@@ -370,12 +370,12 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     absent. The same query on a default workspace → present (positive control).
   - CLI: `ps eww` of that profile workspace's `claude` child → no `CLAUDESK_DRIVE_MODE`. The default
     workspace's child → present when a mode is stored (positive control).
-  - [ ] P2.1 **One predicate, both sides.**
+  - [x] P2.1 **One predicate, both sides.**
     - TS: `isWorkflowApplicable(gateOn, profileId)` is the single export, composed with
       `useWorkflowFeaturesEnabled` (not a bypass of it).
     - Rust: the mirror sits in the spawn-env resolver and in `announce::arm_available`.
-    - Both key on "profile is default", never on a label or path.  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 **Route every consumer through it:**
+    - Both key on "profile is default", never on a label or path.  <!-- status: done — ✅ As built: Rust `profiles::{is_default_reference, workflow_applicable}`; TS `state/workflowApplicable.ts` (`undefined` = unknown → fail closed). Workspace profile = `useWorkspaceProfile` (stored row via new `project_get_profile`, then the LIVE session via new `cc_session_profile` — a respawn re-reads projects.json). -->
+  - [x] P2.2 **Route every consumer through it:**
     - `workspaceSupervisor.ts`
     - `skillButtons.ts` / Workspace skill row
     - `announceRow.ts` `armAvailable` (inject arm only — ⚠️ the **argv `--continue` arm stays
@@ -383,10 +383,10 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     - `workspaceDriveMode.ts` + the picker drive-mode cell
     - `panelHost.ts` / `RightPanelHost.tsx` for the gated docs panel
     - Grep every `useWorkflowFeaturesEnabled` consumer (15 today) and classify each one:
-      per-workspace, or app-wide (Settings / the invite stay app-wide).  <!-- status: NOT-STARTED -->
-  - [ ] P2.3 **Caller-side guard.** Every per-workspace gate consumer must call the funnel, with
+      per-workspace, or app-wide (Settings / the invite stay app-wide).  <!-- status: done — ✅ Only FIVE modules call the hook; everything downstream takes the gate as a param. Routed: Workspace.tsx (both calls), RightPanelHost (new REQUIRED `workspaceProfile` prop), ProjectModelCell (`profile` prop), ProjectPicker (raw `gateOn` + per-row predicate). App.tsx stays app-wide (invite). Backend: spawn env (`resolve_profile_spawn_env` runs the gate through the predicate) + `announce_actions` (per-project gate). -->
+  - [x] P2.3 **Caller-side guard.** Every per-workspace gate consumer must call the funnel, with
     the consumer list derived from source (a reverse guard — lesson entry 13: a one-directional
-    guard cannot see an omission).  <!-- status: NOT-STARTED -->
+    guard cannot see an omission).  <!-- status: done — ✅ `workflowApplicableGuard.test.ts` (forward: direct-wrap shape at every call; row-scoped binding; REVERSE: allowlist entries exist and still call). Mutation-proven 4/4 individually (unwrap 2nd call / unwrap 1st call [also fails the live test] / bare picker read / stale allowlist). -->
   - [ ] verify-auto  <!-- status: NOT-STARTED -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
@@ -508,8 +508,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 2 > P2.1
-- **Active scope:** P2.1 (the one workflow-applicability predicate, both sides)
+- **Path:** F-b > Phase 2 > verify-auto
+- **Active scope:** Phase 2 verify-auto
 - **Blocked:** none
 - **Unvisited:** Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)

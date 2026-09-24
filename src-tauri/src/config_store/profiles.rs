@@ -65,10 +65,33 @@ pub enum ResolvedProfile {
     Missing(String),
 }
 
+/// Whether a stored reference means the built-in default profile: absent, blank, or
+/// `"default"`. ⚠️ The ONE definition — [`resolve`] and [`workflow_applicable`] both read it, and
+/// `src/state/workflowApplicable.ts` mirrors it for the frontend.
+pub fn is_default_reference(reference: Option<&str>) -> bool {
+    matches!(
+        reference.map(str::trim),
+        None | Some("") | Some(DEFAULT_PROFILE)
+    )
+}
+
+/// F-b ruling 4 — **the workflow layer exists only for the default profile.** Gate ON ∧ default
+/// profile. ⚠️ **Every backend consumer of the workflow gate that is scoped to one project or
+/// session must read this, never the raw gate** — the spawn env (`CLAUDESK_DRIVE_MODE`) and the
+/// picker's `/session-restore` announce arm. A non-default profile has no workflow skills (the
+/// `original` profile says so outright), so anything fired into it is a slash command the
+/// session cannot run. Mirrored by `isWorkflowApplicable` in `src/state/workflowApplicable.ts`.
+pub fn workflow_applicable(gate_enabled: bool, profile_reference: Option<&str>) -> bool {
+    gate_enabled && is_default_reference(profile_reference)
+}
+
 /// Resolve a row's stored reference against the profile list. Pure, so every caller shares it.
 pub fn resolve(profiles: &[Profile], reference: Option<&str>) -> ResolvedProfile {
+    if is_default_reference(reference) {
+        return ResolvedProfile::Default;
+    }
     match reference.map(str::trim) {
-        None | Some("") | Some(DEFAULT_PROFILE) => ResolvedProfile::Default,
+        None => ResolvedProfile::Default,
         Some(name) => profiles
             .iter()
             .find(|p| p.name == name)
@@ -285,6 +308,26 @@ mod tests {
             resolve(&list, Some("gone")),
             ResolvedProfile::Missing("gone".to_string())
         );
+    }
+
+    #[test]
+    fn profile_workflow_applicable_truth_table() {
+        // (gate, reference) → applicable. Mirrored row-for-row by the TS test of
+        // `isWorkflowApplicable` — change both or neither.
+        for (gate, reference, want) in [
+            (true, None, true),
+            (true, Some(""), true),
+            (true, Some(" default "), true),
+            (true, Some("neo"), false),
+            (false, None, false),
+            (false, Some("neo"), false),
+        ] {
+            assert_eq!(
+                workflow_applicable(gate, reference),
+                want,
+                "{gate} {reference:?}"
+            );
+        }
     }
 
     #[test]

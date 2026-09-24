@@ -39,6 +39,7 @@ import {
   type OpenIntent,
 } from "./announceRow";
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
+import { isWorkflowApplicable } from "../../state/workflowApplicable";
 import type { AnnounceMap, AutoResumeAction } from "../../state/predictAction";
 
 // A picker toast is either an INFO note (e.g. "removed N stale projects" on mount) or
@@ -73,6 +74,8 @@ export interface RecentProject {
   project_path: string;
   default_model?: string | null;
   default_drive_mode?: DriveMode | null;
+  /** F-b — the profile this row spawns under. Absent / `null` = the default profile. */
+  profile?: string | null;
 }
 
 // Pure, testable filter predicate. Case-insensitive substring match on the
@@ -166,7 +169,10 @@ export function ProjectPicker({
   // match over source: it cannot tell a real call from prose, so this comment deliberately
   // does NOT spell either forbidden identifier. Naming them here would flag this file as an
   // offender. See `useWorkflowFeaturesEnabled.ts` for the full contract.
-  const workflowEnabled = useWorkflowFeaturesEnabled();
+  // F-b ruling 4 — the RAW gate, deliberately named `gateOn`: the picker spans many rows, so it
+  // cannot wrap the hook directly. Every read goes through `isWorkflowApplicable(gateOn, <row>)`,
+  // and `workflowApplicableGuard.test.ts` fails on any bare use of `gateOn`.
+  const gateOn = useWorkflowFeaturesEnabled();
   // NOTE (M10.9 WP2 Phase 4): the three app-global settings states that used to live here
   // (ccPermissionMode / timeTrackingEnabled / updateNotificationsEnabled), together with
   // their seed+listen effects and optimistic-set handlers, MOVED to the Settings panel —
@@ -246,7 +252,10 @@ export function ProjectPicker({
     const { action } = rowAffordances(
       projectPath,
       announceMap,
-      workflowEnabled,
+      isWorkflowApplicable(
+        gateOn,
+        recents.find((r) => r.project_path === projectPath)?.profile ?? null,
+      ),
     );
     // Stamp recency before handing off so the next list_projects reflects it. A
     // rejection surfaces as an error toast (P4.2) — never dropped as an unhandled
@@ -493,7 +502,7 @@ export function ProjectPicker({
                   const { announcement, showNoFireDoor } = rowAffordances(
                     r.project_path,
                     announceMap,
-                    workflowEnabled,
+                    isWorkflowApplicable(gateOn, r.profile ?? null),
                   );
                   return (
                     <button
@@ -611,6 +620,7 @@ export function ProjectPicker({
                       projectLabel={labelFor(r)}
                       seedModel={r.default_model ?? null}
                       seedDriveMode={r.default_drive_mode ?? null}
+                      profile={r.profile ?? null}
                       onCommitted={handleModelCommitted}
                       onDriveModeCommitted={handleDriveModeCommitted}
                     />

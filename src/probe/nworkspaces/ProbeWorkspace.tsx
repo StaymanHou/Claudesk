@@ -52,6 +52,7 @@ export function ProbeWorkspace({
         workspaceId={workspace.id}
         projectPath={workspace.project_path}
         visible={visible}
+        workspaceProfile={null}
       />
     </div>
   );

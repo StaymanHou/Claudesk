@@ -481,6 +481,7 @@ pub fn run() {
             config_store::commands::profile_adopt,
             config_store::commands::profile_remove,
             config_store::commands::set_project_profile,
+            config_store::commands::project_get_profile,
             // M12 WP2: clear the unclean-exit flag on a CLEAN close. There is deliberately
             // no `mark_unclean` counterpart — setting is owned by the spawn path, where it
             // is co-located with the `?` guaranteeing a failed spawn leaves no flag.
@@ -513,6 +514,8 @@ pub fn run() {
             // only when it would actually change something. NOT the stored value — see the
             // command's doc comment.
             cc_session::commands::cc_drive_mode,
+            // F-b Phase 2: the profile a live session spawned under (workflow applicability).
+            cc_session::commands::cc_session_profile,
             // Read/persist the CC permission mode (the friend-requested dropdown).
             // get seeds the picker dropdown + View-menu radio on mount; set persists +
             // broadcasts `cc-permission-mode` so both re-render. Read at spawn time →

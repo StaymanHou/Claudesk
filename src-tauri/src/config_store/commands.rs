@@ -354,6 +354,15 @@ pub fn profile_adopt(
     super::profiles::adopt(&dir, Path::new(&config_dir), name.as_deref()).map_err(|e| e.to_string())
 }
 
+/// One project's STORED profile reference (`None` = default, or no record). The workspace's
+/// pre-session workflow-applicability input; once a session exists, `cc_session_profile` wins.
+/// A read error is an error, so the frontend fails closed rather than guessing "default".
+#[tauri::command]
+pub fn project_get_profile(app: AppHandle, path: String) -> Result<Option<String>, String> {
+    let dir = resolve_data_dir(&app)?;
+    super::read_project_profile(&dir, Path::new(&path)).map_err(|e| e.to_string())
+}
+
 /// Remove a profile from the list, leaving its directory untouched ("remove from Claudesk").
 /// Rows that reference it degrade to the missing-profile state (spawn refused, A.6).
 /// ⚠️ Phase 3 adds the hook UNREGISTER from the dir's `settings.json` here, before the drop.

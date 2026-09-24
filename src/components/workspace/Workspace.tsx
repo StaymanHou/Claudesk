@@ -101,6 +101,8 @@ import {
 } from "../../cc/supervisorToggleIpc";
 import { supervisorToggleAction } from "../../cc/supervisorToggleAction";
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
+import { isWorkflowApplicable } from "../../state/workflowApplicable";
+import { useWorkspaceProfile } from "../../state/useWorkspaceProfile";
 // M13.5 WP3 — the nav state the prev/next controls render from. ⚠️ The old `inertAfter`
 // inert-state machine is DELETED: it existed to explain a dead click, and a correct `disabled`
 // state (driven by `canPrev`/`canNext`) makes a dead click impossible, so keeping both would be
@@ -154,7 +156,17 @@ export function Workspace({
   //
   // The gate seam. Read the HOOK, never the raw command or the one-shot wrapper: a one-shot
   // read never re-syncs on the broadcast, which is a defect that actually shipped in M10.9 WP3.
-  const workflowEnabled = useWorkflowFeaturesEnabled();
+  // F-b ruling 4 — the gate is PER WORKSPACE: a non-default profile has no workflow layer.
+  // `workspaceProfile` is the one input every workflow surface below reads through
+  // `isWorkflowApplicable`; the second hook call further down and `RightPanelHost` share it.
+  const workspaceProfile = useWorkspaceProfile(
+    workspace.project_path,
+    workspace.cc_session_id,
+  );
+  const workflowEnabled = isWorkflowApplicable(
+    useWorkflowFeaturesEnabled(),
+    workspaceProfile,
+  );
   // What this workspace WOULD fire if reopened now. Re-read on every `visible` edge rather than
   // once on mount, because the whole point is to reflect a flag the ⏸ may have set *since* —
   // and workspaces stay mounted forever (the standing invariant), so a mount-only read would go
@@ -677,7 +689,10 @@ export function Workspace({
   // `onRecycle` below logs the declined case distinctly. (The old comment framed both arms as
   // purely protective; that reading is what let an announced-but-never-started recycle look fine.)
   // ⚠️ Reuses the app's existing gate hook rather than a second source of truth.
-  const workflowFeaturesEnabled = useWorkflowFeaturesEnabled();
+  const workflowFeaturesEnabled = isWorkflowApplicable(
+    useWorkflowFeaturesEnabled(),
+    workspaceProfile,
+  );
   // M14 WP0 Phase 2 — flip the supervisor toggle for this project.
   //
   // ⚠️ **OPTIMISTIC, WITH AN EXPLICIT REVERT — not fire-and-forget.** The write can genuinely
@@ -1412,6 +1427,7 @@ export function Workspace({
            stay disabled after a session first appears. A recycle updates `workspace`, so this
            value tracks it. */
         ccSessionId={workspace.cc_session_id}
+        workspaceProfile={workspaceProfile}
         collapsed={rightCollapsed}
         registerDirtyProbe={registerDirtyProbe}
         terminalPaneRef={termPaneRef}

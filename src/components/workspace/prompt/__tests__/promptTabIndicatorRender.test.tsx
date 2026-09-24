@@ -45,6 +45,7 @@ function renderHost(): Document {
       workspaceId="ws-test"
       projectPath={PROJECT}
       visible={true}
+      workspaceProfile={null}
       collapsed={false}
     />,
   );

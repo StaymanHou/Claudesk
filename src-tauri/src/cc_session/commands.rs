@@ -116,6 +116,20 @@ pub fn cc_drive_mode(
     reg.drive_mode(&session_id).map_err(|e| e.to_string())
 }
 
+/// F-b — the profile a live CC session spawned under (`None` = the default profile). The
+/// workspace's workflow-applicability input once a session exists: a respawn re-reads
+/// `projects.json`, so the row's value at open time is not the truth for the running process.
+#[tauri::command]
+pub fn cc_session_profile(
+    registry: State<'_, Registry>,
+    session_id: String,
+) -> Result<Option<String>, String> {
+    let reg = registry
+        .lock()
+        .map_err(|_| "session registry lock poisoned".to_string())?;
+    reg.profile(&session_id).map_err(|e| e.to_string())
+}
+
 /// Spawn the WP9 second-terminal panel's interactive login shell for `project_path`;
 /// returns the new session id. Reuses the shared registry + the command-agnostic
 /// `cc_input`/`cc_resize`/`cc_kill` + the `cc-output-<sid>`/`cc-exit-<sid>` events,

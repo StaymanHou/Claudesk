@@ -216,6 +216,11 @@ pub fn announce_actions(data_dir: &Path, gate_enabled: bool) -> AnnounceMap {
         // `is_unclean_on_disk` re-reads the file per call, so this uses the map-level
         // reader with the same `key_for` canonicalization applied inside.
         let unclean = session_state::is_unclean_keyed(&flags, &path_str);
+        // F-b ruling 4 — the gate is PER PROJECT. A row on a non-default profile has no workflow
+        // layer, so the `/session-restore` arm is unavailable for it even with the gate ON; the
+        // ungated `--continue` arm is unaffected. Read through the one predicate, never raw.
+        let project_gate =
+            config_store::profiles::workflow_applicable(gate_enabled, project.profile.as_deref());
         // ⚠️ THE STAT IS SKIPPED AS A *CONSEQUENCE* OF THE ARM BEING UNAVAILABLE — not by a
         // second, independent gate check. That distinction was found by mutation testing
         // and it matters:
@@ -234,7 +239,7 @@ pub fn announce_actions(data_dir: &Path, gate_enabled: bool) -> AnnounceMap {
         // ONE control decides, and the IO saving falls out of it. `arm_available` is that
         // control, so its branches are now genuinely load-bearing.
         let session_md =
-            arm_available(ACTION_RESTORE, gate_enabled) && has_session_md(&project.path);
+            arm_available(ACTION_RESTORE, project_gate) && has_session_md(&project.path);
         if let Some(action) = resolve(unclean, session_md) {
             // Still checked after resolution — `resolve` answers *which* arm the signals
             // select, `arm_available` answers *whether that arm may be shown*. Keeping them
@@ -244,7 +249,7 @@ pub fn announce_actions(data_dir: &Path, gate_enabled: bool) -> AnnounceMap {
             // For the RESTORE arm this is now belt-and-braces with the line above (its
             // signal cannot be true when the arm is unavailable). For CONTINUE it is the
             // only check, since that arm's signal is read unconditionally.
-            if arm_available(action, gate_enabled) {
+            if arm_available(action, project_gate) {
                 out.insert(path_str, action.to_string());
             }
         }
@@ -280,6 +285,38 @@ mod tests {
     }
 
     // ── The gate ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn profile_row_gets_no_restore_arm_even_with_the_gate_on() {
+        // F-b ruling 4. Same fixture, two rows' worth of evidence: default → restore; after
+        // pointing the row at a profile → nothing. The positive control is the first assertion.
+        let proj = project_with_session_md();
+        let data = data_dir_with(&[proj.path()]);
+        let key = proj.path().to_string_lossy().to_string();
+        assert_eq!(
+            announce_actions(data.path(), true)
+                .get(&key)
+                .map(String::as_str),
+            Some(ACTION_RESTORE)
+        );
+        config_store::set_project_profile(data.path(), proj.path(), Some("neo".into())).unwrap();
+        assert_eq!(announce_actions(data.path(), true).get(&key), None);
+    }
+
+    #[test]
+    fn profile_row_keeps_the_ungated_continue_arm() {
+        let proj = TempDir::new().unwrap();
+        let data = data_dir_with(&[proj.path()]);
+        config_store::set_project_profile(data.path(), proj.path(), Some("neo".into())).unwrap();
+        session_state::set_and_persist(data.path(), &proj.path().to_string_lossy());
+        let key = proj.path().to_string_lossy().to_string();
+        assert_eq!(
+            announce_actions(data.path(), true)
+                .get(&key)
+                .map(String::as_str),
+            Some(ACTION_CONTINUE)
+        );
+    }
 
     #[test]
     fn gate_off_suppresses_the_restore_arm() {

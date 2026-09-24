@@ -75,9 +75,19 @@ export const xtermPaneModule = { XtermPane: forwardRef(XtermPaneStub) };
 const gate = { enabled: false };
 export const gateModule = { useWorkflowFeaturesEnabled: () => gate.enabled };
 
-export const rightPanelModule = {
-  RightPanelHost: () => <div data-testid="right-panel-stub" />,
+/** What the stubbed `RightPanelHost` was last rendered with (F-b: the profile it received). */
+export const rightPanel = {
+  props: null as null | { workspaceProfile?: string | null },
 };
+
+function RightPanelHostStub(props: { workspaceProfile?: string | null }) {
+  useEffect(() => {
+    rightPanel.props = props;
+  });
+  return <div data-testid="right-panel-stub" />;
+}
+
+export const rightPanelModule = { RightPanelHost: RightPanelHostStub };
 
 /** Every IPC call the mounted tree made, in order. */
 export const ipcCalls: { cmd: string; args: Record<string, unknown> }[] = [];
@@ -91,6 +101,8 @@ export interface MountOptions {
   storedDriveMode?: string | null;
   projectPath?: string;
   statusState?: "idle" | "running" | "unknown";
+  /** F-b — the profile both `project_get_profile` and `cc_session_profile` answer with. */
+  profile?: string | null;
 }
 
 let root: Root | null = null;
@@ -102,6 +114,7 @@ export async function mountWorkspace(opts: MountOptions) {
   pane.steps = [];
   pane.navAfterStep = AT_REST;
   pane.props = null;
+  rightPanel.props = null;
   ipcCalls.length = 0;
   uncaught.length = 0;
   gate.enabled = opts.gate;
@@ -113,6 +126,8 @@ export async function mountWorkspace(opts: MountOptions) {
       if (cmd === "project_get_default_drive_mode")
         return opts.storedDriveMode ?? null;
       if (cmd === "picker_announce_actions") return {};
+      if (cmd === "project_get_profile" || cmd === "cc_session_profile")
+        return opts.profile ?? null;
       return null;
     },
     { shouldMockEvents: true },

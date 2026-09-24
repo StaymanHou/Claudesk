@@ -70,6 +70,7 @@ import {
   driveModeChanged,
 } from "../../cc/driveMode";
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
+import { isWorkflowApplicable } from "../../state/workflowApplicable";
 import { commitCellValue } from "./commitCellValue";
 
 /**
@@ -96,6 +97,8 @@ interface ProjectModelCellProps {
    * Claudesk sets no env var and the workflow skills ask as they always have.
    */
   seedDriveMode?: DriveMode | null;
+  /** F-b — this row's profile (`null` = default). A non-default profile has no drive mode. */
+  profile?: string | null;
   /**
    * Report a successfully-persisted model so the parent can fold it into `recents`,
    * keeping the seed truthful across an unmount (filter in/out). Success path only — a
@@ -113,10 +116,15 @@ export function ProjectModelCell({
   projectLabel,
   seedModel,
   seedDriveMode = null,
+  profile = null,
   onCommitted,
   onDriveModeCommitted,
 }: ProjectModelCellProps) {
-  const gateEnabled: WorkflowGateValue = useWorkflowFeaturesEnabled();
+  // F-b ruling 4 — a non-default profile row has no drive-mode cell, gate ON or not.
+  const gateEnabled: WorkflowGateValue = isWorkflowApplicable(
+    useWorkflowFeaturesEnabled(),
+    profile,
+  );
 
   const [model, setModel] = useState<string | null>(seedModel);
   const [draft, setDraft] = useState(() => displayModelValue(seedModel));

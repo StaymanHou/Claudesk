@@ -61,6 +61,10 @@ import {
   type RightPanel,
 } from "./panelHost";
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
+import {
+  isWorkflowApplicable,
+  type ProfileReference,
+} from "../../state/workflowApplicable";
 import { usePipMode, setPipModeOptimistic } from "../../state/usePipMode";
 // M11 WP3 — LAZY, for the same reason as DiffPanel/ProjectSearch above
 // (SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD). WP2 imported this statically when the
@@ -169,6 +173,13 @@ interface RightPanelHostProps {
    * ⚠️ Passed straight through on every render rather than captured — a recycle replaces the id.
    */
   ccSessionId?: string | null;
+  /**
+   * F-b ruling 4 — the profile this workspace runs under (`useWorkspaceProfile`). A non-default
+   * profile has no gated docs panel; `undefined` (not yet known) fails closed.
+   * ⚠️ REQUIRED, deliberately: an optional prop would let a caller omit it and silently pick one
+   * of the two defaults, and neither is safe to assume.
+   */
+  workspaceProfile: ProfileReference;
 }
 
 export function RightPanelHost({
@@ -179,6 +190,7 @@ export function RightPanelHost({
   collapsed = false,
   registerDirtyProbe,
   terminalPaneRef,
+  workspaceProfile,
 }: RightPanelHostProps) {
   // WP12 — open files live in PER-PANE TAB STRIPS (EditorSplit owns the pane model;
   // each pane has its own tab strip + open-file set). The open seams (finder, tree,
@@ -429,7 +441,10 @@ export function RightPanelHost({
   // a second call site would be a second source of truth that never re-syncs on the
   // broadcast (the M10.9 contract, enforced by the OFF-invariant guard's bypass scan).
   // Defaults `false` until the async seed resolves, so the Docs tab never flashes on.
-  const workflowFeaturesEnabled = useWorkflowFeaturesEnabled();
+  const workflowFeaturesEnabled = isWorkflowApplicable(
+    useWorkflowFeaturesEnabled(),
+    workspaceProfile,
+  );
 
   // Latest-ref so the capture-phase keydown listener — registered once on [visible] with
   // an identity-stable dep array — reads the CURRENT gate rather than stale-closing over

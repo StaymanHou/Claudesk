@@ -555,6 +555,13 @@ fn resolve_resume_arm(intent: OpenIntent, consume: impl FnOnce() -> bool) -> Res
 ///   see; a broken `projects.json` already shows the operator an empty picker);
 /// - a row that NAMES a profile, when the list is unreadable, the name is unlisted, or the dir
 ///   is gone → **refuse**, with a message naming the profile.
+/// F-b — the listed profile a CC spawn runs under (`None` at the call site = default).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SpawnProfile {
+    name: String,
+    dir: PathBuf,
+}
+
 fn resolve_spawn_profile(
     reads: Option<(
         Result<Option<String>, crate::config_store::ConfigError>,
@@ -563,7 +570,7 @@ fn resolve_spawn_profile(
             crate::config_store::ConfigError,
         >,
     )>,
-) -> Result<Option<PathBuf>, CcError> {
+) -> Result<Option<SpawnProfile>, CcError> {
     use crate::config_store::profiles::{resolve, ResolvedProfile};
     let Some((reference, read_list)) = reads else {
         return Ok(None);
@@ -591,25 +598,37 @@ fn resolve_spawn_profile(
             p.name,
             p.config_dir.display()
         ))),
-        ResolvedProfile::Listed(p) => Ok(Some(p.config_dir)),
+        ResolvedProfile::Listed(p) => Ok(Some(SpawnProfile {
+            name: p.name,
+            dir: p.config_dir,
+        })),
     }
 }
 
 /// F-b — the CC spawn env for a resolved profile: the existing gate/mode resolution, plus
 /// `CLAUDE_CONFIG_DIR` when the spawn runs under a listed profile. The default profile adds
 /// nothing here; the INHERITED value is stripped at the `CommandBuilder` (A.8).
+///
+/// ⚠️ **Ruling 4 — the gate is passed through `workflow_applicable` BEFORE it reaches the
+/// drive-mode resolution**, so a profile spawn gets no `CLAUDESK_DRIVE_MODE` (and reports no
+/// effective mode) even with the gate ON. A read ERROR is preserved as an error — the existing
+/// fail-closed handling downstream still owns it.
 fn resolve_profile_spawn_env(
     gate_read: Option<Result<bool, crate::config_store::ConfigError>>,
     mode_read: Option<
         Result<Option<crate::config_store::DriveMode>, crate::config_store::ConfigError>,
     >,
-    profile_dir: Option<&Path>,
+    profile: Option<&SpawnProfile>,
 ) -> ResolvedCcSpawnEnv {
+    let reference = profile.map(|p| p.name.as_str());
+    let gate_read = gate_read.map(|read| {
+        read.map(|gate| crate::config_store::profiles::workflow_applicable(gate, reference))
+    });
     let mut resolved = resolve_cc_spawn_env(gate_read, mode_read);
-    if let Some(dir) = profile_dir {
+    if let Some(p) = profile {
         resolved.env.push((
             crate::config_store::profiles::CONFIG_DIR_ENV.to_string(),
-            dir.to_string_lossy().into_owned(),
+            p.dir.to_string_lossy().into_owned(),
         ));
     }
     resolved
@@ -1351,6 +1370,10 @@ struct RegisteredSession {
     /// ⚠️ Always `None` for shell sessions: [`SessionRegistry::spawn_shell`] passes no drive
     /// mode because the login shell must never receive that var ([`shell_spawn_env`]).
     drive_mode: Option<crate::config_store::DriveMode>,
+    /// F-b — the name of the profile this CC session SPAWNED under (`None` = default). The
+    /// frontend reads it back (`cc_session_profile`) because a respawn re-reads `projects.json`,
+    /// so the row's value at open is not the truth for the running process.
+    profile: Option<String>,
 }
 
 /// Owns the live sessions. Registered as `State<Mutex<SessionRegistry>>` in `lib.rs`;
@@ -1386,6 +1409,7 @@ impl SessionRegistry {
             RegisteredSession {
                 session: make(id.clone()),
                 drive_mode: None,
+                profile: None,
             },
         );
         id
@@ -1421,7 +1445,7 @@ impl SessionRegistry {
         // any PTY opens: a refused spawn (unlisted profile, dir gone, unreadable list) must leave
         // the crash signal exactly as it found it and start nothing. See `resolve_spawn_profile`
         // for why this degrades differently from the model read.
-        let profile_dir = resolve_spawn_profile(data_dir.as_deref().map(|dir| {
+        let profile = resolve_spawn_profile(data_dir.as_deref().map(|dir| {
             (
                 crate::config_store::read_project_profile(dir, Path::new(project_path)),
                 move || crate::config_store::profiles::read_profiles(dir),
@@ -1453,7 +1477,7 @@ impl SessionRegistry {
             data_dir.as_deref().map(|dir| {
                 crate::config_store::read_default_drive_mode(dir, Path::new(project_path))
             }),
-            profile_dir.as_deref(),
+            profile.as_ref(),
         );
         // M13.5 WP4 P1.2 — retain the EFFECTIVE mode this session is about to spawn under, so
         // a workspace-side readout can answer "stored ≠ running" truthfully. Read back via
@@ -1502,8 +1526,8 @@ impl SessionRegistry {
         // F-b probe P1.1 (2): `--continue` with nothing to continue EXITS CC. Checked against the
         // profile's own config root — a profile's transcripts are not under `~/.claude`.
         let resume = guard_continue_against_transcripts(resume, || {
-            let root = match profile_dir.as_deref() {
-                Some(dir) => dir.to_path_buf(),
+            let root = match profile.as_ref() {
+                Some(p) => p.dir.clone(),
                 None => match app.path().home_dir() {
                     Ok(home) => crate::transcript::default_config_root(&home),
                     // No home → cannot look; keep the arm rather than second-guess it.
@@ -1521,7 +1545,7 @@ impl SessionRegistry {
             app,
             id.clone(),
             project_path,
-            spawn_permission_mode(mode, profile_dir.as_deref()),
+            spawn_permission_mode(mode, profile.as_ref().map(|p| p.dir.as_path())),
             model.as_deref(),
             resume,
             &cc_env,
@@ -1555,6 +1579,7 @@ impl SessionRegistry {
             RegisteredSession {
                 session: Box::new(session),
                 drive_mode: spawned_drive_mode,
+                profile: profile.map(|p| p.name),
             },
         );
         Ok(id)
@@ -1575,6 +1600,8 @@ impl SessionRegistry {
                 // `CLAUDESK_DRIVE_MODE` (`shell_spawn_env` enforces the boundary), so there is
                 // no mode for a shell session to be running under.
                 drive_mode: None,
+                // A login shell is not CC; it runs under no profile.
+                profile: None,
             },
         );
         Ok(id)
@@ -1640,6 +1667,14 @@ impl SessionRegistry {
         self.sessions
             .get(id)
             .map(|entry| entry.drive_mode)
+            .ok_or_else(|| CcError::UnknownSession(id.to_string()))
+    }
+
+    /// F-b — the profile a live session spawned under (`None` = default).
+    pub fn profile(&self, id: &str) -> Result<Option<String>, CcError> {
+        self.sessions
+            .get(id)
+            .map(|entry| entry.profile.clone())
             .ok_or_else(|| CcError::UnknownSession(id.to_string()))
     }
 
@@ -2301,7 +2336,13 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let list = vec![listed_profile("neo", dir.path())];
         let got = resolve_spawn_profile(Some((Ok(Some("neo".to_string())), move || Ok(list))));
-        assert_eq!(got.unwrap(), Some(dir.path().to_path_buf()));
+        assert_eq!(
+            got.unwrap(),
+            Some(SpawnProfile {
+                name: "neo".to_string(),
+                dir: dir.path().to_path_buf()
+            })
+        );
     }
 
     #[test]
@@ -2336,8 +2377,11 @@ mod tests {
             "{:?}",
             default.env
         );
-        let dir = Path::new("/u/.config/claude-neo");
-        let profile = resolve_profile_spawn_env(Some(Ok(false)), Some(Ok(None)), Some(dir));
+        let neo = SpawnProfile {
+            name: "neo".to_string(),
+            dir: PathBuf::from("/u/.config/claude-neo"),
+        };
+        let profile = resolve_profile_spawn_env(Some(Ok(false)), Some(Ok(None)), Some(&neo));
         assert!(
             profile
                 .env
@@ -2345,6 +2389,34 @@ mod tests {
                 .any(|(k, v)| k == key && v == "/u/.config/claude-neo"),
             "{:?}",
             profile.env
+        );
+    }
+
+    #[test]
+    fn profile_spawn_env_withholds_the_drive_mode_from_a_profile_even_with_the_gate_on() {
+        // Ruling 4: the workflow layer is ALWAYS off for a non-default profile.
+        let neo = SpawnProfile {
+            name: "neo".to_string(),
+            dir: PathBuf::from("/u/.config/claude-neo"),
+        };
+        let on = || Some(Ok(true));
+        let mode = || Some(Ok(Some(crate::config_store::DriveMode::Autopilot)));
+        let profile = resolve_profile_spawn_env(on(), mode(), Some(&neo));
+        assert!(
+            !profile.env.iter().any(|(k, _)| k == DRIVE_MODE_ENV),
+            "{:?}",
+            profile.env
+        );
+        assert_eq!(
+            profile.drive_mode, None,
+            "a profile session reports no effective mode"
+        );
+        // Positive control: the default profile under the same inputs DOES carry it.
+        let default = resolve_profile_spawn_env(on(), mode(), None);
+        assert!(default.env.iter().any(|(k, _)| k == DRIVE_MODE_ENV));
+        assert_eq!(
+            default.drive_mode,
+            Some(crate::config_store::DriveMode::Autopilot)
         );
     }
 
@@ -2488,7 +2560,7 @@ mod tests {
         let call = &code[at("PtyCcSession::spawn(")..];
         let call = &call[..call.find(");").unwrap()];
         assert!(
-            call.contains("spawn_permission_mode(mode, profile_dir.as_deref())"),
+            call.contains("spawn_permission_mode(mode, profile.as_ref().map(|p| p.dir.as_path()))"),
             "the spawn must pass the profile-aware permission mode: {call}"
         );
     }
