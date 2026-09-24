@@ -14,9 +14,11 @@ import { ProfilesSettings } from "../ProfilesSettings";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const calls: { cmd: string; args: Record<string, unknown> }[] = [];
-let listed = [
+const INITIAL = [
   { name: "neo", config_dir: "/u/.config/claude-neo", provenance: "adopted" },
+  { name: "work", config_dir: "/u/.config/claude-work", provenance: "created" },
 ];
+let listed = [...INITIAL];
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 const errors: string[] = [];
@@ -44,6 +46,21 @@ async function mount() {
         return null;
       }
       if (cmd === "profile_adopt") return null;
+      if (cmd === "profile_delete") {
+        listed = listed.filter(
+          (p) => p.name !== (args as { name: string }).name,
+        );
+        return null;
+      }
+      if (cmd === "profile_wizard_defaults")
+        return {
+          config_root: "/u/.config",
+          permission_mode: "default",
+          cleanup_period_days: 99999,
+          theme: "dark",
+          status_line: null,
+          themes: ["dark"],
+        };
       return null;
     },
     { shouldMockEvents: true },
@@ -64,10 +81,15 @@ afterEach(async () => {
   root = null;
   host = null;
   clearMocks();
-  listed = [
-    { name: "neo", config_dir: "/u/.config/claude-neo", provenance: "adopted" },
-  ];
+  listed = [...INITIAL];
+  // Portalled dialogs live in <body>, outside the host.
+  document.body
+    .querySelectorAll('[data-testid="profile-wizard"], .profile-dialog-layer')
+    .forEach((n) => n.remove());
 });
+
+const inBody = (id: string) =>
+  document.body.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 
 async function click(el: Element | null) {
   if (!el) throw new Error("click target not found");
@@ -112,5 +134,46 @@ describe("ProfilesSettings — live", () => {
         args: { configDir: "/u/.config/claude-eos", name: null },
       },
     ]);
+  });
+
+  it("Delete is offered ONLY for a created profile — an adopted one has none in the DOM (D.24)", async () => {
+    const el = await mount();
+    expect(
+      el.querySelector('[data-testid="profiles-delete-work"]'),
+    ).not.toBeNull();
+    expect(el.querySelector('[data-testid="profiles-delete-neo"]')).toBeNull();
+    // Remove stays available for both.
+    expect(
+      el.querySelector('[data-testid="profiles-remove-work"]'),
+    ).not.toBeNull();
+  });
+
+  it("Delete opens a confirm naming the dir; Cancel sends nothing", async () => {
+    const el = await mount();
+    await click(el.querySelector('[data-testid="profiles-delete-work"]'));
+    const dialog = inBody("confirm-dialog");
+    expect(dialog?.textContent).toContain("/u/.config/claude-work");
+    expect(dialog?.textContent).toContain("history");
+    await click(inBody("confirm-cancel"));
+    expect(calls.some((c) => c.cmd === "profile_delete")).toBe(false);
+    expect(inBody("confirm-dialog")).toBeNull();
+  });
+
+  it("confirming sends profile_delete for THAT profile, and the row goes away", async () => {
+    const el = await mount();
+    await click(el.querySelector('[data-testid="profiles-delete-work"]'));
+    await click(inBody("confirm-delete"));
+    expect(calls.filter((c) => c.cmd === "profile_delete")).toEqual([
+      { cmd: "profile_delete", args: { name: "work" } },
+    ]);
+    expect(el.querySelector('[data-testid="profiles-item-work"]')).toBeNull();
+    expect(errors).toEqual([]);
+  });
+
+  it("New profile… opens the wizard", async () => {
+    const el = await mount();
+    expect(inBody("profile-wizard")).toBeNull();
+    await click(el.querySelector('[data-testid="profiles-new"]'));
+    expect(inBody("profile-wizard")).not.toBeNull();
   });
 });

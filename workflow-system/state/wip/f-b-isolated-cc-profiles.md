@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: F-b — Isolated CC profiles as Claudesk workspaces
 
 **Workflow:** feature
-**State:** verify-codify (phase 4 complete)
+**State:** build (phase 5 impl complete) → verify-auto
 **Created:** 2026-09-23
 **Entry:** spec (complex feature)
 **Source:** `roadmap.md` → Group F → F-b + "F-b decisions — `/util-grill-me`, 2026-09-23" (4 rulings,
@@ -496,7 +496,7 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     - [ ] P4.verify-human.3 Set it on the scratch-a row, open, `/login` once, send a prompt: the scratch-a tile dot goes Running then back to Idle (**the deferred P3.verify-human.1** — real logged-in turn)  <!-- status: PASS (operator 2026-09-24); agent confirmed in the status log: SessionStart → UserPromptSubmit (running, emitted) → Stop (idle, emitted) for scratch-a/ws-1, via claude-original-dev's 10 dev hook entries -->
   - [x] verify-codify  <!-- status: done — boundary = the picker page + the Settings panel. Already covering: `projectModelCellProfileLine.test.tsx` (the line: first, three states, missing never default, ungated, refusal-ordering pin), `profilesSettingsLive.test.tsx` (the group's clicks → IPC by value), the triaged exact-order / identity pins. Added `projectPickerProfileLive.test.tsx` — a LIVE mount of the real ProjectPicker: list read once + RE-read on a real `profiles-changed` event (missing → listed with no reopen); a missing row → toast, no `record_open`, no `onOpen` (positive control: a default row opens); the select sends `set_project_profile {path, profile}`. Mutation-proven 2/2 (listener removed / refusal after onOpen). Plus a pin that the permission-mode note sits in the claude-code group. verify:auto EXIT=0 (31s; 3045 FE / 967 Rust) -->
 
-- [ ] Phase 5: New-profile wizard + Delete-to-Trash  <!-- status: NOT-STARTED; depends on Phase 4 -->
+- [ ] Phase 5: New-profile wizard + Delete-to-Trash  <!-- status: in-progress -->
   **Relevance check (before Phase 5):**
   - Requester still needs this: yes. Creation was the operator's scope expansion (2026-09-15).
   - Requirements changed, recorded not reopened: the profile UI is now a LINE in the model cell (P4 vh1), so "New profile…" belongs as an option in THAT line's select, not in a column cell. The wizard's permission-mode step now takes effect inside Claudesk (P1 ruling). The deferred checks land here: P1.verify-human.2 (login read-back) and B.10 (footer shows the profile's mode).
@@ -528,14 +528,14 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     **no** Delete control in the DOM (D.24).
   - Browser: the first spawn under a freshly created profile shows CC's login screen in the pane
     (xterm **buffer** read, not the DOM — lesson (i)).
-  - [ ] P5.1 **Wizard component** (steps above; a modal fits here because it is a setup surface,
-    not a primary one — `primary-surface-is-zero-ceremony` does not fire).  <!-- status: NOT-STARTED -->
-  - [ ] P5.2 **`profile_create` backend.** Refuse a non-empty dir. Write the files via a temp file
+  - [x] P5.1 **Wizard component** (steps above; a modal fits here because it is a setup surface,
+    not a primary one — `primary-surface-is-zero-ceremony` does not fire).  <!-- status: done — ✅ `NewProfileWizard.tsx` (portalled into <body>, z-index 60) over the pure `profileWizardModel.ts` (step order, draft, validation mirroring `validate_name`, draft → spec; ⚠️ NOT `newProfileWizard.ts` — that collides case-insensitively with the component on macOS). Reached from Settings **New profile…** and from the `Profile:` select's **New profile…** entry (sentinel `::new-profile`, outside the name alphabet, never committed); a profile created from a row is committed to THAT row via the existing `commitProfile` writer. Non-empty dir → refusal + "Add … as an existing config dir instead" (adopts, never creates). ⚠️ Esc is owned by `useEscCapture` (a WINDOW capture listener): App's overlay Esc is a DOCUMENT capture listener, so a React onKeyDown would lose the race and one Esc would close Settings with the wizard — the test pins it against an App-style listener, mutation-proven (window→document fails it, landed). Live tests: `newProfileWizardLive` (8 steps in order, exact spec by value, collision, adopt-instead, Esc), `projectModelCellNewProfileLive` -->
+  - [x] P5.2 **`profile_create` backend.** Refuse a non-empty dir. Write the files via a temp file
     plus rename. Snapshot the defaults from `~/.claude` at call time. Register the hook. Add the
-    profile with `provenance: Created`. ⚠️ No `~/.zshrc` access in code at all.  <!-- status: NOT-STARTED -->
-  - [ ] P5.3 **`profile_delete` (Created only).** Move to Trash via the probe (3) mechanism, then
+    profile with `provenance: Created`. ⚠️ No `~/.zshrc` access in code at all.  <!-- status: done — ✅ `config_store/profile_create.rs`: `create` (validate → refuse non-empty / not-a-dir / taken name / unknown theme → write settings.json, .claude.json, CLAUDE.md via tmp+rename → `register` → list as Created; ANY failure removes the seeded files and the dir if this call made it — mutation-proven), `wizard_defaults` (theme / statusLine / permissions.defaultMode read from `~/.claude/settings.json` at open; statusLine re-snapshotted at create), `dir_status`. Commands `profile_wizard_defaults`, `profile_dir_status`, `profile_create` (emits `profiles-changed`). A real-registration test proves the hook merge keeps every seeded key. The no-zshrc guard reads CODE lines of the module (positive control: it failed on its own test name first) -->
+  - [x] P5.3 **`profile_delete` (Created only).** Move to Trash via the probe (3) mechanism, then
     drop the entry. The confirm dialog names the dir, and states that history and memory go with
-    it. Run it off the main thread.  <!-- status: NOT-STARTED -->
+    it. Run it off the main thread.  <!-- status: done — ✅ `delete_created` (Adopted → refused, never trashed — mutation-proven; trash FIRST, entry dropped only on success; a gone dir just drops the entry; trasher injected so tests never touch the real Trash) behind `async profile_delete` + `spawn_blocking` → `trash::delete`. Settings shows **Delete…** only for `created` rows (an adopted row has none in the DOM); the confirm (`deleteProfileConfirmSpec`) names the dir and says history + memory go with it, default focus = Cancel, Esc = cancel via `useEscCapture`. Live-tested in `profilesSettingsLive` -->
   - [ ] verify-auto  <!-- status: NOT-STARTED -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
@@ -557,6 +557,13 @@ Confidence: high
 Evidence: the test asserts the exact ordered id list, and P4.3 inserts `profiles` after `claude-code` by design
 Action: inserted `"profiles"` into the exact ordered list (kept exact, per the test's own instruction that a new group is a one-line deliberate edit); renamed the describe/it titles "five" → "six" (grep found no other reference to the old titles)
 
+## Test Triage — `projectPickerProfileLive.test.tsx` "choosing a profile sends set_project_profile for THIS row" (Phase 5)
+
+Classification: Obsolete test — it pinned the Phase 4 option set, and Phase 5 adds the spec'd entry
+Confidence: high
+Evidence: spec A.4 — "The cell offers every listed profile plus a 'New profile…' entry that opens the wizard"; the failure was only `expected ['', 'neo', '::new-profile'] to deeply equal ['', 'neo']`
+Action: the exact option-value pin now lists `NEW_PROFILE_OPTION` by its constant (still exact, still ordered); the behavior under test (a pick sends `set_project_profile` for this row) is unchanged and still asserted
+
 ## Test Triage — Phase 4 F12 rework (operator vh1: profile as a LINE in the model cell, not a column)
 Classification: Obsolete test — the operator's verify-human correction supersedes P4.1's column
 Confidence: high
@@ -564,18 +571,18 @@ Evidence: vh1 (2026-09-24) "make it as a new row above the model selector and th
 Action: (1) the two exact cell-order pins reverted to `["open","model","remove"]` (still exact); (2) `projectProfileCellRender.test.tsx` DELETED with its component and replaced by `projectModelCellProfileLine.test.tsx` (same properties, on the real model cell: first line, three states, missing never default, ungated, plus the moved refusal-ordering pin); (3) `projectModelCellRender.test.tsx` gate-OFF "exactly ONE line" updated — the profile line is now always present, so gate OFF renders profile + model (the mode line is still absent, which is the property the test exists for)
 (4) `projectModelCellStructure.test.ts` "routes BOTH lines through the single writer" counted 2 commitCellValue calls; the profile line is a third ROUTED line (the invariant holds), so it now asserts by IDENTITY that the three writers — model, drive mode, profile — are each reached from a commitCellValue call, and that there are exactly three
 
-- **Path:** F-b > Phase 5 > P5.1
-- **Active scope:** P5.1 (New-profile wizard)
+## Current Node
+- **Path:** F-b > Phase 5 > verify-auto
+- **Active scope:** Phase 5 verify-auto (P5.1–P5.3 built; `pnpm verify:auto` EXIT=0 at build, 52s, 3068 FE / 982 Rust lib)
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
-- **Open discoveries:** none (permission-mode finding ruled + built)
+- **Unvisited:** Phase 5 verify-self → Phase 5 verify-human → Phase 5 verify-codify → ship → review-quality → finalize
+- **Open discoveries:** [SURFACED-2026-09-24] Phase 5 build defaults (a)–(f) — to confirm at verify-human
 
 ## Discoveries
+[SURFACED-2026-09-24] Phase 5 > build — defaults taken without asking (correct at verify-human): (a) the wizard's permission mode is pre-selected from `~/.claude/settings.json` `permissions.defaultMode` (the "snapshot the default profile" rule the theme and status line follow), falling back to CC's `default`, NOT from Claudesk's app-global mode; (b) `skipDangerousModePermissionPrompt` is NOT seeded, so a profile created with `bypassPermissions` shows CC's own warning once ("silence is not a gate"); (c) theme is a closed `<select>` of CC 2.1.281's seven values (`auto` + six), not free text; (d) a profile created from a picker row is committed to that row; (e) an existing EMPTY dir is accepted (only a non-empty one is refused); (f) the seeded CLAUDE.md is the eos/tube boilerplate guard section verbatim with the dir substituted.
 [SURFACED-2026-09-23] Phase 1 > P1.1 — probe (1): `theme` lives in `settings.json` (a `.claude.json` `theme` is stripped at startup); `copyOnSelect` lives in `.claude.json` and survives first run; seeding `hasCompletedOnboarding` skips CC's login step, so it is NOT seeded. Spec D.18 is corrected in place.
 [SURFACED-2026-09-23] Phase 1 > P1.1 — probe (2): `claude --continue` with no conversation for the cwd prints "No conversation found to continue" and EXITS. P1.4 gains a transcript-exists guard on the argv arm.
 [SURFACED-2026-09-23] Phase 1 > P1.1 — probe (3): reuse the existing `trash = "5"` dependency (`editor_fs::…` already calls `trash::delete` on directories, and it has shipped). No new dependency.
 [SURFACED-2026-09-23] Phase 1 > verify-self — ran by the orchestrator, NOT the `feature-verify-self-runner` subagent: `mcp__tauri__*` bridge tools do not reach subagents (memory `mcp-bridge-tools-not-exposed-to-subagents`), and every Phase 1 outcome needs the bridge. Deviation from the SKILL's unconditional-spawn rule, taken for tool reachability.
 [SURFACED-2026-09-23] Phase 1 > verify-self — ⚠️ **SPEC CONTRADICTION: `build_cc_argv` ALWAYS passes `--permission-mode <Claudesk's app-global mode>`, which overrides a profile's `permissions.defaultMode`.** So B.10 ("footer shows the profile's permission mode") cannot hold, and the wizard's always-shown permission-mode step (D.18) would have no effect inside Claudesk — only in a bare terminal. Observed live: the scratch profile's `defaultMode: "plan"` child still got `--permission-mode bypassPermissions`. Needs an operator ruling before Phase 5; logged to backlog.
 
-## Session Handoff — 2026-09-24 10:38
-Handed off. See `workflow-system/state/.session.md` to restore.

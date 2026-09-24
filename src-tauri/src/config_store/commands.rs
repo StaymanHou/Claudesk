@@ -437,6 +437,67 @@ pub(crate) fn remove_unregistered(
         .map_err(|e| e.to_string())
 }
 
+/// F-b D.18 — the New-profile wizard's pre-fill, snapshotted from `~/.claude/settings.json` NOW
+/// (when the wizard opens). The default config dir is `<config_root>/claude-<name>`.
+#[tauri::command]
+pub fn profile_wizard_defaults(
+    app: AppHandle,
+) -> Result<super::profile_create::WizardDefaults, String> {
+    let home = app
+        .path()
+        .home_dir()
+        .map_err(|e| format!("could not resolve home: {e}"))?;
+    let default_settings = crate::hook_install::commands::user_settings_path()?;
+    Ok(super::profile_create::wizard_defaults(
+        &default_settings,
+        &home.join(".config"),
+    ))
+}
+
+/// F-b D.19 — whether a candidate config dir is absent / empty / non-empty, so the wizard can
+/// refuse a non-empty one (and offer "adopt instead") before the confirm step.
+#[tauri::command]
+pub fn profile_dir_status(path: String) -> super::profile_create::DirStatus {
+    super::profile_create::dir_status(Path::new(&path))
+}
+
+/// F-b D.18 — create a profile from the wizard: seed its files, register Claudesk's hook, and
+/// list it as `Created`. Rolled back on any failure. ⚠️ Never touches `~/.zshrc`.
+#[tauri::command]
+pub fn profile_create(
+    app: AppHandle,
+    spec: super::profile_create::NewProfileSpec,
+) -> Result<super::profiles::Profile, String> {
+    let dir = resolve_data_dir(&app)?;
+    let command = crate::hook_install::commands::this_builds_hook_command(&app)?;
+    let default_settings = crate::hook_install::commands::user_settings_path()?;
+    let profile = super::profile_create::create(&dir, &default_settings, &spec, |d| {
+        crate::hook_install::commands::register_profile(d, &command)
+    })?;
+    let _ = app.emit(PROFILES_CHANGED_EVENT, ());
+    Ok(profile)
+}
+
+/// F-b D.24 — move a `Created` profile's directory to the macOS Trash, then drop it from the
+/// list. Refuses an `Adopted` profile.
+///
+/// ⚠️ **`async` + `spawn_blocking`, never a sync command** — a sync command runs on the MAIN
+/// thread, and a Trash move goes through Finder / `NSFileManager` with no upper bound on how long
+/// it takes (`tests/sync_commands_do_not_block.rs`).
+#[tauri::command]
+pub async fn profile_delete(app: AppHandle, name: String) -> Result<(), String> {
+    let dir = resolve_data_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        super::profile_create::delete_created(&dir, &name, |p| {
+            trash::delete(p).map_err(|e| format!("couldn't move {} to the Trash: {e}", p.display()))
+        })
+    })
+    .await
+    .map_err(|e| format!("profile delete worker failed: {e}"))??;
+    let _ = app.emit(PROFILES_CHANGED_EVENT, ());
+    Ok(())
+}
+
 /// Set (`Some(name)`) or clear (`None` / `"default"`) the profile a project spawns under.
 ///
 /// ⚠️ **Refuses a name that is not listed** — the store would keep it, but a row pointed at an

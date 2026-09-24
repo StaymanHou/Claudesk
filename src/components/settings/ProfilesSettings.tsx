@@ -4,23 +4,30 @@
 // ⚠️ **Lite-IDE core — NOT gated** on `workflow_features_enabled`: a profile is a Claude Code
 // concept, so this module does not read the gate.
 //
-// ⚠️ Paired affordances (design prior `paired-actions-need-paired-affordances`): Add and Remove
-// live together here. Create and Delete-to-Trash arrive with the wizard (F-b Phase 5).
+// ⚠️ Paired affordances (design prior `paired-actions-need-paired-affordances`): Add / Remove and
+// New / Delete live together here (spec D.25). Delete is offered ONLY for a `created` profile
+// (D.24 — Claudesk trashes only what it made); an `adopted` one has no Delete in the DOM at all.
 //
 // Remove = "remove from Claudesk, KEEP the directory" (spec D.23): the backend unregisters
 // Claudesk's hook from the dir's `settings.json` first, and leaves every other file alone.
 
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { createPortal } from "react-dom";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   adoptionSuggestions,
   adoptProfile,
+  deleteProfile,
   listProfiles,
   PROFILES_CHANGED_EVENT,
   removeProfile,
   type Profile,
 } from "../../state/profiles";
+import { ConfirmModal } from "../workspace/editor/ConfirmModal";
+import { deleteProfileConfirmSpec } from "./profileWizardModel";
+import { NewProfileWizard } from "./NewProfileWizard";
+import { useEscCapture } from "./useEscCapture";
 
 interface ProfilesSettingsProps {
   /** The panel's shared error banner. */
@@ -35,6 +42,11 @@ export function ProfilesSettings({ onError }: ProfilesSettingsProps) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  /** The profile a Delete confirm is open for. */
+  const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
+  // The confirm owns Esc while open, so one Esc cancels it without also closing Settings.
+  useEscCapture(confirmDelete !== null, () => setConfirmDelete(null));
 
   // Bumped to re-read after a change here, or on `profiles-changed` from anywhere.
   const [version, setVersion] = useState(0);
@@ -99,6 +111,21 @@ export function ProfilesSettings({ onError }: ProfilesSettingsProps) {
     [onError, reload],
   );
 
+  const trash = useCallback(
+    async (name: string) => {
+      setBusy(true);
+      try {
+        await deleteProfile(name);
+      } catch (e) {
+        onError(describeError(`delete the profile "${name}"`, e));
+      } finally {
+        setBusy(false);
+        reload();
+      }
+    },
+    [onError, reload],
+  );
+
   return (
     <div className="profiles-settings" data-testid="profiles-settings">
       <ul className="profiles-list" data-testid="profiles-list">
@@ -127,9 +154,33 @@ export function ProfilesSettings({ onError }: ProfilesSettingsProps) {
             >
               Remove
             </button>
+            {p.provenance === "created" && (
+              <button
+                type="button"
+                className="profiles-button profiles-button-danger"
+                data-testid={`profiles-delete-${p.name}`}
+                disabled={busy}
+                title="Move this profile's directory to the Trash, with its history and memory."
+                onClick={() => setConfirmDelete(p)}
+              >
+                Delete…
+              </button>
+            )}
           </li>
         ))}
       </ul>
+
+      <div className="profiles-new">
+        <button
+          type="button"
+          className="profiles-button"
+          data-testid="profiles-new"
+          disabled={busy}
+          onClick={() => setWizardOpen(true)}
+        >
+          New profile…
+        </button>
+      </div>
 
       <div className="profiles-add" data-testid="profiles-add">
         <span className="settings-row-label">Add existing config dir…</span>
@@ -156,6 +207,32 @@ export function ProfilesSettings({ onError }: ProfilesSettingsProps) {
           Choose folder…
         </button>
       </div>
+
+      {wizardOpen && (
+        <NewProfileWizard
+          listedNames={profiles.map((p) => p.name)}
+          onClose={() => setWizardOpen(false)}
+          onCreated={() => {
+            setWizardOpen(false);
+            reload();
+          }}
+        />
+      )}
+
+      {confirmDelete !== null &&
+        createPortal(
+          <div className="profile-dialog-layer">
+            <ConfirmModal
+              spec={deleteProfileConfirmSpec(confirmDelete)}
+              onChoose={(choice) => {
+                const target = confirmDelete;
+                setConfirmDelete(null);
+                if (choice === "delete") void trash(target.name);
+              }}
+            />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

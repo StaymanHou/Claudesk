@@ -72,7 +72,13 @@ import {
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 import { isWorkflowApplicable } from "../../state/workflowApplicable";
 import { commitCellValue } from "./commitCellValue";
-import { profileLineText, DEFAULT_PROFILE_LABEL } from "./profileLine";
+import {
+  profileLineText,
+  DEFAULT_PROFILE_LABEL,
+  NEW_PROFILE_LABEL,
+  NEW_PROFILE_OPTION,
+} from "./profileLine";
+import { NewProfileWizard } from "../settings/NewProfileWizard";
 import { setProjectProfile, type Profile } from "../../state/profiles";
 
 /**
@@ -145,6 +151,9 @@ export function ProjectModelCell({
   );
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileFailed, setProfileFailed] = useState(false);
+  // F-b Phase 5 — "New profile…" in the select opens the wizard; a profile it creates is then
+  // committed to THIS row, since that is what the operator picked the entry to get.
+  const [wizardOpen, setWizardOpen] = useState(false);
   const profileRef = useRef<string | null>(profile);
   const profileSelectRef = useRef<HTMLSelectElement>(null);
   useEffect(() => {
@@ -290,9 +299,14 @@ export function ProjectModelCell({
           value={profileValue ?? ""}
           aria-label={`Claude Code profile for ${projectLabel}`}
           title={profileTitle}
-          onChange={(e) =>
-            commitProfile(e.target.value === "" ? null : e.target.value)
-          }
+          onChange={(e) => {
+            if (e.target.value === NEW_PROFILE_OPTION) {
+              setEditingProfile(false);
+              setWizardOpen(true);
+              return;
+            }
+            commitProfile(e.target.value === "" ? null : e.target.value);
+          }}
           onBlur={() => setEditingProfile(false)}
           onKeyDown={(e) => {
             e.stopPropagation();
@@ -315,6 +329,7 @@ export function ProjectModelCell({
               {missingProfile} (missing)
             </option>
           )}
+          <option value={NEW_PROFILE_OPTION}>{NEW_PROFILE_LABEL}</option>
         </select>
       ) : (
         <CellValueLine
@@ -324,6 +339,17 @@ export function ProjectModelCell({
           title={profileTitle}
           text={profileLine.text}
           onActivate={() => setEditingProfile(true)}
+        />
+      )}
+
+      {wizardOpen && (
+        <NewProfileWizard
+          listedNames={profiles.map((p) => p.name)}
+          onClose={() => setWizardOpen(false)}
+          onCreated={(created) => {
+            setWizardOpen(false);
+            commitProfile(created.name);
+          }}
         />
       )}
 

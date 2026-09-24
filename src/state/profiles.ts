@@ -6,6 +6,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { DEFAULT_PROFILE } from "./workflowApplicable";
+import type { CcPermissionMode } from "../cc/permissionMode";
 
 /** Broadcast by the backend after a profile is adopted or removed. Payload: none. */
 export const PROFILES_CHANGED_EVENT = "profiles-changed";
@@ -90,4 +91,54 @@ export function missingProfileRefusal(
   return state.kind === "missing"
     ? `This project runs under the profile "${state.name}", which is no longer in Claudesk's profile list. Pick a profile for it first.`
     : null;
+}
+
+// ---------------------------------------------------------------------------
+// F-b Phase 5 — the New-profile wizard + Delete-to-Trash
+// ---------------------------------------------------------------------------
+
+/** Rust `profile_create::WizardDefaults` — a snapshot of `~/.claude` taken when the wizard opens. */
+export interface WizardDefaults {
+  /** `~/.config`; the default dir is `<config_root>/claude-<name>`. */
+  readonly config_root: string;
+  readonly permission_mode: CcPermissionMode;
+  readonly cleanup_period_days: number;
+  readonly theme: string;
+  /** `~/.claude/settings.json`'s `statusLine`, verbatim, or `null` when it has none. */
+  readonly status_line: unknown;
+  readonly themes: readonly string[];
+}
+
+/** Rust `profile_create::NewProfileSpec` — the wire contract of `profile_create`. */
+export interface NewProfileSpec {
+  readonly name: string;
+  readonly config_dir: string;
+  readonly permission_mode: CcPermissionMode;
+  readonly cleanup_period_days: number;
+  readonly model: string | null;
+  readonly theme: string;
+  readonly copy_status_line: boolean;
+  readonly mouse_tracking: boolean;
+  readonly copy_on_select: boolean;
+}
+
+/** Rust `profile_create::DirStatus`. */
+export type DirStatus = "absent" | "empty" | "nonEmpty" | "notADirectory";
+
+export async function profileWizardDefaults(): Promise<WizardDefaults> {
+  return invoke<WizardDefaults>("profile_wizard_defaults");
+}
+
+export async function profileDirStatus(path: string): Promise<DirStatus> {
+  return invoke<DirStatus>("profile_dir_status", { path });
+}
+
+/** Seed the dir, register the hook, list it as `created`. Rolled back backend-side on failure. */
+export async function createProfile(spec: NewProfileSpec): Promise<Profile> {
+  return invoke<Profile>("profile_create", { spec });
+}
+
+/** Move a `created` profile's dir to the macOS Trash and drop it. Rejects for `adopted`. */
+export async function deleteProfile(name: string): Promise<void> {
+  return invoke<void>("profile_delete", { name });
 }

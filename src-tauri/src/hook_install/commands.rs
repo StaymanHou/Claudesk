@@ -44,7 +44,7 @@ fn hook_script_name(app: &AppHandle) -> &'static str {
 }
 
 /// Path to the user's `~/.claude/settings.json` (where CC reads hook registrations).
-fn user_settings_path() -> Result<PathBuf, String> {
+pub(crate) fn user_settings_path() -> Result<PathBuf, String> {
     let home = dirs_home()?;
     Ok(home.join(".claude").join("settings.json"))
 }

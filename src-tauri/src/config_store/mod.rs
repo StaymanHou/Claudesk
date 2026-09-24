@@ -40,6 +40,7 @@
 //! A future placeholder field in this module should re-open the ledger in this shape.
 
 pub mod commands;
+pub mod profile_create;
 pub mod profiles;
 pub mod settings;
 

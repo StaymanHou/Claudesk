@@ -483,6 +483,11 @@ pub fn run() {
             config_store::commands::profile_adoption_suggestions,
             config_store::commands::set_project_profile,
             config_store::commands::project_get_profile,
+            // F-b Phase 5: the New-profile wizard + Delete-to-Trash.
+            config_store::commands::profile_wizard_defaults,
+            config_store::commands::profile_dir_status,
+            config_store::commands::profile_create,
+            config_store::commands::profile_delete,
             // M12 WP2: clear the unclean-exit flag on a CLEAN close. There is deliberately
             // no `mark_unclean` counterpart — setting is owned by the spawn path, where it
             // is co-located with the `?` guaranteeing a failed spawn leaves no flag.

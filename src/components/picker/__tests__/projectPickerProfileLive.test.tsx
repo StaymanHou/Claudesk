@@ -6,6 +6,7 @@ import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 import { ProjectPicker } from "../ProjectPicker";
 import { PROFILES_CHANGED_EVENT } from "../../../state/profiles";
+import { NEW_PROFILE_OPTION } from "../profileLine";
 
 // F-b Phase 4 — the PICKER PAGE on a live mount (the consuming surface): the real component,
 // real clicks, real (mocked) Tauri events. Pins what no unit test of the cell can see — the
@@ -130,7 +131,11 @@ describe("ProjectPicker × profiles — live (F-b Phase 4)", () => {
     const select = el.querySelector(
       '[data-testid="project-profile-select"]',
     ) as HTMLSelectElement;
-    expect([...select.options].map((o) => o.value)).toEqual(["", "neo"]);
+    expect([...select.options].map((o) => o.value)).toEqual([
+      "",
+      "neo",
+      NEW_PROFILE_OPTION,
+    ]);
     await act(async () => {
       select.value = "neo";
       select.dispatchEvent(new Event("change", { bubbles: true }));

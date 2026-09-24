@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-09-23
+updated: 2026-09-24
 ---
 
 # Runtime Registry
@@ -31,13 +31,14 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 39s (2026-09-23, F-b Phase 1; Rust + frontend, frontend 3000 tests, Rust 943 lib, EXIT=0)
+- **Last:** 52s (2026-09-24, F-b Phase 5; frontend 3068 tests, Rust 982 lib, EXIT=0)
 - **Use timeout:** 216000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 52s — 2026-09-24
   - 39s — 2026-09-23 (F-b Phase 1 verify-auto; Rust rebuild)
   - 31s — 2026-09-23 (paydown WP10 act)
   - 35s — 2026-09-23 (paydown WP9 P2 verify-codify)

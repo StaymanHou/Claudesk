@@ -39,3 +39,11 @@ export function profileLineText(
       };
   }
 }
+
+/**
+ * F-b Phase 5 — the `Profile:` select's "New profile…" entry. It opens the wizard and is NEVER
+ * committed as a value: `:` is outside the profile-name alphabet (`profiles::validate_name`), so
+ * no listed profile can ever collide with it.
+ */
+export const NEW_PROFILE_OPTION = "::new-profile";
+export const NEW_PROFILE_LABEL = "New profile…";

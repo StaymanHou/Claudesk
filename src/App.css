@@ -4793,6 +4793,157 @@ body,
   background: rgba(255, 255, 255, 0.14);
 }
 
+.profiles-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.profiles-button-primary {
+  background: #0e639c;
+  border-color: #1177bb;
+  color: #ffffff;
+}
+
+.profiles-button-primary:hover {
+  background: #1177bb;
+}
+
+.profiles-button-danger {
+  color: rgba(240, 130, 130, 0.92);
+}
+
+/* F-b Phase 5 — the New-profile wizard (`NewProfileWizard.tsx`) and the Delete confirm's layer.
+   Both are portalled into <body> and sit above Settings (45) and the invite (50). ⚠️ No token
+   layer: literals are copied from `.confirm-dialog`. */
+.profile-wizard-backdrop,
+.profile-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* The shared ConfirmModal brings its own absolute backdrop; inside this fixed layer it fills
+   the viewport. */
+.profile-dialog-layer .confirm-dialog-backdrop {
+  background-color: transparent;
+}
+
+.profile-wizard {
+  width: min(32rem, 92vw);
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  background-color: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
+.profile-wizard-title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #f6f6f6;
+}
+
+.profile-wizard-step {
+  margin-left: 0.4rem;
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.profile-wizard-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 4.5rem;
+}
+
+.profile-wizard-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: #c4c4c4;
+}
+
+.profile-wizard-field input,
+.profile-wizard-field select {
+  padding: 4px 6px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  color: #f6f6f6;
+  background: #1e1e1e;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+}
+
+.profile-wizard-field small,
+.profile-wizard-note {
+  margin: 0;
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.profile-wizard-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: #c4c4c4;
+}
+
+.profile-wizard-check code {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.7);
+  word-break: break-all;
+}
+
+.profile-wizard-summary {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.78rem;
+}
+
+.profile-wizard-summary div {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.profile-wizard-summary dt {
+  flex: 0 0 8.5rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.profile-wizard-summary dd {
+  margin: 0;
+  min-width: 0;
+  color: #f6f6f6;
+  word-break: break-all;
+}
+
+.profile-wizard-error {
+  margin: 0;
+  font-size: 0.76rem;
+  color: rgba(240, 130, 130, 0.92);
+}
+
+.profile-wizard-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .substrate-install-button {
   align-self: flex-start;
   margin-top: 8px;
