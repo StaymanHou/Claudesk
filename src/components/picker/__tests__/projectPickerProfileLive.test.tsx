@@ -59,6 +59,29 @@ async function mount(rowProfile: string | null, onOpen = vi.fn()) {
         case "set_project_profile":
         case "record_open":
           return null;
+        case "profile_wizard_defaults":
+          return {
+            config_root: "/u/.config",
+            permission_mode: "default",
+            cleanup_period_days: 99999,
+            theme: "dark",
+            status_line: null,
+            themes: ["dark"],
+          };
+        case "profile_dir_status":
+          return "absent";
+        case "profile_create": {
+          // The backend lists the profile, then emits `profiles-changed` (emitted by the test).
+          const spec = (args as { spec: { name: string; config_dir: string } })
+            .spec;
+          const created = {
+            name: spec.name,
+            config_dir: spec.config_dir,
+            provenance: "created",
+          };
+          listed = [...listed, created];
+          return created;
+        }
         default:
           return null;
       }
@@ -145,5 +168,58 @@ describe("ProjectPicker × profiles — live (F-b Phase 4)", () => {
       { cmd: "set_project_profile", args: { path: ROW, profile: "neo" } },
     ]);
     expect(profileLine(el)?.textContent).toBe("Profile: neo");
+  });
+
+  it("F-b Phase 5 — a profile created from the row's New profile… is committed to it and the row OPENS under it", async () => {
+    listed = [neo];
+    const { el, onOpen } = await mount(null);
+    await act(async () => {
+      (profileLine(el) as HTMLElement).click();
+    });
+    const select = el.querySelector(
+      '[data-testid="project-profile-select"]',
+    ) as HTMLSelectElement;
+    await act(async () => {
+      select.value = NEW_PROFILE_OPTION;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle();
+    const name = document.body.querySelector(
+      '[data-testid="profile-wizard-name"]',
+    ) as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    await act(async () => {
+      setter?.call(name, "work");
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    for (let i = 0; i < 8; i++) {
+      await act(async () => {
+        (
+          document.body.querySelector(
+            '[data-testid="profile-wizard-next"]',
+          ) as HTMLElement
+        ).click();
+      });
+      await settle();
+    }
+    await act(async () => {
+      await emit(PROFILES_CHANGED_EVENT);
+    });
+    await settle();
+
+    expect(calls.filter((c) => c.cmd === "set_project_profile")).toEqual([
+      { cmd: "set_project_profile", args: { path: ROW, profile: "work" } },
+    ]);
+    // Re-read on profiles-changed, so the new name resolves — never "missing".
+    expect(profileLine(el)?.textContent).toBe("Profile: work");
+    await act(async () => {
+      (el.querySelector(".picker-recent") as HTMLElement).click();
+    });
+    await settle();
+    expect(calls.map((c) => c.cmd)).toContain("record_open");
+    expect(onOpen).toHaveBeenCalledTimes(1);
   });
 });

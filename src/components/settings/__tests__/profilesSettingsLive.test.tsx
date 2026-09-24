@@ -176,4 +176,28 @@ describe("ProfilesSettings — live", () => {
     await click(el.querySelector('[data-testid="profiles-new"]'));
     expect(inBody("profile-wizard")).not.toBeNull();
   });
+
+  it("one Esc cancels the Delete confirm, sends nothing, and never reaches App's document capture listener", async () => {
+    // App.tsx closes Settings from a DOCUMENT capture listener; the confirm must win the race.
+    let appSaw = 0;
+    const app = (e: KeyboardEvent) => {
+      if (e.key === "Escape") appSaw++;
+    };
+    document.addEventListener("keydown", app, true);
+    try {
+      const el = await mount();
+      await click(el.querySelector('[data-testid="profiles-delete-work"]'));
+      await act(async () => {
+        inBody("confirm-cancel")?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        );
+      });
+      await settle();
+      expect(inBody("confirm-dialog")).toBeNull();
+      expect(appSaw).toBe(0);
+      expect(calls.some((c) => c.cmd === "profile_delete")).toBe(false);
+    } finally {
+      document.removeEventListener("keydown", app, true);
+    }
+  });
 });
