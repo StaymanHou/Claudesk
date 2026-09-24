@@ -49,7 +49,7 @@
 // truthful; without that, a commit followed by a filter round-trip would re-seed from a stale
 // snapshot. See `applyCommittedModel.ts`.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setProjectDefaultModel } from "../../cc/modelOverrideIpc";
 import {
   setProjectDefaultDriveMode,
@@ -121,9 +121,10 @@ export function ProjectModelCell({
   onDriveModeCommitted,
 }: ProjectModelCellProps) {
   // F-b ruling 4 — a non-default profile row has no drive-mode cell, gate ON or not.
-  const gateEnabled: WorkflowGateValue = isWorkflowApplicable(
-    useWorkflowFeaturesEnabled(),
-    profile,
+  const gateOn: WorkflowGateValue = useWorkflowFeaturesEnabled();
+  const gateEnabled = useMemo(
+    () => isWorkflowApplicable(gateOn, profile),
+    [gateOn, profile],
   );
 
   const [model, setModel] = useState<string | null>(seedModel);

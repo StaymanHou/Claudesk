@@ -387,7 +387,7 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [x] P2.3 **Caller-side guard.** Every per-workspace gate consumer must call the funnel, with
     the consumer list derived from source (a reverse guard — lesson entry 13: a one-directional
     guard cannot see an omission).  <!-- status: done — ✅ `workflowApplicableGuard.test.ts` (forward: direct-wrap shape at every call; row-scoped binding; REVERSE: allowlist entries exist and still call). Mutation-proven 4/4 individually (unwrap 2nd call / unwrap 1st call [also fails the live test] / bare picker read / stale allowlist). -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [x] verify-auto  <!-- status: done — EXIT=0 (40s; 3018 FE / 951 Rust; OFF-invariant guard still 6 arms / 9 subjects). Two first-run failures fixed in place: (1) React Compiler `preserve-manual-memoization` on ProjectModelCell — passing a prop into the opaque `isWorkflowApplicable(...)` call widened its hand-memoized callbacks' inferred deps (bisected: inline `gateOn && profile === null` lints clean, the call does not); fixed with `useMemo`, and the guard generalized to the BOUND form (`const x = useWorkflowFeaturesEnabled()`, every read routed, `useMemo` deps array accepted) — re-mutation-proven 5/5. (2) clippy doc-lazy-continuation: `SpawnProfile` had been inserted between `resolve_spawn_profile`'s doc and its fn -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
@@ -508,8 +508,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 2 > verify-auto
-- **Active scope:** Phase 2 verify-auto
+- **Path:** F-b > Phase 2 > verify-self
+- **Active scope:** Phase 2 verify-self (live: gate ON; profile workspace vs default workspace — skill row / drive-mode readout absent; CC child has no CLAUDESK_DRIVE_MODE; announce map drops the restore arm)
 - **Blocked:** none
 - **Unvisited:** Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)

@@ -545,8 +545,15 @@ fn resolve_resume_arm(intent: OpenIntent, consume: impl FnOnce() -> bool) -> Res
     }
 }
 
+/// F-b — the listed profile a CC spawn runs under (`None` at the call site = default).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SpawnProfile {
+    name: String,
+    dir: PathBuf,
+}
+
 /// F-b — resolve the config dir a CC spawn runs under: `Ok(None)` = the default profile
-/// (`~/.claude`), `Ok(Some(dir))` = a listed profile, `Err` = refuse the spawn.
+/// (`~/.claude`), `Ok(Some(SpawnProfile))` = a listed profile, `Err` = refuse the spawn.
 ///
 /// ⚠️ **The asymmetry with [`resolve_spawn_model`] is deliberate.** A degraded model read costs
 /// "CC's default model" — a mild surprise. A degraded *profile* read would cost the wrong
@@ -555,13 +562,6 @@ fn resolve_resume_arm(intent: OpenIntent, consume: impl FnOnce() -> bool) -> Res
 ///   see; a broken `projects.json` already shows the operator an empty picker);
 /// - a row that NAMES a profile, when the list is unreadable, the name is unlisted, or the dir
 ///   is gone → **refuse**, with a message naming the profile.
-/// F-b — the listed profile a CC spawn runs under (`None` at the call site = default).
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct SpawnProfile {
-    name: String,
-    dir: PathBuf,
-}
-
 fn resolve_spawn_profile(
     reads: Option<(
         Result<Option<String>, crate::config_store::ConfigError>,
