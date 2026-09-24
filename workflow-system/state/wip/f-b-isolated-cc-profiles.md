@@ -343,8 +343,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     - [x] B.11 `set_project_profile` change → the row's `session-state.json` key is gone  <!-- status: PASS -->
     - [x] A.6 row → removed profile → `cc_spawn` returns "…profile \"scratch\", which is no longer in Claudesk's profile list…"; child count unchanged (2); the refused spawn set no unclean flag  <!-- status: PASS -->
     - [x] Probe notes `tmp/scratch/f-b-probes.md` answer all three questions  <!-- status: PASS -->
-  - [ ] verify-human  <!-- status: in-progress — boundary: modifies the existing `cc_spawn` path; capture = verify-self's live `ps eww` evidence -->
-    - [x] P1.verify-human.1 Operator ruling: `--permission-mode` argv vs a profile's `defaultMode` → **RULED 2026-09-23: omit `--permission-mode` for non-default profiles; the profile's `settings.json` governs. Default profile keeps the app-global flag.** Build work lands with the spawn change (not yet implemented).  <!-- status: done -->
+  - [x] verify-human  <!-- status: done — boundary: modifies the existing `cc_spawn` path; capture = verify-self's live `ps eww` evidence + the 2026-09-24 argv re-check -->
+    - [x] P1.verify-human.1 Operator ruling: `--permission-mode` argv vs a profile's `defaultMode` → **RULED 2026-09-23: omit `--permission-mode` for non-default profiles; the profile's `settings.json` governs. Default profile keeps the app-global flag.** ✅ **Built 2026-09-24 (`fc156ad`)**: `spawn_permission_mode` + `build_cc_argv(Option<…>)`, unit-tested + mutation-proven (a profile getting `Some(app_mode)` fails the test, landed). **Caller proven live**: default row → `claude --permission-mode bypassPermissions`, profile row → bare `claude` + `CLAUDE_CONFIG_DIR`. ⚠️ B.10's *footer* read was not done (the pane is not mounted on an IPC spawn) — folded into Phase 5 verify-human.  <!-- status: done -->
     - [ ] P1.verify-human.2 Operator logs in once under a scratch profile; agent reads back `.claude.json` / `settings.json` (probe (1) post-login half). **DEFERRED by operator 2026-09-23 to Phase 5 verify-human** (end-to-end create + login).  <!-- status: done (deferred) -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
@@ -450,7 +450,7 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     error).  <!-- status: NOT-STARTED -->
   - [ ] P4.3 **Settings "Profiles" group:** list, Remove (for every non-default profile), and
     "Add existing config dir…" (suggestions plus a folder picker via `tauri-plugin-dialog`). Delete
-    and New arrive in Phase 5.  <!-- status: NOT-STARTED -->
+    and New arrive in Phase 5. ⚠️ **Per the 2026-09-23 ruling, the app-global permission-mode setting does NOT apply to profile workspaces** — the Settings permission control must say so (a one-line hint), or it reads as broken.  <!-- status: NOT-STARTED -->
   - [ ] verify-auto  <!-- status: NOT-STARTED -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
@@ -496,17 +496,17 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
     - [ ] Operator creates a real profile end-to-end, logs in, confirms theme + status line + no
-      mouse capture + no copy-on-select, then deletes it and finds it in the Trash.  <!-- status: NOT-STARTED -->
+      mouse capture + no copy-on-select, **and the pane footer shows the profile's permission mode (B.10)**, then deletes it and finds it in the Trash. (Includes the P1.verify-human.2 deferral: after `/login`, agent reads back `.claude.json` `copyOnSelect` + `settings.json` `theme`.)  <!-- status: NOT-STARTED -->
     - [ ] Installed-`.app` Finder-launch smoke (profile spawn + dot) — **deferred to the
       `/release` gate** per the operator's standing preference (G.30).  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 1 > verify-human
-- **Active scope:** Phase 1 verify-human answered; NEXT = implement the permission-mode ruling (omit `--permission-mode` for non-default profiles) then verify-codify. Paused at operator request (turn-level).
+- **Path:** F-b > Phase 1 > verify-codify
+- **Active scope:** Phase 1 verify-codify
 - **Blocked:** none
 - **Unvisited:** Phase 2 → Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
-- **Open discoveries:** `--permission-mode` argv overrides a profile's `defaultMode` (spec B.10 / D.18 contradiction — ruling needed)
+- **Open discoveries:** none (permission-mode finding ruled + built)
 
 ## Discoveries
 [SURFACED-2026-09-23] Phase 1 > P1.1 — probe (1): `theme` lives in `settings.json` (a `.claude.json` `theme` is stripped at startup); `copyOnSelect` lives in `.claude.json` and survives first run; seeding `hasCompletedOnboarding` skips CC's login step, so it is NOT seeded. Spec D.18 is corrected in place.

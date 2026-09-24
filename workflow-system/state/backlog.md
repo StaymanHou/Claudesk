@@ -1126,4 +1126,4 @@ and work on the spec well."
 - **Context:** Spec B.10 expects the pane footer to show the profile's mode, and the wizard makes the permission-mode step mandatory (the boilerplate's "silence is not a gate"). Both are dead as built. Observed live 2026-09-23: a `defaultMode: "plan"` profile spawned with `--permission-mode bypassPermissions`.
 - **Suggested action:** Operator ruling. Recommended: omit `--permission-mode` for non-default profiles so the profile's `settings.json` governs; keep the app-global flag for the default profile only.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** resolved in F-b Phase 1 (ruled 2026-09-23, built 2026-09-24 `fc156ad`) — delete with its `**Backlog resolved:**` CHANGELOG line at `feature-finalize`
