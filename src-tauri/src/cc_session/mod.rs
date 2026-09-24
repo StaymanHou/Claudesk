@@ -634,6 +634,25 @@ fn resolve_profile_spawn_env(
     resolved
 }
 
+/// Env vars a CC spawn must NOT inherit from Claudesk's own process — each is Claudesk's to set:
+/// - `CLAUDE_CONFIG_DIR` (F-b A.8): set explicitly for a profile; the default profile must reach
+///   `~/.claude` even if Claudesk itself was launched with one exported;
+/// - `CLAUDESK_DRIVE_MODE`: the drive-mode signal is Claudesk's OWN value (gated, per project,
+///   per profile). ⚠️ Found live at F-b Phase 2 verify-self: a dev build launched from inside a
+///   Claudesk CC session inherited the PARENT's mode and passed it to every child, whatever the
+///   gate, the stored mode, or the profile said
+///   (`SURFACE-2026-09-24-SPAWNED-CC-INHERITS-A-PARENT-CLAUDESK-DRIVE-MODE`).
+const CC_SPAWN_ENV_REMOVE: &[&str] = &[
+    crate::config_store::profiles::CONFIG_DIR_ENV,
+    DRIVE_MODE_ENV,
+];
+
+/// Env vars the login-shell pane must not inherit. ⚠️ `CLAUDESK_DRIVE_MODE` only — the shell
+/// "must never receive" it (`shell_spawn_env`), and an inherited copy broke that promise the same
+/// way. `CLAUDE_CONFIG_DIR` is deliberately NOT stripped: the shell is the operator's own terminal,
+/// not a CC spawn, and the value is theirs.
+const SHELL_SPAWN_ENV_REMOVE: &[&str] = &[DRIVE_MODE_ENV];
+
 /// Apply argv, cwd and env to a `CommandBuilder` that already carries the inherited base env.
 ///
 /// ⚠️ **Removal runs BEFORE `env` is applied** — F-b A.8: a CC spawn strips an inherited
@@ -1087,11 +1106,10 @@ impl PtyCcSession {
             project_path,
             &borrow_env(env),
             "/exit",
-            // F-b A.8 — a CC spawn never INHERITS a config dir. A profile sets it explicitly in
-            // `env`; the default profile must reach CC's own `~/.claude` even when Claudesk was
-            // itself launched with `CLAUDE_CONFIG_DIR` exported (e.g. `pnpm tauri:dev` from a
-            // profile's terminal). Removal runs before `env` is applied, so a profile's value wins.
-            &[crate::config_store::profiles::CONFIG_DIR_ENV],
+            // F-b A.8 — a CC spawn never INHERITS a config dir or a drive mode. See
+            // `CC_SPAWN_ENV_REMOVE`. Removal runs before `env` is applied, so Claudesk's own
+            // values (a profile's dir, the gated drive mode) win.
+            CC_SPAWN_ENV_REMOVE,
         )
     }
 
@@ -1121,7 +1139,7 @@ impl PtyCcSession {
             project_path,
             &shell_spawn_env(),
             "exit",
-            &[],
+            SHELL_SPAWN_ENV_REMOVE,
         )
     }
 
@@ -2490,8 +2508,8 @@ mod tests {
             flat.contains("\"/exit\", // F-b A.8"),
             "the CC spawn_argv call no longer carries its env_remove argument"
         );
-        assert!(flat.contains("&[crate::config_store::profiles::CONFIG_DIR_ENV])"));
-        assert!(flat.contains("&shell_spawn_env(), \"exit\", &[])"));
+        assert!(flat.contains("CC_SPAWN_ENV_REMOVE)"));
+        assert!(flat.contains("&shell_spawn_env(), \"exit\", SHELL_SPAWN_ENV_REMOVE)"));
         // The removal loop itself is asserted as a VALUE in
         // `profile_compose_strips_an_inherited_config_dir_and_lets_a_profile_win`.
         assert!(flat
@@ -2518,12 +2536,44 @@ mod tests {
         // Profile: removal list AND an explicit value → the explicit value wins.
         let profile = compose_command(inherited(), &[], "/p", &[(key, "/u/claude-neo")], &[key]);
         assert_eq!(env_of(&profile, key).as_deref(), Some("/u/claude-neo"));
-        // Shell: no removal list → the inherited value is left alone (the shell is not CC).
-        let shell = compose_command(inherited(), &[], "/p", &[], &[]);
+        // Shell: its own list → the inherited config dir is left alone (the shell is not CC).
+        let shell = compose_command(inherited(), &[], "/p", &[], SHELL_SPAWN_ENV_REMOVE);
         assert_eq!(
             env_of(&shell, key).as_deref(),
             Some("/inherited/from/the/app")
         );
+    }
+
+    #[test]
+    fn neither_spawn_inherits_a_parent_drive_mode() {
+        // F-b Phase 2 verify-self: a dev build launched from a Claudesk CC session inherited
+        // the parent's CLAUDESK_DRIVE_MODE and passed it to every child.
+        let inherited = || {
+            let mut c = CommandBuilder::new("claude");
+            c.env(DRIVE_MODE_ENV, "autopilot");
+            c
+        };
+        let cc_quiet = compose_command(inherited(), &[], "/p", &[], CC_SPAWN_ENV_REMOVE);
+        assert_eq!(
+            env_of(&cc_quiet, DRIVE_MODE_ENV),
+            None,
+            "CC: inherited mode must go"
+        );
+        let shell = compose_command(inherited(), &[], "/p", &[], SHELL_SPAWN_ENV_REMOVE);
+        assert_eq!(
+            env_of(&shell, DRIVE_MODE_ENV),
+            None,
+            "shell must never receive it"
+        );
+        // Claudesk's OWN value still wins when it sets one (the gated arm).
+        let cc_own = compose_command(
+            inherited(),
+            &[],
+            "/p",
+            &[(DRIVE_MODE_ENV, "stepping")],
+            CC_SPAWN_ENV_REMOVE,
+        );
+        assert_eq!(env_of(&cc_own, DRIVE_MODE_ENV).as_deref(), Some("stepping"));
     }
 
     /// The pure decisions above prove the MACHINE; this pins the CALLER (the recurring defect
