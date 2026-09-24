@@ -73,3 +73,12 @@ exactly the moment they are most heavily mutation-tested.
 Filed as `SURFACE-2026-09-13-GIT-CHECKOUT-SILENTLY-NO-OPS-ON-AN-UNTRACKED-FILE` (high) for a fold
 into `docs/lessons/source-text-guards.md` as a mutation-testing precondition — **folded 2026-09-23**
 (a pointer bullet in its mutation-proving list) and the backlog entry deleted; this memory is the detail.
+
+**Corollary — the aside copies need UNIQUE names (hit 2026-09-24, F-b Phase 3 codify).** Snapshotting
+three files that share a basename (`hook_install/commands.rs`, `config_store/commands.rs`,
+`transcript/commands.rs`) with `cp a b c $SNAP/` keeps only the LAST — they overwrite each other — so
+the "restore" copied the transcript module over `hook_install/commands.rs` (`E0428`) and the
+uncommitted test in it was gone from the snapshot. Recovery was `git show HEAD:<path>` + re-adding the
+test. Name each copy by its role (`hook_commands.rs`, …) and record `shasum`s BEFORE mutating, then
+`diff` the sums after restoring. And a mutant that does not COMPILE (`error[E0004]`) is an invalid
+probe, not a pass — rewrite it until the test result is printed.

@@ -264,6 +264,61 @@ mod tests {
 
     // ── F-b Phase 3: per-profile registration ──────────────────────────────────────────────
 
+    /// Comment-stripped, whitespace-flattened production source of a file, for CALLER pins.
+    fn flat_production(src: &str) -> String {
+        let production = src.split("#[cfg(test)]").next().unwrap_or(src);
+        production
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join(" ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join("")
+            .replace(",)", ")")
+    }
+
+    /// The bodies are unit-tested above; this pins the four `AppHandle` CALLERS that no unit
+    /// test can reach (the recurring defect shape: a correct mechanism nobody calls).
+    #[test]
+    fn profile_callers_route_through_the_tested_bodies() {
+        let launch = flat_production(include_str!("commands.rs"));
+        let at = launch
+            .find("pubfninstall_on_launch(")
+            .expect("install_on_launch moved; re-scope this guard");
+        let body = &launch[at..];
+        let body = &body[..body
+            .find("fnlisted_profiles(")
+            .expect("listed_profiles follows")];
+        // The ~/.claude install is still made, and its result is what the function returns —
+        // a profile failure can never change it (C.16).
+        assert!(
+            body.contains("letdefault=install(&settings,&command)"),
+            "{body}"
+        );
+        assert!(
+            body.contains("install_into_profiles(&listed_profiles(app),&command)"),
+            "{body}"
+        );
+        assert!(body.trim_end().ends_with("default}"), "{body}");
+
+        let cfg = flat_production(include_str!("../config_store/commands.rs"));
+        assert!(
+            cfg.contains("adopt_registered(&dir,Path::new(&config_dir),name.as_deref(),&command)")
+        );
+        assert!(cfg.contains("remove_unregistered(&dir,&name,&command)"));
+
+        let tr = flat_production(include_str!("../transcript/commands.rs"));
+        assert!(
+            tr.contains("Some(d)=>config_root_for_project("),
+            "transcript_tail no longer resolves the config root"
+        );
+        assert!(
+            !tr.contains("transcript_dir_for(&super::default_config_root(&home)"),
+            "transcript_tail went back to assuming ~/.claude"
+        );
+    }
+
     const PROD: &str = "CLAUDESK_HOOK_SOCK='/d/hook.sock' /usr/bin/perl '/d/claudesk-hook.pl'";
     const DEV: &str = "CLAUDESK_HOOK_SOCK='/dd/hook.sock' /usr/bin/perl '/dd/claudesk-hook-dev.pl'";
 

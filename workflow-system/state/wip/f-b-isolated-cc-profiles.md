@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: F-b — Isolated CC profiles as Claudesk workspaces
 
 **Workflow:** feature
-**State:** verify-codify (phase 2 complete)
+**State:** verify-codify (phase 3 complete)
 **Created:** 2026-09-23
 **Entry:** spec (complex feature)
 **Source:** `roadmap.md` → Group F → F-b + "F-b decisions — `/util-grill-me`, 2026-09-23" (4 rulings,
@@ -397,7 +397,7 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     - [x] P2.verify-human.1 Operator ruling: keep the pre-existing inherited-`CLAUDESK_DRIVE_MODE` fix (`decde09`) inside F-b, or split it into its own task → **KEEP (operator 2026-09-24)**; named as a separate item in the ship summary  <!-- status: done -->
   - [x] verify-codify  <!-- status: done — boundary = Workspace UI + picker cell + `SessionRegistry::spawn`. Already covering: `workflowApplicableLive.test.tsx` (Workspace live mount, per surface by identity, positive control), backend spawn-env / announce / env-removal tests, the caller guard. Added: `projectModelCellProfileRender.test.tsx` (gate mocked ON; default row = mode line, profile row = none — positive control) and two CALLER pins in `profile_spawn_caller_orders_its_profile_decisions` (env resolver receives `profile.as_ref()`; the session records `profile.map(|p| p.name)`). Mutation-proven 3/3 individually, all compiled + landed. verify:auto EXIT=0 (39s; 3020 FE / 952 Rust) -->
 
-- [ ] Phase 3: Per-profile hook registration + config-dir-aware transcript reader  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [x] Phase 3: Per-profile hook registration + config-dir-aware transcript reader  <!-- status: done 2026-09-24 -->
   **Relevance check (before Phase 3):**
   - Requester still needs this: yes. The operator's core value is the status dot, and a profile session is still dark.
   - Requirements unchanged: yes (ruling 3, persistent per-profile registration). Phase 2's env-strip fix does not touch hooks.
@@ -447,9 +447,15 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     - [x] P3.vs.8 `cargo test transcript` (verify-auto run)  <!-- status: PASS -->
   - [x] verify-human  <!-- status: done — boundary (launch hook install, transcript_tail); capture = verify-self's jq/shasum/status-log evidence; the one agent-unreachable check deferred to Phase 4 -->
     - [ ] P3.verify-human.1 Operator opens a workspace under a real (logged-in) adopted profile and confirms the dot tracks idle → running → awaiting-input → idle across a real turn. [UNVERIFIED by agent — the scratch profile is not logged in, so only `running` was reachable.] **DEFERRED by operator 2026-09-24 to Phase 4 verify-human**, run against `~/.config/claude-original-dev` (created 2026-09-24 at the operator's request — a CONFIG-ONLY copy of `claude-original`; needs one `/login`).  <!-- status: done (deferred) -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-codify  <!-- status: done — boundary = `install_on_launch` + the `profile_adopt` / `profile_remove` / `transcript_tail` commands. Bodies already unit-tested at build (additive/foreign-preserving, idempotent, self-heal, missing dir, dev/prod independence, adopt rollback, unregister-first, config root). Added `profile_callers_route_through_the_tested_bodies`: pins the four AppHandle CALLERS (the ~/.claude install is still made AND is the returned result; the profile loop runs; adopt/remove route through the tested bodies; transcript_tail resolves the config root). Mutation-proven 4/4 individually — one first-draft mutant (M4) did not compile and was rewritten until it did. ⚠️ A snapshot-name collision (three `commands.rs`) destroyed the uncommitted test mid-mutation; recovered via `git show HEAD` + re-add, and banked in `.claude/memory/git-checkout-no-ops-on-untracked-file.md`. verify:auto EXIT=0 (46s; 3020 FE / 966 Rust) -->
 
 - [ ] Phase 4: Picker profile cell + Settings "Profiles" group (adopt / remove / missing state)  <!-- status: NOT-STARTED; depends on Phases 2, 3 -->
+  **Relevance check (before Phase 4):**
+  - Requester still needs this: yes. It is the first operator-visible surface for everything Phases 1–3 built.
+  - Requirements unchanged: yes, plus two recorded additions. The Settings permission control needs a one-line hint (the 2026-09-23 ruling). Verify-human now also carries the deferred P3.verify-human.1, run on `claude-original-dev`.
+  - Solution still feasible: yes. `profiles_list` / `profile_adopt` / `profile_remove` / `set_project_profile` all exist and are live-proven.
+  - No superior alternative discovered: yes.
+  **Verdict:** proceed
   **Observable outcomes:**
   - Browser (MCP bridge): every picker row has `[data-testid="project-profile-cell"]` next to the
     model and drive-mode cells. Its options are "default" plus each listed profile plus
@@ -525,10 +531,10 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 3 > verify-codify
-- **Active scope:** Phase 3 verify-codify
+- **Path:** F-b > Phase 4 > P4.1
+- **Active scope:** P4.1 (ProjectProfileCell on the picker row)
 - **Blocked:** none
-- **Unvisited:** Phase 4 → Phase 5 → ship → review-quality → finalize
+- **Unvisited:** Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)
 
 ## Discoveries
