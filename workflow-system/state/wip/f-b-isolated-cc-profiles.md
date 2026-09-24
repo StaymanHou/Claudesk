@@ -512,8 +512,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 2 > verify-auto (post-F9b)
-- **Active scope:** Phase 2 verify-auto after the F9b fix; then verify-self is already PASS (re-verified live)
+- **Path:** F-b > Phase 2 > verify-human
+- **Active scope:** Phase 2 verify-human (post-F9b verify-auto EXIT=0 37s, 3018 FE / 952 Rust; verify-self 2/2 — `git diff 5061bbf decde09 -- src` empty, so the DOM leaf's pre-fix observation still describes the code)
 - **Blocked:** none
 - **Unvisited:** Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)
