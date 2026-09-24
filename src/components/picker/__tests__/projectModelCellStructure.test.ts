@@ -129,12 +129,25 @@ describe("each line owns its own hit region (the WP's structural risk)", () => {
     const code = codeOnly(cellSource());
     // Two call sites of ONE function — not two hand-rolled optimistic-write sequences. If a
     // future edit inlines one of them, this count drops and the structural guarantee is gone.
-    const calls = code.match(/commitCellValue</g) ?? [];
+    //
+    // ⚠️ F-b added a THIRD line (the profile line, triage in the F-b WIP). Asserted by IDENTITY:
+    // each writer is reached from inside a commitCellValue call, and there are exactly as many
+    // calls as writers — a bare count could not tell a routed third line from a hand-rolled one.
+    const calls = [
+      ...code.matchAll(
+        /commitCellValue<[\s\S]*?persist: \(value\) =>\s*(\w+)\(/g,
+      ),
+    ].map((m) => m[1]);
     expect(
-      calls.length,
-      "both the model and drive-mode commits must go through commitCellValue; " +
+      calls.sort(),
+      "the model, drive-mode AND profile commits must each go through commitCellValue; " +
         "a hand-rolled second write path is the M11 WP4 defect this shape prevents",
-    ).toBe(2);
+    ).toEqual([
+      "setProjectDefaultDriveMode",
+      "setProjectDefaultModel",
+      "setProjectProfile",
+    ]);
+    expect(code.match(/commitCellValue</g) ?? []).toHaveLength(3);
   });
 
   it("carries an EXECUTABLE gate-seam reference, not a comment", () => {

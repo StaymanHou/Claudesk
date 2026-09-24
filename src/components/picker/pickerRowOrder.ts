@@ -36,8 +36,6 @@ export const PICKER_ROW_CELLS = [
   "open",
   /** M11.5 WP1 — the per-project CC model override. Right-aligned, fixed width. */
   "model",
-  /** F-b — the per-project Claude Code PROFILE (a `CLAUDE_CONFIG_DIR`). Ungated (lite core). */
-  "profile",
   /** The per-row × that removes the project from recents. */
   "remove",
 ] as const;

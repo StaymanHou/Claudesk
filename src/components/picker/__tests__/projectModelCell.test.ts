@@ -33,14 +33,9 @@ describe("picker row cell order — the model cell is a flat sibling", () => {
     // when the auto-resume announcement + the ⏵ no-fire door were added. Kept as an
     // EXACT-VALUE assertion rather than weakened to `toContain` — asserting the order as a
     // value, not a substring, is the entire reason `pickerRowOrder.ts` exists, and fuzzing
-    // it to stop a failure would delete the guarantee. F-b P4.1 (2026-09-24) added "profile"
-    // after "model" (triage recorded in the F-b WIP) — still an exact value.
-    expect([...PICKER_ROW_CELLS]).toEqual([
-      "open",
-      "model",
-      "profile",
-      "remove",
-    ]);
+    // it to stop a failure would delete the guarantee. F-b briefly added a "profile" cell here;
+    // the operator moved it INTO the model cell's stack at verify-human (triage in the F-b WIP).
+    expect([...PICKER_ROW_CELLS]).toEqual(["open", "model", "remove"]);
   });
 
   it("declares the model cell a sibling of the open-project button", () => {

@@ -72,6 +72,8 @@ import {
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 import { isWorkflowApplicable } from "../../state/workflowApplicable";
 import { commitCellValue } from "./commitCellValue";
+import { profileLineText, DEFAULT_PROFILE_LABEL } from "./profileLine";
+import { setProjectProfile, type Profile } from "../../state/profiles";
 
 /**
  * ⚠️ EXECUTABLE seam reference for the M10.9 workflow gate — do not delete as unused.
@@ -100,6 +102,13 @@ interface ProjectModelCellProps {
   /** F-b — this row's profile (`null` = default). A non-default profile has no drive mode. */
   profile?: string | null;
   /**
+   * F-b — the listed profiles, read ONCE by the picker (never per row), for the profile line's
+   * closed-set select. Default: none listed.
+   */
+  profiles?: readonly Profile[];
+  /** F-b — a successfully-persisted profile change, so the parent can fold it into `recents`. */
+  onProfileCommitted?: (projectPath: string, profile: string | null) => void;
+  /**
    * Report a successfully-persisted model so the parent can fold it into `recents`,
    * keeping the seed truthful across an unmount (filter in/out). Success path only — a
    * failed write reverts locally and must NOT be written back.
@@ -111,20 +120,54 @@ interface ProjectModelCellProps {
 
 const HINTS_ID = "picker-model-hints";
 
+/** Stable empty default, so an omitted `profiles` prop is referentially constant. */
+const NO_PROFILES: readonly Profile[] = [];
+
 export function ProjectModelCell({
   projectPath,
   projectLabel,
   seedModel,
   seedDriveMode = null,
   profile = null,
+  profiles = NO_PROFILES,
   onCommitted,
   onDriveModeCommitted,
+  onProfileCommitted,
 }: ProjectModelCellProps) {
-  // F-b ruling 4 — a non-default profile row has no drive-mode cell, gate ON or not.
+  // F-b — this row's profile, seeded from the row and updated on commit. ⚠️ The gate below reads
+  // THIS (not the seed prop), so a profile change hides or shows the drive-mode line at once.
+  const [profileValue, setProfileValue] = useState<string | null>(profile);
+  // F-b ruling 4 — a non-default profile row has no drive-mode line, gate ON or not.
   const gateOn: WorkflowGateValue = useWorkflowFeaturesEnabled();
   const gateEnabled = useMemo(
-    () => isWorkflowApplicable(gateOn, profile),
-    [gateOn, profile],
+    () => isWorkflowApplicable(gateOn, profileValue),
+    [gateOn, profileValue],
+  );
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileFailed, setProfileFailed] = useState(false);
+  const profileRef = useRef<string | null>(profile);
+  const profileSelectRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    if (editingProfile) profileSelectRef.current?.focus();
+  }, [editingProfile]);
+  const commitProfile = useCallback(
+    (next: string | null) => {
+      setEditingProfile(false);
+      void commitCellValue<string | null>({
+        next,
+        persisted: profileRef.current,
+        changed: (a, b) => (a ?? null) !== (b ?? null),
+        persist: (value) => setProjectProfile(projectPath, value),
+        apply: setProfileValue,
+        setRef: (value) => {
+          profileRef.current = value;
+        },
+        setFailed: setProfileFailed,
+        notifyCommitted: (value) => onProfileCommitted?.(projectPath, value),
+        what: "profile",
+      });
+    },
+    [projectPath, onProfileCommitted],
   );
 
   const [model, setModel] = useState<string | null>(seedModel);
@@ -217,6 +260,15 @@ export function ProjectModelCell({
   // `cellLines` exists — a proven pure module behind a caller that ignores it is this
   // milestone's most-repeated defect).
   const lines = cellLines(model, mode, gateEnabled, MODEL_UNSET_LABEL);
+  const profileLine = profileLineText(profileValue, profiles);
+  const missingProfile =
+    profileLine.kind === "missing" ? (profileValue ?? "").trim() : null;
+  const profileTitle =
+    missingProfile !== null
+      ? `This project names the profile "${missingProfile}", which is not in Claudesk's profile list. Opening it is refused until you pick a profile.`
+      : profileFailed
+        ? "Could not save the profile — the previous value was restored."
+        : `Claude Code profile (CLAUDE_CONFIG_DIR) for ${projectLabel}. Applied when this project's session starts.`;
   const modelLine = lines.find((l) => l.kind === "model");
   const modeLine = lines.find((l) => l.kind === "driveMode");
 
@@ -228,6 +280,53 @@ export function ProjectModelCell({
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
+      {/* F-b — the PROFILE line, first in the stack and always present (lite-IDE core, NOT
+          gated). A closed-set native <select> while editing, per the drive-mode precedent. */}
+      {editingProfile ? (
+        <select
+          ref={profileSelectRef}
+          className="picker-recent-profile-select"
+          data-testid="project-profile-select"
+          value={profileValue ?? ""}
+          aria-label={`Claude Code profile for ${projectLabel}`}
+          title={profileTitle}
+          onChange={(e) =>
+            commitProfile(e.target.value === "" ? null : e.target.value)
+          }
+          onBlur={() => setEditingProfile(false)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setEditingProfile(false);
+            }
+          }}
+        >
+          <option value="">{DEFAULT_PROFILE_LABEL}</option>
+          {profiles.map((p) => (
+            <option key={p.name} value={p.name}>
+              {p.name}
+            </option>
+          ))}
+          {/* The stored-but-unlisted value stays representable, or the select would silently
+              show "default" for a row the backend will refuse. */}
+          {missingProfile !== null && (
+            <option value={missingProfile} disabled>
+              {missingProfile} (missing)
+            </option>
+          )}
+        </select>
+      ) : (
+        <CellValueLine
+          testId="project-profile-line"
+          className={`picker-recent-cell-line${profileLine.kind === "default" ? "" : " is-set"}${profileFailed || profileLine.kind === "missing" ? " is-failed" : ""}`}
+          label={`Claude Code profile for ${projectLabel}: ${profileLine.text}. Click to change.`}
+          title={profileTitle}
+          text={profileLine.text}
+          onActivate={() => setEditingProfile(true)}
+        />
+      )}
+
       {editingModel ? (
         <input
           ref={inputRef}

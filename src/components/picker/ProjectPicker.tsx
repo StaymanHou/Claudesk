@@ -23,7 +23,6 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pruneToastMessage } from "./pruneToast";
 import { mapIpcError } from "./ipcError";
 import { ProjectModelCell, ProjectModelHints } from "./ProjectModelCell";
-import { ProjectProfileCell } from "./ProjectProfileCell";
 import {
   listProfiles,
   PROFILES_CHANGED_EVENT,
@@ -662,19 +661,10 @@ export function ProjectPicker({
                       seedModel={r.default_model ?? null}
                       seedDriveMode={r.default_drive_mode ?? null}
                       profile={r.profile ?? null}
+                      profiles={profiles}
+                      onProfileCommitted={handleProfileCommitted}
                       onCommitted={handleModelCommitted}
                       onDriveModeCommitted={handleDriveModeCommitted}
-                    />
-                  );
-                case "profile":
-                  return (
-                    <ProjectProfileCell
-                      key={cell}
-                      projectPath={r.project_path}
-                      projectLabel={labelFor(r)}
-                      seedProfile={r.profile ?? null}
-                      profiles={profiles}
-                      onCommitted={handleProfileCommitted}
                     />
                   );
                 case "remove":

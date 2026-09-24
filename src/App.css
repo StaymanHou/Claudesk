@@ -3463,9 +3463,7 @@ body,
 
 /* ── WP5 Project Picker (Phase 2 of WP5) ─────────────────────────────── */
 .picker {
-  /* F-b — widened 640 → 760px for the per-row profile cell (operator, grill 2026-09-23:
-     "if we are running out of space, we can make the workspace selection container wider"). */
-  max-width: 760px;
+  max-width: 640px;
   margin: 0 auto;
   padding: 12vh 2rem 2rem;
   /* Bounded-height flex column so a tall recents list (or the WP7 yolo checkbox's
@@ -3548,7 +3546,7 @@ body,
    centered card and tones down its top padding. Dark tokens only. */
 .picker-overlay-panel {
   position: relative;
-  width: min(92%, 760px); /* F-b — widened with `.picker`, see there */
+  width: min(92%, 640px);
   max-height: 80%;
   overflow-y: auto;
   background-color: #252526;
@@ -3812,7 +3810,9 @@ body,
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  width: 9.8em;
+  /* F-b — 9.8em → 12em: the stack gained a `Profile: <name>` line ("Profile: original-dev"
+     is 21 characters). */
+  width: 12em;
   padding: 0 0.6em;
   overflow: hidden;
   color: #6a6a6a;
@@ -3913,35 +3913,9 @@ body,
      If the column is ever narrowed, `appearance: none` + a CSS caret reclaims those 31px. */
 }
 
-.picker-recent-profile {
-  /* F-b — the per-row Claude Code PROFILE cell (`ProjectProfileCell.tsx`). Modelled on
-     `.picker-recent-model`: chrome-less, right-aligned, fixed width, ellipsis. ⚠️ No
-     `var(--token)` — there is no token layer (`no-css-custom-property-layer`); the literals
-     are copied from `.picker-recent-model`. */
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  width: 7.5em;
-  padding: 0 0.6em;
-  overflow: hidden;
-  color: #6a6a6a;
-  font-family: inherit;
-  font-size: 0.78rem;
-  line-height: 1.3;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  background: none;
-  border: none;
-  border-radius: 0;
-}
-
-.picker-recent-profile.is-editing {
-  padding: 0;
-}
-
 .picker-recent-profile-select {
+  /* F-b — the PROFILE line's select, the first line of `.picker-recent-model`'s stack
+     (operator, Phase 4 verify-human: a row above model + drive mode, not a column). */
   width: 100%;
   min-width: 0;
   padding: 0.1em 0.2em;

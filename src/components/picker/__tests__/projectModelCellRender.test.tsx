@@ -76,12 +76,20 @@ describe("the cell's resting DOM with the workflow gate OFF", () => {
   // every test below is the OFF shape. That default is itself deliberate: defaulting true
   // would flash a gated surface on during startup for every user.
 
-  it("renders exactly ONE line — the mode line does not exist", () => {
+  it("renders exactly the profile + model lines — the mode line does not exist", () => {
     const doc = renderCell();
     // The seam contract, as a parsed DOM value rather than a source-text search: "a gated
     // surface must not exist when the gate is off" — not hidden, not disabled, not an empty
     // reserved row.
-    expect(doc.querySelectorAll(".picker-recent-cell-line")).toHaveLength(1);
+    //
+    // ⚠️ F-b (triage in the F-b WIP): the ungated PROFILE line is now always first in the stack,
+    // so the OFF shape is two lines. Asserted by IDENTITY, not by count — a length of 2 could not
+    // tell the profile line from a leaked drive-mode line (source-text-guards entry 15).
+    expect(
+      [...doc.querySelectorAll(".picker-recent-cell-line")].map((l) =>
+        l.getAttribute("data-testid"),
+      ),
+    ).toEqual(["project-profile-line", "picker-recent-model-line"]);
     expect(
       doc.querySelector('[data-testid="picker-recent-mode-line"]'),
     ).toBeNull();
