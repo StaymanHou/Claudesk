@@ -118,19 +118,19 @@ describe("the cell's resting DOM with the workflow gate OFF", () => {
     expect(doc.body.innerHTML).not.toContain("Drive Mode");
   });
 
-  it("shows the model label UNPREFIXED, exactly as the pre-M12 cell did", () => {
-    // With one value there is nothing to disambiguate, so the `Model: ` prefix must drop out.
-    // This is the byte-identical-to-before property, asserted on real markup.
+  it("shows the model label PREFIXED even with the gate OFF (F-b)", () => {
+    // ⚠️ Reversed by the operator at F-b Phase 4 verify-human (2026-09-24; triage in the F-b
+    // WIP): the "one value, nothing to disambiguate" rationale no longer holds — a Profile:
+    // line is always above now, and a bare "Default" beneath it read as ambiguous.
     const doc = renderCell({ seedModel: null });
     const line = doc.querySelector('[data-testid="picker-recent-model-line"]');
-    expect(line?.textContent).toBe("Default");
-    expect(line?.textContent).not.toContain("Model:");
+    expect(line?.textContent).toBe("Model: Default");
   });
 
-  it("shows a set model bare, with the is-set class", () => {
+  it("shows a set model prefixed, with the is-set class (F-b)", () => {
     const doc = renderCell({ seedModel: "opus" });
     const line = doc.querySelector('[data-testid="picker-recent-model-line"]');
-    expect(line?.textContent).toBe("opus");
+    expect(line?.textContent).toBe("Model: opus");
     expect(line?.className).toContain("is-set");
   });
 

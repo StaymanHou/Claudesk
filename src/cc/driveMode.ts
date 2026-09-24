@@ -114,18 +114,22 @@ export interface CellLine {
  *
  * | state | line 1 | line 2 |
  * |---|---|---|
- * | gate OFF | `Default` / `opus` | *(absent)* |
+ * | gate OFF | `Model: Default` / `Model: opus` | *(absent)* |
  * | neither set | `Model: Default` | `Drive Mode: None` |
- * | both set | `opus` | `autopilot` |
- * | mixed | `opus` | `Drive Mode: None` |
+ * | both set | `Model: opus` | `autopilot` |
+ * | mixed | `Model: opus` | `Drive Mode: None` |
  *
- * ⚠️ **Gate OFF returns ONE line and it carries NO prefix** — the cell must be
- * byte-identical to the pre-M12 build for a user who never enabled workflow features
- * (operator decision, 2026-08-10). Not a reserved empty second line, not a disabled mode
- * line: absent, per the `useWorkflowFeaturesEnabled` seam contract ("a gated surface must
- * not exist when the gate is off"). The prefix drops out too, because with one value there
- * is nothing to disambiguate — which is precisely the context `MODEL_UNSET_LABEL`'s original
- * brevity rationale was written for.
+ * ⚠️ **The model line is ALWAYS prefixed `Model: ` (operator, F-b Phase 4 verify-human
+ * 2026-09-24).** F-b put an always-present `Profile: …` line above this cell's lines, so
+ * the old "gate OFF → one unprefixed line, byte-identical to pre-M12" rationale ("with one
+ * value there is nothing to disambiguate") no longer holds: there is never one line now. A
+ * bare `Default` under `Profile: original-dev` read as ambiguous. The drive-mode line keeps
+ * its original rule (labelled only when unset).
+ *
+ * ⚠️ **Gate OFF still returns exactly ONE line from THIS function** — no drive-mode line: not a
+ * reserved empty second line, not a disabled mode line, but absent, per the
+ * `useWorkflowFeaturesEnabled` seam contract ("a gated surface must not exist when the gate is
+ * off"). The profile line is rendered by the cell itself and is ungated (lite-IDE core).
  *
  * @param model the persisted model override, or `null` when unset
  * @param mode the persisted drive mode, or `null` when unset
@@ -141,25 +145,21 @@ export function cellLines(
   modelUnsetLabel: string,
 ): readonly CellLine[] {
   const modelUnset = model === null;
+  // F-b — always prefixed (see the doc comment): a Profile: line now always sits above.
+  const modelLine: CellLine = {
+    kind: "model",
+    text: `${MODEL_LINE_PREFIX}${modelUnset ? modelUnsetLabel : model}`,
+    isUnset: modelUnset,
+  };
 
   if (!gateEnabled) {
-    // Single-line, unprefixed — exactly what the cell rendered before M12.
-    return [
-      {
-        kind: "model",
-        text: modelUnset ? modelUnsetLabel : model,
-        isUnset: modelUnset,
-      },
-    ];
+    // One line: the gated drive-mode line does not exist.
+    return [modelLine];
   }
 
   const modeUnset = mode === null;
   return [
-    {
-      kind: "model",
-      text: modelUnset ? `${MODEL_LINE_PREFIX}${modelUnsetLabel}` : model,
-      isUnset: modelUnset,
-    },
+    modelLine,
     {
       kind: "driveMode",
       text: modeUnset

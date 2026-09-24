@@ -58,14 +58,14 @@ describe("cellLines — the resting-label table, as one value", () => {
   // The four rows of WBS Verdict (f)'s table, asserted exactly. If a future change alters
   // any cell's text, exactly one of these fails and names which state broke.
 
-  it("gate OFF → ONE line, unprefixed, byte-identical to the pre-M12 cell", () => {
+  it("gate OFF → ONE line (no drive-mode line); the model line is prefixed (F-b)", () => {
     // The operator's decision (2026-08-10): with workflow features off, this cell must be
     // what it always was — not a reserved empty second line, not a disabled mode line.
     expect(cellLines(null, null, false, LABEL)).toEqual([
-      { kind: "model", text: "Default", isUnset: true },
+      { kind: "model", text: "Model: Default", isUnset: true },
     ]);
     expect(cellLines("opus", null, false, LABEL)).toEqual([
-      { kind: "model", text: "opus", isUnset: false },
+      { kind: "model", text: "Model: opus", isUnset: false },
     ]);
   });
 
@@ -85,17 +85,18 @@ describe("cellLines — the resting-label table, as one value", () => {
     ]);
   });
 
-  it("gate ON, both set → both lines BARE", () => {
-    // Once set, a value is self-describing and a prefix is noise.
+  it("gate ON, both set → the model line prefixed, the drive-mode line bare", () => {
+    // F-b (operator 2026-09-24): the model line is ALWAYS prefixed now that a Profile: line
+    // sits above it; the drive-mode line keeps its label-only-when-unset rule.
     expect(cellLines("opus", "autopilot", true, LABEL)).toEqual([
-      { kind: "model", text: "opus", isUnset: false },
+      { kind: "model", text: "Model: opus", isUnset: false },
       { kind: "driveMode", text: "autopilot", isUnset: false },
     ]);
   });
 
   it("gate ON, mixed → labels the unset line only (mixed rows are legitimate)", () => {
     expect(cellLines("opus", null, true, LABEL)).toEqual([
-      { kind: "model", text: "opus", isUnset: false },
+      { kind: "model", text: "Model: opus", isUnset: false },
       { kind: "driveMode", text: "Drive Mode: None", isUnset: true },
     ]);
     expect(cellLines(null, "fsd", true, LABEL)).toEqual([
