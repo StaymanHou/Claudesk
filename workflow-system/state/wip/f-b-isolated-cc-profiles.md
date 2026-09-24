@@ -576,3 +576,6 @@ Action: (1) the two exact cell-order pins reverted to `["open","model","remove"]
 [SURFACED-2026-09-23] Phase 1 > P1.1 — probe (3): reuse the existing `trash = "5"` dependency (`editor_fs::…` already calls `trash::delete` on directories, and it has shipped). No new dependency.
 [SURFACED-2026-09-23] Phase 1 > verify-self — ran by the orchestrator, NOT the `feature-verify-self-runner` subagent: `mcp__tauri__*` bridge tools do not reach subagents (memory `mcp-bridge-tools-not-exposed-to-subagents`), and every Phase 1 outcome needs the bridge. Deviation from the SKILL's unconditional-spawn rule, taken for tool reachability.
 [SURFACED-2026-09-23] Phase 1 > verify-self — ⚠️ **SPEC CONTRADICTION: `build_cc_argv` ALWAYS passes `--permission-mode <Claudesk's app-global mode>`, which overrides a profile's `permissions.defaultMode`.** So B.10 ("footer shows the profile's permission mode") cannot hold, and the wizard's always-shown permission-mode step (D.18) would have no effect inside Claudesk — only in a bare terminal. Observed live: the scratch profile's `defaultMode: "plan"` child still got `--permission-mode bypassPermissions`. Needs an operator ruling before Phase 5; logged to backlog.
+
+## Session Handoff — 2026-09-24 10:38
+Handed off. See `workflow-system/state/.session.md` to restore.
