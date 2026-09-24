@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: F-b — Isolated CC profiles as Claudesk workspaces
 
 **Workflow:** feature
-**State:** verify-codify (phase 1 complete)
+**State:** verify-codify (phase 2 complete)
 **Created:** 2026-09-23
 **Entry:** spec (complex feature)
 **Source:** `roadmap.md` → Group F → F-b + "F-b decisions — `/util-grill-me`, 2026-09-23" (4 rulings,
@@ -350,7 +350,7 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     - [ ] P1.verify-human.2 Operator logs in once under a scratch profile; agent reads back `.claude.json` / `settings.json` (probe (1) post-login half). **DEFERRED by operator 2026-09-23 to Phase 5 verify-human** (end-to-end create + login).  <!-- status: done (deferred) -->
   - [x] verify-codify  <!-- status: done — boundary = `SessionRegistry::spawn` (the `cc_spawn` path). Added: `compose_command` extracted so the child env is asserted as a VALUE (`get_env`: inherited CLAUDE_CONFIG_DIR stripped for default, profile value wins, shell untouched); `profile_spawn_caller_orders_its_profile_decisions` pins the CALLER (profile resolved before the flag consume and the PTY spawn; --continue guard after the arm, before the spawn; spawn gets `spawn_permission_mode(…)`). Each mutation-proven individually, all 3 compiled + landed + failed. verify:auto EXIT=0 (39s; 3000 FE / 947 Rust) -->
 
-- [ ] Phase 2: Workflow-layer applicability funnel — ALWAYS off for non-default profiles  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [x] Phase 2: Workflow-layer applicability funnel — ALWAYS off for non-default profiles  <!-- status: done 2026-09-24 -->
   **Relevance check (before Phase 2):**
   - Requester still needs this: yes — the operator ruled "always off" at spec review.
   - Requirements unchanged: yes. Phase 1's ruling (no `--permission-mode` for profiles) touches the spawn argv only; ruling 4 is as written.
@@ -395,9 +395,15 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     - [x] P2.verify-self.2 CLI `ps eww` of the profile workspace's CC child → no `CLAUDESK_DRIVE_MODE`  <!-- status: PASS after F9b (2026-09-24) — first run FAILED on an INHERITED var (pre-existing leak, see SURFACE-2026-09-24-SPAWNED-CC-INHERITS-A-PARENT-CLAUDESK-DRIVE-MODE). Fix: `CC_SPAWN_ENV_REMOVE` (CLAUDE_CONFIG_DIR + CLAUDESK_DRIVE_MODE) and `SHELL_SPAWN_ENV_REMOVE` (CLAUDESK_DRIVE_MODE), value-tested + mutation-proven 2/2. Re-verify, app launched with the parent var still inherited (`ps eww` of app PID shows it): profile child → none; default child → `autopilot` (now necessarily Claudesk's OWN gated value — the positive control the first run could not give) -->
   - [x] verify-human  <!-- status: done — boundary (Workspace header, picker cells, cc_spawn env); capture = verify-self's live `ps eww` + per-workspace DOM attribution -->
     - [x] P2.verify-human.1 Operator ruling: keep the pre-existing inherited-`CLAUDESK_DRIVE_MODE` fix (`decde09`) inside F-b, or split it into its own task → **KEEP (operator 2026-09-24)**; named as a separate item in the ship summary  <!-- status: done -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-codify  <!-- status: done — boundary = Workspace UI + picker cell + `SessionRegistry::spawn`. Already covering: `workflowApplicableLive.test.tsx` (Workspace live mount, per surface by identity, positive control), backend spawn-env / announce / env-removal tests, the caller guard. Added: `projectModelCellProfileRender.test.tsx` (gate mocked ON; default row = mode line, profile row = none — positive control) and two CALLER pins in `profile_spawn_caller_orders_its_profile_decisions` (env resolver receives `profile.as_ref()`; the session records `profile.map(|p| p.name)`). Mutation-proven 3/3 individually, all compiled + landed. verify:auto EXIT=0 (39s; 3020 FE / 952 Rust) -->
 
 - [ ] Phase 3: Per-profile hook registration + config-dir-aware transcript reader  <!-- status: NOT-STARTED; depends on Phase 1 -->
+  **Relevance check (before Phase 3):**
+  - Requester still needs this: yes. The operator's core value is the status dot, and a profile session is still dark.
+  - Requirements unchanged: yes (ruling 3, persistent per-profile registration). Phase 2's env-strip fix does not touch hooks.
+  - Solution still feasible: yes. `hook_install::{install, uninstall}` already take the settings path; `transcript_dir_for` already takes a config root (Phase 1).
+  - No superior alternative discovered: yes. `--settings` per-spawn injection was ruled out at the grill for bare-terminal visibility.
+  **Verdict:** proceed
   **Observable outcomes:**
   - CLI: after a launch with a scratch profile listed →
     `jq '.hooks | to_entries[] | .value[].hooks[].command' <scratch>/settings.json` contains
@@ -513,10 +519,10 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 2 > verify-codify
-- **Active scope:** Phase 2 verify-codify
+- **Path:** F-b > Phase 3 > P3.1
+- **Active scope:** P3.1 (generalize `hook_install` to every listed profile's `settings.json`)
 - **Blocked:** none
-- **Unvisited:** Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
+- **Unvisited:** Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)
 
 ## Discoveries

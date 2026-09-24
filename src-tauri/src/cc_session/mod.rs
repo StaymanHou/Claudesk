@@ -2607,6 +2607,13 @@ mod tests {
         assert!(at("resolve_spawn_profile(") < at("PtyCcSession::spawn("));
         assert!(at("resolve_resume_arm(") < at("guard_continue_against_transcripts("));
         assert!(at("guard_continue_against_transcripts(") < at("PtyCcSession::spawn("));
+        // F-b Phase 2: the env resolver receives the RESOLVED profile (so ruling 4 withholds the
+        // drive mode), and the registered session records its name (what `cc_session_profile`
+        // reports to the workspace's workflow gate).
+        let env_call = &code[at("resolve_profile_spawn_env(")..];
+        let env_call = &env_call[..env_call.find(");").unwrap()];
+        assert!(env_call.contains("profile.as_ref()"), "{env_call}");
+        assert!(code.contains("profile: profile.map(|p| p.name),"));
         let call = &code[at("PtyCcSession::spawn(")..];
         let call = &call[..call.find(");").unwrap()];
         assert!(
