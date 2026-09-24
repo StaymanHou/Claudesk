@@ -580,11 +580,44 @@ Action: (1) the two exact cell-order pins reverted to `["open","model","remove"]
 (4) `projectModelCellStructure.test.ts` "routes BOTH lines through the single writer" counted 2 commitCellValue calls; the profile line is a third ROUTED line (the invariant holds), so it now asserts by IDENTITY that the three writers — model, drive mode, profile — are each reached from a commitCellValue call, and that there are exactly three
 
 ## Current Node
-- **Path:** F-b > review-quality
-- **Active scope:** review-quality against ship commit `60b5ec2` (F-b range `380bd97^..60b5ec2`)
+- **Path:** F-b > finalize
+- **Active scope:** finalize (review-quality done: 0 CRITICAL / 2 MAJOR / 6 MINOR, all auto-backlogged)
 - **Blocked:** none
-- **Unvisited:** finalize
+- **Unvisited:** (none after finalize)
 - **Open discoveries:** none (Phase 5 build defaults (a)–(f) accepted at verify-human)
+
+## Code-Quality Review — f-b-isolated-cc-profiles
+
+*(feature-review-quality, 2026-09-24, ship commit `409f458`, window `257529c^..409f458`. Mode 3: MAJOR + MINOR auto-backlogged to `backlog-quality-findings.md` under `# f-b-isolated-cc-profiles — 2026-09-24`; pointer in `backlog.md`.)*
+
+### Strengths
+- Profile resolution fails closed everywhere it matters. `ResolvedProfile::Missing` is distinct from `Default`, and the spawn refuses before the unclean-exit flag is consumed and before any PTY opens. A doc comment explains why the model read may degrade quietly while the profile read may not.
+- Logic is kept apart from `AppHandle`: `adopt_registered`, `remove_unregistered`, `apply_project_profile`, `create`, `delete_created` and `config_root_for_project` take plain paths, with `trash` / `register` injected. They are unit-tested, and the callers are pinned by `profile_callers_route_through_the_tested_bodies`.
+- Hook registration only adds and never overwrites. It is proven against a realistic `neo` settings.json (deny fence, allow-list, statusLine, foreign hook): idempotent, self-healing, never recreates a deleted dir, and keeps dev and prod entries separate. Rollback order is right on both sides.
+- `compose_command` makes the child env testable as a value. `CC_SPAWN_ENV_REMOVE` / `SHELL_SPAWN_ENV_REMOVE` each record why they strip what they strip. `profile_delete` is `async` + `spawn_blocking`.
+- `invokedCommandsAreRegistered.test.ts` closes the stringly-typed invoke gap that `mockIPC` hides, and carries its own positive control.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [src-tauri/src/transcript/commands.rs — `transcript_tail`] The config root comes from the STORED row profile, but the supervisor gate follows the LIVE session's profile. After a mid-session row change (default session running, row switched to `neo`), the supervisor stays on while the tail reads `neo/projects/<slug>/` and falls back to the newest `neo` transcript. That is the dual-use-directory collision the doc comment warns about. — The context-pressure recycle would silently read another profile's token usage. → `SURFACE-2026-09-24-QUALITY-TRANSCRIPT-ROOT-READS-STORED-PROFILE-NOT-LIVE`
+- [src-tauri/src/config_store/profile_create.rs — `create`] It checks name collisions but not an already-listed dir (which `adopt` checks via `same_dir`). An adopted EMPTY dir could become a second, `Created` entry and then be trashed by `delete_created`. — Provenance is the only guard on the destructive path. (Latent: an adopted dir holds the hook's `settings.json`, so it is non-empty in practice.) → `SURFACE-2026-09-24-QUALITY-PROFILE-CREATE-MISSES-THE-ALREADY-LISTED-DIR-CHECK`
+
+**MINOR** (→ `SURFACE-2026-09-24-QUALITY-F-B-MINOR-BATCH`)
+- [ProjectPicker.tsx — `handleProfileCommitted`] The drive-mode handler's comment now sits above the profile handler.
+- [profiles.ts / commands.rs — `PROFILES_CHANGED_EVENT`] The doc says "adopted or removed"; create and delete also emit it.
+- [profile_create.rs — `profiles_invalid`] Duplicates `profiles::invalid`, and validation errors are dressed as IO errors.
+- [profiles.ts — `resolveRowProfile`] Re-implements the blank/`"default"` rule instead of sharing `isDefaultProfile`.
+- [config_store/commands.rs tests] F-b tests sit above the module's `use` lines.
+- [invokedCommandsAreRegistered.test.ts] The regex misses nested generics, and the header doesn't say so.
+
+### Assessment
+The implementation is well built and leaves the codebase better than it found it: clean seams (`ResolvedProfile`, the one `workflow_applicable` funnel, `compose_command`, logic testable without `AppHandle`), and each fail-closed choice documented where it is made. The one real design gap is that stored and live profile values disagree across a mid-session row change. The frontend handles this deliberately; the transcript reader assumes it cannot happen. The missing duplicate-dir check in `create` is the other invariant worth closing before Delete-to-Trash sees heavy use. Comments are dense but explain why, not what. The rest is local polish.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Discoveries
 [SURFACED-2026-09-24] Phase 5 > build — defaults taken without asking (correct at verify-human): (a) the wizard's permission mode is pre-selected from `~/.claude/settings.json` `permissions.defaultMode` (the "snapshot the default profile" rule the theme and status line follow), falling back to CC's `default`, NOT from Claudesk's app-global mode; (b) `skipDangerousModePermissionPrompt` is NOT seeded, so a profile created with `bypassPermissions` shows CC's own warning once ("silence is not a gate"); (c) theme is a closed `<select>` of CC 2.1.281's seven values (`auto` + six), not free text; (d) a profile created from a picker row is committed to that row; (e) an existing EMPTY dir is accepted (only a non-empty one is refused); (f) the seeded CLAUDE.md is the eos/tube boilerplate guard section verbatim with the dir substituted.

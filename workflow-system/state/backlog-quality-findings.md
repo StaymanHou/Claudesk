@@ -4,6 +4,39 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# f-b-isolated-cc-profiles — 2026-09-24
+
+*(feature-review-quality on ship commit `409f458`, window `257529c^..409f458`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 6 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-09-24-QUALITY-TRANSCRIPT-ROOT-READS-STORED-PROFILE-NOT-LIVE
+- **Severity:** MAJOR
+- **Location:** `src-tauri/src/transcript/commands.rs`, `transcript_tail` / `config_root_for_project`
+- **Finding:** `transcript_tail` picks its config root from the row's STORED profile (`projects.json`). The workflow gate follows the LIVE session's profile (`useWorkspaceProfile` → `cc_session_profile`). The doc comment calls this safe because the supervisor is off for non-default profiles, but that stops holding once the stored and live values disagree. Scenario: a default session is running and the operator switches its picker row to `neo`. The supervisor stays ON (the live session is default), while `transcript_tail` now reads `neo/projects/<slug>/`. There the named session file is absent, so `select_transcript` falls back to the newest `neo` transcript for that directory. That is the dual-use-directory collision the comment itself warns about. The context-pressure recycle would then read another profile's token usage without any sign that it had.
+- **Suggested action:** resolve the root from the live session's registered profile (the same source `cc_session_profile` reads). Otherwise, refuse the newest-file fallback whenever the stored and live profiles differ. Correct the doc comment either way.
+- **Priority:** medium *(narrow trigger: a mid-session profile change on an open workspace, in a dir with transcripts under both roots. But the failure is silent, and it sits on the supervisor path, which has never been observed live.)*
+- **Status:** pending
+
+## SURFACE-2026-09-24-QUALITY-PROFILE-CREATE-MISSES-THE-ALREADY-LISTED-DIR-CHECK
+- **Severity:** MAJOR
+- **Location:** `src-tauri/src/config_store/profile_create.rs`, `create`
+- **Finding:** `create` refuses a taken NAME but not an already-listed DIRECTORY, a check that `profiles::adopt` does make (`same_dir`). So an adopted dir that happens to be empty could be "created" again under a second name: two entries for one dir, one `Adopted` and one `Created`. `delete_created` would then send a dir that an `Adopted` entry still points at to the Trash. Provenance is the only guard on the destructive path.
+- **Mitigation observed at backlogging (agent, 2026-09-24):** an adopted dir is normally NON-empty. `adopt_registered` writes the hook into `<dir>/settings.json`, and rolls the adoption back if that write fails, so create's non-empty refusal catches it. The hole needs the operator to have emptied an adopted dir by hand. Latent, not live.
+- **Suggested action:** add the `same_dir` refusal inside `create`'s `update_profiles` closure, and pre-check it before writing, with a test: an adopted EMPTY dir → create refused, dir untouched.
+- **Priority:** medium *(latent, but it is the one invariant guarding Delete-to-Trash, and the fix is a few lines)*
+- **Status:** pending
+
+## SURFACE-2026-09-24-QUALITY-F-B-MINOR-BATCH
+- **Severity:** MINOR ×6
+- **Findings:**
+  1. `ProjectPicker.tsx`, `handleProfileCommitted`: it landed under the comment "Same contract, same purity requirement, for the drive mode (M12 WP4c)", which now labels the profile handler, and the drive-mode handler below it has lost its comment. Move the comment.
+  2. `PROFILES_CHANGED_EVENT` (`src/state/profiles.ts` + `config_store/commands.rs`) is documented as "after a profile is adopted or removed". Phase 5 also emits it from `profile_create` / `profile_delete`. Update both docs.
+  3. `profile_create::profiles_invalid` duplicates the private `profiles::invalid`. Both dress a validation failure as `ConfigError::Io(InvalidInput)`, and `create` / `delete_created` return `Result<_, String>`. A `ConfigError::Invalid` variant with a shared constructor would fix both copies and the stringly-typed returns.
+  4. `resolveRowProfile` (`src/state/profiles.ts`) re-implements the blank/`"default"` rule inline instead of sharing `isDefaultProfile` (`workflowApplicable.ts`). That leaves two frontend copies of what Rust calls "the ONE definition". The `undefined` handling differs on purpose, so share only the blank/`"default"` core.
+  5. `config_store/commands.rs` tests: the F-b tests and `const CMD` sit ABOVE the module's `use super::*;` / `use tempfile::TempDir;`. Reorder so the imports come first.
+  6. `invokedCommandsAreRegistered.test.ts`: `<[^>]*>` does not match a nested generic (`invoke<Record<string, X>>("name")`), so such a call is skipped silently. Widen the regex, or state the gap in the header beside the runtime-name one.
+- **Priority:** low
+- **Status:** pending
+
 # paydown-wp9-sync-command-blocking-guard — 2026-09-23
 
 *(feature-review-quality on ship commit `17f90e5`; drive_mode=autopilot. 0 CRITICAL, 4 MAJOR, 5 MINOR, all auto-backlogged. The reviewer found no dead code, stale branches or superseded helpers left over from `run_command`'s three rebuilds. The leftover scaffolding is almost entirely comment provenance.)*

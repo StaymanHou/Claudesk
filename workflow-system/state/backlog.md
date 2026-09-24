@@ -1076,6 +1076,17 @@ and work on the spec well."
 - **Status:** pending
 - **Pickup shape:** one small task. Do `spawn_blocking` for the dry run, keeping the lock-guard anchor, together with the guard's async-exemption rule and the `cfg` predicate fix, each with a fixture test and a mutant. The provenance labels go to the T1/T2 comment pass.
 
+## Code-quality findings — f-b-isolated-cc-profiles (2026-09-24)
+- **Pointer:** **2 MAJOR + 6 MINOR** from review of ship commit `409f458`.
+  - MAJOR:
+    1. `transcript_tail` resolves its config root from the STORED row profile while the supervisor gate follows the LIVE session, so a mid-session profile change can feed the context-pressure recycle another profile's transcript without any sign.
+    2. `profile_create` misses `adopt`'s already-listed-dir check. That is latent: an adopted dir is non-empty because registration writes its `settings.json`. But it is the one guard on Delete-to-Trash.
+  - MINORs: a misplaced comment in `ProjectPicker`; a stale `PROFILES_CHANGED_EVENT` doc; a duplicated `invalid` helper plus stringly errors; the default-profile rule copied twice in TS; test-module import order; the invoke guard's regex missing nested generics.
+  - Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# f-b-isolated-cc-profiles — 2026-09-24`.
+- **Priority:** medium (MAJORs) / low (MINORs)
+- **Status:** pending
+- **Pickup shape:** one small task. Add the `same_dir` refusal plus a test in `create`, and resolve `transcript_tail`'s root from the live session (or refuse its fallback on a stored/live mismatch) with a test. Fold the six MINORs in as one-liners.
+
 ## SURFACE-2026-09-18-DOC-COUNT-NEEDS-A-GENERATOR-NOT-A-DETECTOR
 - **Source:** feature:verify-codify (M14 WP4 Phase 4)
 - **Target level:** product:arch
