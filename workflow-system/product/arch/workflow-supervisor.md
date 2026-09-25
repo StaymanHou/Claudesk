@@ -259,6 +259,13 @@ were **DEFERRED, not passed** (operator's call: hard to trigger without real dog
 live-observation phase is deferred on the same basis. An agent cannot manufacture them — an
 agent-launched CC produces no hook events. Tracked as
 `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (**high**).
+⚠️ **Update 2026-09-25: observed firing ONCE, then observed NOT firing.** It fired live on
+2026-09-15 (v0.5.0: the unwanted six-fire run behind the WP0 hotfix). CC transcripts from v0.5.1
+on show **no fire at all**, while at least six plain `F8` breaks on supervised projects went
+unfired. The item is re-framed as a probable defect, with the evidence, method and unverified
+hypotheses in the entry. ⚠️ **§F's `withheld … — <reason>` line is the discriminating observable,
+and it is unreadable** (console-only), which is why the activity surface is sequenced ahead of the
+investigation.
 ⚠️ **Read the `DEFERRED-*` status tags on those leaves, NOT the `[x]` checkboxes** — the checkbox
 means the gate closed, not that the behavior was observed.
 

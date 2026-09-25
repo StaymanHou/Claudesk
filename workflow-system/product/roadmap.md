@@ -577,6 +577,54 @@ precedent. Closed 2026-08-26.
 > **Carried forward at `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`
 > (high), which now holds all six checks.** Closing the cycle does not close that item.
 > ⚠️ **Do not read M15's `[x]` deliverables as evidence the supervisor has been observed acting.**
+>
+> ⚠️ **UPDATE 2026-09-25: observed firing ONCE, then observed NOT firing.** The supervisor fired
+> live on 2026-09-15 (v0.5.0; an unwanted six-fire run that produced the WP0 hotfix). Since
+> v0.5.1, no transcript shows a fire, and at least six plain AUTO-edge (F8) breaks on supervised
+> projects went unfired. **The live half is now a probable DEFECT, not just unobserved** — see
+> Revision 2026-09-25 below.
+
+## Revision 2026-09-25 — dogfeedback CLOSED as a wall-clock item; it found the supervisor silent; activity surface → investigation inserted next
+
+**Context.** The dogfeedback pass (item 2 of the 2026-09-15 order below) is **closed as a
+wall-clock item**. The operator has dogfooded through v0.6/v0.7 and reported **no more feedback**
+(2026-09-24). ⚠️ **But the pass did not end in "observed working".** Before resolving anything,
+the close-out checked for positive evidence of a fire, because silence from a supervisor that never
+fires looks exactly like success. CC transcripts show:
+
+- **A confirmed live fire on 2026-09-15** (v0.5.0): six `/feature-build` commands about 4s after
+  turn end, which the operator confirmed in-session and which produced the WP0 hotfix.
+- **Zero machine-speed fires from v0.5.1 (2026-09-17) through 2026-09-25.**
+- **At least six textbook misses in that window.** Each was a supervised project (`autopilot`
+  stored, per-workspace toggle ON, gate ON), each ran inside Claudesk, and each turn ended on a
+  bare `TRANSITION: F8` with no question. The operator restarted the chain by hand after
+  31s–49min ("next", "so?"). The google-newsroom product run of 09-23 also broke at P3/P5/P7/P9.
+
+So `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (**high**) is
+**re-framed as a probable defect** ("silent since v0.5.1", evidence table and reproducible method
+in the entry). ⚠️ **The top-ranked suspect is WP0's own unsent-input suppression**, the one
+mechanism that changed at v0.5.1. That is still a hypothesis. The discriminating observable (the
+`withheld … — <reason>` line) is computed on every non-fire and then discarded to an unreadable
+`console.warn`.
+
+**Operator decision 2026-09-25 — execution order from here:**
+
+1. **Supervisor activity surface**
+   (`SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE`, high). **Planned
+   next**, because it is the investigation's instrument. It opens with its own `/util-grill-me`
+   (the item's questions 1–6 are the agenda). ⚠️ It owns the **seventh** OFF-invariant guard arm,
+   and must itself be gated OFF with the supervisor.
+2. **Silent-supervisor investigation**, driven by the activity record: an operator-driven break in
+   a dev build (an agent-launched CC emits no hook events), then read the withhold reason. Shape it
+   (`/incident-report` or `/feature-reproduce`) from what the first read shows.
+3. **Previously queued, unchanged relative to each other:** the F-a/F-b code-quality minor items,
+   then the right-panel media viewer (`SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER`, filed today).
+   ⚠️ Their position relative to items 1–2 was not re-ruled. The operator had queued them after
+   "the dogfeedback close-out", which is now done, so reorder freely.
+
+⚠️ **The dogfeedback's six deferred checks and WP0's seven are NOT passed and NOT waived.** They are
+**void until firing is restored**, because a no-fire check passes vacuously while nothing fires.
+Their re-scoped list is in the NEVER-OBSERVED entry.
 
 ## Revision 2026-09-15 — v0.5.0 cut; execution order set to M14-remainder → dogfeedback → Group F (operator-requested capabilities)
 
@@ -601,7 +649,7 @@ that does not depend on the dogfooding clock.
    description/topics. ✅ **The "default CLI args for `claude`" Settings line was corrected
    2026-09-18 (WP4 Phase 1)** — ~~it misstates PiP (shipped M5) and permission-mode (shipped M6) as
    future work~~; see the `[x]` **Settings UI** deliverable line for the corrected statement.
-2. **Dogfeedback pass** — read the week of real supervisor use and decide what it changed. Not a
+2. ✅ **CLOSED 2026-09-25 — see Revision 2026-09-25 (it found the supervisor silent since v0.5.1).** **Dogfeedback pass** — read the week of real supervisor use and decide what it changed. Not a
    milestone; a decision point that **may insert one**. The six deferred checks live in
    `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`; ⚠️ **check 5 (does Esc
    actually interrupt a wrong fire) is the one carrying real risk** — ruling R-1's accepted cost
@@ -1127,6 +1175,3 @@ Decompose M8 at its `/product-wbs` pass; WP1 (the capture/render pipeline probe 
 
 > 2026-06-15: Major rewrite driven by the vision pivot (multi-window → single-window tabbed workspaces + filmstrip + PiP + menu-bar) and research resolving the open design questions. Phase 1 gained the tab-shell substrate + a gating thumbnail-rendering probe; xterm.js settled on DOM-renderer-only (WebGL ~16-context cap); the prior "cross-window CC status indicator" milestone was replaced by three status surfaces (filmstrip / menu-bar / PiP) fed by a single Rust broadcaster over a Unix-socket hook channel (resolving the old "WP9b probe").
 > 2026-05-22: Replaced the single auto-resume bullet with a three-branch Smart auto-resume milestone; added a drive-mode selector + indicator milestone. Both additive to the stateful-controller phase.
-
-## Session Handoff — 2026-09-24 12:32
-Handed off. See `workflow-system/state/.session.md` to restore.

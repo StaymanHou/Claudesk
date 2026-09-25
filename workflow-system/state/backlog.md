@@ -57,13 +57,82 @@
 - **Status:** pending
 - **Pickup shape:** read the three entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
+## SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER
+
+- **Priority:** medium
+- **Surfaced by:** operator request (2026-09-25, at session restore after v0.7.0)
+- **Target:** product:roadmap (a new feature ask, not a defect in shipped code)
+- **Type:** new-work
+- **Status:** pending — **sequenced by the operator (2026-09-25) AFTER the restore plan** (the dogfeedback close-out, then the F-a/F-b minor-item cleanup). ⚠️ The close-out then inserted the supervisor activity surface and the silent-supervisor investigation ahead of the minor items (roadmap → Revision 2026-09-25), so the order is now: activity surface → investigation → minor items → this item
+
+**The ask:** the right-panel editor should **show images and play audio and video.** The trigger is
+F-b. Now that isolated profiles exist, some workspaces are **non-coding** (media production), and
+for those the editor pane is useless on the files that matter. This is **lite-IDE core**, not a
+workflow-gated feature (M10.9 tier 1).
+
+**Current state, measured 2026-09-25 (cited by symbol):**
+
+- **Binary files are refused outright.** `editor_fs::read_file_core` does a `std::fs::read` and then
+  `String::from_utf8`. Anything that fails that check becomes `EditorFsError::NotUtf8`, which
+  `EditorPanel` renders as `editor-error` ("Could not open {path}"). There is no other binary
+  detection.
+- ⚠️ **`read_file` has NO SIZE CAP.** Today, opening a multi-GB video reads the whole file into
+  memory *before* it gets rejected. A media branch has to route around `read_file`, and a size cap
+  may be worth adding regardless.
+- **SVG and other files that happen to be valid UTF-8 open as TEXT.** Decide whether SVG should
+  open as an image, as text, or offer both.
+- **No media preview exists anywhere.** There is no `convertFileSrc`, `asset://` or `<img>` in
+  `src/`. `DocMarkdown` does not resolve relative images either.
+- **Tab seam:** `openFiles.ts` has `TabKind = "file" | "synthetic"`, and `PaneTabs` switches on
+  `kind`. A new path-bearing `"media"` kind, chosen by extension inside `EditorSplit.openFile`, fits
+  the existing seam. That branch must **skip the per-path `read_file`/`stat_file` load effect**,
+  which currently runs for every tab.
+
+**Design questions the pickup must settle (not decided here):**
+
+1. **Transport.** One option is the asset protocol: add the `protocol-asset` Cargo feature, set
+   `assetProtocol.scope`, and use `convertFileSrc`. It streams and supports HTTP range requests,
+   which **video and audio seeking need**. The other option is a bytes/base64 IPC command, which is
+   fine for small images and wrong for video. ⚠️ Scope interacts with `[[app-ships-with-no-csp]]`
+   (`"csp": null`): a broad asset scope makes any project file readable by webview JS. The webview
+   already has the full `__TAURI_INTERNALS__` surface, so this probably adds no new exposure, but
+   **state it explicitly** rather than assume it.
+2. **Codec reality: it must be a PROBE, not an assumption.** WKWebView plays what Safari plays. That
+   likely covers mp4/H.264/HEVC, mov, mp3/aac/wav and common images including HEIC, while
+   webm/ogg/mkv support is partial or absent. Per the standing probe-first lesson, **run each format
+   in the real webview** before promising it, and decide what an unplayable file shows.
+3. **Scope boundary.** Viewer/player only, or also light operations (zoom/fit, a scrubber, file
+   info)? No editing is implied by the ask.
+4. **Profile-aware or universal?** The motivation is non-coding profiles, but a viewer helps every
+   workspace. The default reading is **universal**, unless a design prior says otherwise.
+
+**Pickup shape:** probably a small feature (`/feature-spec`). Following the Group F convention, a
+`/util-grill-me` pass on Q1–Q3 is the natural entry step, and a codec probe comes before any UI work.
+
 ## SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE
 
 - **Priority:** high
 - **Surfaced by:** operator request (2026-09-21, during F-a WP2 restore — a detour, not F-a work)
 - **Target level:** product:roadmap (a new feature ask, not a defect in shipped code)
 - **Type:** gap (missing capability)
-- **Status:** pending
+- **Status:** pending — ⭐ **SEQUENCED NEXT (operator, 2026-09-25): plan its implementation now**, ahead
+  of the NEVER-OBSERVED investigation, because it is that investigation's instrument.
+
+⚠️ **Update 2026-09-25 — THE FAILURE THIS ITEM PREDICTED HAPPENED.** The entry below warns that
+*"success and total inactivity are observationally identical."* At the dogfeedback close-out the
+transcripts showed the supervisor had **not fired since v0.5.1**, and had missed at least six plain
+F8 breaks on supervised projects. Meanwhile the operator, seeing nothing wrong, reported "no more
+feedback". Evidence and hypotheses: `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`.
+Two consequences for this item:
+- **The sequencing question below is SETTLED: build it BEFORE the investigation.** The
+  `withheld … — <reason>` line is exactly the observable that separates the hypotheses (a stuck
+  unsent-input watermark vs. a trigger that never arrives vs. a verdict that withholds), and today
+  it goes to a console nobody can open.
+- ⚠️ **Question 3 (granularity) now leans hard toward fires AND withholds.** A fires-only log would
+  have shown an empty list, which is indistinguishable from "no breaks happened". That is the same
+  write-only trap one level up. The withhold reason is the diagnostic payload; volume is a design
+  constraint to manage, not a reason to drop it. The question is still open for the grill, but a
+  fires-only answer should have to argue against this evidence.
 
 **The ask — TWO requirements, and the second was added 2026-09-21 after the first draft:**
 
@@ -241,167 +310,161 @@ an argument for sequencing, not a decision.
 - **Source:** operator dogfooding (v0.5.0, first real use of the M15 workflow supervisor)
 - **Target level:** product:wbs
 - **Type:** bug
-- **Summary:** First operator feedback from live supervisor use. ⚠️ **RECORDED, NOT TRIAGED —
-  the operator explicitly said "just record it" and expects to add more.** Do not act on these
-  without a triage pass; do not treat this entry as closed when one item is fixed.
-- **Context:** This is the first feedback of its kind. `SURFACE-2026-09-14-SUPERVISOR-NEVER-
-  OBSERVED-FIRING-IN-A-LIVE-SESSION` (high) has been open because the supervisor's live half had
-  never been observed acting. ⚠️ **Item 2 below is the first direct evidence that it FIRES in a
-  real session** — which partially satisfies that item's observation question while simultaneously
-  reporting the fire as unwanted. Both facts matter and neither cancels the other.
-
-  **Item 1 — "inference / transition check would freeze the UI."**
-  ⚠️ Matches a KNOWN and PREVIOUSLY-BURNED failure mode, which is why it is the highest-signal of
-  the three. `CLAUDE.md`: *"`#[command]` fns + `on_window_event` are main-thread — which cuts BOTH
-  ways: an AppKit call inside one is safe, but a `thread::sleep`/blocking poll, or a lock held
-  across a main-thread-marshaling call, FREEZES the UI. A sync `cc_kill` doing exactly this hung
-  the app (P1 2026-08-25; `sample` was the instrument that found it)."* The supervisor reads
-  transcripts and may shell out to a `claude -p` adjudicator; either on a main-thread path would
-  reproduce this shape. ⚠️ **`sample` is the instrument that found it last time** — use it again
-  rather than reasoning from the code.
-
-  **Item 2 — "I'm typing something midway, and the supervisor auto chained."**
-  ⚠️ **This is the recorded dissent arriving in reality.** M15's fire policy is *silently, always*,
-  chosen over announce-then-click and over a countdown veto. The dissent was recorded AND SIZED at
-  decomposition: ~2-in-19 confirmed breaks were question-shaped, and `injectCommand` has **no retry
-  and no pre-send cancel window** by design, so a wrong fire is unrecoverable except via **Esc**.
-  ⚠️ **Probe Q2 (can a question-shaped / answer-awaiting tail be detected?) was the gate on this
-  policy and it REMAINS OPEN** — `roadmap.md`'s own instruction was: if Q2 fails, revisit the fire
-  policy before building WP3, do not build it anyway. This report is evidence the un-gated case is
-  real. ⚠️ Note the operator was TYPING — which is a *different* signal from a question-shaped
-  tail, and may be cheaper to detect (local UI state, no transcript parse).
-
-  **Item 3 — the operator's question: "it's only working when workflow is enabled and a project
-  is using workflow, right?"** ✅ **ANSWERED FROM SOURCE, 2026-09-15 — YES, with two conditions,
-  not one.** `Workspace.tsx:620` passes `enabled: workflowFeaturesEnabled` (the M10.9 gate hook)
-  into `useSupervisor`, and `useSupervisor.ts:110` re-checks `if (!host.enabled) return` on every
-  turn — deliberately re-checked at fire time rather than only at subscribe time, so flipping the
-  gate mid-session takes effect immediately. **Second condition:** `useSupervisor.ts:115` returns
-  early when `storedMode === null`, so a project with no stored drive mode in `projects.json` is
-  never supervised either. So: gate ON **and** a stored drive mode. ⚠️ Ruling R-1 is what makes the
-  second condition bite — the STORED mode is the authority, so a project inherits supervision from
-  `projects.json` regardless of how the turn was entered.
-- **Update 2026-09-17 — ⚠️ WP0 PHASE 1 SHIPS WITH ITS HANDS-ON CHECKS DEFERRED, and they must
-  ride the release.** The unsent-input suppression is built and mechanically proven (watermark
-  state machine, suppression placement, ledger-claim semantics, AC-7 both behaviorally and
-  structurally, caller wiring — all mutation-proven). ⚠️ **But "does it actually stop interrupting
-  the operator" was NOT observed** — an agent-launched CC emits no hook events, so the supervisor
-  never fires under agent testing, and the operator approved on the mechanical evidence while
-  explicitly stating no hands-on test was performed. **Seven checks are carried as
-  `DEFERRED-TO-DOGFOODING` on `P1.verify-human.1-7`** in `wip/supervisor-hotfix.md`:
-  1. Unsent line present at turn end → NO fire, text intact. *(the reported defect)*
-  2. ⚠️ A line walked away from for minutes → STILL no fire. **The ruling's load-bearing case —
-     a debounce-on-recent-keystrokes implementation would fire here and pass check 1.**
-  3. Esc, then turn end → fires normally.
-  4. Ctrl+C and Ctrl+U → fire normally.
-  5. Enter/submit → fires normally.
-  6. After a suppressed turn, subsequent turns resume chaining (the suppressed turn itself stays
-     spent **by design**).
-  7. Esc-dismissing a CC *menu* clears the watermark early — the **recorded accepted cost** of the
-     D-2 decay ruling. Confirm it is tolerable in practice.
-  ⚠️ **Checks 1-2 and 6 are markedly easier to judge AFTER WP0 Phase 3 ships the suppressed-state
-  marker** — until then suppression is invisible and must be inferred from the absence of an
-  unwanted fire, which is exactly the write-only problem Phase 3 exists to fix. ⚠️ **Read the
-  `DEFERRED-*` tags on those leaves, not their `[x]` checkboxes** (the M15 WP4/WP5 convention).
-- **Update 2026-09-17 (WP0 close) — ⚠️ PARTIALLY RESOLVED; the entry SURVIVES, slimmer.**
-  **Item 2 is ADDRESSED IN CODE** by WP0 (`a46ae89`): unsent-input suppression + a per-workspace
-  toggle + a suppressed-state marker, all mechanically proven and mutation-tested. ⚠️ **But it is
-  NOT closed**, for two independent reasons, and the entry is deliberately not deleted:
-  (a) the seven hands-on checks below are `DEFERRED-TO-DOGFOODING`, so the fix is *built and
-  unobserved* — "does it actually stop interrupting the operator" has never been witnessed; and
-  (b) ⚠️ **no release has been cut** (task 0.7 open; latest tag `v0.5.0`) — *⚠️ **stale as of 2026-09-23:** WP0 shipped in `v0.5.1` and `v0.6.0` is out, so blocker (b) has CLEARED; what remains is the operator running the installed build*, so the operator's own
-  Claudesk is **still running the UNFIXED supervisor** — which is itself what blocks (a).
-  ⚠️ **Item 2's FIRE-POLICY question also remains open and is NOT what WP0 answered.** WP0
-  implements the narrower "suppress when unsent input is present" candidate; the probe-Q2 question
-  (can a question-shaped / answer-awaiting tail be detected?) that gates the *silently-always* fire
-  policy is untouched. **Item 1 (UI freeze) is explicitly out of WP0's scope and wholly untouched.**
-  **Item 3 needs no action — answered 2026-09-15.**
-- **Suggested action (remaining open work):** ⚠️ **Item 1** — still the highest-signal item, and
-  now the only one with no work against it: `sample` against a frozen app (the P1 2026-08-25
-  playbook), NOT reasoning from the code. ⚠️ **Item 2's residue** — after a release lands, run the
-  seven deferred checks; then decide the fire policy proper (probe Q2), which WP0 deliberately did
-  not settle. Triage what remains as a batch, not one-at-a-time.
-- **Priority:** high
-- **Status:** open
+- **Summary:** The first (and, per the operator on 2026-09-24, the **last**) batch of operator
+  feedback from live supervisor use: three items. **Rewritten 2026-09-25** at the dogfeedback
+  close-out to its remaining open work. ⚠️ **It is NOT closed, and "no more feedback" does not close
+  it.** Its open checks are **vacuous while the supervisor never fires**, and per
+  `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` it has not fired since
+  v0.5.1.
+- **Item 3 — "only when workflow is enabled and a project uses workflow?"** ✅ Answered 2026-09-15:
+  yes, gate ON **and** a stored drive mode. Since v0.5.1 there is a third condition: the
+  per-workspace `supervisor_enabled` toggle. **No work remains on this item.**
+- **Item 2 — "I'm typing something midway, and the supervisor auto chained."** The fix is **built**:
+  WP0 (`a46ae89`, shipped v0.5.1) added unsent-input suppression, the per-workspace toggle and a
+  suppressed-state marker, all mutation-proven. ⚠️ **Its seven hands-on checks remain
+  `DEFERRED-TO-DOGFOODING`** on `P1.verify-human.1-7` of the archived `supervisor-hotfix.md`. The
+  dogfooding did not satisfy them: "no unwanted fire mid-typing" is exactly what a supervisor that
+  never fires also produces. ⚠️ **Worse, this fix is the top-ranked SUSPECT for the silence**
+  (hypothesis 1 in the NEVER-OBSERVED item: a watermark stuck up would withhold every turn). The
+  checks, for when firing is restored:
+  1. Unsent line present at turn end → NO fire, text intact.
+  2. ⚠️ A line walked away from for minutes → STILL no fire (the D-2 ruling's load-bearing case).
+  3. Esc, then turn end → fires.
+  4. Ctrl+C and Ctrl+U → fire.
+  5. Enter/submit → fires. ⚠️ **Add: F-a prompt-panel send (v0.6.0) → fires.** That submit path does
+     not come through the xterm keystroke stream and post-dates the watermark design.
+  6. After a suppressed turn, later turns resume chaining.
+  7. Esc-dismissing a CC menu clears the watermark early (the accepted cost). Confirm it is
+     tolerable.
+  ⚠️ **The fire-policy question proper (probe Q2: can a question-shaped / answer-awaiting tail be
+  detected?) is still open.** WP0 answered only the narrower unsent-input case.
+- **Item 1 — "inference / transition check would freeze the UI."** ⚠️ **Untouched, and unconfirmed
+  either way.** No freeze has been reported since, but that is weak evidence: if the supervisor
+  rarely reaches the adjudicator, the `claude -p` path that would freeze rarely runs. When it next
+  happens, use the P1 2026-08-25 playbook: `sample` against the frozen app, not reasoning from the
+  code.
+- **Suggested action:** none standalone. This rides on the NEVER-OBSERVED investigation: once
+  firing is restored and the activity record exists, run item 2's checks against the record, then
+  decide probe Q2.
+- **Priority:** high (while the suppression fix is a suspect for the silence)
+- **Status:** open — rewritten 2026-09-25; blocked on the NEVER-OBSERVED investigation
 
 ## SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION
-- **Source:** feature:verify-human (M15 WP4 Phase 4)
+- **Source:** feature:verify-human (M15 WP4 Phase 4). **Re-framed 2026-09-25** at the dogfeedback
+  close-out (`wip/supervisor-dogfeedback-closeout.md`).
 - **Target level:** product:wbs
-- **Type:** gap (verification debt, not a known defect)
-- **Summary:** M15 WP4 wires the workflow supervisor to its **first production caller**, but the
-  supervisor has **never been observed actually firing in a live CC session**. Five behavioral
-  checks were deferred at verify-human because the trigger cannot be reliably manufactured: (1) a
-  live AUTO-edge fire, (2) the gate-OFF invariant under a real turn, (3) the installed-`.app`
-  GUI-PATH smoke test, (4) an unattended context-pressure recycle at a real phase boundary, (5)
-  **Esc recovery for a chained one-step run**.
-- **Context:** Everything statically checkable IS verified — `pnpm verify:auto` green (2580
-  frontend / 919 Rust), the `"supervisor"` label chain intact end-to-end, the M10.9 gate checked
-  twice, `fanOut` provably unwired, four wiring mutants killed individually. ⚠️ **The wiring is
-  proven; the behavior is not.** Operator's reasoning (2026-09-14): *"It's hard to consistently
-  trigger these conditions without actually using it"* — and manufacturing a trigger would verify
-  the fixture rather than the feature (`[[verify-self-stub-cannot-cross-subprocess-boundary]]`).
-  ⚠️ **THE RISK:** the supervisor fires with **no human watching**, and `injectCommand` has **no
-  retry and no pre-send cancel window** — the only recovery from a wrong fire is CC's **Esc**,
-  which is itself deferred check (5). So a wrong fire on an unwatched workspace is unrecoverable
-  AND its recovery path is unconfirmed.
-- **Suggested action:** Operator-owned; trigger is the first real dogfooding after M15 ships.
-  Check (3) folds into the standing `/release`-gate practice
-  (`[[installed-build-verify-deferred-to-release]]`) and needs a build newer than v0.4.0/Sep-6 —
-  the installed app predates this code by 8 days and cannot exercise it. ⚠️ **WP5's exit verify
-  must read these as OPEN.** A future session finding `[x]` on the P4.verify-human leaves must read
-  their `DEFERRED-*` status tags, not the checkbox: the checkbox means the gate closed, not that
-  the behavior was observed.
-- **Priority:** high (it is the milestone's core behavior, unobserved, with an unrecoverable
-  failure mode and an unconfirmed recovery path)
-- **Update 2026-09-14:** ⚠️ **The observability blocker that would have made these checks
-  undiagnosable is CLEARED.** The three MAJORs from this WP's quality review were paid down before
-  any dogfooding (see CHANGELOG): a successful fire is now announced, a declined recycle is logged
-  distinctly, and an unreadable WIP is distinguishable from an absent one. **This does not close
-  this item** — the behavior is still unobserved — but a fire or recycle now leaves a trace, so
-  when dogfooding does trigger one the five deferred checks have evidence to read.
-- **Update 2026-09-15 — ⚠️ M15 WP5's PHASE 3 IS FOLDED INTO THIS ITEM, AND WP5 SHIPPED WITHOUT
-  IT (operator decision).** WP5 planned a "Live observation" phase whose six checks are the same
-  behaviors listed above; it was never run, for the same reason they were deferred at WP4 — an
-  agent cannot manufacture the trigger (`SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT`:
-  an agent-launched CC emits no hook events). The operator approved shipping WP5 with it open
-  (P1.verify-human.3 and P4.verify-human.3, both 2026-09-15) rather than blocking the milestone.
-  ⚠️ **SO M15 CLOSED WITH ITS EXIT CRITERION EXPLICITLY UNMET — recorded, not hidden.**
-  `arch/workflow-supervisor.md` §H and `CLAUDE.md` both say so in terms.
+- **Type:** ⚠️ **bug** (probable), re-typed 2026-09-25 from "gap (verification debt)"
+- **Summary:** ⚠️ **THE SUPERVISOR HAS NOT FIRED SINCE v0.5.1, AND IT HAS MISSED REAL BREAKS.** It
+  fired live before the WP0 hotfix. Since v0.5.1 (2026-09-17) no transcript shows a machine-speed
+  fire, while at least six textbook AUTO-edge breaks on supervised, Claudesk-hosted projects went
+  unfired and were restarted by hand. **The ID is kept for grep continuity.** The title's "never
+  observed" is now half-wrong: it WAS observed firing on 2026-09-15, and has been observed NOT
+  firing since.
+- **Why silence was not evidence (the handoff caution, vindicated):** the operator reported "no more
+  feedback" after dogfooding v0.6. A supervisor that never fires produces **nothing to complain
+  about** beyond a wait, and the operator absorbed each wait by typing "next". Resolving this item
+  on that silence would have closed the exact failure it was filed to catch.
 
-  **The six checks to run at first dogfooding** (WP5's list — note it has **one more** than WP4's,
-  the gate-OFF check having been missing from WP5's plan until Phase 1 caught it):
-  1. A real AUTO-policy turn that stops is detected and fired **without operator input**, across a
-     real multi-workspace session.
-  2. ⚠️ **Gate OFF → the same turn fires nothing** (the OFF-invariant, live).
-  3. The negative arm live: a legitimate `verify-human` PAUSE, an `ESCALATE`, and a no-stored-mode
-     project each produce **no fire at all**.
-  4. A context-pressure recycle observed at a **non-final** phase boundary above 400,000 tokens.
-  5. ⚠️ **Esc actually interrupts a wrong fire** — R-1's accepted cost rests on this and it has
-     never been confirmed.
-  6. Installed-`.app` smoke test (GUI-PATH) — ⚠️ needs a build newer than `c55d5fa`; folds into
-     the `/release` gate.
+### Evidence (gathered 2026-09-25 from CC transcripts, reproducible)
 
-  ✅ **What is now easier than it was at WP4:** every fire, recycle and declined-recycle leaves a
-  distinct log line (the 2026-09-14 observability paydown), so these checks have evidence to read
-  rather than silence to interpret. The mechanical half is also fully pinned by standing tests —
-  `verdictReplay.test.ts` (34/36 on the non-circular set), `verdict.test.ts`'s negative arm
-  including the **verify-human GATE** (added at WP5 Phase 2), and the recycle conditions.
-  **What remains is exactly and only the live behavior.**
-- **Update 2026-09-23:** `v0.5.1` … `v0.6.0` have shipped since; every check below is satisfiable on the operator's installed build (via the in-app updater, never `brew upgrade`). Nothing else changed: the six checks still wait on real dogfooding.
-- **Update 2026-09-15 (b) — ⭐ THE STRUCTURAL BLOCKER IS CLEARED: `v0.5.0` IS CUT.** The installed
-  app was `v0.4.0` (2026-09-06) and predated every line of the supervisor, which made all six
-  checks *unsatisfiable* — the same trap M13.5 WP1 hit. `v0.5.0` (2026-09-15, 22 commits, the whole
-  of M15) contains them. ⚠️ **This does NOT close the item, and the release must not be read as
-  progress on it** — the checks are now **satisfiable but still unsatisfied.** Two operator
-  conditions gate the actual observation: the upgrade waits until **all mid-flight tasks reach a
-  clean boundary** (a `brew upgrade` deletes and re-quarantines the running app, killing every live
-  Claudesk session), and the supervisor then needs **at least one full week of real use** before
-  its behavior is worth judging. ⚠️ **Expect this item to stay open for weeks; that is the plan,
-  not a stall.** Check 6 (installed-`.app` GUI-PATH smoke) is satisfiable the moment the upgrade
-  lands; checks 1–5 need the week. Sequenced in `roadmap.md` → Revision 2026-09-15 as the
-  **dogfeedback** step, deliberately *after* M14's remainder because that work does not depend on
-  this clock.
-- **Status:** pending
+**Method.** Scan main-chain entries of `~/.claude/projects/*/*.jsonl` (and
+`~/.config/claude-*/projects/`). Two passes were run:
+- **(a) Machine-speed commands.** Find slash-command user entries (`<command-name>`) whose gap from
+  the preceding assistant entry is under 6s. A human does not read a turn and type a command that
+  fast; the supervisor's fire lands in about 4s.
+- **(b) Unfired breaks.** Find assistant turns carrying `TRANSITION: <id>` whose id is an AUTO edge
+  in autopilot, where the next non-tool event is a **human** message rather than a `Skill` call.
+  Cross-check each hit's project in `projects.json`: `default_drive_mode`, `supervisor_enabled`,
+  gate `workflow_features_enabled`, `profile`. Confirm Claudesk hosting by the presence of the
+  *"Claudesk reports the drive mode"* `additionalContext` line in the transcript.
+
+**(a) Pre-hotfix fire, CONFIRMED.** 2026-09-15 19:49–19:55Z, claudesk session `7a912f57`: six
+`/feature-build` commands arrived 3.4–4.8s after turn end, all with no args. The operator
+confirmed them in-session: *"it's the supervisor doing these /feature-build thing."* That misfire
+run is what produced the WP0 hotfix (unsent-input suppression plus the per-workspace toggle,
+shipped in v0.5.1).
+
+**(a) Since v0.5.1: ZERO machine-speed workflow commands** (2026-09-17 → 2026-09-25, 50 slash
+commands with a preceding assistant turn). The only fast one, `/session-handoff` on 09-17 at 14:31
+(4.6s), was operator-typed, and it pre-empted a `/feature-verify-auto` that an F8 turn had just
+left due.
+
+**(b) Unfired breaks.** Every row below is a supervised project (`autopilot` stored,
+`supervisor_enabled: true`, gate ON, default profile) and Claudesk-hosted. Each turn ended on a
+bare `TRANSITION: F8` (build → verify-auto, AUTO in Mode 3) with **no question in the tail**:
+
+| When (Z) | Project | Waited | Operator then typed |
+|---|---|---|---|
+| 09-18 18:18 | ops-data-hub | 5 min | "do it" |
+| 09-22 15:34 | ops-data-hub | 23 min | "next" |
+| 09-22 17:03 | mbt-copilot | 31 s | "keep going" |
+| 09-22 17:13 | mbt-copilot | **49 min** | "so?" |
+| 09-22 18:13 | claudesk | 16 min | "all good" |
+| 09-22 18:20 | mbt-copilot | 10 min | "so?" |
+
+Also: the google-newsroom product run (09-23) broke at **P3, P5, P7 and P9**, and the operator
+typed "next" / "just continue" each time. Two of those tails asked a commit question, so the
+adjudicator may legitimately have withheld on them. P3 and P7 did not ask one.
+
+⚠️ **Not counted as misses:** the F4 (spec → plan) stops whose tails said "say go" / "tell me what to
+change". These are question-shaped, so a withhold there is defensible. That is a separate,
+model-side over-pausing question, not this defect.
+
+⚠️ **What the evidence cannot say:** WHICH version was running on each date (the installed app was
+upgraded to 0.7.0 on 2026-09-25 08:30; earlier upgrade times are unrecorded). Every release from
+v0.5.1 on contains the supervisor, and the 2026-09-15 fire proves the v0.5.0 build could fire.
+
+### Hypotheses — UNVERIFIED, listed so the investigation starts with a map, not a conclusion
+
+1. ⚠️ **Unsent-input suppression stuck ON** (top suspect: it is the one mechanism that CHANGED at
+   v0.5.1). The watermark rises on typed-but-unsubmitted input and, by design, stays up for
+   minutes (WP0 check 2's load-bearing case). If some real submit path is not seen as a clear (a
+   path other than Enter / Esc / Ctrl+C / Ctrl+U in the xterm keystroke stream), every later turn
+   withholds `unsent-input-present`. Watch the paths that do not come through xterm keystrokes:
+   F-a's prompt-panel send (v0.6.0), a CC menu, pasted text.
+2. **The turn-end trigger never reaches the supervisor.** Possibilities: `is_turn_start` /
+   raw-event plumbing, the `already-fired-for-this-turn` ledger never clearing, or hook
+   registration (dev and prod hooks are both registered in `~/.claude/settings.json`).
+3. **The verdict withholds**: `transcript-unreadable` (slug or transcript-path resolution),
+   `no-verdict`, `policy-not-auto`, or `adjudicator-says-awaiting` on plain F8 tails.
+   (`SURFACE-2026-09-24-QUALITY-TRANSCRIPT-ROOT-READS-STORED-PROFILE-NOT-LIVE` post-dates every row
+   above and involves profiles, while these rows all use the default profile, so it is **not** the
+   cause of these misses. It is adjacent code, though.)
+
+⚠️ **The discriminating observable already exists, and nobody can read it.** Every non-fire emits a
+`withheld … — <reason>` line from a closed vocabulary (`arch/workflow-supervisor.md` §F), and it
+goes to `console.warn` in the WKWebView. That is unreadable in a shipped build, and per
+`[[read-logs-console-captures-nothing]]` also unreadable to an agent via `read_logs`. **The
+investigation's first move is to make those lines readable.** Two routes: the activity surface
+(`SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE`, sequenced next for this
+reason), or a dev-build `console.warn` tap via `webview_execute_js`, validated by a positive
+control first. ⚠️ An agent-launched CC emits no hook events
+(`SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT`), so a live repro needs an
+**operator-driven** CC turn in a dev build.
+
+### What closes this item
+
+1. **The cause is found and fixed**, and a regression test pins it at the layer that failed.
+2. **A live fire is observed on an AUTO-edge break on a v0.5.1+ build**, read from the activity
+   record rather than inferred from timing.
+3. **The original deferred checks, re-scoped.** Their earlier status is void, because a no-fire
+   check passes vacuously while nothing fires:
+   - live AUTO fire across a multi-workspace session;
+   - gate OFF → no fire;
+   - negative arm (verify-human PAUSE, ESCALATE, no-stored-mode) → no fire;
+   - a context-pressure recycle at a non-final phase boundary over 400,000 tokens;
+   - ⚠️ **Esc interrupts a wrong fire** (R-1's accepted cost rests on it, still unconfirmed);
+   - installed-`.app` GUI-PATH smoke.
+   The WP0 checks tracked in `SURFACE-2026-09-15-SUPERVISOR-DOGFEEDBACK-BATCH-1` are vacuous for the
+   same reason and wait on (1) and (2).
+
+- **Suggested action:** first, build the activity surface's retained record (sequenced next,
+  operator 2026-09-25). Then investigate with it: an operator-driven break in a dev build, reading
+  the `withheld` reason. Open the investigation as `/incident-report` or `/feature-reproduce`
+  depending on what the first read shows.
+- **Priority:** high (the milestone's core behavior is not working in the field, and the failure
+  is silent by construction)
+- **Status:** pending — re-framed 2026-09-25; investigation sequenced after the activity surface
 
 ## SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT
 

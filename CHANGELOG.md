@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-25
+
+- **Task closed:** Supervisor dogfeedback is closed as a wall-clock item and re-framed on evidence: CC transcripts show the supervisor fired live on 2026-09-15 but not once since v0.5.1, missing at least six plain F8 breaks on supervised projects, so the three supervisor backlog items were rewritten (none resolved) and the activity surface and a silent-supervisor investigation were sequenced next.
+
 ## 2026-09-24
 
 - **Feature shipped:** F-b: isolated Claude Code profiles as Claudesk workspaces. Each picker row can spawn its session under a named `CLAUDE_CONFIG_DIR` profile. A missing profile refuses to spawn, and the workflow layer is always off for non-default profiles. Claudesk registers its hook into every profile, so the status dot works. Profiles are created in a native wizard, adopted, removed, or moved to the Trash from ⌘, Settings.
