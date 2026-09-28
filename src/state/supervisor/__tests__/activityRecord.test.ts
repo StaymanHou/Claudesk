@@ -55,6 +55,8 @@ describe("outcomeForReason", () => {
     expect(outcomeForReason("sweep-threw")).toBe("error");
     expect(outcomeForReason("inject-failed")).toBe("error");
     expect(outcomeForReason("policy-not-auto")).toBe("withheld");
+    // A turn whose close never reached the transcript is a withhold, not a supervisor error.
+    expect(outcomeForReason("transcript-incomplete")).toBe("withheld");
     expect(outcomeForReason("no-pty-session")).toBe("withheld");
   });
 });

@@ -1459,6 +1459,10 @@ export function Workspace({
           // because the operator typed in a different terminal. Same exclusion reasoning as
           // `markTurnStarts` and `pendingAction` below.
           onInputForwarded={(chunk) => {
+            // The chunk arrives with terminal reports already stripped (`routeCcInput`). Empty
+            // means it was reports only, which is not operator input: it must neither move the
+            // watermark nor cancel a pending turn-attribution origin.
+            if (chunk.length === 0) return;
             unsentInputRef.current?.push(chunk);
             // Turn attribution — operator input between a fire and its turn start means the turn
             // is not (only) the supervisor's, so the pending origin is dropped.

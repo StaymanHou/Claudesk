@@ -143,6 +143,31 @@ not the token parse, is the hard half.**
 indistinguishable** from legitimate pauses. A prose-reading LLM adjudicator — the original ask —
 would pass **all 19** confirmed breaks. The mechanical check decides every one.
 
+### Reading the turn — the flush race and turn scoping (2026-09-28, silent-supervisor)
+
+⚠️ **CC writes a turn's final line AFTER the `Stop` hook.** Measured live in 6/6 turns: the
+final assistant line (`stop_reason: end_turn`) reached disk **74–109 ms after `Stop`**, flushed
+together with `system:stop_hook_summary` and `system:turn_duration`, while the supervisor read the
+tail within ~2 ms. So until this fix **every decision was made on the previous turn's tail**. The
+2026-09-15 "fires" were fires on stale verdicts, and the silence since v0.5.1 was this race plus
+the report-raised watermark (§F).
+
+- **Completion (`isTurnComplete`, `transcript.ts`).** A tail is complete for the current turn iff,
+  after the last real user prose line, there is a main-chain assistant line whose `stop_reason` is
+  terminal (neither `tool_use` nor absent), or a `stop_hook_summary` / `turn_duration` line. Corpus
+  (135 transcripts, CC 2.1.272–283): 928/929 turn ends carry `end_turn`/`stop_sequence`, and 99.3%
+  of those are followed by a close line. The close line alone covers the one outlier (an
+  `AskUserQuestion` turn ending on `tool_use`). Subagent (`isSidechain`) lines never count.
+- **The wait (`fireOne`).** Re-read until complete, `TAIL_COMPLETION_BUDGET` = 20 × 100 ms, **before
+  the ledger claim**, so a stale read never claims a key. On expiry → `transcript-incomplete`
+  (withheld). ⚠️ This is a bounded re-read inside one decision, **not** a watchdog. The rejected
+  PID-polling watchdog below is a different thing.
+- **Turn scoping (`readTurn`).** The backward scan stops at the last user prose line: a verdict the
+  operator has since answered, or one from a `--continue`-resumed conversation, is not this turn's
+  (→ `no-verdict`). Unscoped, it FIRED one live (a turn ending on `F8` fired the previous turn's
+  `T2` as `/task-act`). The ledger could not have stopped that, because `verdictIndex` indexes the
+  512 KiB tail window, shifts once the file outgrows it, and lives in memory.
+
 ### Idempotency — the `FireLedger`
 
 Keyed on `{workspaceId, transcriptPath, edgeId, verdictIndex}`. ⚠️ **Claimed BEFORE adjudication**,
@@ -243,10 +268,14 @@ for dev. It is size-capped at 5 MiB with one rotated generation (`.log.1`), reus
   transcript text.
 - ⚠️ **Filter by `projectPath`, not `workspaceId`.** Ids like `ws-1` are reassigned on every app
   run.
-- ⚠️ **One turn end can appear twice**, from a pre-existing duplicate `workspace-status` listener
-  that appears during a session (see
-  `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`). The record faithfully
-  reports each invocation.
+- **One decision per `Stop`** *(2026-09-28)*. On 2026-09-25 a single emitted `Stop` produced two
+  records (a second webview consumer). It could not be reproduced (mode changes, hot reloads, a full
+  reload with a respawn), so the funnel now claims each EVENT once, keyed `(workspace_id,
+  last_event_at)`, module-level in `turnEndDedupe.ts`. A repeat is recorded as
+  `duplicate-turn-end` and never decided again. An event with no `last_event_at` is never deduped.
+  If this reason ever appears in the log, the duplicate consumer is back: go and find it.
+- **Reasons added 2026-09-28:** `transcript-incomplete` (the turn's close never reached the
+  transcript within the budget) and `duplicate-turn-end` (see above). Both are `withheld`.
 - **`inject-failed` is now reachable.** `injectCommand` swallows a rejected `cc_input`, so the
   supervisor passes an `onIpcError` that re-throws. Before this, a failed injection was reported as
   a fire.
@@ -271,9 +300,11 @@ started, it shows `⚙` with a tooltip naming the command. Mechanism (`src/state
   when it dequeues a prompt (task notifications; a message typed while the model runs). The
   supervisor fires after a `Stop`, so these fall outside the ~40 ms gap in practice; one landing
   inside it would take the tag. Accepted.
-- ⚠️ **Cancellation is conservative**: terminal reports (focus, DA, cursor) cancel too, the same
-  misclassification that raises the unsent-input watermark. It errs toward a missing `⚙`, never a
-  wrong one. Fix both together.
+- **Cancellation is operator input only** *(fixed 2026-09-28, silent-supervisor Phase 2)*. Terminal
+  reports (focus in/out, DA replies, cursor position) used to cancel a pending origin, the same
+  misclassification that raised the unsent-input watermark. `routeCcInput` now strips them once,
+  for both readers (`src/state/supervisor/terminalReports.ts`), and `Workspace` ignores a chunk
+  that was reports only. The PTY still receives every byte.
 - **Gated through the readout**: the `⚙` renders from `workspaceSupervisorReadout(…).turnBadge`,
   never from the pane's origin directly, because the turn readout itself is ungated.
 - Not tagged: the command a context-pressure recycle defers into the fresh session.

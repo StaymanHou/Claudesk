@@ -39,7 +39,13 @@ import {
   type TurnKey,
   type WithholdReason,
 } from "./verdict";
-import { parseTranscript, readTurn, type TranscriptTail } from "./transcript";
+import {
+  isTurnComplete,
+  parseTranscript,
+  readTurn,
+  type TranscriptLine,
+  type TranscriptTail,
+} from "./transcript";
 import { readContextTokens } from "./contextPressure";
 import type { ParsedWip } from "./wipPhases";
 import type { AdjudicatorDeps } from "./adjudicator";
@@ -126,6 +132,20 @@ export interface FanOutDeps {
    * production caller MUST supply it, and a test pins that it does.
    */
   readonly hasUnsentInput?: (w: SupervisedWorkspace) => boolean;
+  /**
+   * How long to wait for the turn's close to reach the transcript before deciding.
+   *
+   * ⚠️ CC flushes a turn's final line AFTER the `Stop` hook (74–109 ms measured), so the first
+   * read at a turn end is normally one turn stale. `fireOne` re-reads until
+   * `isTurnComplete`, up to `attempts` reads `intervalMs` apart, then gives up with
+   * `transcript-incomplete`. Defaults: {@link TAIL_COMPLETION_BUDGET}.
+   */
+  readonly completion?: {
+    readonly attempts: number;
+    readonly intervalMs: number;
+  };
+  /** The wait between re-reads. Injected so tests run under fake timers. */
+  readonly sleep?: (ms: number) => Promise<void>;
   /** Evidence for the one conditional policy cell. */
   readonly context?: PolicyContext;
   /** Diagnostic sink. Defaults to `console.warn`. */
@@ -142,6 +162,7 @@ export type FanOutReason =
   | WithholdReason
   | "adjudicator-says-awaiting"
   | "transcript-unreadable"
+  | "transcript-incomplete"
   | "no-transcript"
   | "already-fired-for-this-turn"
   | "unsent-input-present"
@@ -199,6 +220,20 @@ export interface FanOutOutcome {
 const TAIL_CHARS = 1200;
 
 /**
+ * The default re-read budget for a turn's close: about 2 s in all. The worst flush lag
+ * measured was 109 ms, so the margin covers slow or stacked Stop hooks while staying under
+ * the ~3 s the adjudicator already costs. Tune it from the `transcript-incomplete` count in
+ * `supervisor-activity.log`.
+ */
+export const TAIL_COMPLETION_BUDGET = {
+  attempts: 20,
+  intervalMs: 100,
+} as const;
+
+const realSleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
  * Supervise ONE workspace. Every fire in Claudesk goes through here.
  *
  * ⚠️ **THE LEDGER IS CLAIMED BEFORE THE INJECT, NOT AFTER.** `claim()` returns false if the
@@ -220,20 +255,32 @@ export async function fireOne(
     reason,
   });
 
+  // ⚠️ WAIT FOR THE TURN'S CLOSE BEFORE READING A VERDICT, AND BEFORE THE LEDGER CLAIM BELOW.
+  // A stale read decides on the previous turn: it finds no verdict, or an earlier one that
+  // already chained, and a claim made from it would be keyed on the wrong verdict.
+  const { attempts, intervalMs } = deps.completion ?? TAIL_COMPLETION_BUDGET;
+  const sleep = deps.sleep ?? realSleep;
   let tail: TranscriptTail;
-  try {
-    tail = await deps.readTail(workspace);
-  } catch (e) {
-    // ⚠️ Withhold, per the binding failure direction. "No evidence" must never mean "fire".
-    warn(
-      `supervisor: could not read ${workspace.workspaceId}'s transcript — ${String(e)}`,
-    );
-    return no("transcript-unreadable");
+  let lines: TranscriptLine[];
+  for (let attempt = 1; ; attempt++) {
+    try {
+      tail = await deps.readTail(workspace);
+    } catch (e) {
+      // ⚠️ Withhold, per the binding failure direction. "No evidence" must never mean "fire".
+      warn(
+        `supervisor: could not read ${workspace.workspaceId}'s transcript — ${String(e)}`,
+      );
+      return no("transcript-unreadable");
+    }
+    if (tail.path !== null) known = { ...known, transcriptPath: tail.path };
+    if (tail.path === null || tail.lines.length === 0)
+      return no("no-transcript");
+    lines = parseTranscript(tail.lines);
+    if (isTurnComplete(lines)) break;
+    if (attempt >= attempts) return no("transcript-incomplete");
+    await sleep(intervalMs);
   }
-  if (tail.path !== null) known = { ...known, transcriptPath: tail.path };
-  if (tail.path === null || tail.lines.length === 0) return no("no-transcript");
 
-  const lines = parseTranscript(tail.lines);
   const reading = readTurn(lines);
   const contextTokens = readContextTokens(lines);
   known = {

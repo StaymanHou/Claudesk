@@ -1,5 +1,25 @@
 # Backlog
 
+## SURFACE-2026-09-28-SUPERVISOR-FIRES-ON-A-TRANSITION-TOKEN-QUOTED-IN-PROSE
+- **Source:** feature:verify-self (`silent-supervisor` Phase 3)
+- **Target level:** feature:spec
+- **Type:** bug
+- **Summary:** The supervisor fires a `TRANSITION:` token that the model merely QUOTED in its final message. `readTurn` takes the last `TRANSITION:` anywhere in the turn's final assistant text.
+- **Context:** Observed live 2026-09-28 in the dev build. A `/feature-verify-auto` turn in scratch-c emitted no token of its own, but its final message said *The "Built / TRANSITION: F8" reply was the literal text you asked for*, and the supervisor fired `/feature-verify-auto` again. This is now reachable because the supervisor fires at all: before `silent-supervisor` it read the previous turn's tail. Corpus (21 days, 138 turn-ending messages with a token): **119** at line start (67 on the last line, 52 followed by more text), **19 mid-line**. The mid-line cases mix REAL verdicts (`… (TRANSITION: P10).`, `→ **TRANSITION: F13**`, `` `TRANSITION: P13` ``) with QUOTES (``I'd stopped on `TRANSITION: F8` again``), so neither "must start a line" nor "must be the last line" separates them cleanly.
+- **Suggested action:** a design decision about the token contract (`transitionToken.ts` / upstream mccc's Phase 3d regex contract). Options: (a) require line start, trading ~14% of today's verdicts for withholds (the safe direction under R-6); (b) have mccc emit the token in one canonical form (last line, bare) and require exactly that; (c) have the adjudicator judge quoted-vs-emitted. Recovery today is Esc.
+- **Priority:** medium-high (a wrong fire re-runs a skill; it is recoverable, but the supervisor is about to ship firing)
+- **Status:** pending
+
+## SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR
+- **Source:** feature:verify-self (`silent-supervisor` Phase 3)
+- **Target level:** feature:spec
+- **Type:** bug
+- **Summary:** In one workspace, every emitted `Stop` reached the supervisor's `onTurnEnd` TWICE, and neither of its supervisor-started turns got the `⚙` turn-attribution badge.
+- **Context:** Dev build, 2026-09-28. `ws-1` (scratch-c) was the first workspace opened in that app run, then a second (scratch-b, `ws-3`) was opened beside it. Each of `ws-1`'s `Stop`s is one `outcome=emitted` line in `status-channel.log`, yet two activity records were written (`fired` + `duplicate-turn-end`; the dedupe from `silent-supervisor` AC-4 contained it). `ws-3` never duplicated, not even after a third workspace was opened. The live React tree held exactly ONE `Workspace` fiber for `ws-1` and one root, and `ws-1`'s turn total was correct (the pane's turn-start tap is not duplicated). The same symptom was seen on 2026-09-25 (one emitted `Stop`, two records). **Candidate explanation (unconfirmed):** a leftover, still-subscribed earlier instance of `ws-1`'s subtree. Its `useSupervisor` would make the duplicate call, and its pane would consume the pending `⚙` origin (claim is consume-once) before the live pane.
+- **Suggested action:** reproduce from a fresh dev launch (open A, open B, run a turn in A, and count records per `Stop`), then find which subscription survives unmount (`useTauriListen`'s cleanup; the XtermPane turn-start tap; any remount of the first workspace when the layout gains a second). A `duplicate-turn-end` line in `supervisor-activity.log` is the detector.
+- **Priority:** medium (decisions are already deduplicated; what remains is a leak plus missing `⚙` in the affected workspace)
+- **Status:** pending
+
 ## Code-quality findings — supervisor-activity-record (2026-09-28)
 
 - **Pointer:** **1 MAJOR + 8 MINOR remain** from the review of `dece979` (rewritten 2026-09-28: the torn-append MAJOR was resolved by task `activity-log-append-tear`). The MAJOR that remains: the §B arch-doc enumeration guard scans a hand-kept file list. The MINORs: two stale comments, an ambiguous `sweep-threw` reason, a layering import, a 6-positional-param readout, a thrice-duplicated `2000` read limit, a `Workspace.tsx` extraction, and a popover Esc that may reach CC. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-activity-record — 2026-09-28`.

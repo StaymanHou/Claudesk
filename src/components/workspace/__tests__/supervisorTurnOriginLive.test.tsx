@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { routeCcInput } from "../ccInputRouting";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   click,
@@ -83,6 +84,21 @@ describe("the supervisor's ⚙ in the turn readout", () => {
     await pushClaimedTurnStart(FIRST_TURN);
     expect(q(el, "workspace-turn-origin")).toBeNull();
     expect(q(el, "workspace-turn-readout")?.textContent).toBe("1/1");
+  });
+
+  // ⚠️ silent-supervisor Phase 2: a focus change between the fire and its turn start sends a
+  // focus report through `onData`. Routed through the real `routeCcInput`, it reaches `Workspace`
+  // as an empty chunk, which must not cancel the tag (it used to: `arch/workflow-supervisor.md`
+  // §F, "Cancellation is conservative").
+  it("⚠️ a terminal report between the fire and the turn start does NOT cancel the tag", async () => {
+    const el = await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+    });
+    fire();
+    await forwardInput(routeCcInput("\x1b[O", "cc-1", (s) => s).toWatermark);
+    await pushClaimedTurnStart(FIRST_TURN);
+    expect(q(el, "workspace-turn-origin")).not.toBeNull();
   });
 
   it("claims THIS workspace's origin only: another workspace's fire does not tag it", async () => {

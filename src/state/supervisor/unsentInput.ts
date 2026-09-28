@@ -29,9 +29,16 @@
 // re-assert the "paste bypasses this" blind spot** from the pre-spec WIP text — it is refuted
 // by the vendored typings.
 //
+// ⚠️ **BUT THE CHOKEPOINT ALSO CARRIES TERMINAL-GENERATED REPORTS** (focus in/out, device
+// attributes, cursor position), which xterm sends through `onData` as if typed. They raised the
+// watermark on every workspace open and every focus change until silent-supervisor Phase 2.
+// `foldInput` now strips them first (`terminalReports.ts` has the live capture).
+//
 // ⚠️ **WHAT REMAINS AN INFERENCE, STATED PLAINLY:** CC's TUI owns its own input buffer and
 // Claudesk cannot see it. This module tracks what was *sent in*, never what CC currently
 // *holds*. {@link CLEARING_BYTES} is the whole of the mitigation.
+
+import { stripTerminalReports } from "./terminalReports";
 
 /**
  * The bytes that CLEAR the watermark — the line was either submitted or abandoned.
@@ -93,15 +100,18 @@ export const initialUnsentInputState: UnsentInputState = { unsentInput: false };
  * be mistaken for a clearing key.
  *
  * @param state the current watermark
- * @param chunk raw input as `term.onData` delivers it, BEFORE any base64 encoding
+ * @param chunk raw input as `term.onData` delivers it, BEFORE any base64 encoding. Terminal
+ *   report sequences in it are ignored (see `terminalReports.ts`).
  */
 export function foldInput(
   state: UnsentInputState,
   chunk: string,
 ): UnsentInputState {
-  if (chunk.length === 0) return state;
+  // Terminal-generated reports are not the operator's input and never move the watermark.
+  const operatorInput = stripTerminalReports(chunk);
+  if (operatorInput.length === 0) return state;
 
-  const bytes = new TextEncoder().encode(chunk);
+  const bytes = new TextEncoder().encode(operatorInput);
   let unsent = state.unsentInput;
   for (const byte of bytes) {
     unsent = CLEARING_BYTES.includes(byte) ? false : true;

@@ -20,7 +20,9 @@ export type EarlyExitReason =
   /** The project has no stored drive mode, so it is not supervised (ruling R-1). */
   | "no-stored-mode"
   /** No CC PTY session is attached to the workspace, so there is nothing to inject into. */
-  | "no-pty-session";
+  | "no-pty-session"
+  /** This exact `Stop` was already decided; a second delivery is recorded, never re-decided. */
+  | "duplicate-turn-end";
 
 /** Every reason a record can carry: one closed union, so reasons stay exhaustive and grep-able. */
 export type SupervisorReason = FanOutReason | EarlyExitReason;

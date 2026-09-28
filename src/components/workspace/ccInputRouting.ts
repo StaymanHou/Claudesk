@@ -24,13 +24,22 @@
 // direction, and it is why this returns the raw chunk for the sink and the encoded one for the
 // pty as two separate fields.
 
+// ⚠️ **AND THE WATERMARK SIDE IS THE OPERATOR'S INPUT ONLY** (silent-supervisor Phase 2). The chunk
+// also carries terminal-generated reports (focus in/out, device attributes, cursor position),
+// which are stripped here, once, for BOTH readers: the watermark and the turn-attribution cancel.
+// The pty still gets every byte, because CC asked for those reports.
+
+import { stripTerminalReports } from "../../state/supervisor/terminalReports";
+
 /** What the pane should do with one `term.onData` chunk. */
 export interface CcInputRouting {
   /**
-   * The chunk to hand the unsent-input watermark — RAW, never base64.
+   * The operator's part of the chunk, for the unsent-input watermark and the turn-attribution
+   * cancel — unencoded, never base64, with terminal reports removed. Empty when the chunk was
+   * reports only; `Workspace` then ignores it.
    *
-   * ⚠️ Always present, even when {@link toPty} is null: a dead session does not make the
-   * operator's typing disappear from the screen.
+   * ⚠️ Computed even when {@link toPty} is null: a dead session does not make the operator's
+   * typing disappear from the screen.
    */
   readonly toWatermark: string;
   /**
@@ -57,7 +66,7 @@ export function routeCcInput(
 ): CcInputRouting {
   return {
     // ⚠️ Unconditional, and BEFORE the session check below. See the header.
-    toWatermark: chunk,
+    toWatermark: stripTerminalReports(chunk),
     toPty: sessionId ? encode(chunk) : null,
   };
 }

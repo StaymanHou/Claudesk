@@ -44,9 +44,19 @@ export interface TranscriptUsage {
 /** One parsed transcript line. Only the fields the supervisor reads are modelled. */
 export interface TranscriptLine {
   type?: string;
+  /** Set on `system` lines: `stop_hook_summary` / `turn_duration` close a turn. */
+  subtype?: string;
+  /** True on a subagent's lines. A subagent's `end_turn` does not end the main turn. */
+  isSidechain?: boolean;
   message?: {
     role?: string;
     content?: unknown;
+    /**
+     * Why the model stopped. `tool_use` on every mid-turn assistant line (including a verdict
+     * line that goes on to chain); `end_turn` / `stop_sequence` on the line that ends the turn;
+     * absent on an interrupted turn. See {@link isTurnComplete}.
+     */
+    stop_reason?: string | null;
     /**
      * Present on assistant lines. The context-pressure read's only input.
      *
@@ -154,6 +164,55 @@ export function skillInvocation(line: TranscriptLine): string | null {
   return null;
 }
 
+/**
+ * Index of the last real user prose line (see {@link isUserProseTurn}), or -1 when the window
+ * holds none. Everything after it belongs to the current turn.
+ *
+ * ⚠️ An injected skill body is an `isMeta` user TEXT line and counts here, so the boundary can
+ * sit mid-turn after a chained `Skill` call. That is harmless for both readers below: the
+ * turn's final verdict and its close always come after its last skill body.
+ */
+export function lastUserProseIndex(lines: readonly TranscriptLine[]): number {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (isUserProseTurn(lines[i])) return i;
+  }
+  return -1;
+}
+
+/** `system` subtypes CC writes as it closes a turn, after the Stop hooks run. */
+const TURN_CLOSE_SUBTYPES: ReadonlySet<string> = new Set([
+  "stop_hook_summary",
+  "turn_duration",
+]);
+
+/**
+ * Has the current turn's close reached the file?
+ *
+ * ⚠️ **THIS EXISTS BECAUSE CC FLUSHES THE TURN'S FINAL LINE AFTER THE `Stop` HOOK.** Measured
+ * live 2026-09-28: in 6/6 turns the final assistant line reached disk 74–109 ms after `Stop`,
+ * in the same write as `stop_hook_summary` / `turn_duration`, while the supervisor read the
+ * tail within ~2 ms. Every decision before this check was made on the PREVIOUS turn's tail.
+ *
+ * Complete iff, after the last user prose line, there is a main-chain assistant line with a
+ * terminal `stop_reason` (anything but `tool_use` or absent), or a turn-close `system` line.
+ * Corpus (135 transcripts, CC 2.1.272–283): 928/929 turn ends carry `end_turn` /
+ * `stop_sequence`, and 99.3% of those are followed by a close line. The close line alone covers
+ * the one outlier, an `AskUserQuestion` turn that ends on `tool_use`.
+ */
+export function isTurnComplete(lines: readonly TranscriptLine[]): boolean {
+  for (let i = lastUserProseIndex(lines) + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.isSidechain === true) continue;
+    if (line.type === "system" && TURN_CLOSE_SUBTYPES.has(line.subtype ?? ""))
+      return true;
+    if (line.type !== "assistant") continue;
+    const reason = line.message?.stop_reason;
+    if (reason !== undefined && reason !== null && reason !== "tool_use")
+      return true;
+  }
+  return false;
+}
+
 /** What the reader concluded about the most recent emitted verdict. */
 export interface TurnReading {
   /** The transition id from the last assistant text block that carried one. */
@@ -169,9 +228,10 @@ export interface TurnReading {
 /**
  * Read the most recent emitted verdict and decide whether it already chained.
  *
- * ⚠️ **Scans BACKWARD for the last assistant line carrying a token** (trap 1 — the token must
- * come off an assistant text block, never a user line), then scans FORWARD from there for a
- * `Skill` call, stopping only at a real user prose turn (trap 2).
+ * ⚠️ **Scans BACKWARD for the last assistant line carrying a token, no further back than the
+ * last user prose line** (trap 1 — the token must come off an assistant text block, never a
+ * user line; and it must be THIS turn's), then scans FORWARD from there for a
+ * `Skill` call (trap 2: tool results never end the turn, so they never move the boundary).
  *
  * ⚠️ The forward scan starts at the verdict line ITSELF, because an assistant message can
  * carry the `TRANSITION:` text block and the `Skill` tool_use block in the SAME message —
@@ -188,7 +248,13 @@ export function readTurn(lines: readonly TranscriptLine[]): TurnReading {
 
   let verdictIndex: number | null = null;
   let edgeId: string | null = null;
-  for (let i = lines.length - 1; i >= 0; i--) {
+  // ⚠️ SCOPED TO THE CURRENT TURN: a token before the last user prose line is a verdict the
+  // operator has already answered, or one from a resumed conversation. Unscoped, the scan
+  // found it and FIRED it: live 2026-09-28, a turn ending on `F8` fired the previous turn's
+  // `T2` as `/task-act`. The ledger could not stop that either, since `verdictIndex` indexes a
+  // 512 KiB tail window and shifts once the file outgrows it, and the ledger is in-memory.
+  const floor = lastUserProseIndex(lines);
+  for (let i = lines.length - 1; i > floor; i--) {
     const text = assistantText(lines[i]);
     if (!text.includes("TRANSITION:")) continue;
     // ⚠️ Read the LAST token in the block, not the first: a block that narrates the table
@@ -203,12 +269,10 @@ export function readTurn(lines: readonly TranscriptLine[]): TurnReading {
   }
   if (verdictIndex === null || edgeId === null) return none;
 
+  // No user-prose stop is needed here: the verdict sits after the last user prose line, so none
+  // can follow it. Trap 2 now lives in `lastUserProseIndex`, which skips tool results.
   for (let i = verdictIndex; i < lines.length; i++) {
-    const line = lines[i];
-    // ⚠️ The user-prose check comes FIRST, but must not fire on the verdict line itself
-    // (which is an assistant line, so it cannot — stated because the ordering looks fragile).
-    if (i !== verdictIndex && isUserProseTurn(line)) break;
-    const skill = skillInvocation(line);
+    const skill = skillInvocation(lines[i]);
     if (skill !== null) {
       return { edgeId, verdictIndex, chainedTo: skill, alreadyChained: true };
     }

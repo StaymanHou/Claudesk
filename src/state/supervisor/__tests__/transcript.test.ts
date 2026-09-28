@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
+  isTurnComplete,
   isUserProseTurn,
   parseTranscript,
   readTurn,
@@ -257,8 +258,11 @@ describe("readTurn — trap 2: the chain window must not close early", () => {
     expect(r.chainedTo).toBe("feature-verify-auto");
   });
 
-  it("closes the window on a real user prose turn — THIS is a break", () => {
-    // The positive case for the detector: verdict emitted, operator spoke, no Skill call.
+  // ⚠️ AC-3b (silent-supervisor, 2026-09-28). This case used to read `F8` as a break: the
+  // corpus detector's view. The supervisor decides at a TURN END, and here the operator has
+  // spoken since the verdict, so it is not this turn's. Reading it fired a previous turn's `T2`
+  // as `/task-act` in a live session.
+  it("a verdict the operator has since answered is NOT this turn's verdict", () => {
     const lines = [
       assistantText("TRANSITION: F8"),
       assistantText("Ready to run verify-auto."),
@@ -266,9 +270,20 @@ describe("readTurn — trap 2: the chain window must not close early", () => {
       assistantSkill("feature-verify-auto"),
     ];
     const r = readTurn(lines);
+    expect(r.edgeId).toBeNull();
+    expect(r.verdictIndex).toBeNull();
     expect(r.alreadyChained).toBe(false);
-    expect(r.chainedTo).toBeNull();
+  });
+
+  it("finds this turn's verdict when an older, answered one precedes the prompt", () => {
+    const lines = [
+      assistantText("TRANSITION: T2"),
+      userProse("now build it"),
+      assistantText("Built.\n\nTRANSITION: F8"),
+    ];
+    const r = readTurn(lines);
     expect(r.edgeId).toBe("F8");
+    expect(r.verdictIndex).toBe(2);
   });
 
   it("reports no verdict when the transcript has none", () => {
@@ -352,5 +367,103 @@ describe("readTurn — against a REAL captured transcript", () => {
     // The real tool_result line must NOT read as prose — if it did, the chain window would
     // close on it and this real, correctly-chained turn would be labelled a break.
     expect(parsed.filter(isUserProseTurn)).toHaveLength(0);
+  });
+});
+
+// ⚠️ silent-supervisor AC-3: CC writes a turn's final line AFTER the `Stop` hook, so the
+// supervisor must recognize a tail that has not closed yet. The shapes are the ones measured at
+// research (135 transcripts): `end_turn` closes, `tool_use` continues, and the
+// `stop_hook_summary` / `turn_duration` lines close a turn whatever its last assistant line.
+describe("isTurnComplete", () => {
+  const ended = (text: string): TranscriptLine => ({
+    type: "assistant",
+    message: { stop_reason: "end_turn", content: [{ type: "text", text }] },
+  });
+  const continuing = (text: string): TranscriptLine => ({
+    type: "assistant",
+    message: { stop_reason: "tool_use", content: [{ type: "text", text }] },
+  });
+  const close = (subtype: string): TranscriptLine => ({
+    type: "system",
+    subtype,
+  });
+
+  it("is false when only the prompt has been flushed", () => {
+    expect(isTurnComplete([userProse("/feature-build")])).toBe(false);
+  });
+
+  it("is false when the newest assistant line is mid-turn (`tool_use`)", () => {
+    expect(
+      isTurnComplete([
+        userProse("/session-start go"),
+        continuing("Done.\n\nTRANSITION: F33"),
+        assistantSkill("feature-plan"),
+      ]),
+    ).toBe(false);
+  });
+
+  it("is true once the turn's final `end_turn` line is there", () => {
+    expect(
+      isTurnComplete([userProse("go"), ended("Built.\n\nTRANSITION: F8")]),
+    ).toBe(true);
+  });
+
+  it("accepts `stop_sequence` as terminal too (2 of 929 turn ends)", () => {
+    const line: TranscriptLine = {
+      type: "assistant",
+      message: { stop_reason: "stop_sequence", content: [] },
+    };
+    expect(isTurnComplete([userProse("go"), line])).toBe(true);
+  });
+
+  for (const subtype of ["stop_hook_summary", "turn_duration"]) {
+    it(`is true on a \`${subtype}\` line even when the last assistant line is \`tool_use\``, () => {
+      // The one corpus outlier: an `AskUserQuestion` turn that ends on its tool call.
+      expect(
+        isTurnComplete([
+          userProse("go"),
+          continuing("Which one?"),
+          close(subtype),
+        ]),
+      ).toBe(true);
+    });
+  }
+
+  it("ignores a close from BEFORE the latest prompt (the previous turn's)", () => {
+    expect(
+      isTurnComplete([
+        ended("Previous turn."),
+        close("turn_duration"),
+        userProse("next prompt"),
+      ]),
+    ).toBe(false);
+  });
+
+  it("does not count a subagent's `end_turn` as the main turn's close", () => {
+    const side: TranscriptLine = {
+      ...ended("subagent done"),
+      isSidechain: true,
+    };
+    expect(isTurnComplete([userProse("go"), side])).toBe(false);
+  });
+
+  it("does not count an interrupted line (no `stop_reason`)", () => {
+    expect(isTurnComplete([userProse("go"), assistantText("partial")])).toBe(
+      false,
+    );
+  });
+
+  it("does not let a tool result move the boundary (trap 2)", () => {
+    const toolResult: TranscriptLine = {
+      type: "user",
+      message: {
+        role: "user",
+        content: [{ type: "tool_result", content: "x" }],
+      },
+      toolUseResult: {},
+    };
+    expect(isTurnComplete([userProse("go"), ended("done"), toolResult])).toBe(
+      true,
+    );
   });
 });

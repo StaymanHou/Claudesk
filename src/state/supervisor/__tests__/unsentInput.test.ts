@@ -233,3 +233,60 @@ describe("the change callback fires on TRANSITIONS only", () => {
     expect(w.unsentInput).toBe(true);
   });
 });
+
+// ⚠️ SILENT-SUPERVISOR REPRODUCTION (SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-
+// SESSION, cause 2). `term.onData` carries terminal-GENERATED reports as well as keystrokes, and
+// each report ends on a byte that is not in the clearing set. So a focus change alone raised the
+// watermark, and the next turn end withheld `unsent-input-present`: the supervisor went silent
+// exactly when the operator looked away. These are the four shapes the investigation replayed.
+describe("foldInput — terminal-generated reports are not operator input", () => {
+  const reports: ReadonlyArray<readonly [string, string]> = [
+    ["focus-in", "\x1b[I"],
+    ["focus-out", "\x1b[O"],
+    ["primary DA reply", "\x1b[?1;2c"],
+    ["cursor-position", "\x1b[24;80R"],
+  ];
+
+  for (const [name, report] of reports) {
+    it(`a ${name} report does not RAISE a clear watermark`, () => {
+      expect(foldInput(initialUnsentInputState, report).unsentInput).toBe(
+        false,
+      );
+    });
+
+    // The other half: a report must not CLEAR it either. A fix that treated every
+    // ESC-leading chunk as a clear would pass the case above and fire over a typed line.
+    it(`a ${name} report does not CLEAR a set watermark`, () => {
+      const typed = foldInput(initialUnsentInputState, "abc");
+      expect(foldInput(typed, report).unsentInput).toBe(true);
+    });
+  }
+});
+
+describe("foldInput — reports mixed with operator input", () => {
+  // ⚠️ A report arriving in the same chunk as a keystroke must not hide the keystroke. A fix
+  // that ignored any chunk CONTAINING a report would drop the `a` and fire over it.
+  it("a keystroke sharing a chunk with a report still sets the watermark", () => {
+    expect(foldInput(initialUnsentInputState, "a\x1b[I").unsentInput).toBe(
+      true,
+    );
+    expect(foldInput(initialUnsentInputState, "\x1b[Oa").unsentInput).toBe(
+      true,
+    );
+  });
+
+  it("an arrow key is operator input, not a report", () => {
+    expect(foldInput(initialUnsentInputState, "\x1b[A").unsentInput).toBe(true);
+  });
+
+  it("a secondary device-attributes reply (`CSI > … c`) is a report too", () => {
+    expect(
+      foldInput(initialUnsentInputState, "\x1b[>0;276;0c").unsentInput,
+    ).toBe(false);
+  });
+
+  it("a submit that arrives with a report still clears", () => {
+    const typed = foldInput(initialUnsentInputState, "abc");
+    expect(foldInput(typed, "\r\x1b[O").unsentInput).toBe(false);
+  });
+});

@@ -81,3 +81,19 @@ describe("routeCcInput — the watermark gets RAW bytes, the pty gets encoded", 
     expect(r.toPty).toBe("ENC()");
   });
 });
+
+// silent-supervisor Phase 2 — the pane's terminal reports reach the pty, never the watermark.
+describe("routeCcInput — terminal reports", () => {
+  it("a report-only chunk gives the watermark NOTHING and the pty the raw bytes", () => {
+    const r = routeCcInput("\x1b[I", "sess-1", encode);
+    expect(r.toWatermark).toBe("");
+    // CC asked for focus reporting, so it must still receive the report.
+    expect(r.toPty).toBe("ENC(\x1b[I)");
+  });
+
+  it("a mixed chunk gives the watermark only the operator's part", () => {
+    const r = routeCcInput("a\x1b[?1;2c", "sess-1", encode);
+    expect(r.toWatermark).toBe("a");
+    expect(r.toPty).toBe("ENC(a\x1b[?1;2c)");
+  });
+});

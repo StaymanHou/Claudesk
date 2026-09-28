@@ -9,6 +9,7 @@
 // was written" would pass a funnel that records the wrong exit (`source-text-guards.md`,
 // entry 15, a length standing in for an identity).
 
+import { resetTurnEnds } from "../turnEndDedupe";
 import { afterEach, describe, expect, it } from "vitest";
 import { act, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -35,13 +36,14 @@ import {
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-/** A turn that emitted `edgeId` and did not chain (the `fanOut.test.ts` shape). */
+/** A closed turn that emitted `edgeId` and did not chain (the `fanOut.test.ts` shape). */
 const tailFor = (edgeId: string, tokens?: number): TranscriptTail => ({
   path: "/t/a.jsonl",
   lines: [
     JSON.stringify({
       type: "assistant",
       message: {
+        stop_reason: "end_turn",
         content: [{ type: "text", text: `All done.\n\nTRANSITION: ${edgeId}` }],
         ...(tokens === undefined
           ? {}
@@ -64,6 +66,9 @@ const WIP_AT_BOUNDARY = {
 };
 
 interface Setup {
+  /** The workspace this `useSupervisor` instance serves (default `ws-1`, project `/p`). */
+  workspaceId?: string;
+  projectPath?: string;
   enabled?: boolean;
   supervisorEnabled?: boolean | null;
   storedMode?: DriveMode | null;
@@ -96,8 +101,8 @@ function Harness({ setup }: { setup: Setup }) {
     setup.ptySessionId === undefined ? "pty-1" : setup.ptySessionId,
   );
   const host: SupervisorHost = {
-    workspaceId: "ws-1",
-    projectPath: "/p",
+    workspaceId: setup.workspaceId ?? "ws-1",
+    projectPath: setup.projectPath ?? "/p",
     enabled: setup.enabled ?? true,
     storedModeRef,
     supervisorEnabledRef,
@@ -124,7 +129,11 @@ async function settle() {
   });
 }
 
-async function mount(setup: Setup = {}) {
+/**
+ * Mount `setup` (it owns the IPC mock) plus one more live `useSupervisor` instance per entry in
+ * `extra`, each with its own host and refs, as a second mounted workspace subtree would have.
+ */
+async function mount(setup: Setup = {}, extra: Setup[] = []) {
   records.length = 0;
   injected.length = 0;
   recycles.length = 0;
@@ -153,18 +162,32 @@ async function mount(setup: Setup = {}) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  await act(async () => root!.render(<Harness setup={setup} />));
+  await act(async () =>
+    root!.render(
+      <>
+        <Harness setup={setup} />
+        {extra.map((e, i) => (
+          <Harness key={i} setup={{ ...setup, ...e }} />
+        ))}
+      </>,
+    ),
+  );
   await settle();
 }
 
-/** Push one turn-end status event for `ws-1`, as the Rust broadcaster does. */
-async function turnEnd(sessionId: string | null = "cc-1") {
+/** Push one turn-end status event for `workspaceId`, as the Rust broadcaster does. */
+async function turnEnd(
+  sessionId: string | null = "cc-1",
+  lastEventAt?: number,
+  workspaceId = "ws-1",
+) {
   await act(async () => {
     await emit(WORKSPACE_STATUS_EVENT, {
-      workspace_id: "ws-1",
+      workspace_id: workspaceId,
       state: "idle",
       is_turn_end: true,
       ...(sessionId === null ? {} : { session_id: sessionId }),
+      ...(lastEventAt === undefined ? {} : { last_event_at: lastEventAt }),
     });
   });
   await settle();
@@ -177,6 +200,7 @@ afterEach(async () => {
   container = null;
   clearMocks();
   resetOrigins();
+  resetTurnEnds();
   originAtInject = undefined;
 });
 
@@ -246,7 +270,10 @@ describe("AC-1: exactly one record per turn end, one per exit", () => {
         lines: [
           JSON.stringify({
             type: "assistant",
-            message: { content: [{ type: "text", text: "Just chatting." }] },
+            message: {
+              stop_reason: "end_turn",
+              content: [{ type: "text", text: "Just chatting." }],
+            },
           }),
         ],
       }),
@@ -397,5 +424,173 @@ describe("turn attribution: the supervisor arms an origin for the turn it starts
     await turnEnd();
     expect(originAtInject).toBeUndefined();
     expect(claimOrigin("ws-1", 1_040)).toBeNull();
+  });
+});
+
+// ⚠️ silent-supervisor Phase 1 — THE CONSUMING SURFACE, end to end. `fireOne` is reached only
+// through this hook in production, so the flush race and turn scoping are driven here through
+// the real `useSupervisor` → `decideTurn` → `fireOne` chain, with the real `transcript_tail`
+// IPC shape and the real (unmocked) re-read sleep.
+describe("silent-supervisor: the transcript lags the turn end", () => {
+  const prompt = JSON.stringify({
+    type: "user",
+    message: { role: "user", content: "/feature-build" },
+  });
+  const closed = (text: string) =>
+    JSON.stringify({
+      type: "assistant",
+      message: { stop_reason: "end_turn", content: [{ type: "text", text }] },
+    });
+
+  /** Settle long enough for a few 100 ms re-reads. */
+  async function settleReReads() {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+  }
+
+  it("waits for the turn's final line, then fires THIS turn's verdict (was: no-verdict)", async () => {
+    let reads = 0;
+    await mount({
+      tail: () => {
+        reads += 1;
+        // The first two reads land before CC flushes the final line, as measured live.
+        return {
+          path: "/t/race.jsonl",
+          lines:
+            reads <= 2
+              ? [prompt]
+              : [prompt, closed("Built.\n\nTRANSITION: F8")],
+        };
+      },
+    });
+    await turnEnd();
+    await settleReReads();
+
+    expect(reads).toBe(3);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      outcome: "fired",
+      edgeId: "F8",
+      command: "/feature-verify-auto",
+    });
+    expect(injected).toHaveLength(1);
+  });
+
+  it("never fires a verdict from before the operator's latest message (AC-3b)", async () => {
+    await mount({
+      tail: () => ({
+        path: "/t/scoped.jsonl",
+        lines: [
+          closed("Built.\n\nTRANSITION: F8"),
+          JSON.stringify({
+            type: "user",
+            message: { role: "user", content: "wait, what does F8 mean?" },
+          }),
+          closed("F8 is build to verify-auto."),
+        ],
+      }),
+    });
+    await turnEnd();
+
+    expect(records.map((r) => [r.outcome, r.reason, r.edgeId])).toEqual([
+      ["withheld", "no-verdict", null],
+    ]);
+    expect(injected).toEqual([]);
+  });
+});
+
+// ⚠️ silent-supervisor AC-4 — ONE DECISION PER `Stop`. The 2026-09-25 duplicate could not be
+// reproduced, so the funnel is guarded on the EVENT itself: the same `(workspace_id,
+// last_event_at)` delivered twice is decided once, and the repeat is recorded as what it is.
+describe("silent-supervisor: a turn end delivered twice", () => {
+  const counting = () => {
+    const calls = { n: 0 };
+    return {
+      calls,
+      tail: () => {
+        calls.n += 1;
+        return tailFor("F5");
+      },
+    };
+  };
+
+  it("the SAME event twice: one decision, and the repeat recorded as duplicate-turn-end", async () => {
+    const t = counting();
+    await mount({ tail: t.tail });
+    await turnEnd("cc-1", 1_790_000_000_001);
+    await turnEnd("cc-1", 1_790_000_000_001);
+
+    expect(records.map((r) => [r.outcome, r.reason])).toEqual([
+      ["fired", null],
+      ["withheld", "duplicate-turn-end"],
+    ]);
+    expect(t.calls.n).toBe(1);
+    expect(injected).toHaveLength(1);
+  });
+
+  it("two DIFFERENT events are each decided (the key is the event, not the workspace)", async () => {
+    const t = counting();
+    await mount({ tail: t.tail });
+    await turnEnd("cc-1", 1_790_000_000_001);
+    await turnEnd("cc-1", 1_790_000_000_002);
+
+    expect(t.calls.n).toBe(2);
+    expect(records.map((r) => r.reason)).toEqual([
+      null,
+      "already-fired-for-this-turn",
+    ]);
+  });
+
+  it("an event without `last_event_at` is never deduplicated", async () => {
+    const t = counting();
+    await mount({ tail: t.tail });
+    await turnEnd("cc-1");
+    await turnEnd("cc-1");
+
+    expect(t.calls.n).toBe(2);
+    expect(records.map((r) => r.reason)).not.toContain("duplicate-turn-end");
+  });
+
+  it("⚠️ TWO live instances for one workspace, ONE broadcast `Stop`: one decision, one fire", async () => {
+    // The shape that reproduced live in `ws-1` (a leaked, still-subscribed second instance): each
+    // instance receives the single event once. Only the MODULE-level claim sees both, since each
+    // instance has its own ledger and refs.
+    const t = counting();
+    await mount({ tail: t.tail }, [{}]);
+    await turnEnd("cc-1", 1_790_000_000_001);
+
+    expect(records.map((r) => [r.outcome, r.reason]).sort()).toEqual([
+      ["fired", null],
+      ["withheld", "duplicate-turn-end"],
+    ]);
+    expect(t.calls.n).toBe(1);
+    expect(injected).toHaveLength(1);
+  });
+
+  it("two supervised workspaces with the SAME `last_event_at`: each is decided, under its own project", async () => {
+    const t = counting();
+    await mount({ tail: t.tail }, [{ workspaceId: "ws-3", projectPath: "/q" }]);
+    await turnEnd("cc-1", 1_790_000_000_001, "ws-1");
+    await turnEnd("cc-3", 1_790_000_000_001, "ws-3");
+
+    expect(t.calls.n).toBe(2);
+    expect(
+      records.map((r) => [r.workspaceId, r.projectPath, r.outcome, r.reason]),
+    ).toEqual([
+      ["ws-1", "/p", "fired", null],
+      ["ws-3", "/q", "fired", null],
+    ]);
+    expect(injected).toHaveLength(2);
+  });
+
+  it("with the gate OFF a duplicate writes nothing either", async () => {
+    const t = counting();
+    await mount({ enabled: false, tail: t.tail });
+    await turnEnd("cc-1", 1_790_000_000_001);
+    await turnEnd("cc-1", 1_790_000_000_001);
+
+    expect(records).toEqual([]);
+    expect(t.calls.n).toBe(0);
   });
 });

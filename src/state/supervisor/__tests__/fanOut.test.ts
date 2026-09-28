@@ -21,13 +21,14 @@ import { RECYCLE_TOKEN_THRESHOLD } from "../contextPressure";
 import { parseWip } from "../wipPhases";
 import { UnsentInputWatermark } from "../unsentInput";
 
-/** A transcript tail for a turn that emitted `edgeId` and did not chain. */
+/** A transcript tail for a turn that emitted `edgeId`, did not chain, and has closed. */
 const tailFor = (edgeId: string, path = "/t/a.jsonl"): TranscriptTail => ({
   path,
   lines: [
     JSON.stringify({
       type: "assistant",
       message: {
+        stop_reason: "end_turn",
         content: [{ type: "text", text: `All done.\n\nTRANSITION: ${edgeId}` }],
       },
     }),
@@ -54,6 +55,9 @@ const harness = (
   const injected: Array<{ pty: string; command: string; label: string }> = [];
   return {
     readTail: async (w) => tail(w),
+    // The completion wait's re-reads are exercised in `transcriptFlushRace.test.ts`; here every
+    // tail is already closed, so the wait is never entered and a real sleep would only slow it.
+    sleep: async () => {},
     // ⚠️ Records the LABEL as well. `FanOutDeps.inject` requires it, but TypeScript accepts a
     // stub that ignores trailing parameters — so the type alone does NOT prove `fireOne`
     // passes one. Capturing it is what makes the requirement value-tested.
@@ -418,7 +422,10 @@ describe("⚠️ the WHOLE pipeline, against a REAL captured transcript", () => 
       "utf8",
     )
       .split("\n")
-      .filter((l) => l.trim()),
+      .filter((l) => l.trim())
+      // The turn's close. CC writes it after the `Stop` hook, and the capture ended before
+      // it; without it the supervisor would (correctly) wait for a turn that is still open.
+      .concat(JSON.stringify({ type: "system", subtype: "turn_duration" })),
   });
 
   it("⚠️ does NOT fire on a real turn that already chained", async () => {
@@ -493,6 +500,7 @@ describe("fireOne — the M15 WP4 recycle arm", () => {
       JSON.stringify({
         type: "assistant",
         message: {
+          stop_reason: "end_turn",
           content: [
             { type: "text", text: `All done.\n\nTRANSITION: ${edgeId}` },
           ],
@@ -741,10 +749,11 @@ describe("fireOne — unsent-input suppression", () => {
       ...workspace.matchAll(/unsentInputRef\.current\?\.push\(/g),
     ];
     expect(pushes).toHaveLength(1);
-    // Block body since turn attribution (2026-09-28), which also cancels a pending origin there;
-    // the push must still be the callback's FIRST statement.
+    // Block body since turn attribution (2026-09-28), which also cancels a pending origin there.
+    // The push must still be the callback's first statement after the ONE permitted guard: the
+    // empty-chunk return (silent-supervisor Phase 2), where a report-only chunk stops.
     expect(workspace).toMatch(
-      /onInputForwarded=\{\(chunk\) => \{\s*unsentInputRef\.current\?\.push\(chunk\);/,
+      /onInputForwarded=\{\(chunk\) => \{\s*if \(chunk\.length === 0\) return;\s*unsentInputRef\.current\?\.push\(chunk\);/,
     );
 
     // ...fed from `term.onData`, not from anywhere else in the pane.

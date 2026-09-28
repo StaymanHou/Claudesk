@@ -45,6 +45,8 @@ import {
 import { readAppVersion, recordActivity } from "./activityRecorder";
 import type { TurnEndSignal } from "./turnEnd";
 import { armOrigin, cancelOrigin } from "./turnOrigin";
+import { claimTurnEnd } from "./turnEndDedupe";
+import type { WorkspaceStatusUpdate } from "../workspaceStatus";
 
 /** The shape Rust's `wip_read` command returns. */
 interface WipRead {
@@ -336,7 +338,9 @@ export function useSupervisor(host: SupervisorHost): void {
   if (ledgerRef.current === null) ledgerRef.current = new FireLedger();
 
   const onTurnEnd = useCallback(
-    async (event?: TurnEndSignal) => {
+    async (
+      event?: TurnEndSignal & Pick<WorkspaceStatusUpdate, "last_event_at">,
+    ) => {
       // ⚠️ Re-checked HERE rather than only in `useTurnEnd`'s `enabled`: the gate can flip while
       // a turn is in flight, and the fire is the irreversible half. ⚠️ **It is also the ONE exit
       // that writes no activity record**: with the M10.9 gate OFF the app must be byte-identical
@@ -345,15 +349,21 @@ export function useSupervisor(host: SupervisorHost): void {
 
       const ts = (host.now ?? Date.now)();
       let decision: Decision;
-      try {
-        decision = await decideTurn(host, ledgerRef.current as FireLedger);
-      } catch (e) {
-        // `fireOne` isolates its own failures; this catches caller code (`onRecycle`) so the
-        // throw neither escapes into React nor costs the turn its record.
-        (host.warn ?? ((m: string) => console.warn(m)))(
-          `supervisor: sweep threw for ${host.workspaceId} — ${String(e)}`,
-        );
-        decision = { outcome: "error", reason: "sweep-threw" };
+      // ⚠️ ONE DECISION PER `Stop` (`turnEndDedupe.ts`). A second delivery of the same event is
+      // still recorded, so the duplication stays visible, but it is never decided again.
+      if (!claimTurnEnd(host.workspaceId, event?.last_event_at)) {
+        decision = { outcome: "withheld", reason: "duplicate-turn-end" };
+      } else {
+        try {
+          decision = await decideTurn(host, ledgerRef.current as FireLedger);
+        } catch (e) {
+          // `fireOne` isolates its own failures; this catches caller code (`onRecycle`) so the
+          // throw neither escapes into React nor costs the turn its record.
+          (host.warn ?? ((m: string) => console.warn(m)))(
+            `supervisor: sweep threw for ${host.workspaceId} — ${String(e)}`,
+          );
+          decision = { outcome: "error", reason: "sweep-threw" };
+        }
       }
       // ⚠️ **EXACTLY ONE RECORD PER TURN END, and this is the only place one is written.** Every
       // exit of `decideTurn` returns here, and a throw is caught above, so a turn end that leaves no
