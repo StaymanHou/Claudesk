@@ -31,13 +31,14 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 40s (2026-09-28, supervisor-activity-record Phase 3 verify-auto; frontend 3151 tests, Rust 986 lib, EXIT=0)
+- **Last:** 40s (2026-09-28, activity-log-append-tear task; frontend 3153 tests, Rust 988 lib, EXIT=0)
 - **Use timeout:** 216000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 40s — 2026-09-28 (activity-log-append-tear task)
   - 40s — 2026-09-28 (supervisor-activity-record P3 verify-auto)
   - 43s — 2026-09-25
   - 45s — 2026-09-24 (F-b P5 codify)

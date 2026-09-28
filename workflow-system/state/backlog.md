@@ -2,10 +2,10 @@
 
 ## Code-quality findings — supervisor-activity-record (2026-09-28)
 
-- **Pointer:** 2 MAJOR + 8 MINOR from the review of `dece979`. The MAJORs: the activity-log append can TEAR under concurrent async writers (`writeln!` = two syscalls, no lock), which silently drops two records; and the §B arch-doc enumeration guard scans a hand-kept file list. The MINORs: two stale comments, an ambiguous `sweep-threw` reason, a layering import, a 6-positional-param readout, a thrice-duplicated `2000` read limit, a `Workspace.tsx` extraction, and a popover Esc that may reach CC. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-activity-record — 2026-09-28`.
-- **Priority:** medium (MAJOR 1 undermines the record's one-record-per-turn contract, and the silent-supervisor investigation relies on that record) / low (the rest)
+- **Pointer:** **1 MAJOR + 8 MINOR remain** from the review of `dece979` (rewritten 2026-09-28: the torn-append MAJOR was resolved by task `activity-log-append-tear`). The MAJOR that remains: the §B arch-doc enumeration guard scans a hand-kept file list. The MINORs: two stale comments, an ambiguous `sweep-threw` reason, a layering import, a 6-positional-param readout, a thrice-duplicated `2000` read limit, a `Workspace.tsx` extraction, and a popover Esc that may reach CC. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-activity-record — 2026-09-28`.
+- **Priority:** medium (the MAJOR) / low (the rest)
 - **Status:** pending
-- **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor` (or a `/task-plan` for MAJOR 1 alone; it is task-sized and worth doing before the investigation leans on the log). To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
+- **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
 ## Code-quality findings — paydown-wp3-boot-smoke-test (2026-09-23)
 

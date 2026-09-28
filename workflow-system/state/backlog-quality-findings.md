@@ -6,16 +6,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # supervisor-activity-record — 2026-09-28
 
-*(feature-review-quality on ship commit `dece979`, window `dece979^..dece979`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 8 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-09-28-QUALITY-ACTIVITY-LOG-APPEND-CAN-TEAR-UNDER-CONCURRENT-WRITERS
-- **Severity:** MAJOR
-- **Location:** `src-tauri/src/status_log/mod.rs`, `StatusLog::append` (`writeln!(f, "{line}")`), reached from the `async` command `supervisor_activity::commands::supervisor_activity_append`
-- **Finding:** `writeln!` on an unbuffered `File` issues the line and the `"\n"` as SEPARATE `write` syscalls, and `O_APPEND` makes only each single write atomic. The append command is `async`, so appends from several workspaces can run at the same time on runtime worker threads, and `A-line, B-line, A-\n, B-\n` is a possible order. That leaves one merged line that `parseRecordLine` silently drops, losing BOTH records. `rotate_at`'s size check and rename can race the same way and overwrite a just-rotated generation. (Premise confirmed at backlogging, agent 2026-09-28: `append` is `rotate_if_oversized()` → `OpenOptions::append` → `writeln!`, with no lock.)
-- **Why it matters:** the record's contract is "exactly one record per turn end, so a missing line is itself an anomaly". A torn write breaks it silently, in the multi-workspace case the supervisor exists for.
-- **Suggested action:** compose `format!("{line}\n")` and write it with ONE `write_all`, or serialize the activity log's appends and rotation behind a `Mutex` (managed state). Add a test with N threads appending concurrently, asserting N well-formed lines. ⚠️ `status-channel.log` shares `StatusLog`: check whether its writer is also concurrent.
-- **Priority:** medium
-- **Status:** pending
+*(feature-review-quality on ship commit `dece979`, window `dece979^..dece979`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 8 MINOR, all auto-backlogged. The torn-append MAJOR was resolved 2026-09-28 by task `activity-log-append-tear`; 1 MAJOR + 8 MINOR remain.)*
 
 ## SURFACE-2026-09-28-QUALITY-ARCH-DOC-ENUMERATION-GUARD-USES-A-HAND-KEPT-FILE-LIST
 - **Severity:** MAJOR

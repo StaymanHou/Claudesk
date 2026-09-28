@@ -4,6 +4,8 @@
 
 - **Feature shipped:** Supervisor activity record: every workflow-supervisor turn-end decision is now written as one JSONL line to `supervisor-activity.log` in the app-data dir, the `⚙ supervised` badge shows the last decision with a `▾` popover of recent ones, and the turn readout marks supervisor-started turns with `⚙`, so "working", "declining" and "doing nothing" are finally distinguishable.
 - **Backlog resolved:** SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE — closed by the supervisor activity record (durable per-decision log, header hint and popover, turn attribution).
+- **Task closed:** Appends to the status-channel and supervisor activity logs are now safe under concurrent writers: each line is one `write_all`, and rotation plus write run under a process-wide lock. Before the fix, 400 concurrent IPC appends in a dev build produced 77 torn lines and lost 171 records.
+- **Backlog resolved:** SURFACE-2026-09-28-QUALITY-ACTIVITY-LOG-APPEND-CAN-TEAR-UNDER-CONCURRENT-WRITERS — fixed in `StatusLog::append` (single write + `APPEND_LOCK`), pinned by two concurrency tests that each kill a mutant and by a live 400-append check against the real command.
 
 ## 2026-09-25
 

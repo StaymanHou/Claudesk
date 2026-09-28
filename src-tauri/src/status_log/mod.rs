@@ -24,6 +24,11 @@
 //! - **Append-mode:** one line per event, opened-and-closed per write (no held handle
 //!   to leak across the drain thread's lifetime; the volume is one line per CC turn,
 //!   not a hot loop).
+//! - **Concurrency-safe:** each log has more than one writer thread (the status log: the
+//!   drain thread + the register/deregister commands; the supervisor activity record: an
+//!   `async` command on runtime workers). So each line goes out as ONE `write_all`, and
+//!   rotation + write run under the process-wide [`APPEND_LOCK`]. A torn line would merge
+//!   two records into one that readers silently drop.
 //! - **KEPT as a standing prod diagnostic, size-capped** (debt-paydown D3, 2026-06-30).
 //!   The earlier note here predicted WP2 would demote this to debug-only; the operator
 //!   instead chose to KEEP it in prod (it's the channel that self-confirms a future
@@ -36,6 +41,7 @@
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 
 /// Basename of the status-channel log within the app-data directory.
 pub const STATUS_LOG_FILE: &str = "status-channel.log";
@@ -44,6 +50,11 @@ pub const STATUS_LOG_FILE: &str = "status-channel.log";
 /// generous for the one-line-per-CC-turn volume (tens of thousands of events), small
 /// enough that the worst case (live + one rotated generation) stays ~10 MiB on disk.
 pub const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Serializes every append (rotation + write) across ALL `StatusLog` instances in the
+/// process. One lock for both logs is enough: the volume is about one line per CC turn
+/// event, and dev and prod are separate processes writing separate data dirs.
+static APPEND_LOCK: Mutex<()> = Mutex::new(());
 
 /// A best-effort append-mode logger bound to a resolved log path. Constructed once at
 /// drain-thread start from the `AppHandle`'s `app_data_dir()`; cloned cheaply (it is
@@ -101,30 +112,42 @@ impl StatusLog {
     /// place ([`write_line`](Self::write_line)) and the formatting/IO is unit-testable
     /// against a real (temp) path.
     fn append(&self, line: &str) -> std::io::Result<()> {
+        self.append_with_cap(line, MAX_LOG_BYTES)
+    }
+
+    /// [`append`](Self::append) with an injectable rotation cap, so the concurrent-rotation
+    /// test can rotate often without writing 5 MiB.
+    fn append_with_cap(&self, line: &str, cap_bytes: u64) -> std::io::Result<()> {
+        // ⚠️ Held across the rotate AND the write. Without it, two appenders that both see an
+        // oversized file both rename: the second rename moves the fresh live file (holding
+        // the first appender's line) over the generation just rotated, discarding it.
+        // A poisoned lock still guards the file, and logging must not stop on a panic
+        // elsewhere, so the poison is ignored.
+        let _guard = APPEND_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
         // Size-cap (D3 keep+cap): rotate BEFORE the append if the live file is already
         // at/over the cap, so the file we open is fresh (or under-cap) and growth stays
         // bounded to ~one cap per generation. Rotation is best-effort — a failure here
         // falls through to a normal append (a too-large log beats a dropped status line).
-        self.rotate_if_oversized();
+        self.rotate_at(cap_bytes);
         let mut f = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.path)?;
-        writeln!(f, "{line}")
+        // ⚠️ ONE write of the whole line. `writeln!` writes the body and the `\n` as separate
+        // syscalls, and `O_APPEND` makes only each single write atomic, so a concurrent
+        // writer could land between them and merge two records into one unparseable line.
+        f.write_all(format!("{line}\n").as_bytes())
     }
 
-    /// If the live log is at/over [`MAX_LOG_BYTES`], move it to the single rotated
-    /// generation (`<live>.1`), replacing any prior one, so the next append starts a
-    /// fresh live file. Best-effort: a stat or rename failure is swallowed (the caller's
-    /// append then just grows the existing file — never a panic, never a dropped event).
-    /// Factored out so the boundary is unit-testable with a small cap via [`rotate_at`].
-    fn rotate_if_oversized(&self) {
-        self.rotate_at(MAX_LOG_BYTES);
-    }
-
-    /// [`rotate_if_oversized`](Self::rotate_if_oversized) with an injectable cap (tests
-    /// drive a tiny cap rather than writing 5 MiB). `>=` so a file exactly at the cap
-    /// rotates. A missing/unstattable live file is a no-op (nothing to rotate).
+    /// If the live log is at/over `cap_bytes`, move it to the single rotated generation
+    /// (`<live>.1`), replacing any prior one, so the next append starts a fresh live file.
+    /// Best-effort: a stat or rename failure is swallowed (the caller's append then just
+    /// grows the existing file — never a panic, never a dropped event). The cap is
+    /// injectable so tests drive a tiny one rather than writing 5 MiB. `>=` so a file
+    /// exactly at the cap rotates. A missing/unstattable live file is a no-op.
+    ///
+    /// ⚠️ Not synchronized on its own: callers other than tests go through
+    /// [`append_with_cap`](Self::append_with_cap), which holds [`APPEND_LOCK`].
     fn rotate_at(&self, cap_bytes: u64) {
         let oversized = std::fs::metadata(&self.path)
             .map(|m| m.len() >= cap_bytes)
@@ -335,6 +358,104 @@ mod tests {
             std::fs::read_to_string(log.rotated_path()).unwrap(),
             "0123456789\n"
         );
+    }
+
+    /// The ids every `(thread, i)` pair should produce, sorted, for set comparison.
+    fn expected_ids(threads: usize, per_thread: usize) -> Vec<String> {
+        let mut ids: Vec<String> = (0..threads)
+            .flat_map(|t| (0..per_thread).map(move |i| format!("t{t}-{i}")))
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    /// Parse a log body into its record ids, failing on any line that is not exactly one
+    /// `<id> <payload>` record (a merged or split line fails here).
+    fn record_ids(body: &str, payload: &str) -> Vec<String> {
+        let mut ids: Vec<String> = body
+            .split('\n')
+            .filter(|l| !l.is_empty())
+            .map(|l| {
+                let (id, rest) = l.split_once(' ').expect("record has an id");
+                assert_eq!(rest, payload, "malformed record line: {l:?}");
+                id.to_owned()
+            })
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    #[test]
+    fn concurrent_appends_never_tear_a_line() {
+        // The supervisor record's `async` append command and the status log's two writer
+        // threads can append at the same time. Each line must land whole: a body and its
+        // `\n` written as separate syscalls can interleave with another writer and merge
+        // two records into one line.
+        const THREADS: usize = 16;
+        const PER_THREAD: usize = 200;
+        let payload = "x".repeat(64);
+        let dir = TempDir::new().unwrap();
+        let log = StatusLog::at(dir.path().join("concurrent.log"));
+        let start = std::sync::Barrier::new(THREADS);
+        std::thread::scope(|s| {
+            for t in 0..THREADS {
+                let (log, start, payload) = (&log, &start, &payload);
+                s.spawn(move || {
+                    start.wait();
+                    for i in 0..PER_THREAD {
+                        log.try_write_line(&format!("t{t}-{i} {payload}")).unwrap();
+                    }
+                });
+            }
+        });
+        let body = std::fs::read_to_string(log.path()).unwrap();
+        assert!(body.ends_with('\n'));
+        assert_eq!(
+            record_ids(&body, &payload),
+            expected_ids(THREADS, PER_THREAD)
+        );
+    }
+
+    #[test]
+    fn concurrent_appends_at_the_cap_rotate_exactly_once() {
+        // Several appenders arriving together at an at-cap file must rotate it ONCE. If two
+        // of them both rename, the second moves the fresh live file over the generation the
+        // first just rotated, and that whole generation is lost. Repeated, because each round
+        // is one chance for the race.
+        const THREADS: usize = 16;
+        const ROUNDS: usize = 40;
+        let payload = "y".repeat(16);
+        let seed = "SEED\n".repeat(256);
+        // The post-rotation lines (THREADS × ~23 bytes) stay well under this cap, so exactly
+        // one rotation is correct and a second one is the race.
+        let cap = seed.len() as u64;
+        for round in 0..ROUNDS {
+            let dir = TempDir::new().unwrap();
+            let log = StatusLog::at(dir.path().join("rotating.log"));
+            std::fs::write(log.path(), &seed).unwrap();
+            let start = std::sync::Barrier::new(THREADS);
+            std::thread::scope(|s| {
+                for t in 0..THREADS {
+                    let (log, start, payload) = (&log, &start, &payload);
+                    s.spawn(move || {
+                        start.wait();
+                        log.append_with_cap(&format!("t{t}-0 {payload}"), cap)
+                            .unwrap();
+                    });
+                }
+            });
+            assert_eq!(
+                std::fs::read_to_string(log.rotated_path()).unwrap(),
+                seed,
+                "round {round}: the rotated generation must be the seed, intact"
+            );
+            let live = std::fs::read_to_string(log.path()).unwrap();
+            assert_eq!(
+                record_ids(&live, &payload),
+                expected_ids(THREADS, 1),
+                "round {round}: every post-rotation line must be in the live file"
+            );
+        }
     }
 
     #[test]
