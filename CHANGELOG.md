@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-28
+
+- **Feature shipped:** Supervisor activity record: every workflow-supervisor turn-end decision is now written as one JSONL line to `supervisor-activity.log` in the app-data dir, the `⚙ supervised` badge shows the last decision with a `▾` popover of recent ones, and the turn readout marks supervisor-started turns with `⚙`, so "working", "declining" and "doing nothing" are finally distinguishable.
+- **Backlog resolved:** SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE — closed by the supervisor activity record (durable per-decision log, header hint and popover, turn attribution).
+
 ## 2026-09-25
 
 - **Task closed:** Supervisor dogfeedback is closed as a wall-clock item and re-framed on evidence: CC transcripts show the supervisor fired live on 2026-09-15 but not once since v0.5.1, missing at least six plain F8 breaks on supervised projects, so the three supervisor backlog items were rewritten (none resolved) and the activity surface and a silent-supervisor investigation were sequenced next.

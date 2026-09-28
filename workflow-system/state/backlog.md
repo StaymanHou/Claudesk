@@ -136,171 +136,6 @@ workflow-gated feature (M10.9 tier 1).
 **Pickup shape:** probably a small feature (`/feature-spec`). Following the Group F convention, a
 `/util-grill-me` pass on Q1–Q3 is the natural entry step, and a codec probe comes before any UI work.
 
-## SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE
-
-- **Priority:** high
-- **Surfaced by:** operator request (2026-09-21, during F-a WP2 restore — a detour, not F-a work)
-- **Target level:** product:roadmap (a new feature ask, not a defect in shipped code)
-- **Type:** gap (missing capability)
-- **Status:** pending — ⭐ **SEQUENCED NEXT (operator, 2026-09-25): plan its implementation now**, ahead
-  of the NEVER-OBSERVED investigation, because it is that investigation's instrument.
-
-⚠️ **Update 2026-09-25 — THE FAILURE THIS ITEM PREDICTED HAPPENED.** The entry below warns that
-*"success and total inactivity are observationally identical."* At the dogfeedback close-out the
-transcripts showed the supervisor had **not fired since v0.5.1**, and had missed at least six plain
-F8 breaks on supervised projects. Meanwhile the operator, seeing nothing wrong, reported "no more
-feedback". Evidence and hypotheses: `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`.
-Two consequences for this item:
-- **The sequencing question below is SETTLED: build it BEFORE the investigation.** The
-  `withheld … — <reason>` line is exactly the observable that separates the hypotheses (a stuck
-  unsent-input watermark vs. a trigger that never arrives vs. a verdict that withholds), and today
-  it goes to a console nobody can open.
-- ⚠️ **Question 3 (granularity) now leans hard toward fires AND withholds.** A fires-only log would
-  have shown an empty list, which is indistinguishable from "no breaks happened". That is the same
-  write-only trap one level up. The withhold reason is the diagnostic payload; volume is a design
-  constraint to manage, not a reason to drop it. The question is still open for the grill, but a
-  fires-only answer should have to argue against this evidence.
-
-**The ask — TWO requirements, and the second was added 2026-09-21 after the first draft:**
-
-1. **A retained activity record** answering, per workspace and across all of them — **was the
-   supervisor triggered? when? how many times? with what input, and what output?** Today there is
-   no way for the operator to tell whether the supervisor is working as designed, misfiring, or
-   silently doing nothing at all.
-2. ⚠️ **NON-INTRUSIVE IN-PLACE ATTRIBUTION — the operator must be able to look at a turn and tell
-   whether the supervisor fired it or they typed it themselves** (operator, 2026-09-21). This is
-   **not** a restatement of (1): (1) is a place you deliberately visit, (2) is a property of the
-   turn as you encounter it in the normal course of work. ⚠️ **"Non-intrusive" is an operator-stated
-   constraint, not a nicety** — the supervisor's value is that it does not demand attention, so an
-   attribution marker that interrupts, steals focus, or adds noise defeats the feature it is
-   reporting on.
-
-⚠️ **THE HARD FACT FOR REQUIREMENT (2): a fired turn and a typed turn are INDISTINGUISHABLE
-DOWNSTREAM, by construction.** `injectCommand` (`components/workspace/autoResumeFire.ts`) takes a
-`label` — `"supervisor"` for every supervisor injection, enforced as a required parameter in
-`fanOut.ts` — but **the label is consumed ONLY on the failure path** (the `catch`, for the warn
-line and the `onIpcError` message). On success it is discarded, and the call is a bare
-`invoke("cc_input", { sessionId, data: slashCommandPayload(command) })` — **byte-identical to what
-the operator's own keystrokes produce.** CC receives no provenance, the transcript records none,
-and the PTY cannot be read back. ⚠️ So requirement (2) cannot be satisfied by reading anything
-downstream of the injection; the attribution must be **retained Claudesk-side at fire time** and
-rendered from there. ⚠️ **Do not propose parsing the terminal to recover it** — `arch.md` forbids
-reading CC's output as a state source, and it would not work anyway.
-
-⚠️ **The gap is STRUCTURAL, not an oversight — the supervisor's design creates it.** Its whole
-purpose is to silently type the next step on the operator's behalf, and it is deliberately
-**headless** (`arch/workflow-supervisor.md` §G: zero `.tsx`, zero JSX, no panel / menu-id / chord /
-row-cell / skill-row registration — a *recorded* decision). Compounding it, the operator's
-attention is by construction on the workspaces **awaiting input**, not the ones quietly
-self-driving — so the supervisor acts precisely where nobody is looking. **Success and total
-inactivity are observationally identical.**
-
-**What exists today, and why it does not close this.** §F ("Observability — what a fire leaves
-behind", added `7f303e6` 2026-09-14 as a dogfooding precondition) gives every branch a distinct
-trace — a successful fire, a started recycle, a **declined** recycle, an unreadable WIP, and
-(M14 WP0) a per-non-fire **`withheld … — <reason>`** line drawn from a precise closed vocabulary
-(`policy-not-auto`, `not-dispatchable`, `not-supervised`, `adjudicator-says-awaiting`,
-`already-fired-for-this-turn`, `transcript-unreadable`, `no-verdict`, `unsent-input-present`).
-⚠️ **But every one of them is a `console.warn` into the WKWebView console**
-(`useSupervisor.ts`, `fanOut.ts`, `adjudicator.ts` all default `warn` to `console.warn`), which in
-a shipped build the operator cannot open. ⚠️ And per
-`[[read-logs-console-captures-nothing]]`, `read_logs{source:"console"}` captures nothing for this
-app either — **so the traces are unreachable to the operator AND to an agent.** The data is
-computed, correctly and completely, and then discarded to a sink nobody reads.
-
-⚠️ **So this item is mostly a SURFACING problem, not an instrumentation one.** The expensive half
-— deciding what to record and recording it at every branch — is already built and pinned by tests.
-What is missing is a destination: a retained, readable, per-workspace history. Do **not** re-derive
-the event vocabulary; read §F and the `withheld` reason list above.
-
-⚠️ **This is the REVERSING CONDITION named in `arch/workflow-supervisor.md` §G, and it fires the
-moment this item is built.** Giving the supervisor an operator-visible surface makes that surface
-own the **SEVENTH** guard arm, and the `armSubjects` pin (`offInvariantGuard.test.ts` →
-`it("still polices all six registries")`, currently **9** subjects) **must bump in the same
-change**. The guard's backstop is real but partial — its allowlist is all of `src/**`, so a
-panel/menu-id/chord *of a shape arms 1–3 already select on* trips today, while a genuinely novel
-shape would not. ⚠️ Also: the surface must itself be gated **OFF** with the supervisor
-(`workflow_features_enabled` / `host.enabled`), or the OFF-invariant acquires a dead affordance —
-the exact thing M10.9's two-tier gate exists to prevent.
-
-**Relationship to `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (high):**
-adjacent, **not** a duplicate, and they compound. That item is *verification debt* — six specific
-behavioral checks deferred to dogfooding because an agent cannot manufacture the trigger. This item
-is the *instrument* those checks would read. ⚠️ **Sequencing consequence worth weighing:** three of
-those six checks (a live AUTO fire, the live gate-OFF invariant, the negative arm producing no fire)
-are checks the operator must currently confirm **by watching a terminal at the right moment** —
-with a retained activity log they become an after-the-fact read. Building this **before** or
-**early into** dogfooding plausibly makes the dogfooding itself cheaper and more conclusive. That is
-an argument for sequencing, not a decision.
-
-⭐ **GRILLED 2026-09-25 — the three expensive decisions are SETTLED (operator). Do not re-open them:**
-1. **Retention and readership → a durable, append-only JSONL file in the app-data dir.** One line
-   per turn-end decision, size-capped with rotation, surviving relaunch and upgrade, and readable
-   **by the operator in the UI AND by an agent from disk.** An agent-readable record is the point:
-   the console-only traces are what hid the silent supervisor. It is R-4 compliant, because Rust
-   only appends and TypeScript decides.
-2. **UI surface → off the existing `⚙ supervised` header control**
-   (`workspaceSupervisorReadout`): a per-workspace popover of recent decisions. **No new
-   right-panel tab.** No cross-workspace UI roll-up for now; the file answers "is it firing
-   anywhere?".
-3. **Attribution → tag each turn marker with its origin at fire time.** The turn prev/next
-   readout shows `⚙` on a supervisor-fired turn, and the header badge carries a quiet "last action"
-   hint. ⚠️ **Operator-sanctioned fallback: header hint only, IF the turn tag proves difficult.**
-   Probe it before committing. ⚠️ xterm decorations are NOT an option: they are proposed API, and
-   the overview ruler painted zero pixels under the DOM renderer (M13.5 WP3; see the `XtermPane`
-   turn-marker comment).
-
-**Defaults taken at the grill (listed so they stay refusable):**
-- Record EVERY turn-end decision (fired, withheld + reason, recycled, recycle declined), including
-  early returns.
-- Also record a turn end *received*, so "the trigger never arrived" is distinguishable from
-  "nothing happened".
-- Record fields: timestamp, workspace/project, CC session id, transition token + step, resolved
-  cell + mode, verdict + reason, the adjudicator verdict if consulted, the injected command, and
-  context tokens. **Never the transcript.**
-- One app-wide file; dev and prod are separated by their app-data dirs.
-- No notification: passive only.
-- Recording is NOT gated by the per-workspace toggle (a toggled-off workspace records
-  `not-supervised`), but NOTHING records while the M10.9 gate is OFF.
-- The existing `console.warn` lines stay.
-
-The six questions below are **the pre-grill agenda, kept for context**. Q1, Q2 and Q5 are answered
-above; Q3, Q4 and Q6 were answered as defaults.
-
-**Open design questions (for `/util-grill-me` at the item's start — do not pre-decide here):**
-1. **Surface shape** — right-panel tab, a section in an existing panel, filmstrip/tile affordance,
-   or a menu-bar popover section? ⚠️ Note the operator's stated context: attention is elsewhere, so
-   a surface requiring a deliberate visit may under-serve the "is it working at all?" question that
-   motivated the ask, while anything ambient competes with the status dot.
-2. **Retention + scope** — per-workspace only, or a cross-workspace roll-up? In-memory for the
-   session, or durable across relaunch? ⚠️ If durable, the persistence-substrate question is live
-   and **F-a WP2 decision 1 is the nearest precedent** (`localStorage` keyed by canonicalized
-   `project_path`, explicitly **not** `projects.json`, because unbounded growth read through serde
-   at startup can take the whole project list down).
-3. **Granularity** — fires only, or fires + withholds? The `withheld` reason line is described in
-   `useSupervisor.ts` as *"the tuning channel"* and is the signal that would distinguish
-   "not working" from "correctly declining" — which is the operator's actual question. It is also
-   far higher-volume than fires.
-4. **"Inputs and outputs"** — how much of the decision to show. The natural candidates are the
-   detected transition/step, the resolved policy cell, the adjudicator verdict when one was
-   consulted, and the injected command. ⚠️ The transcript itself must **not** be surfaced
-   wholesale — it is unbounded and the arch forbids reading CC's output as a state source.
-5. ⚠️ **Where attribution (requirement 2) lives, and what carries it.** The label is retained at
-   fire time Claudesk-side — but rendered where? Candidates: a marker in the terminal pane keyed to
-   the fired turn, a per-workspace "last turn: supervisor / you" readout, a filmstrip-tile
-   affordance, or a distinct transient status. ⚠️ The "non-intrusive" constraint and the
-   `display: none` multi-workspace shell both bear on this, and any in-pane marker must not be
-   written INTO the PTY (that would corrupt the buffer and be indistinguishable from CC output).
-6. **Is a passive log enough, or is a notification wanted** when a fire happens on an unwatched
-   workspace? ⚠️ Bears directly on the recorded risk that `injectCommand` has **no retry and no
-   pre-send cancel window**, so a wrong fire's only recovery is CC's **Esc** — and check (5) of the
-   dogfooding list, whether Esc actually interrupts a wrong fire, is itself still unconfirmed.
-
-- **Suggested action:** carry into the next roadmap pass as a candidate alongside Group F. ⚠️ It is
-  **not** F-a work and must not be folded into the running F-a WBS. Per the standing Group F
-  practice, open it with its own `/util-grill-me` pass — questions 1–5 above are that grill's
-  agenda, and the sequencing-against-dogfooding point is the first thing to settle.
-
 ## SURFACE-2026-09-17-F10B-STOPPED-BEFORE-VERIFY-HUMAN-INSTEAD-OF-CHAINING-INTO-IT
 - **Source:** operator correction (M14 WP0, observed twice in one session)
 - **Target level:** product:wbs
@@ -550,12 +385,12 @@ only exits that leave no trace at all.
 `withheld … — <reason>` line from a closed vocabulary (`arch/workflow-supervisor.md` §F), and it
 goes to `console.warn` in the WKWebView. That is unreadable in a shipped build, and per
 `[[read-logs-console-captures-nothing]]` also unreadable to an agent via `read_logs`. **The
-investigation's first move is to make those lines readable.** Two routes: the activity surface
-(`SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE`, sequenced next for this
-reason), or a dev-build `console.warn` tap via `webview_execute_js`, validated by a positive
-control first. ⚠️ An agent-launched CC emits no hook events
-(`SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT`), so a live repro needs an
-**operator-driven** CC turn in a dev build.
+investigation's first move is to make those lines readable.** ✅ **Done 2026-09-28:** the
+supervisor activity record shipped (`dece979`; CHANGELOG 2026-09-28), so every decision, withhold
+reason included, is a line in `<app-data>/supervisor-activity.log` (`tail`/`jq`, filter by
+`projectPath`). ⚠️ An agent-launched CC emits no hook events **unless** the dev build is launched
+with the Claude session markers stripped at the app parent (see this entry's 2026-09-25 findings).
+Otherwise a live repro needs an **operator-driven** CC turn in a dev build.
 
 ### What closes this item
 
@@ -857,7 +692,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
   standing precedent and (a) reverses it.
 - **Priority:** medium (no live exposure; the arm's assertion is sound — the risk is the next
   surface, most likely M15's)
-- **Status:** deferred — carry to next cycle (M13 close 2026-08-18); ⚠️ **M15 is the likely author of the first exposed surface** (a Recycle menu item) — decide (a) vs (b) *before* building it, not after. Standing precedent is (b). ⚠️ **Re-anchored 2026-09-23 (paydown fold-back):** M15 closed with a **headless** supervisor that owns NO guard arm, so it never authored the exposed surface. The anchor is now `SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE`, which owns the **seventh** arm, so decide (a) vs (b) at that entry's grill.
+- **Status:** deferred — carry to next cycle (M13 close 2026-08-18); ⚠️ **M15 is the likely author of the first exposed surface** (a Recycle menu item) — decide (a) vs (b) *before* building it, not after. Standing precedent is (b). ⚠️ **Re-anchored 2026-09-23 (paydown fold-back):** M15 closed with a **headless** supervisor that owns NO guard arm, so it never authored the exposed surface. The anchor was then the supervisor activity surface, expected to own the **seventh** arm, but that surface **shipped 2026-09-28 WITHOUT a seventh arm**: all of it derives from `workspaceSupervisorReadout`, arm 6's existing subject (`arch/workflow-supervisor.md` §G). So this question still has **no concrete anchor**. Decide (a) vs (b) when a supervisor surface first needs its own arm.
 
 ## SURFACE-2026-08-06-SESSION-RESTORE-CONTRADICTS-ITSELF-ON-THE-DEFAULT-DRIVE-MODE
 - **Source:** feature:build (M12 WP4a Phase 2)

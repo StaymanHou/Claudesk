@@ -1,6 +1,7 @@
 ---
 workflow: feature
-state: ship (complete)
+state: completed
+completed: 2026-09-28
 created: 2026-09-25
 drive_mode: autopilot
 ---
@@ -8,7 +9,7 @@ drive_mode: autopilot
 # Feature: Supervisor activity record
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-09-28 (ship `dece979`; review-quality `785b132`)
 **Created:** 2026-09-25
 **Entry:** spec (complex feature)
 **Source:** `SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE`. Grilled
@@ -340,16 +341,22 @@ the instrument the silent-supervisor investigation depends on.
   - [x] verify-codify  <!-- 2026-09-28: the one live-verified behavior without a regression test was the ⚙'s STYLING (its class sat outside the header-class CSS guard's `workspace-header-supervisor*` scan). Added two pins to `supervisorToggleStyles.test.ts`: emitted AND styled, and the SAME accent as the header badge (read from the badge's rule). Mutation-proven: C1 wrong colour, C2 rule deleted, C3 class renamed; each killed. Everything else was already pinned (claim ordering: structural; per-marker persistence: `selectedTag`; expiry and consume-once: `turnOrigin`; gate OFF, cancel and the re-read on step: the live-mount file). Full `pnpm verify:auto` EXIT=0 in 30s (3153 frontend, 986 Rust lib). -->
 
 ## Current Node
-- **Path:** Feature > finalize
-- **Active scope:** finalize (review-quality complete 2026-09-28: 0 CRITICAL, 2 MAJOR, 8 MINOR, all auto-backlogged). All three phases complete (2026-09-28); P3.verify-human.2 DEFERRED to the investigation.
+- **Path:** Feature > (complete)
+- **Active scope:** none. Finalized 2026-09-28. All three phases complete (2026-09-28); P3.verify-human.2 DEFERRED to the investigation.
 - **Blocked:** none. ⚠️ P3's verify-human LIVE check is expected to be DEFERRED: a live `⚙` needs a
   real supervisor fire, and the supervisor is currently silent (read race + spurious watermark).
   ⚠️ A dev build is running for the probe (PID 52154, markers stripped, scratch-c open); verify-self
   can reuse it after a reload.
-- **Unvisited:** finalize
+- **Unvisited:** none
 - **Open discoveries:** 5 (below). #2 and #3 are the two causes of the silent supervisor, #4 is
   the duplicate listener (operator: fix with the investigation), and #5 is the mid-turn
   `is_turn_start` found by the P3.1 probe.
+
+## Retrospect
+- **What changed in our understanding:** the record paid for itself before it shipped. On its first real turns it named two independent causes of the silent supervisor (a transcript read racing the `Stop` hook; terminal-generated reports raising the unsent-input watermark), and it exposed a latent bug (a swallowed `cc_input` rejection made `inject-failed` unreachable, so a failed injection counted as a fire) plus a duplicate `workspace-status` listener. The P3.1 probe added one fact: `UserPromptSubmit`, and so `is_turn_start`, also fires MID-TURN when CC dequeues a queued prompt.
+- **Assumptions that held:** a single-funnel recorder could cover every exit, including the recycle arm decided in `Workspace.tsx`; attribution by correlating the next turn start was reliable (32–40 ms, exactly one start per injection); extending `workspaceSupervisorReadout` kept every new surface under arm 6's existing subject.
+- **Assumptions that were wrong:** that an agent-launched CC can never produce real hook events (it can, when the Claude session markers are stripped at the app PARENT); that the new surface would need a seventh guard arm (it needed none); and that `StatusLog`'s append could be reused as-is (review-quality found it tears under concurrent async writers, now backlogged MAJOR).
+- **Approach delta:** Phase 3's probe gained a LIVE half (real injections into a markers-stripped dev build) beside the planned log mining, because the historical data could not measure inject→turn-start. Verify-self drove the REAL `XtermPane` by importing the app's own HMR-stamped module URL (`turnOrigin.ts?t=…`; the plain URL is a separate module instance). One P3 check (a `⚙` from a real fire) is deferred to the investigation, by operator decision.
 
 ## Code-Quality Review
 

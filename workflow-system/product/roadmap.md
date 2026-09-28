@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-09-24
+updated: 2026-09-28
 ---
 
 # Roadmap
@@ -609,8 +609,13 @@ mechanism that changed at v0.5.1. That is still a hypothesis. The discriminating
 
 **Operator decision 2026-09-25 — execution order from here:**
 
-1. **Supervisor activity surface**
-   (`SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE`, high). **Planned
+1. ✅ **SHIPPED 2026-09-28 (`dece979`, feature `supervisor-activity-record`).** Supervisor activity surface
+   (`SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE`, high): a JSONL record
+   per turn end (`<app-data>/supervisor-activity.log`), the badge's "last action" hint plus a `▾`
+   popover, and a `⚙` on supervisor-started turns. As-built: `arch/workflow-supervisor.md` §F/§G.
+   ⚠️ It took NO seventh guard arm: every surface derives from `workspaceSupervisorReadout` (arm 6's
+   existing subject). The record has already named two causes of the silence (a transcript read
+   racing `Stop`; terminal reports raising the unsent-input watermark). Original plan: **planned
    next**, because it is the investigation's instrument. It opens with its own `/util-grill-me`
    (the item's questions 1–6 are the agenda). ⚠️ It owns the **seventh** OFF-invariant guard arm,
    and must itself be gated OFF with the supervisor.

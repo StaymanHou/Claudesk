@@ -1,9 +1,30 @@
 ---
 name: agent-launched-app-cannot-verify-continue
-description: An agent-launched Claudesk cannot verify WHICH conversation `--continue` resumes — its spawned CC sessions inherit CLAUDE_CODE_CHILD_SESSION and write no transcript; `env -u` at the seeding call does NOT fix it.
+description: An agent-launched Claudesk spawns CC with no transcript and no hook events UNLESS `pnpm tauri:dev` itself runs with the full Claude-marker `env -u` strip (then both work, verified 2026-09-28); stripping at a child call does not help.
 metadata:
   type: project
 ---
+
+⚠️ **CORRECTED 2026-09-28 — the fix is to strip at the app PARENT, and it works.** Launch the dev build
+itself with every Claude session marker removed:
+
+```
+env -u CLAUDE_CODE_CHILD_SESSION -u CLAUDECODE -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_ENTRYPOINT \
+    -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID \
+    -u CLAUDE_CODE_SESSION_ATTENDED -u CLAUDE_CODE_EXECPATH -u CLAUDE_EFFORT -u CLAUDESK_DRIVE_MODE \
+    pnpm tauri:dev
+```
+
+The app-spawned CC then **writes a transcript** (verified 2026-09-28: scratch-c's newest `.jsonl` held the
+agent-injected prompt) and **emits real hook events** (`UserPromptSubmit`/`Stop` in `status-channel.log`,
+first seen 2026-09-25). An agent can drive REAL turns with
+`__TAURI_INTERNALS__.invoke('cc_input', {sessionId, data: btoa("…\r")})` via `webview_execute_js`
+(fire-and-forget; the PTY session id is the fiber prop `ccSessionId`, e.g. `cc-5`). So the
+"operator-only" limit below applied to a launch that stripped only `CLAUDE_CODE_CHILD_SESSION`, or
+stripped at a child call. ⚠️ **Still unverified:** that `--continue` now resumes the intended
+conversation from such a build. It probably can, but assert transcript saving is ON first. The history
+below is kept for the reasoning; its "cannot" is the pre-correction state.
+
 
 A `--continue` verification **cannot be completed from a Claudesk that the agent launched.** Any CC
 session spawned by such an app inherits **`CLAUDE_CODE_CHILD_SESSION`** down the launch chain
