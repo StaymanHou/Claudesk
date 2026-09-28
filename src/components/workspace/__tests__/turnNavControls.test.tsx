@@ -48,6 +48,7 @@ const nav = (
   canNext,
   ordinal,
   total,
+  origin: null,
 });
 
 const q = (el: ParentNode, id: string) =>

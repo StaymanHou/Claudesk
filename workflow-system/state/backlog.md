@@ -57,6 +57,26 @@
 - **Status:** pending
 - **Pickup shape:** read the three entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
+## SURFACE-2026-09-28-IS-TURN-START-FIRES-ON-MID-TURN-DEQUEUES
+- **Source:** feature:build (`supervisor-activity-record`, P3.1 probe)
+- **Target level:** product:arch
+- **Type:** gap
+- **Summary:** `event_is_turn_start` (`status_broadcaster`) treats EVERY `UserPromptSubmit` as a turn
+  start, but CC also fires `UserPromptSubmit` mid-turn when it dequeues a queued prompt: a
+  background task notification, or a message the operator typed while the model was running. Both
+  were seen in claudesk session `7a912f57` on 2026-09-15 (19:52:31 and 19:54:33Z, prod
+  `status-channel.log.1`), each while the turn was still running (no `Stop` between).
+- **Context:** The M13.5 turn prev/next markers are planted on these mid-turn points too, so the
+  walk can step onto a spot that is not the start of a turn. Turn attribution (the `⚙`) is
+  unaffected in practice: it claims only within ~2 s after a fire, and the supervisor fires after a
+  `Stop` (documented in `src/state/supervisor/turnOrigin.ts`).
+- **Suggested action:** Decide whether a dequeued prompt should count as a turn start for
+  navigation. If not, find a discriminator on the hook payload or in the event order (e.g. a
+  `UserPromptSubmit` with no `Stop` since the previous one). Capture a live payload first
+  (`[[cc-hook-capture-beats-docs]]`).
+- **Priority:** low
+- **Status:** pending
+
 ## SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER
 
 - **Priority:** medium
@@ -205,6 +225,40 @@ are checks the operator must currently confirm **by watching a terminal at the r
 with a retained activity log they become an after-the-fact read. Building this **before** or
 **early into** dogfooding plausibly makes the dogfooding itself cheaper and more conclusive. That is
 an argument for sequencing, not a decision.
+
+⭐ **GRILLED 2026-09-25 — the three expensive decisions are SETTLED (operator). Do not re-open them:**
+1. **Retention and readership → a durable, append-only JSONL file in the app-data dir.** One line
+   per turn-end decision, size-capped with rotation, surviving relaunch and upgrade, and readable
+   **by the operator in the UI AND by an agent from disk.** An agent-readable record is the point:
+   the console-only traces are what hid the silent supervisor. It is R-4 compliant, because Rust
+   only appends and TypeScript decides.
+2. **UI surface → off the existing `⚙ supervised` header control**
+   (`workspaceSupervisorReadout`): a per-workspace popover of recent decisions. **No new
+   right-panel tab.** No cross-workspace UI roll-up for now; the file answers "is it firing
+   anywhere?".
+3. **Attribution → tag each turn marker with its origin at fire time.** The turn prev/next
+   readout shows `⚙` on a supervisor-fired turn, and the header badge carries a quiet "last action"
+   hint. ⚠️ **Operator-sanctioned fallback: header hint only, IF the turn tag proves difficult.**
+   Probe it before committing. ⚠️ xterm decorations are NOT an option: they are proposed API, and
+   the overview ruler painted zero pixels under the DOM renderer (M13.5 WP3; see the `XtermPane`
+   turn-marker comment).
+
+**Defaults taken at the grill (listed so they stay refusable):**
+- Record EVERY turn-end decision (fired, withheld + reason, recycled, recycle declined), including
+  early returns.
+- Also record a turn end *received*, so "the trigger never arrived" is distinguishable from
+  "nothing happened".
+- Record fields: timestamp, workspace/project, CC session id, transition token + step, resolved
+  cell + mode, verdict + reason, the adjudicator verdict if consulted, the injected command, and
+  context tokens. **Never the transcript.**
+- One app-wide file; dev and prod are separated by their app-data dirs.
+- No notification: passive only.
+- Recording is NOT gated by the per-workspace toggle (a toggled-off workspace records
+  `not-supervised`), but NOTHING records while the M10.9 gate is OFF.
+- The existing `console.warn` lines stay.
+
+The six questions below are **the pre-grill agenda, kept for context**. Q1, Q2 and Q5 are answered
+above; Q3, Q4 and Q6 were answered as defaults.
 
 **Open design questions (for `/util-grill-me` at the item's start — do not pre-decide here):**
 1. **Surface shape** — right-panel tab, a section in an existing panel, filmstrip/tile affordance,
@@ -416,6 +470,50 @@ v0.5.1 on contains the supervisor, and the 2026-09-15 fire proves the v0.5.0 bui
 
 ### Hypotheses — UNVERIFIED, listed so the investigation starts with a map, not a conclusion
 
+⭐⭐ **SECOND CAUSE CONFIRMED 2026-09-25 (activity-record Phase 1 verify-human): the transcript
+read RACES the `Stop` hook.** A real turn ending on `TRANSITION: F5` was recorded as `no-verdict`:
+`Stop` arrived at .074 and the read ran just after. Re-parsing the same file afterwards finds `F5`;
+the file minus its final line gives `null`. So CC had not yet flushed the final assistant message
+when the supervisor read it. It is timing-dependent (some turns win the race, e.g. the 09-15
+fires) and independent of the watermark below. **Candidate fix (unbuilt):** on `no-verdict`
+right after a `Stop`, re-read the tail after a short bounded delay (or until the transcript's
+newest assistant line postdates the turn's `UserPromptSubmit`), and pin it with a regression test
+that feeds a tail missing its final line and then supplies it.
+
+⚠️ **Also revealed (pre-existing):** a turn end can be evaluated TWICE. A second
+`workspace-status` listener appears during a session (1 record per event on a fresh load, 2 after
+the operator's session actions; suspect: a drive-mode change or respawn on an open workspace).
+The ledger masked it as `already-fired-for-this-turn`. Fix alongside the investigation.
+
+⭐⭐ **PROBABLE ROOT CAUSE FOUND 2026-09-25 (activity-record Phase 1 verify-self), confirming
+hypothesis 1 by MECHANISM.** A freshly opened, untouched dev workspace showed the `⏸` suppressed
+badge. `unsentInput.foldInput` lets the **last byte of each xterm `onData` chunk** decide, but
+`onData` carries **terminal-generated reports** as well as keystrokes: focus-in `ESC[I`, focus-out
+`ESC[O`, DA replies, cursor-position reports. Each ends on a non-clearing byte, so each one raises
+"unsent input" (replayed: all → `true`; Enter → `false`). A focus change mid-turn therefore
+suppresses that turn's fire. **The supervisor goes silent exactly when the operator looks away**,
+which is when it exists to act. It shipped in v0.5.1, the release where firing stopped.
+⚠️ **To confirm:** one REAL operator-driven turn whose activity record reads
+`unsent-input-present` (the activity-record Phase 1 verify-human check). **Candidate fix
+(unbuilt):** filter terminal-report sequences out before folding (a complete CSI sequence ending in
+`I`/`O`/`c`/`R`, or more generally any chunk that begins with ESC and is a complete escape
+sequence), and add a regression test built on the four report shapes above.
+
+⭐ **NARROWED 2026-09-25 (at the activity-surface spec): the trigger DOES reach the frontend.** The
+existing `status_log` (`<app-data>/status-channel.log`, 5 MiB rotating, which covers 2026-09-14 →
+now) shows that at each miss checked (09-22 15:34 ops-data-hub, 17:13 and 18:20 mbt-copilot, 18:13
+claudesk) a `Stop` event **arrived, resolved to the right workspace (`resolved=ws-N`), and was
+`outcome=emitted`** to the webview. So hook registration and Rust-side routing are **ruled out**
+for these rows. The silence is downstream in TypeScript:
+- `is_turn_end` classification;
+- `useTurnEnd`'s filter;
+- **the four SILENT early returns at the top of `useSupervisor`'s `onTurnEnd`** (`!host.enabled`,
+  supervisor toggle `false`, `storedMode === null`, no `ptySessionId`), none of which logs
+  anything, even to the console;
+- or a `fireOne` withhold.
+⚠️ The four silent early returns are now the most interesting place to look, because they are the
+only exits that leave no trace at all.
+
 1. ⚠️ **Unsent-input suppression stuck ON** (top suspect: it is the one mechanism that CHANGED at
    v0.5.1). The watermark rises on typed-but-unsubmitted input and, by design, stays up for
    minutes (WP0 check 2's load-bearing case). If some real submit path is not seen as a clear (a
@@ -430,6 +528,16 @@ v0.5.1 on contains the supervisor, and the 2026-09-15 fire proves the v0.5.0 bui
    (`SURFACE-2026-09-24-QUALITY-TRANSCRIPT-ROOT-READS-STORED-PROFILE-NOT-LIVE` post-dates every row
    above and involves profiles, while these rows all use the default profile, so it is **not** the
    cause of these misses. It is adjacent code, though.)
+
+4. ⭐ **Added 2026-09-25 (activity-record P1): injections failing SILENTLY.** `injectCommand`
+   swallows a rejected `cc_input` (it warns and returns), and the supervisor passed
+   `onIpcError: undefined`, so `fireOne`'s `inject-failed` arm was **unreachable**. A failed
+   injection read as a success: the supervisor logged `fired` while CC received nothing. That
+   **fits "no commands in the transcripts" just as well** as a withhold does. A stale
+   `ccSessionIdRef` (e.g. after a relaunch or Recycle) is the obvious way `cc_input` could reject.
+   Fixed going forward by the activity-record feature (the supervisor now re-throws, so the
+   failure is recorded as `error` / `inject-failed`). ⚠️ The fix makes this hypothesis
+   **testable**; it does not confirm it.
 
 ⚠️ **The discriminating observable already exists, and nobody can read it.** Every non-fire emits a
 `withheld … — <reason>` line from a closed vocabulary (`arch/workflow-supervisor.md` §F), and it
@@ -462,6 +570,10 @@ control first. ⚠️ An agent-launched CC emits no hook events
   operator 2026-09-25). Then investigate with it: an operator-driven break in a dev build, reading
   the `withheld` reason. Open the investigation as `/incident-report` or `/feature-reproduce`
   depending on what the first read shows.
+  ⚠️ **Carry one deferred check into the fix's verification** (operator, 2026-09-28): once the
+  supervisor fires again, confirm the turn readout shows `⚙` on the turn it started
+  (`supervisor-activity-record` P3.verify-human.2, deferred, NOT passed). Turn attribution was
+  verified live only with a hand-armed origin.
 - **Priority:** high (the milestone's core behavior is not working in the field, and the failure
   is silent by construction)
 - **Status:** pending — re-framed 2026-09-25; investigation sequenced after the activity surface

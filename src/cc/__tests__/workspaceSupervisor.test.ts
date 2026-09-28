@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   SUPERVISOR_OFF_LABEL,
   SUPERVISOR_ON_LABEL,
+  SUPERVISOR_TURN_GLYPH,
   workspaceSupervisorReadout,
 } from "../workspaceSupervisor";
 
@@ -136,5 +137,35 @@ describe("the SUPPRESSED copy", () => {
     const t = workspaceSupervisorReadout(true, true, "W", false)?.title ?? "";
     expect(l).not.toMatch(/held back/i);
     expect(t).not.toMatch(/held back/i);
+  });
+});
+
+describe("the TURN mark (turn attribution)", () => {
+  const origin = { command: "/feature-verify-auto", firedAt: 1_000 };
+
+  it("is absent when the selected turn has no supervisor origin", () => {
+    expect(workspaceSupervisorReadout(true, true, "x")?.turnBadge).toBeNull();
+  });
+
+  it("is the header's own gear, and its tooltip names the command the supervisor ran", () => {
+    const badge = workspaceSupervisorReadout(
+      true,
+      true,
+      "x",
+      false,
+      null,
+      origin,
+    )?.turnBadge;
+    expect(badge?.text).toBe(SUPERVISOR_TURN_GLYPH);
+    expect(SUPERVISOR_TURN_GLYPH).toBe("⚙");
+    expect(badge?.title).toContain("supervisor started this turn");
+    expect(badge?.title).toContain("/feature-verify-auto");
+  });
+
+  it("⚠️ stays shown after the project is turned OFF: it records who started that turn", () => {
+    expect(
+      workspaceSupervisorReadout(false, true, "x", false, null, origin)
+        ?.turnBadge?.text,
+    ).toBe("⚙");
   });
 });

@@ -102,9 +102,47 @@ describe("XtermPane turn-navigation wiring", () => {
     // either way. That is the "guard reports green while checking nothing" class from
     // `docs/lessons/source-text-guards.md`: the predicate must name the value that can be wrong.
     // Reading a literal here instead of the ref would report a position the pane is not at.
+    //
+    // Since turn attribution the edge goes through ONE builder, `turnNavView`, shared with the
+    // pull (`turnNavState()`), so the argument check moved onto the builder: it must read BOTH live
+    // refs, and the origin must come from the same markers and position as the counts.
+    expect(code).toMatch(/onTurnStartRecorded\?\.\(turnNavView\(\)\)/);
+    expect(code).toMatch(/turnNavState: \(\) => turnNavView\(\)/);
     expect(code).toMatch(
-      /onTurnStartRecorded\?\.\(\s*navState\(\s*turnMarkersRef\.current,\s*turnPositionRef\.current,?\s*\)/,
+      /const turnNavView = useCallback\(\(\): TurnNavView => \{\s*const markers = turnMarkersRef\.current;\s*const position = turnPositionRef\.current;\s*return \{\s*\.\.\.navState\(markers, position\),\s*origin: selectedTag\(markers, position, turnOriginsRef\.current\),/,
     );
+  });
+
+  it("⚠️ turn attribution: claims the origin ONCE per recorded marker, before telling the parent", () => {
+    // The claim is consume-once (`turnOrigin.claimOrigin`), so where it sits decides which turn is
+    // tagged. It must follow the marker it tags and precede the push, or the parent renders the
+    // new turn without its `⚙` until the next step re-reads it.
+    // ⚠️ ORDER, not presence (`docs/lessons/source-text-guards.md` entry 18): each symbol also
+    // legitimately occurs elsewhere, so a bare `toContain` would pass on a misplaced claim.
+    const listener = code.slice(
+      code.indexOf("useTauriListen<WorkspaceStatusUpdate>"),
+    );
+    const marked = listener.indexOf("term.registerMarker()");
+    const claimed = listener.indexOf("claimTurnOrigin?.()");
+    const tagged = listener.indexOf(
+      "turnOriginsRef.current.set(marker.id, origin)",
+    );
+    const pushed = listener.indexOf("onTurnStartRecorded?.(");
+    expect(marked).toBeGreaterThan(-1);
+    expect(claimed).toBeGreaterThan(marked);
+    expect(tagged).toBeGreaterThan(claimed);
+    expect(pushed).toBeGreaterThan(tagged);
+    // Exactly one claim in the whole pane: a second call site would consume another turn's origin.
+    expect(code.match(/claimTurnOrigin\?\.\(\)/g)).toHaveLength(1);
+  });
+
+  it("prunes the origin table wherever the marker list is compacted", () => {
+    // Otherwise the side table outgrows the markers across a long session.
+    expect(
+      code.match(
+        /pruneTags\(turnOriginsRef\.current, turnMarkersRef\.current\)/g,
+      ),
+    ).toHaveLength(2);
   });
 
   it("⚠️ the DELETED walk API has not crept back", () => {

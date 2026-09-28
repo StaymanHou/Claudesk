@@ -59,13 +59,16 @@ UserPromptSubmit hook ──> is_turn_start ──> [turn ends] ──> useSuper
 policy graph **single-sided**, so "funnel every policy read through ONE function" stays structurally
 easy, and it builds **no new backend→frontend IPC direction**.
 
-⚠️ **THE SUPERVISOR OWNS EXACTLY THREE RUST COMMANDS — enumerate all three, not two:**
+⚠️ **THE SUPERVISOR OWNS FIVE RUST COMMANDS.** It was three at M15 close; the activity record added
+two on 2026-09-25. Enumerate all five:
 
 | Command | Defined | Does |
 |---|---|---|
 | `transcript_tail` | `src-tauri/src/transcript/` | file IO — returns raw lines |
 | `wip_read` | `src-tauri/src/wip/commands.rs` | file IO — returns raw text |
-| **`supervisor_adjudicate`** | `src-tauri/src/adjudicator/commands.rs:19` | **spawns `claude -p`** — returns raw stdout or a stringified error |
+| **`supervisor_adjudicate`** | `src-tauri/src/adjudicator/commands.rs` | **spawns `claude -p`** — returns raw stdout or a stringified error |
+| `supervisor_activity_append` | `src-tauri/src/supervisor_activity/commands.rs` | file IO — appends one opaque JSONL record line (async) |
+| `supervisor_activity_read` | `src-tauri/src/supervisor_activity/commands.rs` | file IO — returns the newest N raw lines (async, capped) |
 
 ⚠️ **`supervisor_adjudicate` is NOT file IO, and an earlier draft of this section wrongly said Rust
 exposes the first two "and nothing else" — corrected 2026-09-15 at WP5 verify-self.** It is
@@ -219,6 +222,62 @@ declined recycle is **neither fired nor recycled and never reconsidered**. The a
 therefore **gated on the recycle actually starting**; announcing first made the only diagnostic
 assert the opposite of what happened.
 
+### The activity record (2026-09-25): the durable, agent-readable trace
+
+⚠️ **Every `console.warn` above is unreadable** in a shipped build, and to an agent too
+(`read_logs` captures nothing). That is how the supervisor went silent for a week unnoticed. So
+every turn-end decision is now ALSO appended as one JSONL line to
+**`<app-data>/supervisor-activity.log`**: `com.claudesk.app/` for prod, `com.claudesk.app.dev/`
+for dev. It is size-capped at 5 MiB with one rotated generation (`.log.1`), reusing
+`status_log::StatusLog`. **Read it with `tail` / `jq`.**
+
+- **Exactly one record per `onTurnEnd` invocation**, through one funnel (`useSupervisor`'s
+  `onTurnEnd` → `decideTurn` → `record()`). That includes the three formerly SILENT early returns
+  (`supervisor-toggled-off`, `no-stored-mode`, `no-pty-session`) and both recycle arms (the
+  caller's `onRecycle` returns `"started" | "declined"`). The **gate-OFF exit writes nothing**.
+- **Schema** (single home: `src/state/supervisor/activityRecord.ts`; Rust stores opaque lines,
+  R-4): `v, ts, appVersion, workspaceId, projectPath, sessionId` (the CC session id from the hook
+  event), `outcome` ∈ `fired | withheld | recycle-started | recycle-declined | error`, `reason` (one
+  closed union: `SupervisorReason` = `FanOutReason` + the early-exit reasons), `transcriptPath,
+  edgeId, mode, detail` (the verdict detail, formerly dropped), `command, tokens`. Never
+  transcript text.
+- ⚠️ **Filter by `projectPath`, not `workspaceId`.** Ids like `ws-1` are reassigned on every app
+  run.
+- ⚠️ **One turn end can appear twice**, from a pre-existing duplicate `workspace-status` listener
+  that appears during a session (see
+  `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`). The record faithfully
+  reports each invocation.
+- **`inject-failed` is now reachable.** `injectCommand` swallows a rejected `cc_input`, so the
+  supervisor passes an `onIpcError` that re-throws. Before this, a failed injection was reported as
+  a fire.
+- **In-UI:** the `⚙ supervised` badge's tooltip carries the newest decision
+  (`Last: withheld: … · 2m ago`, live via the frontend-only `activityFeed`, seeded from the file on
+  mount), and the `▾` trigger beside it opens a popover listing the project's last 20 decisions.
+
+### Turn attribution (2026-09-28): the `⚙` on supervisor-started turns
+
+When the turn prev/next readout (`workspace-turn-readout`, `N/M`) lands on a turn the supervisor
+started, it shows `⚙` with a tooltip naming the command. Mechanism (`src/state/supervisor/turnOrigin.ts`):
+
+- **Arm → claim → cancel.** `useSupervisor`'s `inject` ARMS a pending origin for its workspace
+  immediately **before** the `cc_input` invoke (and disarms it if the injection fails). The CC
+  pane's next `is_turn_start` CLAIMS it (consume-once) and tags that marker in a side table keyed
+  by marker id beside `turnMarkersRef`. Any chunk the pane forwards CANCELS a pending origin.
+- **The claim window is `ORIGIN_CLAIM_WINDOW_MS` = 2000**, from the P3.1 probe: live injections
+  reached the webview as `is_turn_start` in **32–40 ms** (n=4; 49 ms at the broadcaster), and each
+  of the six clean 2026-09-15 fires had its own `UserPromptSubmit` as the first one after the
+  `Stop`. The window only bounds a fire that never produced a turn start.
+- ⚠️ **`is_turn_start` is not strictly a turn start.** CC also fires `UserPromptSubmit` mid-turn
+  when it dequeues a prompt (task notifications; a message typed while the model runs). The
+  supervisor fires after a `Stop`, so these fall outside the ~40 ms gap in practice; one landing
+  inside it would take the tag. Accepted.
+- ⚠️ **Cancellation is conservative**: terminal reports (focus, DA, cursor) cancel too, the same
+  misclassification that raises the unsent-input watermark. It errs toward a missing `⚙`, never a
+  wrong one. Fix both together.
+- **Gated through the readout**: the `⚙` renders from `workspaceSupervisorReadout(…).turnBadge`,
+  never from the pane's origin directly, because the turn readout itself is ungated.
+- Not tagged: the command a context-pressure recycle defers into the fresh session.
+
 ---
 
 ## G. The gate
@@ -230,10 +289,16 @@ paths. `useSupervisor` checks `host.enabled` **twice**: via `useTurnEnd`'s `enab
 **inside** the callback, deliberately, because the gate can flip while a turn is in flight and the
 fire is the irreversible half.
 
-⚠️ **The reversing condition:** if a future change gives the supervisor an operator-visible surface,
-that surface owns the **SEVENTH** arm and the `armSubjects` pin
-(`offInvariantGuard.test.ts` → `it("still polices all six registries")`, currently **9** subjects)
-must bump **in the same change**. The backstop is real but
+⚠️ **The reversing condition, and how it actually played out:** M15 recorded that an
+operator-visible supervisor surface would own a SEVENTH arm. **In practice every such surface
+derives from ONE function, `workspaceSupervisorReadout`, policed as arm 6's `WORKSPACE-SUPERVISOR`
+subject.** That covers the toggle (M14 WP0), the suppressed badge (WP0 Phase 3), and the
+activity hint, `▾` trigger and popover (2026-09-25), all rendered inside the block that derivation
+gates, and the turn readout's `⚙` (2026-09-28), which renders outside that block but only from the
+readout's `turnBadge` field. The readout's own header requires extending it rather than adding a second derivation, so
+the `armSubjects` pin (`offInvariantGuard.test.ts` → `it("still polices all six registries")`)
+stays at **9**. ⚠️ **A supervisor surface that does NOT render from that readout would still own a
+new subject, and the pin must bump in the same change.** The backstop is real but
 partial: the guard's allowlist is **all of `src/**`**, so a supervisor panel/menu-id/chord *of a
 shape arms 1–3 already select on* trips today — a genuinely novel shape would not.
 

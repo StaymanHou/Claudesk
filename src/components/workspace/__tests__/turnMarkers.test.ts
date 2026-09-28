@@ -7,9 +7,12 @@ import {
   maxScroll,
   navState,
   positionAtNewest,
+  pruneTags,
   reachableCount,
   resolvePosition,
   scrollTargetFor,
+  selectedMarker,
+  selectedTag,
   shouldRecordTurnStart,
   stepTurn,
   type TurnMarker,
@@ -564,5 +567,50 @@ describe("shouldRecordTurnStart — the listener's contract", () => {
       shouldRecordTurnStart({ ...base, payload }),
     ).length;
     expect(recorded).toBe(1);
+  });
+});
+
+describe("selectedMarker / selectedTag / pruneTags — turn attribution's side table", () => {
+  // Distinct ids AND distinct tags per marker, so a lookup that returned the wrong marker's tag
+  // (off by one, or always the newest) cannot pass by coincidence.
+  const markers = [m(10, 5), evicted(11), m(12, 40), m(13, 90)];
+  const tags = new Map([
+    [10, "oldest"],
+    [11, "evicted"],
+    [13, "newest"],
+  ]);
+
+  it("at rest, selects the NEWEST live marker", () => {
+    expect(selectedMarker(markers, positionAtNewest)?.id).toBe(13);
+    expect(selectedTag(markers, positionAtNewest, tags)).toBe("newest");
+  });
+
+  it("indexes the LIVE list, skipping the evicted marker", () => {
+    // Live list: 10, 12, 13. Index 1 is marker 12, not the evicted 11.
+    expect(selectedMarker(markers, { index: 1 })?.id).toBe(12);
+    expect(selectedTag(markers, { index: 0 }, tags)).toBe("oldest");
+  });
+
+  it("an untagged selected turn yields null, not a neighbour's tag", () => {
+    expect(selectedTag(markers, { index: 1 }, tags)).toBeNull();
+  });
+
+  it("an empty list selects nothing", () => {
+    expect(selectedMarker([], positionAtNewest)).toBeNull();
+    expect(selectedTag([], positionAtNewest, tags)).toBeNull();
+  });
+
+  it("pruneTags drops exactly the tags whose markers are gone", () => {
+    const table = new Map([
+      [10, "a"],
+      [11, "evicted"],
+      [99, "never a marker"],
+      [13, "b"],
+    ]);
+    pruneTags(table, markers);
+    expect([...table.entries()]).toEqual([
+      [10, "a"],
+      [13, "b"],
+    ]);
   });
 });

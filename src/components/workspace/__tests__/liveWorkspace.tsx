@@ -27,33 +27,38 @@ import {
 import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { TurnNavState } from "../turnMarkers";
+import type { TurnNavView } from "../XtermPane";
+import type { SupervisorOrigin } from "../../../state/supervisor/turnOrigin";
 import type { Workspace as WorkspaceModel } from "../../../state/workspace";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-export const AT_REST: TurnNavState = {
+export const AT_REST: TurnNavView = {
   canPrev: false,
   canNext: false,
   ordinal: 0,
   total: 0,
+  origin: null,
 };
+
+/** The props the stub pane records: the callbacks `Workspace` hands the real pane. */
+interface StubPaneProps {
+  onTurnStartRecorded?: (nav: TurnNavView) => void;
+  onInputForwarded?: (chunk: string) => void;
+  claimTurnOrigin?: () => SupervisorOrigin | null;
+}
 
 /** What the stub pane saw and what it will answer. Reset by `mountWorkspace`. */
 export const pane = {
   steps: [] as ("prev" | "next")[],
   /** Returned by `turnNavState()`, i.e. what the pane reports after a step. */
-  navAfterStep: AT_REST as TurnNavState,
-  props: null as null | {
-    onTurnStartRecorded?: (nav: TurnNavState) => void;
-  },
+  navAfterStep: AT_REST as TurnNavView,
+  props: null as null | StubPaneProps,
 };
 
-function XtermPaneStub(
-  props: { onTurnStartRecorded?: (nav: TurnNavState) => void },
-  ref: Ref<unknown>,
-) {
+function XtermPaneStub(props: StubPaneProps, ref: Ref<unknown>) {
   // In an effect, not during render: react-hooks rejects a render-time write to shared state.
   useEffect(() => {
     pane.props = props;
@@ -103,6 +108,8 @@ export interface MountOptions {
   statusState?: "idle" | "running" | "unknown";
   /** F-b — the profile both `project_get_profile` and `cc_session_profile` answer with. */
   profile?: string | null;
+  /** Extra IPC answers by command name, for commands the harness does not otherwise stub. */
+  ipcAnswers?: Record<string, unknown>;
 }
 
 let root: Root | null = null;
@@ -128,6 +135,8 @@ export async function mountWorkspace(opts: MountOptions) {
       if (cmd === "picker_announce_actions") return {};
       if (cmd === "project_get_profile" || cmd === "cc_session_profile")
         return opts.profile ?? null;
+      if (opts.ipcAnswers && cmd in opts.ipcAnswers)
+        return opts.ipcAnswers[cmd];
       return null;
     },
     { shouldMockEvents: true },
@@ -189,5 +198,28 @@ export async function pushTurnStart(nav: TurnNavState) {
   const cb = pane.props?.onTurnStartRecorded;
   if (!cb)
     throw new Error("Workspace passed no onTurnStartRecorded to the pane");
-  await act(async () => cb(nav));
+  await act(async () => cb({ origin: null, ...nav }));
+}
+
+/**
+ * Turn attribution — push a turn start the way the real pane records one: it asks `Workspace`'s
+ * `claimTurnOrigin` whether the supervisor started this turn, then reports the nav state with
+ * whatever came back. ⚠️ The pane side of this contract (claim at the marker, one builder for push
+ * and pull) is pinned structurally in `turnNavWiring.test.ts`; this helper drives the PARENT side.
+ */
+export async function pushClaimedTurnStart(nav: TurnNavState) {
+  const claim = pane.props?.claimTurnOrigin;
+  if (!claim)
+    throw new Error("Workspace passed no claimTurnOrigin to the pane");
+  const cb = pane.props?.onTurnStartRecorded;
+  if (!cb)
+    throw new Error("Workspace passed no onTurnStartRecorded to the pane");
+  await act(async () => cb({ ...nav, origin: claim() }));
+}
+
+/** Forward a chunk from the pane, as the real pane does for every `onData`. */
+export async function forwardInput(chunk: string) {
+  const cb = pane.props?.onInputForwarded;
+  if (!cb) throw new Error("Workspace passed no onInputForwarded to the pane");
+  await act(async () => cb(chunk));
 }

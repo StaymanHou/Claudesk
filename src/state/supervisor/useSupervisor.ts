@@ -36,6 +36,15 @@ import { parseWip, type ParsedWip } from "./wipPhases";
 import type { TranscriptTail } from "./transcript";
 import type { DriveMode } from "../workflowMachine/policy";
 import { injectCommand } from "../../components/workspace/autoResumeFire";
+import {
+  buildRecord,
+  outcomeForReason,
+  type ActivityRecord,
+  type RecordInput,
+} from "./activityRecord";
+import { readAppVersion, recordActivity } from "./activityRecorder";
+import type { TurnEndSignal } from "./turnEnd";
+import { armOrigin, cancelOrigin } from "./turnOrigin";
 
 /** The shape Rust's `wip_read` command returns. */
 interface WipRead {
@@ -91,10 +100,24 @@ export interface SupervisorHost {
    * ⚠️ Supplied by the caller because `recycleSession()` needs caller-owned React state. This
    * hook decides; the component acts.
    */
-  readonly onRecycle: (info: RecycleRequest) => void;
+  readonly onRecycle: (info: RecycleRequest) => RecycleStatus;
   /** Diagnostic sink. Defaults to `console.warn`. */
   readonly warn?: (message: string) => void;
+  /** Activity-record sink. Defaults to the live feed plus `supervisor-activity.log`. */
+  readonly record?: (record: ActivityRecord) => void | Promise<void>;
+  /** The app version stamped on each record. Defaults to the cached Tauri `getVersion`. */
+  readonly appVersion?: () => Promise<string | null>;
+  /** Clock for the record's timestamp. Defaults to `Date.now`. */
+  readonly now?: () => number;
 }
+
+/**
+ * Whether the caller's recycle actually began. It is reported back so the activity record can
+ * state the FINAL outcome from the one place that records it: a declined recycle leaves the
+ * turn neither fired nor recycled (the ledger has already claimed it), and the record is the
+ * only way that stall is visible.
+ */
+export type RecycleStatus = "started" | "declined";
 
 /** What the supervisor concluded when it decided to recycle. */
 export interface RecycleRequest {
@@ -117,6 +140,189 @@ export async function readWipFor(
   return parseWip(res?.text ?? null);
 }
 
+/** Everything about the decision that the host's base fields do not already say. */
+export type Decision = Omit<
+  RecordInput,
+  "ts" | "appVersion" | "workspaceId" | "projectPath" | "sessionId"
+>;
+
+/**
+ * Resolve one turn end to ONE decision. Every exit returns a `Decision`. A throw from caller
+ * code (`onRecycle`) is caught by `useSupervisor`'s `onTurnEnd`, which still records it, so a
+ * turn end always yields exactly one record.
+ */
+export async function decideTurn(
+  host: SupervisorHost,
+  ledger: FireLedger,
+): Promise<Decision> {
+  const warn = host.warn ?? ((m: string) => console.warn(m));
+  const withheld = (reason: Decision["reason"] & string): Decision => ({
+    outcome: "withheld",
+    reason,
+  });
+
+  // ⚠️ M14 WP0 — THE THIRD CONDITION, its ref read PER TURN for the same reason as the gate
+  // above: the operator flips this toggle precisely *because* the supervisor is misbehaving,
+  // and a value captured at subscribe time would keep firing for the rest of the session. The
+  // fire is the irreversible half (`injectCommand` has no retry and no pre-send cancel window),
+  // so every condition guarding it is read at the last possible moment. ⚠️ Reading the ref late
+  // does not make its VALUE fresh — the host refills it only on reveal and on its own toggle
+  // write (`supervisorToggleIpc.ts` says why that suffices today).
+  if (host.supervisorEnabledRef.current === false)
+    return withheld("supervisor-toggled-off");
+
+  const storedMode = host.storedModeRef.current;
+  // ⚠️ A project with no stored mode is not supervised (R-1, opt-in). `decideVerdict` also
+  // refuses it — this is the cheap early exit, not the guard.
+  if (storedMode === null) return withheld("no-stored-mode");
+
+  const ptySessionId = host.ccSessionIdRef.current;
+  if (!ptySessionId) return withheld("no-pty-session");
+
+  const workspace: SupervisedWorkspace = {
+    workspaceId: host.workspaceId,
+    sessionId: ptySessionId,
+    projectPath: host.projectPath,
+    storedMode,
+    ptySessionId,
+  };
+
+  let outcome: FanOutOutcome;
+  try {
+    outcome = await fireOne(workspace, {
+      readTail: async (w) =>
+        invoke<TranscriptTail>("transcript_tail", {
+          projectPath: w.projectPath,
+          sessionId: w.sessionId,
+        }),
+      // ⚠️ The label is forwarded THROUGH as `injectCommand`'s 4th argument. Dropping it would
+      // fall back to the `"auto-resume"` default and point every supervisor failure at M12's arm
+      // instead of this one.
+      //
+      // ⚠️ **The 3rd argument RE-THROWS.** `injectCommand` swallows a rejected `cc_input` (warns
+      // and returns), so with `onIpcError` left undefined a failed injection reached `fireOne` as
+      // a SUCCESS: its `inject-failed` arm was unreachable, and the activity record would have
+      // said `fired` for a command CC never received. Throwing from the callback makes the
+      // rejection propagate, so the failure is recorded as what it is.
+      //
+      // ⚠️ **The turn-attribution origin is armed BEFORE the invoke, not after it resolves.** The
+      // turn start trails the invoke by ~40 ms, and arming afterwards would leave a window in which
+      // it could arrive first and go untagged. A failed injection disarms it (`turnOrigin.ts`).
+      inject: async (pty, command, label) => {
+        armOrigin(host.workspaceId, {
+          command,
+          firedAt: (host.now ?? Date.now)(),
+        });
+        try {
+          await injectCommand(
+            pty,
+            command,
+            (message) => {
+              throw new Error(message);
+            },
+            label,
+          );
+        } catch (e) {
+          cancelOrigin(host.workspaceId);
+          throw e;
+        }
+      },
+      readWip: async (w) => readWipFor(w.projectPath),
+      adjudicator: {
+        // ⚠️ **`model` IS FORWARDED FROM `adjudicate`, NOT CHOSEN HERE — and `deps.model` is
+        // deliberately NOT set.** `assertPinnedModel` checks any supplied model before every
+        // adjudication, so plumbing one through from config would produce a LOUD failure
+        // rather than a silent downgrade (R-6 condition 1). Leaving it unset lets the module's
+        // own `ADJUDICATOR_MODEL` pin be the single source of truth; the Rust command takes
+        // the model as a parameter precisely so the pin is not duplicated backend-side.
+        run: async ({ model, prompt, timeoutMs }) =>
+          invoke<string>("supervisor_adjudicate", {
+            model,
+            prompt,
+            timeoutMs,
+          }),
+        warn,
+      },
+      ledger,
+      // ⚠️ M14 WP0 — forwarded as a THUNK so `fireOne` reads it immediately before injecting,
+      // not when these deps were built a transcript-read and an adjudication ago.
+      hasUnsentInput: host.hasUnsentInput
+        ? () => host.hasUnsentInput?.() === true
+        : undefined,
+    });
+  } catch (e) {
+    // ⚠️ `fireOne` already isolates its own failures; this catch exists so a throw from the
+    // invoke bridge cannot escape into React's event handler and blank the workspace.
+    warn(`supervisor: sweep threw for ${host.workspaceId} — ${String(e)}`);
+    return { outcome: "error", reason: "sweep-threw" };
+  }
+
+  // ⚠️ **A SUCCESSFUL FIRE IS ANNOUNCED.** It used to be discarded entirely — only throws,
+  // sweep failures and recycles were logged, and `injectCommand` logs only on IPC *rejection*
+  // — so the supervisor could inject a slash command into an unwatched workspace and leave no
+  // trace at all. The rarer recycle branch had the mitigation the far more common fire lacked,
+  // and the argument for it is identical: an operator returning to the pane must be able to
+  // see that something acted on their behalf. This is also the ONLY evidence a fire leaves
+  // while M15's five behavioral checks remain deferred to dogfooding.
+  if (outcome.fired) {
+    warn(
+      `supervisor: fired ${outcome.command ?? "(unknown command)"} into ${host.workspaceId}`,
+    );
+  } else if (outcome.reason && !outcome.recycle) {
+    // ⚠️ **M14 WP0 — THE WITHHOLD REASON WAS COMPUTED AND THEN THROWN AWAY.** `fireOne` returns
+    // a precise reason for every non-fire (`policy-not-auto`, `not-dispatchable`,
+    // `not-supervised`, `adjudicator-says-awaiting`, `already-fired-for-this-turn`,
+    // `transcript-unreadable`, `no-verdict`, `unsent-input-present`) and nothing read it, so
+    // "why did it not chain there?" had no answer short of reasoning about the code.
+    //
+    // ⚠️ **This is the tuning channel, and it ships WITH the suppression it measures.** WP0
+    // adds `unsent-input-present`, whose false-positive rate is unknown and is exactly what
+    // dogfooding must establish — the watermark has no timeout by design and does not clear on
+    // backspace-to-empty, so an over-suppressing workspace is silent without this line.
+    //
+    // ⚠️ **The recycle arm is EXCLUDED** (`!outcome.recycle`): a recycle also reports
+    // `fired: false` with a reason, but the caller already logs both its started and DECLINED
+    // arms distinctly. Logging here too would double-report the loudest branch and bury the
+    // ordinary withholds this line exists to surface.
+    warn(`supervisor: withheld in ${host.workspaceId} — ${outcome.reason}`);
+  }
+
+  // What the decision knew, whatever the outcome.
+  const context = {
+    transcriptPath: outcome.transcriptPath ?? null,
+    edgeId: outcome.edgeId ?? null,
+    mode: outcome.mode ?? null,
+    detail: outcome.detail ?? null,
+    tokens: outcome.tokens ?? null,
+  };
+
+  // ⚠️ The recycle is handed to the CALLER. This hook never calls `recycleSession` itself —
+  // see the module header for why that is structural, not stylistic. The caller reports
+  // whether it began, so the record states the final outcome.
+  if (outcome.recycle) {
+    const status = host.onRecycle(outcome.recycle);
+    return {
+      ...context,
+      outcome: status === "started" ? "recycle-started" : "recycle-declined",
+      reason: "context-pressure-recycle",
+      command: `/${outcome.recycle.skill}`,
+      tokens: outcome.recycle.tokens,
+    };
+  }
+  if (outcome.fired) {
+    return {
+      ...context,
+      outcome: "fired",
+      reason: null,
+      command: outcome.command ?? null,
+    };
+  }
+  // A non-fire always carries a reason; `no-verdict` is the honest fallback if one ever
+  // arrives without it.
+  const reason = outcome.reason ?? "no-verdict";
+  return { ...context, outcome: outcomeForReason(reason), reason };
+}
+
 /**
  * Supervise this workspace: on every turn end, decide whether to chain, recycle, or do nothing.
  *
@@ -129,123 +335,50 @@ export function useSupervisor(host: SupervisorHost): void {
   const ledgerRef = useRef<FireLedger | null>(null);
   if (ledgerRef.current === null) ledgerRef.current = new FireLedger();
 
-  const onTurnEnd = useCallback(async () => {
-    const warn = host.warn ?? ((m: string) => console.warn(m));
-    // ⚠️ Re-checked HERE rather than only in `useTurnEnd`'s `enabled`: the gate can flip while a
-    // turn is in flight, and the fire is the irreversible half.
-    if (!host.enabled) return;
+  const onTurnEnd = useCallback(
+    async (event?: TurnEndSignal) => {
+      // ⚠️ Re-checked HERE rather than only in `useTurnEnd`'s `enabled`: the gate can flip while
+      // a turn is in flight, and the fire is the irreversible half. ⚠️ **It is also the ONE exit
+      // that writes no activity record**: with the M10.9 gate OFF the app must be byte-identical
+      // to one that never had the workflow features, so nothing may appear in the app-data dir.
+      if (!host.enabled) return;
 
-    // ⚠️ M14 WP0 — THE THIRD CONDITION, its ref read PER TURN for the same reason as the gate
-    // above: the operator flips this toggle precisely *because* the supervisor is misbehaving,
-    // and a value captured at subscribe time would keep firing for the rest of the session. The
-    // fire is the irreversible half (`injectCommand` has no retry and no pre-send cancel window),
-    // so every condition guarding it is read at the last possible moment. ⚠️ Reading the ref late
-    // does not make its VALUE fresh — the host refills it only on reveal and on its own toggle
-    // write (`supervisorToggleIpc.ts` says why that suffices today).
-    if (host.supervisorEnabledRef.current === false) return;
-
-    const storedMode = host.storedModeRef.current;
-    // ⚠️ A project with no stored mode is not supervised (R-1, opt-in). `decideVerdict` also
-    // refuses it — this is the cheap early exit, not the guard.
-    if (storedMode === null) return;
-
-    const ptySessionId = host.ccSessionIdRef.current;
-    if (!ptySessionId) return;
-
-    const workspace: SupervisedWorkspace = {
-      workspaceId: host.workspaceId,
-      sessionId: ptySessionId,
-      projectPath: host.projectPath,
-      storedMode,
-      ptySessionId,
-    };
-
-    let outcome: FanOutOutcome;
-    try {
-      outcome = await fireOne(workspace, {
-        readTail: async (w) =>
-          invoke<TranscriptTail>("transcript_tail", {
-            projectPath: w.projectPath,
-            sessionId: w.sessionId,
-          }),
-        // ⚠️ The label is forwarded THROUGH as `injectCommand`'s 4th argument (the 3rd is
-        // `onIpcError`, left undefined). Dropping it would fall back to the `"auto-resume"`
-        // default and point every supervisor failure at M12's arm instead of this one.
-        inject: async (pty, command, label) =>
-          injectCommand(pty, command, undefined, label),
-        readWip: async (w) => readWipFor(w.projectPath),
-        adjudicator: {
-          // ⚠️ **`model` IS FORWARDED FROM `adjudicate`, NOT CHOSEN HERE — and `deps.model` is
-          // deliberately NOT set.** `assertPinnedModel` checks any supplied model before every
-          // adjudication, so plumbing one through from config would produce a LOUD failure
-          // rather than a silent downgrade (R-6 condition 1). Leaving it unset lets the module's
-          // own `ADJUDICATOR_MODEL` pin be the single source of truth; the Rust command takes
-          // the model as a parameter precisely so the pin is not duplicated backend-side.
-          run: async ({ model, prompt, timeoutMs }) =>
-            invoke<string>("supervisor_adjudicate", {
-              model,
-              prompt,
-              timeoutMs,
-            }),
-          warn,
-        },
-        ledger: ledgerRef.current as FireLedger,
-        // ⚠️ M14 WP0 — forwarded as a THUNK so `fireOne` reads it immediately before injecting,
-        // not when these deps were built a transcript-read and an adjudication ago.
-        hasUnsentInput: host.hasUnsentInput
-          ? () => host.hasUnsentInput?.() === true
-          : undefined,
+      const ts = (host.now ?? Date.now)();
+      let decision: Decision;
+      try {
+        decision = await decideTurn(host, ledgerRef.current as FireLedger);
+      } catch (e) {
+        // `fireOne` isolates its own failures; this catches caller code (`onRecycle`) so the
+        // throw neither escapes into React nor costs the turn its record.
+        (host.warn ?? ((m: string) => console.warn(m)))(
+          `supervisor: sweep threw for ${host.workspaceId} — ${String(e)}`,
+        );
+        decision = { outcome: "error", reason: "sweep-threw" };
+      }
+      // ⚠️ **EXACTLY ONE RECORD PER TURN END, and this is the only place one is written.** Every
+      // exit of `decideTurn` returns here, and a throw is caught above, so a turn end that leaves no
+      // line in `supervisor-activity.log` is itself an anomaly worth investigating.
+      const record = buildRecord({
+        ts,
+        appVersion: await (host.appVersion ?? readAppVersion)(),
+        workspaceId: host.workspaceId,
+        projectPath: host.projectPath,
+        sessionId: event?.session_id ?? null,
+        ...decision,
       });
-    } catch (e) {
-      // ⚠️ `fireOne` already isolates its own failures; this catch exists so a throw from the
-      // invoke bridge cannot escape into React's event handler and blank the workspace.
-      warn(`supervisor: sweep threw for ${host.workspaceId} — ${String(e)}`);
-      return;
-    }
-
-    // ⚠️ **A SUCCESSFUL FIRE IS ANNOUNCED.** It used to be discarded entirely — only throws,
-    // sweep failures and recycles were logged, and `injectCommand` logs only on IPC *rejection*
-    // — so the supervisor could inject a slash command into an unwatched workspace and leave no
-    // trace at all. The rarer recycle branch had the mitigation the far more common fire lacked,
-    // and the argument for it is identical: an operator returning to the pane must be able to
-    // see that something acted on their behalf. This is also the ONLY evidence a fire leaves
-    // while M15's five behavioral checks remain deferred to dogfooding.
-    if (outcome.fired) {
-      warn(
-        `supervisor: fired ${outcome.command ?? "(unknown command)"} into ${host.workspaceId}`,
-      );
-    } else if (outcome.reason && !outcome.recycle) {
-      // ⚠️ **M14 WP0 — THE WITHHOLD REASON WAS COMPUTED AND THEN THROWN AWAY.** `fireOne` returns
-      // a precise reason for every non-fire (`policy-not-auto`, `not-dispatchable`,
-      // `not-supervised`, `adjudicator-says-awaiting`, `already-fired-for-this-turn`,
-      // `transcript-unreadable`, `no-verdict`, `unsent-input-present`) and nothing read it, so
-      // "why did it not chain there?" had no answer short of reasoning about the code.
-      //
-      // ⚠️ **This is the tuning channel, and it ships WITH the suppression it measures.** WP0
-      // adds `unsent-input-present`, whose false-positive rate is unknown and is exactly what
-      // dogfooding must establish — the watermark has no timeout by design and does not clear on
-      // backspace-to-empty, so an over-suppressing workspace is silent without this line.
-      //
-      // ⚠️ **The recycle arm is EXCLUDED** (`!outcome.recycle`): a recycle also reports
-      // `fired: false` with a reason, but the caller already logs both its started and DECLINED
-      // arms distinctly. Logging here too would double-report the loudest branch and bury the
-      // ordinary withholds this line exists to surface.
-      warn(`supervisor: withheld in ${host.workspaceId} — ${outcome.reason}`);
-    }
-
-    // ⚠️ The recycle is handed to the CALLER. This hook never calls `recycleSession` itself —
-    // see the module header for why that is structural, not stylistic.
-    if (outcome.recycle) host.onRecycle(outcome.recycle);
+      await (host.record ?? recordActivity)(record);
+    },
     // ⚠️ NOT a stable identity: `host` is a fresh object literal on every `Workspace` render, so
     // this callback is recreated each render. Nothing depends on its identity — `useTurnEnd`
     // receives an inline arrow below, and `useTauriListen` holds the handler in a latest-ref.
-  }, [host]);
+    [host],
+  );
 
   useTurnEnd({
     enabled: host.enabled,
     workspaceId: host.workspaceId,
-    onTurnEnd: () => {
-      void onTurnEnd();
+    onTurnEnd: (payload) => {
+      void onTurnEnd(payload);
     },
   });
 }

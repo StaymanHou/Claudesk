@@ -86,7 +86,11 @@ describe("turnMarkers export contract — a deleted export breaks the app at RUN
     // correct code and invite loosening the real check to make it pass. What must hold is that the
     // regex still SEES the import statement — that is the parse, and it is what can silently rot.
     expect(matchesTurnMarkersImport(paneSource)).toBe(true);
-    expect(matchesTurnMarkersImport(workspaceSource)).toBe(true);
+    // ⚠️ `Workspace.tsx` has NO `./turnMarkers` import since turn attribution (2026-09-28): its one
+    // import was `type TurnNavState`, now `XtermPane`'s `TurnNavView`. Pinned as ABSENT rather than
+    // dropped, so re-adding an import flips this line and whoever does it knows the Workspace
+    // check below has re-armed.
+    expect(/from\s*"\.\/turnMarkers"/.test(workspaceSource)).toBe(false);
     // XtermPane is the one that genuinely holds value imports; if that reaches zero, its check
     // below has gone silent and someone should notice here.
     expect(importedValueBindings(paneSource).length).toBeGreaterThan(0);

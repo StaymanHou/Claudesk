@@ -61,7 +61,9 @@ import {
   compact,
   navState,
   positionAtNewest,
+  pruneTags,
   scrollTargetFor,
+  selectedTag,
   shouldRecordTurnStart,
   stepTurn,
   type StepDirection,
@@ -69,6 +71,15 @@ import {
   type TurnNavState,
   type TurnPosition,
 } from "./turnMarkers";
+import type { SupervisorOrigin } from "../../state/supervisor/turnOrigin";
+
+/**
+ * The nav state plus WHO STARTED the selected turn: `null` for the operator (or unknown), or the
+ * supervisor's origin when it fired that turn. The readout renders `⚙` from `origin`.
+ */
+export interface TurnNavView extends TurnNavState {
+  readonly origin: SupervisorOrigin | null;
+}
 
 /**
  * Imperative handle exposed via `ref` (QoL-WP3). The parent `Workspace` calls
@@ -136,7 +147,7 @@ export interface XtermPaneHandle {
    * M13.5 WP3 — the nav state for the CURRENT position: which ends are open (AC-4) and where
    * we are (AC-5). One call, one source, so a disabled button and its readout cannot disagree.
    */
-  turnNavState(): TurnNavState;
+  turnNavState(): TurnNavView;
 }
 
 interface XtermPaneProps {
@@ -238,7 +249,15 @@ interface XtermPaneProps {
    * caller that never learns about it (`arch.md` — hit four times in this repo). The fix is the
    * missing edge, not a re-read.
    */
-  onTurnStartRecorded?: (nav: TurnNavState) => void;
+  onTurnStartRecorded?: (nav: TurnNavView) => void;
+  /**
+   * Turn attribution — called once per recorded turn start to ask whether the supervisor started
+   * it. Returns its origin (consumed: see `turnOrigin.claimOrigin`) or `null`.
+   *
+   * ⚠️ Only the CC pane passes it, for the same reason only it passes `markTurnStarts`. The pane
+   * stays unaware of the supervisor beyond the origin's type: the parent owns the claim.
+   */
+  claimTurnOrigin?: () => SupervisorOrigin | null;
 }
 
 export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
@@ -257,6 +276,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       markTurnStarts = false,
       onTurnStartRecorded,
       onInputForwarded,
+      claimTurnOrigin,
     },
     ref,
   ) {
@@ -269,6 +289,20 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     // pure model in `turnMarkers.ts` owns all the logic.
     const turnMarkersRef = useRef<TurnMarker[]>([]);
     const turnPositionRef = useRef<TurnPosition>(positionAtNewest);
+    // Turn attribution — the supervisor's origin per marker id, for the turns it started. A side
+    // table rather than a field on the marker: markers are xterm's `IMarker` objects, and this
+    // keeps the pure model in `turnMarkers.ts` free of the supervisor. Pruned with the markers.
+    const turnOriginsRef = useRef<Map<number, SupervisorOrigin>>(new Map());
+    // The nav state for the current position, with the selected turn's origin. ONE builder, so
+    // the push (`onTurnStartRecorded`) and the pull (`turnNavState()`) cannot disagree.
+    const turnNavView = useCallback((): TurnNavView => {
+      const markers = turnMarkersRef.current;
+      const position = turnPositionRef.current;
+      return {
+        ...navState(markers, position),
+        origin: selectedTag(markers, position, turnOriginsRef.current),
+      };
+    }, []);
     // ⚠️ THE ONE WRITER of `turnPositionRef` — every position change goes through here.
     //
     // `arch.md` records this repo's recurring defect shape, hit four times and once as a shipped
@@ -393,6 +427,11 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       // Drop markers xterm has already disposed (their lines left the scrollback) so the list
       // cannot grow without bound across a long session.
       turnMarkersRef.current = compact([...turnMarkersRef.current, marker]);
+      // Turn attribution — did the supervisor start this turn? Claimed here, at the one place a
+      // turn-start marker is created, so every tagged turn has exactly one marker.
+      const origin = claimTurnOrigin?.() ?? null;
+      if (origin) turnOriginsRef.current.set(marker.id, origin);
+      pruneTags(turnOriginsRef.current, turnMarkersRef.current);
       // AC-6 — a new turn means the reader is back at "now", so selection snaps to the newest
       // start rather than continuing from wherever they had stepped back to. Through the ONE
       // setter, so this write is re-clamped like every other.
@@ -402,9 +441,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       // (see `onTurnStartRecorded`'s docs). Passing the state rather than making the parent
       // poll is what keeps AC-4's disabled ends correct without a re-render loop.
       // `useTauriListen` holds this handler in a latest-ref, so no separate ref is needed here.
-      onTurnStartRecorded?.(
-        navState(turnMarkersRef.current, turnPositionRef.current),
-      );
+      onTurnStartRecorded?.(turnNavView());
     });
 
     useImperativeHandle(
@@ -426,6 +463,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           // Compact FIRST so a disposed marker can neither be selected nor shift the indices
           // the position is expressed in. Both the step and the scroll then see one list.
           turnMarkersRef.current = compact(turnMarkersRef.current);
+          pruneTags(turnOriginsRef.current, turnMarkersRef.current);
           const stepped = stepTurn(
             turnMarkersRef.current,
             turnPositionRef.current,
@@ -444,14 +482,13 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           term.scrollToLine(target);
           return true;
         },
-        turnNavState: () =>
-          navState(turnMarkersRef.current, turnPositionRef.current),
+        turnNavState: () => turnNavView(),
       }),
-      // `setTurnPosition` is the only non-ref value the handle closes over. It is
-      // `useCallback([])`-stable, so listing it cannot re-create the handle — but listing it
-      // keeps `exhaustive-deps` honest rather than silencing the rule, which is what would
-      // hide a genuinely unstable dependency added here later.
-      [setTurnPosition],
+      // `setTurnPosition` and `turnNavView` are the only non-ref values the handle closes over.
+      // Both are `useCallback([])`-stable, so listing them cannot re-create the handle — but
+      // listing them keeps `exhaustive-deps` honest rather than silencing the rule, which is what
+      // would hide a genuinely unstable dependency added here later.
+      [setTurnPosition, turnNavView],
     );
     // Spawn trigger. The spawn effect keys on THIS (not `bridge.phase`) so the
     // spawning→live dispatch does NOT re-run the effect — which previously fired the

@@ -793,6 +793,56 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
     expect(off?.enabled).toBe(false);
   });
 
+  it("the supervisor ACTIVITY hint rides the same gated subject: absent OFF, present ON", () => {
+    // The supervisor activity record's in-header surface (2026-09-25): the "last action" hint, the
+    // activity trigger and its popover all render INSIDE the block this derivation gates, so they
+    // add no new derivation and no new arm-6 subject. ⚠️ Deliberately NOT titled "renders no …":
+    // `armSubjects` is reconciled against those titles, and this is the SAME subject.
+    // What this pins is that the hint's new input cannot leak through the gate.
+    const last = {
+      record: {
+        v: 1 as const,
+        ts: 1_000,
+        appVersion: null,
+        workspaceId: "ws-1",
+        projectPath: "/p",
+        sessionId: null,
+        outcome: "fired" as const,
+        reason: null,
+        transcriptPath: null,
+        edgeId: "F5",
+        mode: null,
+        detail: null,
+        command: "/feature-plan",
+        tokens: null,
+      },
+      nowMs: 61_000,
+    };
+    expect(
+      workspaceSupervisorReadout(true, false, "x", false, last),
+    ).toBeNull();
+    // Anti-vacuity: with the gate ON the same input produces the hint.
+    expect(
+      workspaceSupervisorReadout(true, true, "x", false, last)?.lastAction,
+    ).toBe("fired /feature-plan · 1m ago");
+  });
+
+  it("the supervisor TURN mark rides the same gated subject: absent OFF, present ON", () => {
+    // Turn attribution (2026-09-28): the `⚙` beside the turn readout. The readout itself is
+    // UNGATED terminal chrome, so the mark must take its gate from this derivation; reading the
+    // origin directly at the render site would show it with the gate OFF. Same subject as above,
+    // so deliberately NOT titled "renders no …".
+    const origin = { command: "/feature-verify-auto", firedAt: 1_000 };
+    expect(
+      workspaceSupervisorReadout(true, false, "x", false, null, origin),
+    ).toBeNull();
+    // Anti-vacuity: with the gate ON the same origin produces the mark.
+    expect(
+      workspaceSupervisorReadout(true, true, "x", false, null, origin)
+        ?.turnBadge?.text,
+    ).toBe("⚙");
+  });
+
   it("the drive-mode readout is genuinely gate-DERIVED, not a constant that ignores the gate", () => {
     // ⚠️ ANTI-VACUITY. The assertion above is "returns null"; a derivation that returned null
     // for EVERY input would satisfy it while the feature was simply broken — the same shape the

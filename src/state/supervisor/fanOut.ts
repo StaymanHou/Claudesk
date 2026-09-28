@@ -37,6 +37,7 @@ import {
   FireLedger,
   type SupervisedVerdict,
   type TurnKey,
+  type WithholdReason,
 } from "./verdict";
 import { parseTranscript, readTurn, type TranscriptTail } from "./transcript";
 import { readContextTokens } from "./contextPressure";
@@ -132,13 +133,39 @@ export interface FanOutDeps {
 }
 
 /** What happened for one workspace in a sweep. */
+/**
+ * Every reason `fireOne` / `fanOut` can report for not firing. A closed union (it was a bare
+ * `string`) so the activity record's reasons stay exhaustive; `activityRecord.ts` composes it
+ * with the early-exit reasons into `SupervisorReason`.
+ */
+export type FanOutReason =
+  | WithholdReason
+  | "adjudicator-says-awaiting"
+  | "transcript-unreadable"
+  | "no-transcript"
+  | "already-fired-for-this-turn"
+  | "unsent-input-present"
+  | "inject-failed"
+  | "context-pressure-recycle"
+  | "sweep-threw";
+
 export interface FanOutOutcome {
   readonly workspaceId: string;
   readonly fired: boolean;
   /** The command injected, when one was. */
   readonly command?: string;
   /** Why not, when it did not fire. */
-  readonly reason?: string;
+  readonly reason?: FanOutReason;
+  /**
+   * Decision context for the activity record (`activityRecord.ts`), carried out of `fireOne`
+   * rather than dropped. Each is present only once the decision got far enough to know it.
+   */
+  readonly transcriptPath?: string;
+  readonly edgeId?: string | null;
+  readonly mode?: DriveMode;
+  /** The verdict's detail: the policy cell, or the adjudicator's basis. */
+  readonly detail?: string;
+  readonly tokens?: number;
   /**
    * M15 WP4 — set when the verdict was `recycle` rather than `fire`.
    *
@@ -184,7 +211,10 @@ export async function fireOne(
   deps: FanOutDeps,
 ): Promise<FanOutOutcome> {
   const warn = deps.warn ?? ((m: string) => console.warn(m));
-  const no = (reason: string): FanOutOutcome => ({
+  // Context accumulates as the decision advances, so every later exit reports what was known.
+  let known: Partial<FanOutOutcome> = {};
+  const no = (reason: FanOutReason): FanOutOutcome => ({
+    ...known,
     workspaceId: workspace.workspaceId,
     fired: false,
     reason,
@@ -200,10 +230,17 @@ export async function fireOne(
     );
     return no("transcript-unreadable");
   }
+  if (tail.path !== null) known = { ...known, transcriptPath: tail.path };
   if (tail.path === null || tail.lines.length === 0) return no("no-transcript");
 
   const lines = parseTranscript(tail.lines);
   const reading = readTurn(lines);
+  const contextTokens = readContextTokens(lines);
+  known = {
+    ...known,
+    edgeId: reading.edgeId,
+    ...(contextTokens === null ? {} : { tokens: contextTokens }),
+  };
   if (reading.edgeId === null || reading.verdictIndex === null)
     return no("no-verdict");
 
@@ -246,7 +283,7 @@ export async function fireOne(
       context: deps.context,
       tail: tailTextOf(lines, reading.verdictIndex),
       // ⚠️ Read off the SAME `lines` the verdict and ledger key describe — not a second read.
-      contextTokens: readContextTokens(lines),
+      contextTokens,
       wip,
     },
     deps.adjudicator,
@@ -257,6 +294,8 @@ export async function fireOne(
   // arm was added, which is the argument for the closed union over a boolean on `fire`.
   if (verdict.kind === "recycle") {
     return {
+      ...known,
+      mode: verdict.mode,
       workspaceId: workspace.workspaceId,
       fired: false,
       reason: "context-pressure-recycle",
@@ -267,7 +306,11 @@ export async function fireOne(
       },
     };
   }
-  if (verdict.kind !== "fire") return no(verdict.reason);
+  if (verdict.kind !== "fire") {
+    known = { ...known, edgeId: verdict.edgeId, detail: verdict.detail };
+    return no(verdict.reason);
+  }
+  known = { ...known, mode: verdict.mode };
 
   // ⚠️ M14 WP0 — THE UNSENT-INPUT SUPPRESSION. READ THE PLACEMENT NOTES BEFORE MOVING THIS.
   //
@@ -302,7 +345,7 @@ export async function fireOne(
     );
     return no("inject-failed");
   }
-  return { workspaceId: workspace.workspaceId, fired: true, command };
+  return { ...known, workspaceId: workspace.workspaceId, fired: true, command };
 }
 
 /** The adjudicator's input: the tail of the verdict-bearing assistant message. */

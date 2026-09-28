@@ -92,6 +92,13 @@ import { recycleSession, waitForFreshSessionId } from "./recycleSession";
 import { useSupervisor } from "../../state/supervisor/useSupervisor";
 import { UnsentInputWatermark } from "../../state/supervisor/unsentInput";
 import {
+  publishActivity,
+  useLatestActivity,
+} from "../../state/supervisor/activityFeed";
+import { recentForProject } from "../../state/supervisor/activityRecord";
+import { readActivityLines } from "../../state/supervisor/activityRecorder";
+import { SupervisorActivityPopover } from "./SupervisorActivityPopover";
+import {
   SUPERVISOR_SUPPRESSED_GLYPH,
   workspaceSupervisorReadout,
 } from "../../cc/workspaceSupervisor";
@@ -107,7 +114,8 @@ import { useWorkspaceProfile } from "../../state/useWorkspaceProfile";
 // inert-state machine is DELETED: it existed to explain a dead click, and a correct `disabled`
 // state (driven by `canPrev`/`canNext`) makes a dead click impossible, so keeping both would be
 // two mechanisms for one job. Do not reintroduce it.
-import { type TurnNavState } from "./turnMarkers";
+import type { TurnNavView } from "./XtermPane";
+import { cancelOrigin, claimOrigin } from "../../state/supervisor/turnOrigin";
 import {
   RECYCLE_LABEL,
   RECYCLE_TESTID,
@@ -229,11 +237,54 @@ export function Workspace({
   if (unsentInputRef.current === null)
     unsentInputRef.current = new UnsentInputWatermark(setUnsentInput);
 
+  // The supervisor activity record's in-UI half: the project's newest decision (the badge's
+  // "last action" hint) and the popover listing recent ones.
+  const lastActivity = useLatestActivity(workspace.project_path);
+  // ⚠️ The hint's clock is refreshed on HOVER, when the tooltip is actually read, rather than on a
+  // timer: a ticking timer would re-render a component hosting a live terminal every few seconds
+  // for a label nobody is looking at.
+  const [hintNowMs, setHintNowMs] = useState(() => Date.now());
+  const [activityOpen, setActivityOpen] = useState(false);
+  const closeActivity = useCallback(() => setActivityOpen(false), []);
+  useEffect(() => {
+    // Seed the hint from the durable file once per project, so it survives a relaunch. ⚠️ Gated:
+    // with workflow features OFF this reads nothing, and nothing ever writes the file.
+    if (!workflowEnabled) return;
+    let cancelled = false;
+    void readActivityLines(2000).then((lines) => {
+      const [newest] = recentForProject(lines, workspace.project_path, 1);
+      if (!cancelled && newest) publishActivity(newest);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workflowEnabled, workspace.project_path]);
+
+  // M13.5 WP3 — the turn-navigation state the prev/next controls render from (AC-4 + AC-5).
+  //
+  // ⚠️ THIS IS STATE, NOT A REF, and that is the whole point of the re-plan. The previous design
+  // kept only a post-hoc `jumpInert` boolean because "the marker list lives in a ref inside
+  // XtermPane, so this component cannot know the count until it asks". That reasoning produced an
+  // affordance that could only learn it was wrong AFTER a dead click — and then lied until the
+  // next successful one. `XtermPane` now PUSHES the nav state on every turn-start
+  // (`onTurnStartRecorded`), and each click handler re-reads it (`turnNavState()`) right after its
+  // step, so the count is known BEFORE the click and the controls can be honestly `disabled`
+  // instead of dimmed-after-the-fact.
+  const [turnNav, setTurnNav] = useState<TurnNavView>({
+    canPrev: false,
+    canNext: false,
+    ordinal: 0,
+    total: 0,
+    origin: null,
+  });
+
   const supervisorReadout = workspaceSupervisorReadout(
     supervisorEnabled ?? true,
     workflowEnabled && visible,
     workspace.display_name,
     unsentInput,
+    lastActivity ? { record: lastActivity, nowMs: hintNowMs } : null,
+    turnNav.origin,
   );
   const driveModeReadout = workspaceDriveModeReadout(
     storedDriveMode,
@@ -576,22 +627,6 @@ export function Workspace({
   // would start a competing operation against the same session and both would race the same
   // signals.
   const [recycling, setRecycling] = useState(false);
-  // M13.5 WP3 — the turn-navigation state the prev/next controls render from (AC-4 + AC-5).
-  //
-  // ⚠️ THIS IS STATE, NOT A REF, and that is the whole point of the re-plan. The previous design
-  // kept only a post-hoc `jumpInert` boolean because "the marker list lives in a ref inside
-  // XtermPane, so this component cannot know the count until it asks". That reasoning produced an
-  // affordance that could only learn it was wrong AFTER a dead click — and then lied until the
-  // next successful one. `XtermPane` now PUSHES the nav state on every turn-start
-  // (`onTurnStartRecorded`), and each click handler re-reads it (`turnNavState()`) right after its
-  // step, so the count is known BEFORE the click and the controls can be honestly `disabled`
-  // instead of dimmed-after-the-fact.
-  const [turnNav, setTurnNav] = useState<TurnNavState>({
-    canPrev: false,
-    canNext: false,
-    ordinal: 0,
-    total: 0,
-  });
 
   // Paydown WP7 — abort an in-flight Recycle when this workspace unmounts.
   //
@@ -759,7 +794,7 @@ export function Workspace({
           `supervisor: recycling ${workspace.display_name} at ${info.tokens} tokens — ` +
             `deferring /${info.skill} to the fresh session`,
         );
-        return;
+        return "started";
       }
       // ⚠️ The declined arm is logged DISTINCTLY, not merely skipped. This is the turn the
       // ledger consumed for nothing; naming it is the only way the stall is diagnosable, and
@@ -769,6 +804,7 @@ export function Workspace({
           `(${workspace.cc_session_id === null ? "no CC session" : "a recycle is already running"}) — ` +
           `/${info.skill} was NOT fired and this turn will not be reconsidered`,
       );
+      return "declined";
     },
   });
 
@@ -1019,44 +1055,76 @@ export function Workspace({
             BOOLEAN — there is nothing to mistype — so the closed-set argument does not transfer
             and a two-state click target is the lighter surface. */}
         {supervisorReadout && (
-          <span
-            role="button"
-            tabIndex={0}
-            className={`workspace-header-supervisor${supervisorReadout.enabled ? "" : " is-off"}`}
-            data-testid="workspace-header-supervisor"
-            aria-label={supervisorReadout.label}
-            aria-pressed={supervisorReadout.enabled}
-            title={supervisorReadout.title}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleSupervisor();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
+          <span className="workspace-header-supervisor-group">
+            <span
+              role="button"
+              tabIndex={0}
+              className={`workspace-header-supervisor${supervisorReadout.enabled ? "" : " is-off"}`}
+              data-testid="workspace-header-supervisor"
+              aria-label={supervisorReadout.label}
+              aria-pressed={supervisorReadout.enabled}
+              title={supervisorReadout.title}
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerEnter={() => setHintNowMs(Date.now())}
+              onClick={(e) => {
                 e.stopPropagation();
                 toggleSupervisor();
-              }
-            }}
-          >
-            ⚙ {supervisorReadout.text}
-            {/* M14 WP0 Phase 3 (D-5) — the SUPPRESSED marker. ⚠️ A passive, READ-ONLY badge: it
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleSupervisor();
+                }
+              }}
+            >
+              ⚙ {supervisorReadout.text}
+              {/* M14 WP0 Phase 3 (D-5) — the SUPPRESSED marker. ⚠️ A passive, READ-ONLY badge: it
                 reflects the operator's own unsent input and clears when they submit or abandon
                 the line. It has NO click handler of its own — the parent span's toggle is the
                 only action here, and a click-to-clear affordance was considered and declined at
                 spec review (a second control whose effect is invisible until the next turn end).
                 ⚠️ Mirrors the drive-mode readout's ⚠-stale / ⏳-pending marker shape, which is
                 the established precedent for a derived badge in this exact element. */}
-            {supervisorReadout.suppressed && (
-              <span
-                className="workspace-header-supervisor-suppressed"
-                data-testid="workspace-header-supervisor-suppressed"
-                title={supervisorReadout.title}
-              >
-                {" "}
-                {SUPERVISOR_SUPPRESSED_GLYPH}
-              </span>
+              {supervisorReadout.suppressed && (
+                <span
+                  className="workspace-header-supervisor-suppressed"
+                  data-testid="workspace-header-supervisor-suppressed"
+                  title={supervisorReadout.title}
+                >
+                  {" "}
+                  {SUPERVISOR_SUPPRESSED_GLYPH}
+                </span>
+              )}
+            </span>
+            {/* The supervisor activity trigger. ⚠️ A SEPARATE control, because a click on the badge
+              is the toggle (today the only way to un-supervise a workspace). Rendered only inside
+              this gated block, so it cannot exist with the workflow gate OFF. */}
+            <button
+              type="button"
+              className="workspace-header-supervisor-activity"
+              data-testid="workspace-header-supervisor-activity"
+              aria-label={`Show supervisor activity for ${workspace.display_name}`}
+              aria-expanded={activityOpen}
+              title={
+                supervisorReadout.lastAction
+                  ? `Supervisor activity. Last: ${supervisorReadout.lastAction}`
+                  : "Supervisor activity"
+              }
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerEnter={() => setHintNowMs(Date.now())}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActivityOpen((open) => !open);
+              }}
+            >
+              ▾
+            </button>
+            {activityOpen && (
+              <SupervisorActivityPopover
+                projectPath={workspace.project_path}
+                onClose={closeActivity}
+              />
             )}
           </span>
         )}
@@ -1289,10 +1357,24 @@ export function Workspace({
             aria-live="polite"
             title={
               turnNav.total > 0
-                ? `Turn ${turnNav.ordinal} of ${turnNav.total}`
+                ? `Turn ${turnNav.ordinal} of ${turnNav.total}` +
+                  (supervisorReadout?.turnBadge
+                    ? ` — ${supervisorReadout.turnBadge.title}`
+                    : "")
                 : undefined
             }
           >
+            {/* Turn attribution — the `⚙` comes from the GATED supervisor readout, never from
+                `turnNav.origin` directly: this readout is ungated terminal chrome, so reading the
+                origin here would show the mark with workflow features OFF. */}
+            {turnNav.total > 0 && supervisorReadout?.turnBadge && (
+              <span
+                className="workspace-turn-origin"
+                data-testid="workspace-turn-origin"
+              >
+                {supervisorReadout.turnBadge.text}{" "}
+              </span>
+            )}
             {turnNav.total > 0 ? `${turnNav.ordinal}/${turnNav.total}` : ""}
           </span>
           <button
@@ -1376,7 +1458,12 @@ export function Workspace({
           // supervisor never fires into, so a watermark fed from it would suppress CC's chain
           // because the operator typed in a different terminal. Same exclusion reasoning as
           // `markTurnStarts` and `pendingAction` below.
-          onInputForwarded={(chunk) => unsentInputRef.current?.push(chunk)}
+          onInputForwarded={(chunk) => {
+            unsentInputRef.current?.push(chunk);
+            // Turn attribution — operator input between a fire and its turn start means the turn
+            // is not (only) the supervisor's, so the pending origin is dropped.
+            cancelOrigin(workspace.id);
+          }}
           // M13.5 WP3 P3.3 — only the CC pane records turn-start markers. Same exclusion
           // reasoning as `pendingAction` below: `TerminalPane` mounts this component for a
           // login SHELL, which has no turns, so it never opts in (the prop defaults false).
@@ -1387,6 +1474,9 @@ export function Workspace({
           // left it dimmed and asserting "no earlier turn start" forever — a UI that lies.
           // The pane resets its position to the newest at the same moment.
           onTurnStartRecorded={(nav) => setTurnNav(nav)}
+          // Turn attribution — the supervisor arms an origin just before it injects; the pane
+          // claims it on the next turn start (`turnOrigin.ts`).
+          claimTurnOrigin={() => claimOrigin(workspace.id, Date.now())}
           // M12 WP3 Phase 4 — the auto-resume action, read off the workspace model this
           // component already receives. NO new `Workspace` prop was needed: `pending_action`
           // rides on the record (set on the mint branch of `openReducer`, deliberately

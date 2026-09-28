@@ -40,9 +40,6 @@ use std::path::{Path, PathBuf};
 /// Basename of the status-channel log within the app-data directory.
 pub const STATUS_LOG_FILE: &str = "status-channel.log";
 
-/// Basename of the single rotated generation (`status-channel.log.1`).
-pub const STATUS_LOG_ROTATED_FILE: &str = "status-channel.log.1";
-
 /// Size cap (bytes) for the live status log before it rotates (D3 keep+cap). 5 MiB —
 /// generous for the one-line-per-CC-turn volume (tens of thousands of events), small
 /// enough that the worst case (live + one rotated generation) stays ~10 MiB on disk.
@@ -65,6 +62,13 @@ impl StatusLog {
         }
     }
 
+    /// Bind the same best-effort, size-capped append discipline to an arbitrary log path.
+    /// The supervisor activity record (`supervisor_activity`) reuses this rather than growing
+    /// a second rotation scheme. The rotated generation is always `<path>.1`.
+    pub fn at(path: PathBuf) -> Self {
+        Self { path }
+    }
+
     /// The resolved log-file path (for documenting it to the operator).
     pub fn path(&self) -> &Path {
         &self.path
@@ -73,7 +77,9 @@ impl StatusLog {
     /// The rotated-generation path (`<live>.1`) — the single prior generation kept after
     /// a size-cap rotation.
     pub fn rotated_path(&self) -> PathBuf {
-        self.path.with_file_name(STATUS_LOG_ROTATED_FILE)
+        let mut name = self.path.file_name().unwrap_or_default().to_os_string();
+        name.push(".1");
+        self.path.with_file_name(name)
     }
 
     /// Append one already-formatted line (a trailing newline is added). **Best-effort:**
@@ -83,6 +89,12 @@ impl StatusLog {
         // Open-append-close per write: low volume (one line per CC lifecycle event),
         // and not holding a handle keeps the failure surface to this one call.
         let _ = self.append(line);
+    }
+
+    /// [`write_line`](Self::write_line) without the swallow, for a caller that reports a
+    /// failed append rather than ignoring it (the supervisor record's IPC command).
+    pub fn try_write_line(&self, line: &str) -> std::io::Result<()> {
+        self.append(line)
     }
 
     /// The fallible inner write, kept separate so the swallow happens in exactly one
@@ -232,6 +244,19 @@ mod tests {
             format_registry_line("deregister", None, "/raw/path", "/canon/path"),
             "- REGISTRY op=deregister id=- raw=/raw/path key=/canon/path"
         );
+    }
+
+    #[test]
+    fn rotated_path_is_path_generic_and_keeps_the_status_log_name() {
+        // `at` generalized the rotated name to `<live>.1`; the status log's own `.1` name
+        // must be unchanged by that.
+        let dir = TempDir::new().unwrap();
+        assert_eq!(
+            StatusLog::new(dir.path()).rotated_path(),
+            dir.path().join("status-channel.log.1")
+        );
+        let other = StatusLog::at(dir.path().join("other.log"));
+        assert_eq!(other.rotated_path(), dir.path().join("other.log.1"));
     }
 
     #[test]

@@ -61,6 +61,9 @@ mod status_broadcaster;
 // probe) — readable from the launchd-launched prod `.app` where stderr is invisible.
 mod status_log;
 mod sublime;
+// Supervisor activity record: one JSONL line per supervisor turn-end decision, in the app-data
+// dir. File IO only (R-4); the schema and the decision live TS-side in `activityRecord.ts`.
+mod supervisor_activity;
 // M9 WP2: time-analytics store (absorb claude-time) — the SECOND, gated consumer of
 // the HookEvent stream. Pure schema/mapping in time_store/mod.rs; the per-identity
 // SQLite connection holder + gated write + toggle hook-point in time_store/commands.rs.
@@ -497,6 +500,9 @@ pub fn run() {
             // TEXT, never a decision — the parse is TS-side (R-4).
             wip::commands::wip_read,
             adjudicator::commands::supervisor_adjudicate,
+            // The supervisor activity record: an opaque-line append and a raw-line read (R-4).
+            supervisor_activity::commands::supervisor_activity_append,
+            supervisor_activity::commands::supervisor_activity_read,
             // M12 WP3: the batched auto-resume announcement. ONE call per picker open
             // returning every project's predicted action; gate-checked server-side, so an
             // OFF gate returns {} without statting any project dir. Deliberately a sibling

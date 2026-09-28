@@ -32,11 +32,17 @@ const archDoc = readFileSync(
   "utf8",
 );
 
-/** The frontend host — the single place every supervisor-owned `invoke` is made. */
-const hostSrc = readFileSync(
-  resolve(ROOT, "src/state/supervisor/useSupervisor.ts"),
-  "utf8",
-);
+/**
+ * Every module that makes a supervisor-owned `invoke`: the host, plus (2026-09-25) the activity
+ * recorder, which appends and reads `supervisor-activity.log`. ⚠️ When a supervisor module gains
+ * an `invoke`, add it here, or this guard cannot see the command.
+ */
+const hostSrc = [
+  "src/state/supervisor/useSupervisor.ts",
+  "src/state/supervisor/activityRecorder.ts",
+]
+  .map((f) => readFileSync(resolve(ROOT, f), "utf8"))
+  .join("\n");
 
 const policySrc = readFileSync(
   resolve(ROOT, "src/state/workflowMachine/policy.ts"),
@@ -61,9 +67,11 @@ describe("⚠️ §B names EVERY Tauri command the supervisor invokes", () => {
   // ⚠️ THE DEFECT THIS FILE WAS WRITTEN FOR. Derive the command list from the code rather than
   // hardcoding it, so adding a fourth `invoke` fails here until the doc names it. A hardcoded
   // list would have to be updated in two places and would drift the same way the prose did.
-  const invoked = [...hostSrc.matchAll(/invoke<[^>]*>\(\s*"([a-z_]+)"/g)].map(
-    (m) => m[1],
-  );
+  // The generic is OPTIONAL: `invoke("supervisor_activity_append", …)` has none, and a
+  // generic-only pattern silently skipped it.
+  const invoked = [
+    ...hostSrc.matchAll(/invoke(?:<[^>]*>)?\(\s*"([a-z_]+)"/g),
+  ].map((m) => m[1]);
 
   it("⚠️ is not vacuous — the extraction actually found commands", () => {
     // Without this, an `invoke(` syntax change silently empties the set and every arm below
@@ -73,10 +81,16 @@ describe("⚠️ §B names EVERY Tauri command the supervisor invokes", () => {
       invoked.length,
       'no `invoke<...>("name")` calls were extracted from useSupervisor.ts — the call shape ' +
         "changed and this guard is now scanning nothing",
-    ).toBeGreaterThanOrEqual(3);
+    ).toBeGreaterThanOrEqual(5);
   });
 
-  it.each(["transcript_tail", "wip_read", "supervisor_adjudicate"])(
+  it.each([
+    "transcript_tail",
+    "wip_read",
+    "supervisor_adjudicate",
+    "supervisor_activity_append",
+    "supervisor_activity_read",
+  ])(
     "the code still invokes %s (the doc's table is pinned to a real call)",
     (cmd) => {
       expect(invoked).toContain(cmd);

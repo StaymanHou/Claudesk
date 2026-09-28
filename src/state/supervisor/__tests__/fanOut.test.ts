@@ -741,8 +741,10 @@ describe("fireOne — unsent-input suppression", () => {
       ...workspace.matchAll(/unsentInputRef\.current\?\.push\(/g),
     ];
     expect(pushes).toHaveLength(1);
+    // Block body since turn attribution (2026-09-28), which also cancels a pending origin there;
+    // the push must still be the callback's FIRST statement.
     expect(workspace).toMatch(
-      /onInputForwarded=\{\(chunk\) => unsentInputRef\.current\?\.push\(chunk\)\}/,
+      /onInputForwarded=\{\(chunk\) => \{\s*unsentInputRef\.current\?\.push\(chunk\);/,
     );
 
     // ...fed from `term.onData`, not from anywhere else in the pane.

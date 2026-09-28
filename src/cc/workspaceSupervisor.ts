@@ -25,6 +25,13 @@
 // second subject to register and a second place the gate could be forgotten. When Phase 3 lands,
 // add its state to {@link WorkspaceSupervisorReadout} here.
 
+import {
+  describeDecision,
+  type ActivityRecord,
+} from "../state/supervisor/activityRecord";
+import { relativeTime } from "../components/workspace/diff/diffModel";
+import type { SupervisorOrigin } from "../state/supervisor/turnOrigin";
+
 /** What the workspace header should render for the supervisor toggle. */
 export interface WorkspaceSupervisorReadout {
   /** Whether the supervisor may act on this project. */
@@ -43,13 +50,41 @@ export interface WorkspaceSupervisorReadout {
    * meaning anything.
    */
   readonly suppressed: boolean;
+  /**
+   * The newest supervisor decision for this project, as one line with its age
+   * (`withheld: policy-not-auto · 2m ago`), or `null` when none is known yet. Rendered in the
+   * tooltip and the activity popover's header: the in-place answer to "is it doing anything?".
+   */
+  readonly lastAction: string | null;
   /** The text to render. */
   readonly text: string;
   /** Tooltip — states the effect, not just the state. */
   readonly title: string;
   /** `aria-label` for the control; names the workspace so screen readers disambiguate. */
   readonly label: string;
+  /**
+   * Turn attribution — the `⚙` the turn readout shows when the SELECTED turn was started by the
+   * supervisor, or `null` when it was not (or nothing is selected).
+   *
+   * ⚠️ **Part of THIS readout, not a second derivation** (this module's header rule): the turn
+   * readout itself is ungated terminal chrome, so the `⚙` beside it must inherit the gate from
+   * here. With the gate OFF the whole readout is `null`, and so is this.
+   */
+  readonly turnBadge: SupervisorTurnBadge | null;
 }
+
+/** The turn readout's supervisor mark. */
+export interface SupervisorTurnBadge {
+  readonly text: string;
+  /** Tooltip: says the supervisor started this turn, and with which command. */
+  readonly title: string;
+}
+
+/**
+ * The turn-attribution glyph: the SAME gear as the header's `⚙ supervised` badge, so the mark on a
+ * turn reads as "the thing in the header did this" without a legend.
+ */
+export const SUPERVISOR_TURN_GLYPH = "⚙";
 
 /**
  * The state labels.
@@ -92,12 +127,20 @@ export const SUPERVISOR_SUPPRESSED_GLYPH = "⏸";
  * @param enabled the project's persisted `supervisor_enabled` (absent → `true`, resolved in Rust)
  * @param gateEnabled `workflow_features_enabled` — when false there is no readout at all
  * @param workspaceName display name, for the accessible label
+ * @param unsentInput whether a half-typed line is currently suppressing the supervisor
+ * @param last the project's newest activity record and the current time (epoch ms), or `null`
+ * @param turnOrigin the supervisor's origin for the turn the turn readout has selected, or `null`
  */
 export function workspaceSupervisorReadout(
   enabled: boolean,
   gateEnabled: boolean,
   workspaceName: string,
   unsentInput = false,
+  last: {
+    readonly record: ActivityRecord;
+    readonly nowMs: number;
+  } | null = null,
+  turnOrigin: SupervisorOrigin | null = null,
 ): WorkspaceSupervisorReadout | null {
   if (!gateEnabled) return null;
 
@@ -106,9 +149,15 @@ export function workspaceSupervisorReadout(
   // two different things at once, and the OFF state is the one the operator chose.
   const suppressed = enabled && unsentInput;
 
+  const lastAction = last
+    ? `${describeDecision(last.record)} · ${relativeTime(last.record.ts / 1000, last.nowMs / 1000)}`
+    : null;
+  const lastLine = lastAction ? `\n\nLast: ${lastAction}` : "";
+
   return {
     enabled,
     suppressed,
+    lastAction,
     text: enabled ? SUPERVISOR_ON_LABEL : SUPERVISOR_OFF_LABEL,
     // ⚠️ The tooltip states what will HAPPEN, not merely what the flag is. "Supervisor: on" tells
     // the operator nothing they cannot see; naming the consequence is what makes a two-state
@@ -116,17 +165,26 @@ export function workspaceSupervisorReadout(
     // ⚠️ The SUPPRESSED tooltip must say the supervisor is working correctly and name what
     // clears it — otherwise a held-back workspace reads as a broken one, which is the opposite
     // of the reassurance this marker exists to give.
-    title: suppressed
-      ? "Workflow supervisor is ON but HELD BACK — you have unsent input in this pane, so it " +
-        "will not run a skill over what you are typing. Submit the line (or press Esc / " +
-        "Ctrl+C / Ctrl+U to abandon it) and it resumes."
-      : enabled
-        ? "Workflow supervisor is ON for this project — it may auto-run the next skill when a " +
-          "turn ends. Click to turn it off for this project only."
-        : "Workflow supervisor is OFF for this project — it will never auto-run a skill here. " +
-          "Click to turn it back on.",
+    title:
+      (suppressed
+        ? "Workflow supervisor is ON but HELD BACK — you have unsent input in this pane, so it " +
+          "will not run a skill over what you are typing. Submit the line (or press Esc / " +
+          "Ctrl+C / Ctrl+U to abandon it) and it resumes."
+        : enabled
+          ? "Workflow supervisor is ON for this project — it may auto-run the next skill when a " +
+            "turn ends. Click to turn it off for this project only."
+          : "Workflow supervisor is OFF for this project — it will never auto-run a skill here. " +
+            "Click to turn it back on.") + lastLine,
     label:
       `Workflow supervisor for ${workspaceName}: ${enabled ? "on" : "off"}` +
       `${suppressed ? ", currently held back by unsent input" : ""}. Click to toggle.`,
+    // ⚠️ Shown whatever the toggle says NOW: the mark is history ("the supervisor started this
+    // turn"), and turning supervision off afterwards does not change who started it.
+    turnBadge: turnOrigin
+      ? {
+          text: SUPERVISOR_TURN_GLYPH,
+          title: `The workflow supervisor started this turn (it ran ${turnOrigin.command}).`,
+        }
+      : null,
   };
 }

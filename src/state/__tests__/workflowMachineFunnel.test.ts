@@ -186,6 +186,18 @@ const ALLOWED_IMPORTERS = [
   //   • ⚠️ Failure signature confirmed a third time: exactly TWO tests failed; `wires graph to
   //     policy in exactly ONE module` PASSED.
   "state/supervisor/fanOut.ts",
+  // ⚠️ The supervisor activity record's schema (2026-09-25). Added BECAUSE THIS GUARD FIRED.
+  // Review recorded:
+  //
+  //   • It imports **exactly one symbol, and it is a TYPE**: `import type { DriveMode }`, the
+  //     `mode` field a record reports. `grep -cE "POLICY_ROWS|cellForMode|resolvePolicy"`
+  //     returns **0**; it reads NO policy and produces NO verdict. It only describes one.
+  //   • ⚠️ Failure signature confirmed: exactly TWO tests failed (this one and the
+  //     production-set pin); `wires graph to policy in exactly ONE module` PASSED.
+  "state/supervisor/activityRecord.ts",
+  // ⚠️ Its funnel test. Imports the same `DriveMode` type to type the harness's stored-mode
+  // ref, and drives the real `useSupervisor` (whose verdict routes through the funnel).
+  "state/supervisor/__tests__/activityFunnel.test.tsx",
 ];
 
 describe("M15 WP2 Phase 4 — the guard is scanning something real", () => {
@@ -351,6 +363,8 @@ describe("M15 WP2 Phase 4 — the importer population is pinned", () => {
         "through resolvePolicy() (and does NOT read POLICY_ROWS directly), then update " +
         "this expectation and ALLOWED_IMPORTERS together.",
     ).toEqual([
+      // 2026-09-25 — the activity record's schema. Type-only `DriveMode`; reads no policy.
+      "state/supervisor/activityRecord.ts",
       "state/supervisor/fanOut.ts",
       "state/supervisor/transcript.ts",
       // M15 WP4 Phase 4 — the host. Type-only import of `DriveMode`; reads no policy.

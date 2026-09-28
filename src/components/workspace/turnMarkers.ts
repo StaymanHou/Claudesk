@@ -333,3 +333,40 @@ export function shouldRecordTurnStart(args: {
     args.payload.is_turn_start === true
   );
 }
+
+/**
+ * The marker for the selected turn, or `null` when nothing is selectable. Resolved through
+ * {@link resolvePosition}, so it is the same turn the readout's `ordinal` names.
+ */
+export function selectedMarker(
+  markers: readonly TurnMarker[],
+  position: TurnPosition = positionAtNewest,
+): TurnMarker | null {
+  const index = resolvePosition(markers, position);
+  return index === null ? null : (liveMarkers(markers)[index] ?? null);
+}
+
+/**
+ * The tag a side table holds for the selected turn's marker, or `null` (nothing selected, or the
+ * selected turn is untagged). Turn attribution uses it for the supervisor's origin.
+ */
+export function selectedTag<T>(
+  markers: readonly TurnMarker[],
+  position: TurnPosition,
+  tags: ReadonlyMap<number, T>,
+): T | null {
+  const selected = selectedMarker(markers, position);
+  return selected ? (tags.get(selected.id) ?? null) : null;
+}
+
+/**
+ * Drop the tags of markers that are no longer live, so a per-marker side table (keyed by
+ * {@link TurnMarker.id}) cannot outgrow the marker list across a long session.
+ */
+export function pruneTags<T>(
+  tags: Map<number, T>,
+  markers: readonly TurnMarker[],
+): void {
+  const live = new Set(liveMarkers(markers).map((m) => m.id));
+  for (const id of tags.keys()) if (!live.has(id)) tags.delete(id);
+}

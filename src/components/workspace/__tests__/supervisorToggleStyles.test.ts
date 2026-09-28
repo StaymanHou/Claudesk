@@ -33,6 +33,11 @@ const CLASSES = {
   "is-off": ".workspace-header-supervisor.is-off {",
   "workspace-header-supervisor-suppressed":
     ".workspace-header-supervisor-suppressed {",
+  // 2026-09-25 — the supervisor activity record's in-header surface: the badge's wrapper (the
+  // popover's positioning anchor) and the `▾` trigger beside it.
+  "workspace-header-supervisor-group": ".workspace-header-supervisor-group {",
+  "workspace-header-supervisor-activity":
+    ".workspace-header-supervisor-activity {",
 } as const;
 
 /** The class tokens inside the toggle's `className` attributes — literal and template forms. */
@@ -258,5 +263,47 @@ describe("the guard is not vacuous", () => {
     expect(emitted.length).toBeGreaterThan(1000);
     // Sanity: the strip did not eat the source.
     expect(emitted).toContain("workspace-header");
+  });
+});
+
+describe("the activity popover's anchoring", () => {
+  // ⚠️ A LAYOUT regression jsdom cannot see (it computes no geometry), so the CSS source is the
+  // honest instrument here. Found live at Phase 2 verify-self: right-anchored, the 440px panel
+  // opened at x=-163 and clipped its own timestamps, because the badge sits near the header's
+  // left end.
+  const block =
+    /\.supervisor-activity-popover \{([^}]*)\}/.exec(css)?.[1] ?? "";
+
+  it("is anchored to the group's LEFT edge, never its right", () => {
+    expect(
+      block,
+      "the .supervisor-activity-popover rule was not found",
+    ).not.toBe("");
+    expect(block).toMatch(/(^|\n)\s*left:\s*0;/);
+    expect(block).not.toMatch(/(^|\n)\s*right:/);
+  });
+});
+
+describe("turn attribution — the turn readout's ⚙ (2026-09-28)", () => {
+  // Outside the toggle scan above (that one keys on `workspace-header-supervisor*`), so it gets
+  // its own two-way pin: emitted AND styled, and the SAME accent as the header badge, so the two
+  // gears read as one thing. The badge's colour is read from its rule rather than hardcoded twice.
+  const block = (selector: string) => {
+    const at = css.indexOf(selector);
+    expect(at, `${selector} is missing from App.css`).toBeGreaterThan(-1);
+    return css.slice(at, css.indexOf("}", at));
+  };
+  const colorOf = (selector: string) =>
+    /(?:^|\n)\s*color:\s*(#[0-9a-fA-F]{6});/.exec(block(selector))?.[1];
+
+  it(".workspace-turn-origin is emitted and styled", () => {
+    expect(emitted).toMatch(/className="workspace-turn-origin"/);
+    expect(css).toContain(".workspace-turn-origin {");
+  });
+
+  it("uses the header badge's accent", () => {
+    const badge = colorOf(".workspace-header-supervisor {");
+    expect(badge, "the badge rule must carry a hex color").toMatch(/^#/);
+    expect(colorOf(".workspace-turn-origin {")).toBe(badge);
   });
 });

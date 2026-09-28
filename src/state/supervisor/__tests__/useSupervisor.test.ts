@@ -71,7 +71,7 @@ describe("⚠️ wiring guards (source-level)", () => {
     // `label` parameter, but TypeScript accepts a stub that ACCEPTS AND IGNORES it, so the type
     // does not prove it is forwarded.
     expect(code).toMatch(
-      /injectCommand\(\s*pty,\s*command,\s*undefined,\s*label\s*\)/,
+      /injectCommand\(\s*pty,\s*command,[\s\S]*?\},\s*label,?\s*\)/,
     );
   });
 
@@ -104,7 +104,9 @@ describe("⚠️ wiring guards (source-level)", () => {
     // fires and every turn the supervisor sees twice is double-injected. `injectCommand` has no
     // undo.
     expect(code).toMatch(/ledgerRef/);
-    expect(code).toMatch(/ledger:\s*ledgerRef\.current/);
+    // The ref's value is handed to `decideTurn` once per turn, which forwards it to `fireOne`.
+    expect(code).toMatch(/decideTurn\(\s*host,\s*ledgerRef\.current/);
+    expect(code).toMatch(/\bledger,/);
   });
 
   it("⚠️ supplies readWip — without it the recycle branch is dead", () => {
@@ -141,7 +143,7 @@ describe("⚠️ wiring guards (source-level)", () => {
     // session — the exact complaint WP0 exists to answer. Checked beside the other two per-turn
     // conditions, and asserted on the `.current` READ so a refactor to a captured value fails.
     expect(code).toMatch(
-      /if\s*\(host\.supervisorEnabledRef\.current\s*===\s*false\)\s*return;/,
+      /if\s*\(host\.supervisorEnabledRef\.current\s*===\s*false\)\s*return\b/,
     );
   });
 
