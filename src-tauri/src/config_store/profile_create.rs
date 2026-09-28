@@ -8,6 +8,11 @@
 //!   settings key), so it holds in a bare terminal too, not just inside Claudesk.
 //! - `statusLine` → copied **verbatim** from `~/.claude/settings.json`, snapshotted at CALL time.
 //! - `cleanupPeriodDays`, `permissions.defaultMode`, `model` → `settings.json`.
+//! - `claudeMdExcludes: ["~/.claude/CLAUDE.md"]` (absolute) → `settings.json`. CC's CLAUDE.md walk
+//!   up from the cwd loads `<ancestor>/.claude/CLAUDE.md` as project memory, so for any project
+//!   under `$HOME` it pulls in the default profile's user memory — `CLAUDE_CONFIG_DIR` does not
+//!   stop it. Measured CC 2.1.283: the exclude works from the user layer (dropping that layer via
+//!   `--setting-sources project,local` brings the file back).
 //! - ⚠️ **`hasCompletedOnboarding` is NEVER seeded** — it also skips CC's own login step (D.21).
 //!
 //! ## What this never touches
@@ -138,9 +143,18 @@ pub fn wizard_defaults(default_settings: &Path, config_root: &Path) -> WizardDef
     }
 }
 
-/// The seeded `<dir>/settings.json` (before Claudesk's hook is merged in).
-pub fn seed_settings(spec: &NewProfileSpec, status_line: Option<&Value>) -> Value {
+/// The seeded `<dir>/settings.json` (before Claudesk's hook is merged in). `default_claude_md` is
+/// `~/.claude/CLAUDE.md`, excluded so the ancestor walk can't leak it in (see the module header).
+pub fn seed_settings(
+    spec: &NewProfileSpec,
+    status_line: Option<&Value>,
+    default_claude_md: &Path,
+) -> Value {
     let mut s = Map::new();
+    s.insert(
+        "claudeMdExcludes".into(),
+        json!([default_claude_md.to_string_lossy()]),
+    );
     s.insert(
         "permissions".into(),
         json!({ "defaultMode": spec.permission_mode }),
@@ -269,7 +283,11 @@ pub fn create(
         let io = |what: &str, e: std::io::Error| format!("couldn't write {what}: {e}");
         write_atomic(
             &dir.join("settings.json"),
-            &pretty(&seed_settings(spec, status_line.as_ref())),
+            &pretty(&seed_settings(
+                spec,
+                status_line.as_ref(),
+                &default_settings.with_file_name("CLAUDE.md"),
+            )),
         )
         .map_err(|e| io("settings.json", e))?;
         write_atomic(&dir.join(".claude.json"), &pretty(&seed_claude_json(spec)))
@@ -393,6 +411,11 @@ mod tests {
         assert_eq!(s["env"][DISABLE_MOUSE_ENV], "1");
         assert_eq!(s["theme"], "dark", "theme lives in settings.json");
         assert!(s.get("model").is_none());
+        assert_eq!(
+            s["claudeMdExcludes"],
+            json!([home.path().join("CLAUDE.md").to_string_lossy()]),
+            "the default profile's CLAUDE.md is excluded by absolute path"
+        );
 
         let c = read(&dir.join(".claude.json"));
         assert_eq!(c, json!({ "copyOnSelect": false }));
@@ -541,6 +564,7 @@ mod tests {
         assert_eq!(s["permissions"]["defaultMode"], "acceptEdits");
         assert_eq!(s["statusLine"]["command"], "x");
         assert_eq!(s["env"][DISABLE_MOUSE_ENV], "1");
+        assert!(s["claudeMdExcludes"].is_array(), "{s}");
     }
 
     #[test]

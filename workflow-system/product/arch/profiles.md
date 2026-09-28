@@ -122,6 +122,7 @@ mid-session profile change the two disagree.
   | mouse tracking OFF | `settings.json` `env.CLAUDE_CODE_DISABLE_MOUSE="1"` | no settings key exists |
   | `statusLine` | `settings.json` | verbatim from `~/.claude/settings.json`, snapshotted at create |
   | `cleanupPeriodDays`, `permissions.defaultMode`, `model` | `settings.json` | |
+| `claudeMdExcludes: ["<abs ~/.claude/CLAUDE.md>"]` | `settings.json` | ⚠️ `CLAUDE_CONFIG_DIR` does NOT stop CC's cwd→`/` walk, which loads `$HOME/.claude/CLAUDE.md` as `$HOME`'s *project* memory for any project under `$HOME`. The user-layer exclude stops it (measured CC 2.1.283). **Adopt** does not add it (adopt writes nothing but the hook); the 5 profiles listed on 2026-09-28 were patched by hand |
   | the "Never touch `~/.claude/`" guard | `<dir>/CLAUDE.md` | the boilerplate's section, dir substituted |
 
   ⚠️ **Never seed `hasCompletedOnboarding`**: it also skips CC's own login step. The cost of not
