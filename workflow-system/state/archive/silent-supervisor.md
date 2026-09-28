@@ -1,6 +1,7 @@
 ---
 workflow: feature
-state: ship (complete)
+state: completed
+completed: 2026-09-28
 created: 2026-09-28
 drive_mode: autopilot
 entry: reproduce (bug-fix feature)
@@ -9,7 +10,7 @@ entry: reproduce (bug-fix feature)
 # Feature: Silent supervisor — make the workflow supervisor fire again
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-09-28
 **Created:** 2026-09-28
 **Entry:** reproduce (bug-fix feature)
 **Backlog:** `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (high)
@@ -313,11 +314,17 @@ Resolved by the research spike (F3), each against a live dev build and real tran
   - [x] verify-codify — 2 funnel cases added to `activityFunnel.test.tsx` for the two live-observed shapes with no prior coverage: (a) TWO live `useSupervisor` instances for one workspace receive ONE broadcast `Stop` → one decision, one fire, one `duplicate-turn-end` (the leaked-subscription shape; only the module-level claim sees both); (b) two supervised workspaces with the SAME `last_event_at` are each decided and record their OWN `workspaceId`/`projectPath`. Mutants run individually: claim disabled → (a) fails; key without workspace → (b) fails; shasum-restored. `pnpm verify:auto` EXIT=0 (46s): 3214/3214, Rust 988.
 
 ## Current Node
-- **Path:** Feature > finalize
-- **Active scope:** finalize (review-quality done: 0 CRITICAL / 1 MAJOR / 5 MINOR, auto-backlogged; AC-6/7/9 deferred to the release + dogfooding)
+- **Path:** Feature > complete (archived)
+- **Active scope:** none (finalized 2026-09-28; review-quality: 0 CRITICAL / 1 MAJOR / 5 MINOR, auto-backlogged; AC-6/7/9 deferred to the release + dogfooding)
 - **Blocked:** none
 - **Unvisited:** (none after finalize)
 - **Open discoveries:** quoted-token fire; leaked subscription (both surfaced to backlog)
+
+## Retrospect
+- **What changed in our understanding:** The silence had three stacking causes, not one suspect. The flush race was not intermittent: CC writes the turn's final line 74–109 ms after `Stop`, so every read lost the race, and the earlier "some turns win" reading was wrong. The race also produced WRONG-VERDICT withholds (a stale read landing on an earlier, already-chained verdict), so counting `no-verdict` alone under-counted it. And the verdict was never scoped to the current turn, which let an old AUTO verdict fire after the operator had replied (AC-3b, found at research).
+- **Assumptions that held:** The activity record was the right instrument: every miss it recorded mapped to a named cause. Suspicion of WP0's unsent-input suppression (hypothesis 1) was right in spirit. The watermark design was sound, but terminal reports fed it. The event-keyed dedupe held up live: the duplicate consumer reproduced in `ws-1` and the dedupe contained it.
+- **Assumptions that were wrong:** The duplicate consumer was expected to be a dev-only HMR artifact. It reproduced on a clean app run, and it also steals the `⚙` attribution (backlogged, root cause unknown). The plan's AC-8 PAUSE example (`F10`) is an AUTO edge; the verify-human pause belongs to the state, not the edge. A `TRANSITION:` token quoted in prose also fires, a new wrong-fire class the corpus shows cannot be separated by placement (backlogged).
+- **Approach delta:** Delivered as planned (reproduce → research spike → one fix phase per cause), with two changes: AC-3b was folded in at research because it shared the fix site, and the dedupe went into its own module (`turnEndDedupe.ts`) rather than inline in `useSupervisor`. ⚠️ The operator's live acceptance (AC-6/7/9) was deferred to the next release and dogfooding. The fixes are observed in a dev build, not yet in an installed one.
 
 ## Code-Quality Review — silent-supervisor
 

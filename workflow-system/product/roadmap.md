@@ -619,9 +619,18 @@ mechanism that changed at v0.5.1. That is still a hypothesis. The discriminating
    next**, because it is the investigation's instrument. It opens with its own `/util-grill-me`
    (the item's questions 1–6 are the agenda). ⚠️ It owns the **seventh** OFF-invariant guard arm,
    and must itself be gated OFF with the supervisor.
-2. **Silent-supervisor investigation**, driven by the activity record: an operator-driven break in
-   a dev build (an agent-launched CC emits no hook events), then read the withhold reason. Shape it
-   (`/incident-report` or `/feature-reproduce`) from what the first read shows.
+2. ✅ **SHIPPED 2026-09-28 (`778fe72`, feature `silent-supervisor`).** Silent-supervisor
+   investigation. The activity record accounted for the silence with **three** causes, each fixed in
+   its own phase: (a) the transcript read raced `Stop`, because CC flushes the turn's final line
+   74–109 ms after it, so every decision read the previous turn's tail. The supervisor now waits
+   for the turn's close (≤2 s, `transcript-incomplete` otherwise) and scopes the verdict to after
+   the last user prose line. (b) Terminal reports (focus, DA, CPR) raised the unsent-input
+   watermark, so every new workspace started suppressed. (c) A turn end could be decided twice;
+   a module-level per-`Stop` claim records the repeat as `duplicate-turn-end`. A live fire was
+   read from the activity record on a dev build across two workspaces. ⚠️ **The operator's live
+   checks (fire + `⚙`, another app focused, Esc) are DEFERRED to the next release and
+   dogfooding, not passed.** Original plan: driven by the activity record, an operator-driven
+   break in a dev build, then read the withhold reason.
 3. **Previously queued, unchanged relative to each other:** the F-a/F-b code-quality minor items,
    then the right-panel media viewer (`SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER`, filed today).
    ⚠️ Their position relative to items 1–2 was not re-ruled. The operator had queued them after

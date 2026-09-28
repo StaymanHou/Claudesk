@@ -6,6 +6,9 @@
 - **Backlog resolved:** SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE — closed by the supervisor activity record (durable per-decision log, header hint and popover, turn attribution).
 - **Task closed:** Appends to the status-channel and supervisor activity logs are now safe under concurrent writers: each line is one `write_all`, and rotation plus write run under a process-wide lock. Before the fix, 400 concurrent IPC appends in a dev build produced 77 torn lines and lost 171 records.
 - **Backlog resolved:** SURFACE-2026-09-28-QUALITY-ACTIVITY-LOG-APPEND-CAN-TEAR-UNDER-CONCURRENT-WRITERS — fixed in `StatusLog::append` (single write + `APPEND_LOCK`), pinned by two concurrency tests that each kill a mutant and by a live 400-append check against the real command.
+- **Feature shipped:** Silent supervisor fixed: the workflow supervisor fires again on AUTO-edge breaks, after three causes were fixed: a transcript read racing CC's post-`Stop` flush (it now waits for the turn's close and reads only the current turn's verdict), terminal focus/DA/CPR reports raising the unsent-input watermark, and one turn end being decided twice; live acceptance in an installed build is deferred to the next release.
+- **Backlog resolved:** SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION (partial) — cause found, fixed and pinned by regression tests, and a live fire read from the activity record on a dev build; the entry is rewritten to its remaining open checks (installed-build fire, Esc, context-pressure recycle, ESCALATE/no-stored-mode arms).
+- **Backlog resolved:** SURFACE-2026-09-15-SUPERVISOR-DOGFEEDBACK-BATCH-1 (partial) — the "is WP0's suppression causing the silence?" question is answered and fixed (terminal reports raised the watermark); WP0's seven hands-on checks are unblocked and remain open.
 
 ## 2026-09-25
 

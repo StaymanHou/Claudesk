@@ -235,10 +235,10 @@ workflow-gated feature (M10.9 tier 1).
 - **Type:** bug
 - **Summary:** The first (and, per the operator on 2026-09-24, the **last**) batch of operator
   feedback from live supervisor use: three items. **Rewritten 2026-09-25** at the dogfeedback
-  close-out to its remaining open work. ⚠️ **It is NOT closed, and "no more feedback" does not close
-  it.** Its open checks are **vacuous while the supervisor never fires**, and per
-  `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` it has not fired since
-  v0.5.1.
+  close-out to its remaining open work, and again 2026-09-28 at `silent-supervisor` finalize.
+  ⚠️ **It is NOT closed, and "no more feedback" does not close it.** Its checks were vacuous while
+  the supervisor never fired. ✅ Firing is restored on `main` (`778fe72`), so they are now
+  **runnable**, once a release containing that commit is installed.
 - **Item 3 — "only when workflow is enabled and a project uses workflow?"** ✅ Answered 2026-09-15:
   yes, gate ON **and** a stored drive mode. Since v0.5.1 there is a third condition: the
   per-workspace `supervisor_enabled` toggle. **No work remains on this item.**
@@ -247,9 +247,10 @@ workflow-gated feature (M10.9 tier 1).
   suppressed-state marker, all mutation-proven. ⚠️ **Its seven hands-on checks remain
   `DEFERRED-TO-DOGFOODING`** on `P1.verify-human.1-7` of the archived `supervisor-hotfix.md`. The
   dogfooding did not satisfy them: "no unwanted fire mid-typing" is exactly what a supervisor that
-  never fires also produces. ⚠️ **Worse, this fix is the top-ranked SUSPECT for the silence**
-  (hypothesis 1 in the NEVER-OBSERVED item: a watermark stuck up would withhold every turn). The
-  checks, for when firing is restored:
+  never fires also produces. ✅ **The "is this fix causing the silence?" question is ANSWERED**
+  (2026-09-28): the watermark design was sound, but terminal-generated reports (focus in/out, DA,
+  CPR) arrived through `onData` as if typed and raised it. `terminalReports.ts` now strips them
+  for both the watermark and the `⚙` origin cancel. The checks, now runnable:
   1. Unsent line present at turn end → NO fire, text intact.
   2. ⚠️ A line walked away from for minutes → STILL no fire (the D-2 ruling's load-bearing case).
   3. Esc, then turn end → fires.
@@ -266,186 +267,53 @@ workflow-gated feature (M10.9 tier 1).
   rarely reaches the adjudicator, the `claude -p` path that would freeze rarely runs. When it next
   happens, use the P1 2026-08-25 playbook: `sample` against the frozen app, not reasoning from the
   code.
-- **Suggested action:** none standalone. This rides on the NEVER-OBSERVED investigation: once
-  firing is restored and the activity record exists, run item 2's checks against the record, then
-  decide probe Q2.
-- **Priority:** high (while the suppression fix is a suspect for the silence)
-- **Status:** open — rewritten 2026-09-25; blocked on the NEVER-OBSERVED investigation
+- **Suggested action:** during dogfooding of the next release, run item 2's checks against
+  `supervisor-activity.log` (an `unsent-input-present` withhold is the observable for checks 1–2),
+  then decide probe Q2.
+- **Priority:** medium (no longer a suspect for the silence)
+- **Status:** open — rewritten 2026-09-28; unblocked, waiting on a release containing `778fe72`
 
 ## SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION
-- **Source:** feature:verify-human (M15 WP4 Phase 4). **Re-framed 2026-09-25** at the dogfeedback
-  close-out (`wip/supervisor-dogfeedback-closeout.md`).
+- **Source:** feature:verify-human (M15 WP4 Phase 4). Re-framed 2026-09-25 as a probable bug.
+  **Rewritten 2026-09-28** at `silent-supervisor` finalize to its remaining open work (partial
+  resolution; CHANGELOG 2026-09-28).
 - **Target level:** product:wbs
-- **Type:** ⚠️ **bug** (probable), re-typed 2026-09-25 from "gap (verification debt)"
-- **Summary:** ⚠️ **THE SUPERVISOR HAS NOT FIRED SINCE v0.5.1, AND IT HAS MISSED REAL BREAKS.** It
-  fired live before the WP0 hotfix. Since v0.5.1 (2026-09-17) no transcript shows a machine-speed
-  fire, while at least six textbook AUTO-edge breaks on supervised, Claudesk-hosted projects went
-  unfired and were restarted by hand. **The ID is kept for grep continuity.** The title's "never
-  observed" is now half-wrong: it WAS observed firing on 2026-09-15, and has been observed NOT
-  firing since.
-- **Why silence was not evidence (the handoff caution, vindicated):** the operator reported "no more
-  feedback" after dogfooding v0.6. A supervisor that never fires produces **nothing to complain
-  about** beyond a wait, and the operator absorbed each wait by typing "next". Resolving this item
-  on that silence would have closed the exact failure it was filed to catch.
+- **Type:** gap (verification debt). The bug half is fixed on `main`.
+- **Summary:** ✅ **The silence is fixed on `main` (`778fe72`), but NOT yet in a release.** Since
+  v0.5.1 the supervisor had missed every AUTO-edge break. Feature `silent-supervisor` found and
+  fixed three causes, each pinned by regression tests:
+  - the transcript read raced CC's post-`Stop` flush (74–109 ms), and the verdict was not scoped to
+    the current turn;
+  - terminal focus/DA/CPR reports raised the unsent-input watermark;
+  - a turn end could be decided twice.
 
-### Evidence (gathered 2026-09-25 from CC transcripts, reproducible)
+  A live fire was read from `supervisor-activity.log` on a dev build: two workspaces each fired under
+  their own project, one with `⚙`. Gate OFF and a PAUSE edge (`F22`) both withheld. The evidence
+  trail, hypotheses and mechanism are in the archived WIP
+  (`workflow-system/state/archive/silent-supervisor.md`) and in this entry's git history.
+  ⚠️ **Do not resolve this on silence.** A positive observable from an **installed** build is what
+  closes it. The field build lacks the fix until the next release.
 
-**Method.** Scan main-chain entries of `~/.claude/projects/*/*.jsonl` (and
-`~/.config/claude-*/projects/`). Two passes were run:
-- **(a) Machine-speed commands.** Find slash-command user entries (`<command-name>`) whose gap from
-  the preceding assistant entry is under 6s. A human does not read a turn and type a command that
-  fast; the supervisor's fire lands in about 4s.
-- **(b) Unfired breaks.** Find assistant turns carrying `TRANSITION: <id>` whose id is an AUTO edge
-  in autopilot, where the next non-tool event is a **human** message rather than a `Skill` call.
-  Cross-check each hit's project in `projects.json`: `default_drive_mode`, `supervisor_enabled`,
-  gate `workflow_features_enabled`, `profile`. Confirm Claudesk hosting by the presence of the
-  *"Claudesk reports the drive mode"* `additionalContext` line in the transcript.
-
-**(a) Pre-hotfix fire, CONFIRMED.** 2026-09-15 19:49–19:55Z, claudesk session `7a912f57`: six
-`/feature-build` commands arrived 3.4–4.8s after turn end, all with no args. The operator
-confirmed them in-session: *"it's the supervisor doing these /feature-build thing."* That misfire
-run is what produced the WP0 hotfix (unsent-input suppression plus the per-workspace toggle,
-shipped in v0.5.1).
-
-**(a) Since v0.5.1: ZERO machine-speed workflow commands** (2026-09-17 → 2026-09-25, 50 slash
-commands with a preceding assistant turn). The only fast one, `/session-handoff` on 09-17 at 14:31
-(4.6s), was operator-typed, and it pre-empted a `/feature-verify-auto` that an F8 turn had just
-left due.
-
-**(b) Unfired breaks.** Every row below is a supervised project (`autopilot` stored,
-`supervisor_enabled: true`, gate ON, default profile) and Claudesk-hosted. Each turn ended on a
-bare `TRANSITION: F8` (build → verify-auto, AUTO in Mode 3) with **no question in the tail**:
-
-| When (Z) | Project | Waited | Operator then typed |
-|---|---|---|---|
-| 09-18 18:18 | ops-data-hub | 5 min | "do it" |
-| 09-22 15:34 | ops-data-hub | 23 min | "next" |
-| 09-22 17:03 | mbt-copilot | 31 s | "keep going" |
-| 09-22 17:13 | mbt-copilot | **49 min** | "so?" |
-| 09-22 18:13 | claudesk | 16 min | "all good" |
-| 09-22 18:20 | mbt-copilot | 10 min | "so?" |
-
-Also: the google-newsroom product run (09-23) broke at **P3, P5, P7 and P9**, and the operator
-typed "next" / "just continue" each time. Two of those tails asked a commit question, so the
-adjudicator may legitimately have withheld on them. P3 and P7 did not ask one.
-
-⚠️ **Not counted as misses:** the F4 (spec → plan) stops whose tails said "say go" / "tell me what to
-change". These are question-shaped, so a withhold there is defensible. That is a separate,
-model-side over-pausing question, not this defect.
-
-⚠️ **What the evidence cannot say:** WHICH version was running on each date (the installed app was
-upgraded to 0.7.0 on 2026-09-25 08:30; earlier upgrade times are unrecorded). Every release from
-v0.5.1 on contains the supervisor, and the 2026-09-15 fire proves the v0.5.0 build could fire.
-
-### Hypotheses — UNVERIFIED, listed so the investigation starts with a map, not a conclusion
-
-⭐⭐ **SECOND CAUSE CONFIRMED 2026-09-25 (activity-record Phase 1 verify-human): the transcript
-read RACES the `Stop` hook.** A real turn ending on `TRANSITION: F5` was recorded as `no-verdict`:
-`Stop` arrived at .074 and the read ran just after. Re-parsing the same file afterwards finds `F5`;
-the file minus its final line gives `null`. So CC had not yet flushed the final assistant message
-when the supervisor read it. It is timing-dependent (some turns win the race, e.g. the 09-15
-fires) and independent of the watermark below. **Candidate fix (unbuilt):** on `no-verdict`
-right after a `Stop`, re-read the tail after a short bounded delay (or until the transcript's
-newest assistant line postdates the turn's `UserPromptSubmit`), and pin it with a regression test
-that feeds a tail missing its final line and then supplies it.
-
-⚠️ **Also revealed (pre-existing):** a turn end can be evaluated TWICE. A second
-`workspace-status` listener appears during a session (1 record per event on a fresh load, 2 after
-the operator's session actions; suspect: a drive-mode change or respawn on an open workspace).
-The ledger masked it as `already-fired-for-this-turn`. Fix alongside the investigation.
-
-⭐⭐ **PROBABLE ROOT CAUSE FOUND 2026-09-25 (activity-record Phase 1 verify-self), confirming
-hypothesis 1 by MECHANISM.** A freshly opened, untouched dev workspace showed the `⏸` suppressed
-badge. `unsentInput.foldInput` lets the **last byte of each xterm `onData` chunk** decide, but
-`onData` carries **terminal-generated reports** as well as keystrokes: focus-in `ESC[I`, focus-out
-`ESC[O`, DA replies, cursor-position reports. Each ends on a non-clearing byte, so each one raises
-"unsent input" (replayed: all → `true`; Enter → `false`). A focus change mid-turn therefore
-suppresses that turn's fire. **The supervisor goes silent exactly when the operator looks away**,
-which is when it exists to act. It shipped in v0.5.1, the release where firing stopped.
-⚠️ **To confirm:** one REAL operator-driven turn whose activity record reads
-`unsent-input-present` (the activity-record Phase 1 verify-human check). **Candidate fix
-(unbuilt):** filter terminal-report sequences out before folding (a complete CSI sequence ending in
-`I`/`O`/`c`/`R`, or more generally any chunk that begins with ESC and is a complete escape
-sequence), and add a regression test built on the four report shapes above.
-
-⭐ **NARROWED 2026-09-25 (at the activity-surface spec): the trigger DOES reach the frontend.** The
-existing `status_log` (`<app-data>/status-channel.log`, 5 MiB rotating, which covers 2026-09-14 →
-now) shows that at each miss checked (09-22 15:34 ops-data-hub, 17:13 and 18:20 mbt-copilot, 18:13
-claudesk) a `Stop` event **arrived, resolved to the right workspace (`resolved=ws-N`), and was
-`outcome=emitted`** to the webview. So hook registration and Rust-side routing are **ruled out**
-for these rows. The silence is downstream in TypeScript:
-- `is_turn_end` classification;
-- `useTurnEnd`'s filter;
-- **the four SILENT early returns at the top of `useSupervisor`'s `onTurnEnd`** (`!host.enabled`,
-  supervisor toggle `false`, `storedMode === null`, no `ptySessionId`), none of which logs
-  anything, even to the console;
-- or a `fireOne` withhold.
-⚠️ The four silent early returns are now the most interesting place to look, because they are the
-only exits that leave no trace at all.
-
-1. ⚠️ **Unsent-input suppression stuck ON** (top suspect: it is the one mechanism that CHANGED at
-   v0.5.1). The watermark rises on typed-but-unsubmitted input and, by design, stays up for
-   minutes (WP0 check 2's load-bearing case). If some real submit path is not seen as a clear (a
-   path other than Enter / Esc / Ctrl+C / Ctrl+U in the xterm keystroke stream), every later turn
-   withholds `unsent-input-present`. Watch the paths that do not come through xterm keystrokes:
-   F-a's prompt-panel send (v0.6.0), a CC menu, pasted text.
-2. **The turn-end trigger never reaches the supervisor.** Possibilities: `is_turn_start` /
-   raw-event plumbing, the `already-fired-for-this-turn` ledger never clearing, or hook
-   registration (dev and prod hooks are both registered in `~/.claude/settings.json`).
-3. **The verdict withholds**: `transcript-unreadable` (slug or transcript-path resolution),
-   `no-verdict`, `policy-not-auto`, or `adjudicator-says-awaiting` on plain F8 tails.
-   (`SURFACE-2026-09-24-QUALITY-TRANSCRIPT-ROOT-READS-STORED-PROFILE-NOT-LIVE` post-dates every row
-   above and involves profiles, while these rows all use the default profile, so it is **not** the
-   cause of these misses. It is adjacent code, though.)
-
-4. ⭐ **Added 2026-09-25 (activity-record P1): injections failing SILENTLY.** `injectCommand`
-   swallows a rejected `cc_input` (it warns and returns), and the supervisor passed
-   `onIpcError: undefined`, so `fireOne`'s `inject-failed` arm was **unreachable**. A failed
-   injection read as a success: the supervisor logged `fired` while CC received nothing. That
-   **fits "no commands in the transcripts" just as well** as a withhold does. A stale
-   `ccSessionIdRef` (e.g. after a relaunch or Recycle) is the obvious way `cc_input` could reject.
-   Fixed going forward by the activity-record feature (the supervisor now re-throws, so the
-   failure is recorded as `error` / `inject-failed`). ⚠️ The fix makes this hypothesis
-   **testable**; it does not confirm it.
-
-⚠️ **The discriminating observable already exists, and nobody can read it.** Every non-fire emits a
-`withheld … — <reason>` line from a closed vocabulary (`arch/workflow-supervisor.md` §F), and it
-goes to `console.warn` in the WKWebView. That is unreadable in a shipped build, and per
-`[[read-logs-console-captures-nothing]]` also unreadable to an agent via `read_logs`. **The
-investigation's first move is to make those lines readable.** ✅ **Done 2026-09-28:** the
-supervisor activity record shipped (`dece979`; CHANGELOG 2026-09-28), so every decision, withhold
-reason included, is a line in `<app-data>/supervisor-activity.log` (`tail`/`jq`, filter by
-`projectPath`). ⚠️ An agent-launched CC emits no hook events **unless** the dev build is launched
-with the Claude session markers stripped at the app parent (see this entry's 2026-09-25 findings).
-Otherwise a live repro needs an **operator-driven** CC turn in a dev build.
-
-### What closes this item
-
-1. **The cause is found and fixed**, and a regression test pins it at the layer that failed.
-2. **A live fire is observed on an AUTO-edge break on a v0.5.1+ build**, read from the activity
-   record rather than inferred from timing.
-3. **The original deferred checks, re-scoped.** Their earlier status is void, because a no-fire
-   check passes vacuously while nothing fires:
-   - live AUTO fire across a multi-workspace session;
-   - gate OFF → no fire;
-   - negative arm (verify-human PAUSE, ESCALATE, no-stored-mode) → no fire;
-   - a context-pressure recycle at a non-final phase boundary over 400,000 tokens;
-   - ⚠️ **Esc interrupts a wrong fire** (R-1's accepted cost rests on it, still unconfirmed);
-   - installed-`.app` GUI-PATH smoke.
-   The WP0 checks tracked in `SURFACE-2026-09-15-SUPERVISOR-DOGFEEDBACK-BATCH-1` are vacuous for the
-   same reason and wait on (1) and (2).
-
-- **Suggested action:** first, build the activity surface's retained record (sequenced next,
-  operator 2026-09-25). Then investigate with it: an operator-driven break in a dev build, reading
-  the `withheld` reason. Open the investigation as `/incident-report` or `/feature-reproduce`
-  depending on what the first read shows.
-  ⚠️ **Carry one deferred check into the fix's verification** (operator, 2026-09-28): once the
-  supervisor fires again, confirm the turn readout shows `⚙` on the turn it started
-  (`supervisor-activity-record` P3.verify-human.2, deferred, NOT passed). Turn attribution was
-  verified live only with a hand-armed origin.
-- **Priority:** high (the milestone's core behavior is not working in the field, and the failure
-  is silent by construction)
-- **Status:** pending — re-framed 2026-09-25; investigation sequenced after the activity surface
+### What still closes this item (checks deferred by the operator to the next release + dogfooding)
+1. **Installed build, AUTO-edge break → `fired` record + `⚙`** on the turn it started (was AC-6;
+   also carries `supervisor-activity-record` P3.verify-human.2).
+2. **The same with another app focused** when the turn ends (AC-7).
+3. ⚠️ **Esc interrupts an injected turn** (AC-9). R-1's accepted cost rests on it, and it is
+   still unconfirmed.
+4. **Negative arms not yet seen live:** ESCALATE → no fire; a project with no stored mode → no
+   fire. (Gate OFF and PAUSE were seen live in the dev build.)
+5. **A context-pressure recycle** at a non-final phase boundary above 400,000 tokens.
+6. **Installed-`.app` GUI-PATH smoke** for the supervisor's spawns (`claude -p` adjudicator).
+- **How to check:** `jq 'select(.projectPath=="<proj>")' <app-data>/supervisor-activity.log` on the
+  installed app (`com.claudesk.app`), or scan CC transcripts for commands arriving ~4 s after
+  turn end (`[[supervisor-activity-observable-from-cc-transcripts]]`).
+- **Related open items:** `SURFACE-2026-09-28-SUPERVISOR-FIRES-ON-A-TRANSITION-TOKEN-QUOTED-IN-PROSE`,
+  `SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR`,
+  `SURFACE-2026-09-28-QUALITY-TRANSCRIPT-COMPLETION-WAIT-HAS-NO-ALARM-FOR-A-CC-FORMAT-CHANGE`
+  (a CC transcript-format change would silently bring this bug back).
+- **Priority:** high until a release containing `778fe72` is installed (the field build is still
+  silent); medium after that.
+- **Status:** pending — fix shipped on `main` 2026-09-28; live checks deferred to the next release
 
 ## SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT
 
