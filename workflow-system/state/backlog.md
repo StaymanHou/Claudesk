@@ -1,5 +1,12 @@
 # Backlog
 
+## Code-quality findings — supervisor-activity-record (2026-09-28)
+
+- **Pointer:** 2 MAJOR + 8 MINOR from the review of `dece979`. The MAJORs: the activity-log append can TEAR under concurrent async writers (`writeln!` = two syscalls, no lock), which silently drops two records; and the §B arch-doc enumeration guard scans a hand-kept file list. The MINORs: two stale comments, an ambiguous `sweep-threw` reason, a layering import, a 6-positional-param readout, a thrice-duplicated `2000` read limit, a `Workspace.tsx` extraction, and a popover Esc that may reach CC. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-activity-record — 2026-09-28`.
+- **Priority:** medium (MAJOR 1 undermines the record's one-record-per-turn contract, and the silent-supervisor investigation relies on that record) / low (the rest)
+- **Status:** pending
+- **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor` (or a `/task-plan` for MAJOR 1 alone; it is task-sized and worth doing before the investigation leans on the log). To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
+
 ## Code-quality findings — paydown-wp3-boot-smoke-test (2026-09-23)
 
 - **Pointer:** **1 MAJOR remains** (rewritten 2026-09-23 at paydown WP6). MAJOR-1's code half (`check:link` now asserts both entry chunks, pinned by two-entry fixtures) and both MINORs (`appBoot`'s `uncaught` assertion — proven by a positive control and kept — and `linkCheck.test.ts`, now in the tsc `include`) were resolved at WP6; the comment MINORs and MAJOR-1's prose half at WP4. Remaining, MAJOR-2: the Vitest-reads-`undefined` rationale is duplicated about 8 times. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-wp3-boot-smoke-test — 2026-09-23`.

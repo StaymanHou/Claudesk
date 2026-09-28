@@ -4,6 +4,41 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# supervisor-activity-record — 2026-09-28
+
+*(feature-review-quality on ship commit `dece979`, window `dece979^..dece979`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 8 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-09-28-QUALITY-ACTIVITY-LOG-APPEND-CAN-TEAR-UNDER-CONCURRENT-WRITERS
+- **Severity:** MAJOR
+- **Location:** `src-tauri/src/status_log/mod.rs`, `StatusLog::append` (`writeln!(f, "{line}")`), reached from the `async` command `supervisor_activity::commands::supervisor_activity_append`
+- **Finding:** `writeln!` on an unbuffered `File` issues the line and the `"\n"` as SEPARATE `write` syscalls, and `O_APPEND` makes only each single write atomic. The append command is `async`, so appends from several workspaces can run at the same time on runtime worker threads, and `A-line, B-line, A-\n, B-\n` is a possible order. That leaves one merged line that `parseRecordLine` silently drops, losing BOTH records. `rotate_at`'s size check and rename can race the same way and overwrite a just-rotated generation. (Premise confirmed at backlogging, agent 2026-09-28: `append` is `rotate_if_oversized()` → `OpenOptions::append` → `writeln!`, with no lock.)
+- **Why it matters:** the record's contract is "exactly one record per turn end, so a missing line is itself an anomaly". A torn write breaks it silently, in the multi-workspace case the supervisor exists for.
+- **Suggested action:** compose `format!("{line}\n")` and write it with ONE `write_all`, or serialize the activity log's appends and rotation behind a `Mutex` (managed state). Add a test with N threads appending concurrently, asserting N well-formed lines. ⚠️ `status-channel.log` shares `StatusLog`: check whether its writer is also concurrent.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-28-QUALITY-ARCH-DOC-ENUMERATION-GUARD-USES-A-HAND-KEPT-FILE-LIST
+- **Severity:** MAJOR
+- **Location:** `src/state/supervisor/__tests__/archDocEnumeration.test.ts`, `hostSrc`
+- **Finding:** the guard that checks that §B names every command the supervisor invokes scans a HAND-KEPT file list (`useSupervisor.ts` + `activityRecorder.ts`), backed only by an "add it here" comment. An `invoke` in any other supervisor module is invisible to it. This is `docs/lessons/source-text-guards.md` entry 13 (a one-directional guard cannot see omissions), and this feature itself had to extend the list by hand.
+- **Suggested action:** build the list from a glob of the non-test `src/state/supervisor/*.ts` files (e.g. `import.meta.glob(…, { query: "?raw" })`), keep a non-vacuity floor on the count, and positive-control it with a throwaway module that invokes an undocumented command.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-28-QUALITY-SUPERVISOR-ACTIVITY-MINOR-BATCH
+- **Severity:** MINOR ×8
+- **Findings:**
+  1. `useSupervisor.ts` (`decideTurn`, the toggle check): the comment says the value is "read PER TURN for the same reason as the gate above", but after the extraction the gate (`host.enabled`) now sits in `onTurnEnd`, not above. Repoint the reference.
+  2. `fanOut.ts`: the old `/** What happened for one workspace in a sweep. */` now sits directly above the new `FanOutReason` doc block. Two JSDoc blocks are stacked, and `FanOutOutcome` has lost its doc. Move it.
+  3. `useSupervisor.ts`: two catch sites share their warn text and both record `reason: "sweep-threw"`, so a throw from `fireOne` and a throw from the caller's `onRecycle` are indistinguishable in the record, and the `onRecycle` case drops the decision context it already had (edge, tokens, transcript). Give it its own reason and keep the context.
+  4. `src/cc/workspaceSupervisor.ts` and `SupervisorActivityPopover.tsx` both import `relativeTime` from `components/workspace/diff/diffModel`. A pure readout module now depends on the diff viewer's model. Extract a shared time-format helper.
+  5. `workspaceSupervisorReadout` takes six positional parameters, and call sites read like `(true, false, "x", false, null, origin)`, which is easy to transpose. Use an options object for the trailing four.
+  6. The read limit `2000` appears three times (the inline literal in `Workspace.tsx`'s seed effect, `READ_LINE_LIMIT` in the popover, `MAX_READ_LINES` in Rust). Every turn end in an UNSUPERVISED project also writes a `no-stored-mode` line into the shared file, which dilutes that window, so a quiet supervised project can show "No decisions recorded" although the file holds its records. Share one constant, and consider not recording `no-stored-mode`.
+  7. `Workspace.tsx` (1527 lines) grew by about 70 lines of inline header JSX, plus hint-clock state, popover state and a seed effect, gated in two places (`if (!workflowEnabled)` in the seed effect, `workflowEnabled && visible` in the readout). Extract a `SupervisorHeaderControl` component so the surface's state and gate sit together.
+  8. `SupervisorActivityPopover.tsx`: `role="dialog"` never takes focus, and Esc is handled by a `document` keydown listener. If focus stays in the xterm pane when `▾` is clicked (confirm in WKWebView), the Esc that closes the popover also reaches CC and could interrupt a running turn. Move focus into the popover, or scope the Esc handling.
+- **Priority:** low (#8 is worth a live check first: a leaked Esc is user-visible)
+- **Status:** pending
+
 # f-b-isolated-cc-profiles — 2026-09-24
 
 *(feature-review-quality on ship commit `409f458`, window `257529c^..409f458`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 6 MINOR, all auto-backlogged.)*

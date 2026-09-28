@@ -340,16 +340,53 @@ the instrument the silent-supervisor investigation depends on.
   - [x] verify-codify  <!-- 2026-09-28: the one live-verified behavior without a regression test was the ⚙'s STYLING (its class sat outside the header-class CSS guard's `workspace-header-supervisor*` scan). Added two pins to `supervisorToggleStyles.test.ts`: emitted AND styled, and the SAME accent as the header badge (read from the badge's rule). Mutation-proven: C1 wrong colour, C2 rule deleted, C3 class renamed; each killed. Everything else was already pinned (claim ordering: structural; per-marker persistence: `selectedTag`; expiry and consume-once: `turnOrigin`; gate OFF, cancel and the re-read on step: the live-mount file). Full `pnpm verify:auto` EXIT=0 in 30s (3153 frontend, 986 Rust lib). -->
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality (ship complete 2026-09-28; `pnpm verify:auto` EXIT=0, 3153 frontend / 986 Rust lib). All three phases complete (2026-09-28); P3.verify-human.2 DEFERRED to the investigation.
+- **Path:** Feature > finalize
+- **Active scope:** finalize (review-quality complete 2026-09-28: 0 CRITICAL, 2 MAJOR, 8 MINOR, all auto-backlogged). All three phases complete (2026-09-28); P3.verify-human.2 DEFERRED to the investigation.
 - **Blocked:** none. ⚠️ P3's verify-human LIVE check is expected to be DEFERRED: a live `⚙` needs a
   real supervisor fire, and the supervisor is currently silent (read race + spurious watermark).
   ⚠️ A dev build is running for the probe (PID 52154, markers stripped, scratch-c open); verify-self
   can reuse it after a reload.
-- **Unvisited:** review-quality → finalize
+- **Unvisited:** finalize
 - **Open discoveries:** 5 (below). #2 and #3 are the two causes of the silent supervisor, #4 is
   the duplicate listener (operator: fix with the investigation), and #5 is the mid-turn
   `is_turn_start` found by the P3.1 probe.
+
+## Code-Quality Review
+
+## Code-Quality Review — supervisor-activity-record
+
+*(ship commit `dece979`, window `dece979^..dece979`; drive_mode=autopilot → MAJOR + MINOR auto-backlogged, F39.)*
+
+### Strengths
+- One funnel, and it holds: `decideTurn` returns a `Decision` on every exit (including the three formerly silent early returns), `onTurnEnd` is the only writer, and `activityFunnel.test.tsx` pins each exit individually, with the gate-OFF case positive-controlled.
+- Found and fixed a latent bug: `injectCommand` swallowed a rejected `cc_input`, so `inject-failed` was unreachable and a failed injection read as a fire. The re-throwing `onIpcError` fixes it, and the call site explains why.
+- R-4 is respected: Rust appends and reads opaque lines (and refuses embedded newlines), the schema's single home is `activityRecord.ts`, and `StatusLog`'s rotation is reused rather than duplicated, with a new test pinning that the status log's own `.1` name is unchanged.
+- The gate discipline holds: the turn `⚙` is derived through the gated `workspaceSupervisorReadout`, never read from `turnNav.origin` at the render site; the two new OFF-invariant checks are ON/OFF anti-vacuity pairs, titled to stay out of the `armSubjects` reconciliation.
+- Turn attribution is tightly bounded: a measured claim window, consume-once and per-workspace claims, arming before the invoke, and a side table that keeps `turnMarkers.ts` supervisor-free (with `pruneTags` bounding it). The `archDocEnumeration` regex fix (optional generic) closes a real blind spot.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [src-tauri/src/status_log/mod.rs:113] Concurrent appends can tear a record: `writeln!` on an unbuffered `File` is two `write` syscalls, `O_APPEND` makes only each single write atomic, and `supervisor_activity_append` is `async`, so two workspaces can interleave into one merged line that `parseRecordLine` drops. `rotate_at` can race the same way. — It silently breaks the "exactly one record per turn end" contract in the multi-workspace case. → `SURFACE-2026-09-28-QUALITY-ACTIVITY-LOG-APPEND-CAN-TEAR-UNDER-CONCURRENT-WRITERS`
+- [src/state/supervisor/__tests__/archDocEnumeration.test.ts:40] `hostSrc` is a hand-kept file list, so an `invoke` in any unlisted supervisor module is invisible (source-text-guards entry 13). → `SURFACE-2026-09-28-QUALITY-ARCH-DOC-ENUMERATION-GUARD-USES-A-HAND-KEPT-FILE-LIST`
+
+**MINOR** (→ `SURFACE-2026-09-28-QUALITY-SUPERVISOR-ACTIVITY-MINOR-BATCH`)
+- [useSupervisor.ts:164] A stale "the gate above" cross-reference after the extraction.
+- [fanOut.ts:135] Stacked JSDoc blocks: `FanOutOutcome` lost its doc.
+- [useSupervisor.ts:256,354] Two catch sites both record `sweep-threw`, so a `fireOne` throw and an `onRecycle` throw can't be told apart, and the latter drops its context.
+- [workspaceSupervisor.ts:32] The readout (and the popover) import `relativeTime` from the diff viewer's model.
+- [workspaceSupervisor.ts:134] Six positional parameters; use an options object.
+- [Workspace.tsx:254] A thrice-duplicated `2000` read limit, and `no-stored-mode` lines from unsupervised projects dilute that window.
+- [Workspace.tsx:1055-1128] About 70 lines of inline header JSX plus state; extract a `SupervisorHeaderControl`.
+- [SupervisorActivityPopover.tsx:55] `role="dialog"` never takes focus, and a `document` keydown Esc may also reach CC.
+
+### Assessment
+A well-engineered change that moves the codebase forward: an unobservable component now has a single-funnel, one-record-per-decision trace, R-4 and the M10.9 gate rule are respected, the repo's guard conventions are followed, and a latent defect was fixed on the way. The most consequential gap is at the Rust write layer: `StatusLog` was reused as if appends were single-writer and atomic, and neither holds under a concurrent `async` command, so a torn record is exactly the silent loss the feature exists to prevent. Second is a hand-maintained guard list. The rest is comment drift, a positional parameter list, and `Workspace.tsx` growth. Readable, if heavily annotated; the added debt is small and localized.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
