@@ -5,10 +5,10 @@
 // renders it itself (see `DEFAULT_PROFILE` in ./workflowApplicable.ts).
 
 import { invoke } from "@tauri-apps/api/core";
-import { DEFAULT_PROFILE } from "./workflowApplicable";
+import { isDefaultProfileName } from "./workflowApplicable";
 import type { CcPermissionMode } from "../cc/permissionMode";
 
-/** Broadcast by the backend after a profile is adopted or removed. Payload: none. */
+/** Broadcast by the backend after a profile is adopted, removed, created or deleted. Payload: none. */
 export const PROFILES_CHANGED_EVENT = "profiles-changed";
 
 /** Rust `profiles::Provenance`. Only a `created` profile may be moved to the Trash. */
@@ -72,8 +72,9 @@ export function resolveRowProfile(
   reference: string | null | undefined,
   profiles: readonly Profile[],
 ): RowProfileState {
+  // Unlike `isDefaultProfile`, an absent (`undefined`) row reference IS default here.
   const name = (reference ?? "").trim();
-  if (name === "" || name === DEFAULT_PROFILE) return { kind: "default" };
+  if (isDefaultProfileName(name)) return { kind: "default" };
   const profile = profiles.find((p) => p.name === name);
   return profile ? { kind: "listed", profile } : { kind: "missing", name };
 }

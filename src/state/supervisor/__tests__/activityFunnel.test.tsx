@@ -86,6 +86,8 @@ let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 const records: ActivityRecord[] = [];
 const injected: string[] = [];
+/** Every `transcript_tail` invoke's arguments, in order. */
+const tailArgs: Record<string, unknown>[] = [];
 const recycles: RecycleRequest[] = [];
 /** Turn attribution: the origin a turn start would claim AT THE MOMENT `cc_input` arrives. */
 let originAtInject: SupervisorOrigin | null | undefined;
@@ -136,11 +138,13 @@ async function settle() {
 async function mount(setup: Setup = {}, extra: Setup[] = []) {
   records.length = 0;
   injected.length = 0;
+  tailArgs.length = 0;
   recycles.length = 0;
   mockWindows("main");
   mockIPC(
     (cmd, args) => {
       if (cmd === "transcript_tail") {
+        tailArgs.push(args as Record<string, unknown>);
         if (!setup.tail) throw new Error("transcript read failed");
         return setup.tail();
       }
@@ -369,6 +373,26 @@ describe("AC-1: exactly one record per turn end, one per exit", () => {
     await mount({ tail: () => tailFor("F5") });
     await turnEnd(null);
     expect(records.map((r) => r.sessionId)).toEqual([null]);
+  });
+});
+
+describe("the transcript read names the right session twice over", () => {
+  // `sessionId` picks the file (`<id>.jsonl`), so it must be CC's id from the hook, not the PTY
+  // id, which names no file. `ptySessionId` picks the config root by the LIVE profile.
+  it("passes the hook's CC session id as sessionId and the PTY id as ptySessionId", async () => {
+    await mount({ tail: () => tailFor("F5") });
+    await turnEnd("cc-7");
+    expect(tailArgs).toEqual([
+      { projectPath: "/p", sessionId: "cc-7", ptySessionId: "pty-1" },
+    ]);
+  });
+
+  it("a turn end with no CC session id reads with sessionId null, never the PTY id", async () => {
+    await mount({ tail: () => tailFor("F5") });
+    await turnEnd(null);
+    expect(tailArgs).toEqual([
+      { projectPath: "/p", sessionId: null, ptySessionId: "pty-1" },
+    ]);
   });
 });
 

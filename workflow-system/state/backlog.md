@@ -314,6 +314,10 @@ workflow-gated feature (M10.9 tier 1).
 - **Priority:** high until a release containing `778fe72` is installed (the field build is still
   silent); medium after that.
 - **Status:** pending — fix shipped on `main` 2026-09-28; live checks deferred to the next release
+- **Also in that release (2026-09-28, task `f-b-quality-cleanup`):** the supervisor's transcript read
+  now names CC's session id (it had passed the PTY id, so every read took the newest-modified file)
+  and follows the LIVE profile's config root. When reading a fire's `transcriptPath` in the activity
+  record, expect it to be the workspace's own session file.
 
 ## SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT
 
@@ -915,15 +919,10 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Pickup shape:** one small task. Do `spawn_blocking` for the dry run, keeping the lock-guard anchor, together with the guard's async-exemption rule and the `cfg` predicate fix, each with a fixture test and a mutant. The provenance labels go to the T1/T2 comment pass.
 
 ## Code-quality findings — f-b-isolated-cc-profiles (2026-09-24)
-- **Pointer:** **2 MAJOR + 6 MINOR** from review of ship commit `409f458`.
-  - MAJOR:
-    1. `transcript_tail` resolves its config root from the STORED row profile while the supervisor gate follows the LIVE session, so a mid-session profile change can feed the context-pressure recycle another profile's transcript without any sign.
-    2. `profile_create` misses `adopt`'s already-listed-dir check. That is latent: an adopted dir is non-empty because registration writes its `settings.json`. But it is the one guard on Delete-to-Trash.
-  - MINORs: a misplaced comment in `ProjectPicker`; a stale `PROFILES_CHANGED_EVENT` doc; a duplicated `invalid` helper plus stringly errors; the default-profile rule copied twice in TS; test-module import order; the invoke guard's regex missing nested generics.
-  - Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# f-b-isolated-cc-profiles — 2026-09-24`.
-- **Priority:** medium (MAJORs) / low (MINORs)
+- **Pointer:** **1 MINOR remainder** from review of ship commit `409f458`. Both MAJORs and the rest of the MINOR batch were resolved 2026-09-28 (task `f-b-quality-cleanup`). What remains: `profile_create::create` / `delete_created` still return `Result<_, String>`.
+  - Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# f-b-isolated-cc-profiles — 2026-09-24`.
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** one small task. Add the `same_dir` refusal plus a test in `create`, and resolve `transcript_tail`'s root from the live session (or refuse its fallback on a stored/live mismatch) with a test. Fold the six MINORs in as one-liners.
 
 ## SURFACE-2026-09-18-DOC-COUNT-NEEDS-A-GENERATOR-NOT-A-DETECTOR
 - **Source:** feature:verify-codify (M14 WP4 Phase 4)

@@ -358,7 +358,7 @@ export function ProjectPicker({
     [],
   );
 
-  // Same contract, same purity requirement, for the drive mode (M12 WP4c).
+  // Same contract, same purity requirement, for the profile (F-b).
   const handleProfileCommitted = useCallback(
     (projectPath: string, profile: string | null) => {
       setRecents((rs) => applyCommittedProfile(rs, projectPath, profile));
@@ -366,6 +366,7 @@ export function ProjectPicker({
     [],
   );
 
+  // Same contract, same purity requirement, for the drive mode (M12 WP4c).
   const handleDriveModeCommitted = useCallback(
     (projectPath: string, mode: DriveMode | null) => {
       setRecents((rs) => applyCommittedDriveMode(rs, projectPath, mode));

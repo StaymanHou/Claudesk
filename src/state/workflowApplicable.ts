@@ -25,12 +25,20 @@ export const DEFAULT_PROFILE = "default";
  */
 export type ProfileReference = string | null | undefined;
 
+/**
+ * A blank or `"default"` NAME is the built-in profile — the frontend's one copy of that rule.
+ * Callers differ only in what an absent reference means, so they share this core, not a wrapper.
+ */
+export function isDefaultProfileName(name: string): boolean {
+  const trimmed = name.trim();
+  return trimmed === "" || trimmed === DEFAULT_PROFILE;
+}
+
 /** Absent (`null`), blank, or `"default"` → the built-in profile. `undefined` is NOT default. */
 export function isDefaultProfile(reference: ProfileReference): boolean {
   if (reference === undefined) return false;
   if (reference === null) return true;
-  const trimmed = reference.trim();
-  return trimmed === "" || trimmed === DEFAULT_PROFILE;
+  return isDefaultProfileName(reference);
 }
 
 /**

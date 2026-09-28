@@ -254,6 +254,15 @@ pub fn create(
     if listed.iter().any(|p| p.name == spec.name) {
         return Err(format!("a profile named \"{}\" already exists", spec.name));
     }
+    // ⚠️ The same refusal `profiles::adopt` makes. Without it an adopted dir someone emptied by
+    // hand could be listed a second time as `Created`, and `delete_created` would then trash a
+    // dir an `Adopted` entry still points at — provenance is the only guard on that path.
+    if let Some(p) = listed
+        .iter()
+        .find(|p| profiles::same_dir(&p.config_dir, dir))
+    {
+        return Err(already_listed(dir, &p.name));
+    }
     let made_dir = match dir_status(dir) {
         DirStatus::Absent => {
             std::fs::create_dir_all(dir)
@@ -300,10 +309,13 @@ pub fn create(
         register(dir)?;
         profiles::update_profiles(data_dir, |list| {
             if list.iter().any(|p| p.name == spec.name) {
-                return Err(profiles_invalid(format!(
+                return Err(profiles::invalid(format!(
                     "a profile named \"{}\" already exists",
                     spec.name
                 )));
+            }
+            if let Some(p) = list.iter().find(|p| profiles::same_dir(&p.config_dir, dir)) {
+                return Err(profiles::invalid(already_listed(dir, &p.name)));
             }
             let p = Profile {
                 name: spec.name.clone(),
@@ -328,8 +340,8 @@ pub fn create(
     result
 }
 
-fn profiles_invalid(msg: String) -> super::ConfigError {
-    super::ConfigError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, msg))
+fn already_listed(dir: &Path, name: &str) -> String {
+    format!("{} is already listed as \"{name}\"", dir.display())
 }
 
 /// F-b D.24 — move a **`Created`** profile's directory to the Trash, then drop it from the list.
@@ -511,6 +523,54 @@ mod tests {
         let mut dflt = spec(&home.path().join("d"));
         dflt.name = "default".into();
         assert!(create(data.path(), &def, &dflt, ok_register).is_err());
+    }
+
+    /// The Delete-to-Trash invariant: one dir, one entry. An ADOPTED dir that was emptied by
+    /// hand passes the non-empty check, so only the listed-dir refusal stops a second
+    /// (`Created`) entry that `delete_created` would later trash.
+    #[test]
+    fn profile_create_refuses_an_already_listed_empty_dir_and_touches_nothing() {
+        let data = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        let def = default_settings(&home, "{}");
+        let dir = home.path().join("claude-neo");
+        std::fs::create_dir(&dir).unwrap();
+        profiles::adopt(data.path(), &dir, Some("neo")).unwrap();
+        let before = profiles::read_profiles(data.path()).unwrap();
+
+        // Refused BEFORE any write: the later re-check would also refuse, but only after
+        // seeding and registering into a dir another entry owns.
+        let err = create(data.path(), &def, &spec(&dir), |_| {
+            panic!("registered into an already-listed dir")
+        })
+        .unwrap_err();
+        assert!(err.contains("already listed as \"neo\""), "{err}");
+        assert_eq!(
+            std::fs::read_dir(&dir).unwrap().count(),
+            0,
+            "a seed was written"
+        );
+        assert_eq!(profiles::read_profiles(data.path()).unwrap(), before);
+    }
+
+    /// The re-check under the write lock: the dir becomes listed AFTER the pre-check (here, by
+    /// the registration step), so only the check inside `update_profiles` can refuse it.
+    #[test]
+    fn profile_create_rechecks_the_listed_dir_under_the_write_lock() {
+        let data = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        let def = default_settings(&home, "{}");
+        let dir = home.path().join("claude-race");
+        let err = create(data.path(), &def, &spec(&dir), |d| {
+            profiles::adopt(data.path(), d, Some("raced"))
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        })
+        .unwrap_err();
+        assert!(err.contains("already listed as \"raced\""), "{err}");
+        let listed = profiles::read_profiles(data.path()).unwrap();
+        assert_eq!(listed.len(), 1, "{listed:?}");
+        assert_eq!(listed[0].provenance, Provenance::Adopted);
     }
 
     #[test]

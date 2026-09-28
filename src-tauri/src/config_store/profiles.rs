@@ -190,16 +190,13 @@ pub(crate) fn update_profiles<T>(
     Ok(out)
 }
 
-fn invalid(msg: impl Into<String>) -> ConfigError {
-    ConfigError::Io(std::io::Error::new(
-        std::io::ErrorKind::InvalidInput,
-        msg.into(),
-    ))
+pub(crate) fn invalid(msg: impl Into<String>) -> ConfigError {
+    ConfigError::Invalid(msg.into())
 }
 
 /// Same directory, compared through `canonicalize` when both resolve (so `/tmp` and
 /// `/private/tmp` agree), verbatim otherwise.
-fn same_dir(a: &Path, b: &Path) -> bool {
+pub(crate) fn same_dir(a: &Path, b: &Path) -> bool {
     match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
         (Ok(x), Ok(y)) => x == y,
         _ => a == b,

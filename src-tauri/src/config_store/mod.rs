@@ -205,6 +205,10 @@ pub enum ConfigError {
     Io(#[from] std::io::Error),
     #[error("config parse error: {0}")]
     Parse(#[from] serde_json::Error),
+    /// A refused input (a taken name, an already-listed dir, a bad path) — the message is the
+    /// whole user-facing text, so it carries no "config …" prefix.
+    #[error("{0}")]
+    Invalid(String),
 }
 
 /// Read the project list, ordered most-recently-opened first.

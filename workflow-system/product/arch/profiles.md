@@ -89,10 +89,14 @@ hand-deleted entry comes back), and one failing profile never stops the others o
 
 `transcript_dir_for` takes a config root. `config_root_for_project` resolves it: a listed profile
 gives its dir, default gives `~/.claude`, and unlisted or unreadable gives `None`, **never home**.
-The slug rule is unchanged. ⚠️ **Known gap
-(`SURFACE-2026-09-24-QUALITY-TRANSCRIPT-ROOT-READS-STORED-PROFILE-NOT-LIVE`):** this resolves from
-the **stored** row profile, while the workflow gate follows the **live** session. After a
-mid-session profile change the two disagree.
+The slug rule is unchanged. ⚠️ **The reference is the LIVE session's profile, not the row's
+stored one** (`live_or_stored_reference`; fixed 2026-09-28). `transcript_tail` takes a
+`pty_session_id` and reads `SessionRegistry::profile` for it, falling back to the stored row only
+when no live session is registered. That is the same source the workflow gate follows
+(`cc_session_profile`), so a mid-session profile change on a picker row cannot point the reader at
+another profile's transcripts. ⚠️ Its `session_id` is **CC's** id from the hook, which picks
+`<id>.jsonl`. Until 2026-09-28 the supervisor passed the PTY id there instead, which names no
+file, so every read fell back to the newest transcript.
 
 ## Create (the wizard) and Delete-to-Trash
 

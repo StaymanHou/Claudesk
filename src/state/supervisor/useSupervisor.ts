@@ -156,6 +156,7 @@ export type Decision = Omit<
 export async function decideTurn(
   host: SupervisorHost,
   ledger: FireLedger,
+  ccSessionId: string | null,
 ): Promise<Decision> {
   const warn = host.warn ?? ((m: string) => console.warn(m));
   const withheld = (reason: Decision["reason"] & string): Decision => ({
@@ -181,9 +182,12 @@ export async function decideTurn(
   const ptySessionId = host.ccSessionIdRef.current;
   if (!ptySessionId) return withheld("no-pty-session");
 
+  // ⚠️ `sessionId` is CC's id (from the hook), NOT the PTY id. `transcript_tail` looks for
+  // `<sessionId>.jsonl`, and a PTY id names no file, so passing that one sent every read to the
+  // newest-modified fallback.
   const workspace: SupervisedWorkspace = {
     workspaceId: host.workspaceId,
-    sessionId: ptySessionId,
+    sessionId: ccSessionId,
     projectPath: host.projectPath,
     storedMode,
     ptySessionId,
@@ -196,6 +200,8 @@ export async function decideTurn(
         invoke<TranscriptTail>("transcript_tail", {
           projectPath: w.projectPath,
           sessionId: w.sessionId,
+          // Selects the config root by the session's LIVE profile, not the row's stored one.
+          ptySessionId: w.ptySessionId,
         }),
       // ⚠️ The label is forwarded THROUGH as `injectCommand`'s 4th argument. Dropping it would
       // fall back to the `"auto-resume"` default and point every supervisor failure at M12's arm
@@ -355,7 +361,11 @@ export function useSupervisor(host: SupervisorHost): void {
         decision = { outcome: "withheld", reason: "duplicate-turn-end" };
       } else {
         try {
-          decision = await decideTurn(host, ledgerRef.current as FireLedger);
+          decision = await decideTurn(
+            host,
+            ledgerRef.current as FireLedger,
+            event?.session_id ?? null,
+          );
         } catch (e) {
           // `fireOne` isolates its own failures; this catches caller code (`onRecycle`) so the
           // throw neither escapes into React nor costs the turn its record.

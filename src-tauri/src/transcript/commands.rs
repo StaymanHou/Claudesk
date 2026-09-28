@@ -8,7 +8,10 @@
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager};
+use std::sync::Mutex;
+use tauri::{AppHandle, Manager, State};
+
+use crate::cc_session::SessionRegistry;
 
 /// One transcript read: the lines, plus which file they came from.
 ///
@@ -37,9 +40,7 @@ fn home_dir(app: &AppHandle) -> Option<PathBuf> {
 /// `~/.claude` would read ANOTHER profile's transcripts for the same directory — the 4 dual-use
 /// dirs make that a real collision, not a theoretical one.
 ///
-/// Reads the row's STORED reference. The supervisor (this command's only caller) is off for
-/// non-default profiles (ruling 4), so for its live path this resolves `~/.claude`; the
-/// profile arm keeps the reader correct for any future caller.
+/// `reference` is whatever [`live_or_stored_reference`] chose — this fn does not care which.
 pub(crate) fn config_root_for_project(
     home: &Path,
     reference: Result<Option<String>, crate::config_store::ConfigError>,
@@ -57,6 +58,24 @@ pub(crate) fn config_root_for_project(
         ResolvedProfile::Default => Some(super::default_config_root(home)),
         ResolvedProfile::Listed(p) => Some(p.config_dir),
         ResolvedProfile::Missing(_) => None,
+    }
+}
+
+/// The profile reference the transcript root follows: the LIVE session's (`Some`, from the
+/// session registry) when the caller names a registered session, else the row's STORED one.
+///
+/// ⚠️ **Live wins because the two can disagree.** Switching a picker row's profile does not
+/// touch the running process, and the workflow gate follows the LIVE profile
+/// (`useWorkspaceProfile`). Reading the stored one would leave the supervisor ON for a default
+/// session while this reads `<neo>/projects/<slug>/`, and falls back to ANOTHER profile's newest
+/// transcript for the same directory, with nothing to show that it had.
+fn live_or_stored_reference(
+    live: Option<Option<String>>,
+    stored: impl FnOnce() -> Result<Option<String>, crate::config_store::ConfigError>,
+) -> Result<Option<String>, crate::config_store::ConfigError> {
+    match live {
+        Some(reference) => Ok(reference),
+        None => stored(),
     }
 }
 
@@ -92,11 +111,16 @@ fn select_transcript(dir: &std::path::Path, session_id: Option<&str>) -> Option<
 /// the `session_id` wiring, or which has not emitted a hook event yet, still needs to be
 /// readable. But `None` is returned rather than a guess when the project has no transcripts at
 /// all — an empty result the caller must handle, never a silently-wrong file.
+///
+/// `pty_session_id` is the Claudesk session the transcript belongs to; it selects the config
+/// root by that session's LIVE profile ([`live_or_stored_reference`]).
 #[tauri::command]
 pub fn transcript_tail(
     app: AppHandle,
+    registry: State<'_, Mutex<SessionRegistry>>,
     project_path: String,
     session_id: Option<String>,
+    pty_session_id: Option<String>,
 ) -> TranscriptTail {
     let empty = TranscriptTail {
         path: None,
@@ -105,11 +129,16 @@ pub fn transcript_tail(
     let Some(home) = home_dir(&app) else {
         return empty;
     };
+    let live = pty_session_id
+        .as_deref()
+        .and_then(|id| registry.lock().ok()?.profile(id).ok());
     let data_dir = app.path().app_data_dir().ok();
     let root = match data_dir.as_deref() {
         Some(d) => config_root_for_project(
             &home,
-            crate::config_store::read_project_profile(d, Path::new(&project_path)),
+            live_or_stored_reference(live, || {
+                crate::config_store::read_project_profile(d, Path::new(&project_path))
+            }),
             || crate::config_store::profiles::read_profiles(d),
         ),
         // No app-data dir → no profile can be named; the default root is the only answer.
@@ -172,6 +201,30 @@ mod tests {
             )))
         });
         assert_eq!(unreadable, None);
+    }
+
+    #[test]
+    fn a_live_session_reference_wins_and_never_reads_the_stored_row() {
+        let stored = || -> Result<Option<String>, crate::config_store::ConfigError> {
+            panic!("a known live session must not read the stored row")
+        };
+        assert_eq!(
+            live_or_stored_reference(Some(None), stored).unwrap(),
+            None,
+            "a live DEFAULT session beats a row switched to a profile"
+        );
+        assert_eq!(
+            live_or_stored_reference(Some(Some("neo".into())), || Ok(None)).unwrap(),
+            Some("neo".into())
+        );
+    }
+
+    #[test]
+    fn no_live_session_falls_back_to_the_stored_row() {
+        assert_eq!(
+            live_or_stored_reference(None, || Ok(Some("neo".into()))).unwrap(),
+            Some("neo".into())
+        );
     }
     use std::path::Path;
 

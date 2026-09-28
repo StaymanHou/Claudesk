@@ -9,8 +9,13 @@ import { join } from "node:path";
 // unit gate stays green (memory `tauri-command-removal-needs-invoke-sweep`). Added at F-b Phase 5
 // codify, when four new commands shipped and only a live run proved they were wired.
 //
-// Scope: literal `invoke("name")` / `invoke<T>("name")` calls in non-test source. A command name
+// Scope: literal `invoke("name")` / `invoke<T>("name")` calls in non-test source, with type
+// arguments nested up to three deep (`invoke<Record<string, Array<X>>>("name")`). A command name
 // built at runtime is invisible to this guard.
+
+/** A literal-name `invoke` call; group 1 is the command name. */
+const INVOKE_CALL =
+  /\binvoke(?:<(?:[^<>]|<(?:[^<>]|<[^<>]*>)*>)*>)?\(\s*"([a-z0-9_]+)"/g;
 
 const ROOT = process.cwd();
 
@@ -42,7 +47,7 @@ function invokedCommands(): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const f of sourceFiles(join(ROOT, "src"))) {
     const src = readFileSync(f, "utf8");
-    for (const m of src.matchAll(/\binvoke(?:<[^>]*>)?\(\s*"([a-z0-9_]+)"/g)) {
+    for (const m of src.matchAll(INVOKE_CALL)) {
       out.set(m[1], [...(out.get(m[1]) ?? []), f.slice(ROOT.length + 1)]);
     }
   }
@@ -66,6 +71,17 @@ describe("frontend invoke() names vs lib.rs generate_handler!", () => {
     }
     expect(registered.size).toBeGreaterThan(50);
     expect(invoked.size).toBeGreaterThan(50);
+  });
+
+  it("the call pattern sees plain, generic and NESTED-generic invokes", () => {
+    const names = (src: string) =>
+      [...src.matchAll(INVOKE_CALL)].map((m) => m[1]);
+    expect(
+      names(
+        'invoke("a"); invoke<string>("b"); invoke<Record<string, X>>("c"); ' +
+          'invoke<Map<string, Array<Y>>>("d");',
+      ),
+    ).toEqual(["a", "b", "c", "d"]);
   });
 
   it("every invoked command is registered", () => {

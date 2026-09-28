@@ -333,7 +333,8 @@ pub fn project_get_supervisor_enabled(app: AppHandle, path: String) -> bool {
 // F-b — profiles (named `CLAUDE_CONFIG_DIR`s)
 // ---------------------------------------------------------------------------
 
-/// F-b — broadcast after a profile is adopted or removed, so the picker re-reads the list.
+/// F-b — broadcast after a profile is adopted, removed, created or deleted, so the picker
+/// re-reads the list.
 /// ⚠️ Mirrors `PROFILES_CHANGED_EVENT` in `src/state/profiles.ts`.
 pub const PROFILES_CHANGED_EVENT: &str = "profiles-changed";
 
@@ -542,6 +543,8 @@ pub(crate) fn apply_project_profile(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use tempfile::TempDir;
 
     const CMD: &str = "CLAUDESK_HOOK_SOCK='/d/hook.sock' /usr/bin/perl '/d/claudesk-hook.pl'";
 
@@ -665,8 +668,6 @@ mod tests {
             "/proj"
         ));
     }
-    use super::*;
-    use tempfile::TempDir;
 
     /// Build a `<root>/<prod-id>/` and `<root>/<dev-id>/` sibling layout mirroring
     /// the real `…/Application Support/<identifier>/` shape. Returns the dev dir.

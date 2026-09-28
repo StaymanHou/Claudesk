@@ -631,7 +631,9 @@ mechanism that changed at v0.5.1. That is still a hypothesis. The discriminating
    checks (fire + `⚙`, another app focused, Esc) are DEFERRED to the next release and
    dogfooding, not passed.** Original plan: driven by the activity record, an operator-driven
    break in a dev build, then read the withhold reason.
-3. **Previously queued, unchanged relative to each other:** the F-a/F-b code-quality minor items,
+3. **Previously queued, unchanged relative to each other:** the F-a/F-b code-quality minor items
+   (✅ **CLOSED 2026-09-28**, task `f-b-quality-cleanup`: both F-b MAJORs and its MINOR batch, bar a
+   low stringly-typed-return remainder; F-a's one leftover is routed to the comment-convention pass),
    then the right-panel media viewer (`SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER`, filed today).
    ⚠️ Their position relative to items 1–2 was not re-ruled. The operator had queued them after
    "the dogfeedback close-out", which is now done, so reorder freely.
@@ -1190,5 +1192,3 @@ Decompose M8 at its `/product-wbs` pass; WP1 (the capture/render pipeline probe 
 > 2026-06-15: Major rewrite driven by the vision pivot (multi-window → single-window tabbed workspaces + filmstrip + PiP + menu-bar) and research resolving the open design questions. Phase 1 gained the tab-shell substrate + a gating thumbnail-rendering probe; xterm.js settled on DOM-renderer-only (WebGL ~16-context cap); the prior "cross-window CC status indicator" milestone was replaced by three status surfaces (filmstrip / menu-bar / PiP) fed by a single Rust broadcaster over a Unix-socket hook channel (resolving the old "WP9b probe").
 > 2026-05-22: Replaced the single auto-resume bullet with a three-branch Smart auto-resume milestone; added a drive-mode selector + indicator milestone. Both additive to the stateful-controller phase.
 
-## Session Handoff — 2026-09-28 13:57
-Handed off. See `workflow-system/state/.session.md` to restore.
