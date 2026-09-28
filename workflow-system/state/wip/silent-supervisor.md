@@ -313,11 +313,42 @@ Resolved by the research spike (F3), each against a live dev build and real tran
   - [x] verify-codify — 2 funnel cases added to `activityFunnel.test.tsx` for the two live-observed shapes with no prior coverage: (a) TWO live `useSupervisor` instances for one workspace receive ONE broadcast `Stop` → one decision, one fire, one `duplicate-turn-end` (the leaked-subscription shape; only the module-level claim sees both); (b) two supervised workspaces with the SAME `last_event_at` are each decided and record their OWN `workspaceId`/`projectPath`. Mutants run individually: claim disabled → (a) fails; key without workspace → (b) fails; shasum-restored. `pnpm verify:auto` EXIT=0 (46s): 3214/3214, Rust 988.
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality against the ship commit (AC-6/7/9 deferred to the release + dogfooding)
+- **Path:** Feature > finalize
+- **Active scope:** finalize (review-quality done: 0 CRITICAL / 1 MAJOR / 5 MINOR, auto-backlogged; AC-6/7/9 deferred to the release + dogfooding)
 - **Blocked:** none
-- **Unvisited:** finalize
+- **Unvisited:** (none after finalize)
 - **Open discoveries:** quoted-token fire; leaked subscription (both surfaced to backlog)
+
+## Code-Quality Review — silent-supervisor
+
+*(ship commit `778fe72`, window `778fe72^..778fe72`; drive_mode=autopilot → the MAJOR + MINORs auto-backlogged to `backlog-quality-findings.md` → `# silent-supervisor — 2026-09-28`.)*
+
+### Strengths
+- Each of the three causes is fixed at its own seam (the completion wait in `fireOne`, report stripping in `terminalReports.ts`, the per-`Stop` claim in `turnEndDedupe.ts`), each a small pure function with direct tests.
+- The completion wait sits deliberately before the ledger claim, so a stale read never spends a turn's key; sleep and budget are injected, so `transcriptFlushRace.test.ts` drives the real re-read loop under fake timers.
+- Every new failure path withholds rather than fires, with its own named reason (`transcript-incomplete`, `duplicate-turn-end`); a repeat `Stop` is recorded, not dropped, so the leak stays visible.
+- The `readTurn` floor fixes a real wrong-fire by scoping the backward scan, and the old trap-2 loop is removed rather than left alongside it.
+- The two unpinned root causes (leaked subscription, quoted token) were filed with a detector and repro instead of being folded silently into this commit.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`transcript.ts` `isTurnComplete`, `fanOut.ts` completion wait] Every decision is gated on undocumented CC transcript fields (`stop_reason` values, `system` subtypes `stop_hook_summary` / `turn_duration`). A CC format change would make every turn withhold `transcript-incomplete`, the same silent-supervisor symptom, with no alarm. — Needs a positive alarm (N consecutive `transcript-incomplete` → badge/console warning, or a pinned fixture refreshed at each CC bump). → `SURFACE-2026-09-28-QUALITY-TRANSCRIPT-COMPLETION-WAIT-HAS-NO-ALARM-FOR-A-CC-FORMAT-CHANGE`
+
+**MINOR** (→ `SURFACE-2026-09-28-QUALITY-SILENT-SUPERVISOR-MINOR-BATCH`)
+- [`ccInputRouting.ts`, `unsentInput.ts`] "stripped once, for BOTH readers" but `foldInput` strips again; two docs disagree on the owner.
+- [`transcript.ts` `lastUserProseIndex` / `isUserProseTurn`] also counts `isMeta` skill bodies, so the "user prose" floor can sit mid-turn; the name and the `readTurn` doc overstate it.
+- [`useSupervisor.ts` `decideTurn`] "read at the last possible moment" is overstated now that a ≤2 s wait sits between the toggle read and the inject; the reason list lacks `transcript-incomplete` and `duplicate-turn-end`.
+- [`turnEndDedupe.ts`] module-level store reset only by `activityFunnel.test.tsx`; other `onTurnEnd` tests are safe only because they pass no `last_event_at`.
+- [`useSupervisor.ts` `onTurnEnd`] ad-hoc widened param instead of adding `last_event_at` to `TurnEndSignal`.
+
+### Assessment
+Well built and moves the codebase forward: each cause gets a narrow, measured fix that fails in the withhold direction with a distinct observable reason, and the tests drive the real loop and routing. The main debt is the new dependency on CC's undocumented transcript format, whose all-withhold failure mode is indistinguishable from the bug being fixed and deserves a positive alarm. The remaining risks are comment-level. Adds capability without structural debt.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

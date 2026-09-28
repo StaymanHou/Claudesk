@@ -4,6 +4,29 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# silent-supervisor — 2026-09-28
+
+*(feature-review-quality on ship commit `778fe72`, window `778fe72^..778fe72`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-09-28-QUALITY-TRANSCRIPT-COMPLETION-WAIT-HAS-NO-ALARM-FOR-A-CC-FORMAT-CHANGE
+- **Severity:** MAJOR
+- **Location:** `src/state/supervisor/transcript.ts` (`isTurnComplete`), `src/state/supervisor/fanOut.ts` (the completion wait in `fireOne`)
+- **Finding:** every decision is now gated on `isTurnComplete`, which keys on three UNDOCUMENTED CC transcript properties: `stop_reason` values and the `system` subtypes `stop_hook_summary` / `turn_duration`. If a CC release renames or drops them, every turn waits ~2 s and withholds `transcript-incomplete`, which is exactly the "supervisor silently never fires" symptom this feature fixed, and nothing flags it except someone reading the activity log.
+- **Suggested action:** a positive alarm. Candidates: N consecutive `transcript-incomplete` withholds for one workspace surface on the badge hint (or a console warn), and/or a pinned transcript fixture refreshed from a live capture at each CC version bump. Per CLAUDE.md: silence from a component whose success is invisible is not evidence it works.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-28-QUALITY-SILENT-SUPERVISOR-MINOR-BATCH
+- **Severity:** MINOR ×5
+- **Findings:**
+  1. `ccInputRouting.ts` header, the `Workspace.tsx` comment and the commit message say terminal reports are stripped "here, once, for BOTH readers", but `foldInput` (`unsentInput.ts`) strips them again and its header says it "now strips them first". Two strip sites, two docs that disagree on the owner. Pick one owner, or document the second as defense in depth.
+  2. `transcript.ts`: `lastUserProseIndex` / `isUserProseTurn` also count `isMeta` skill-body lines, so the `readTurn` floor can sit mid-turn after a chained `Skill` call, while the `readTurn` header says the boundary is "the last user prose line" and "tool results never … move the boundary". Rename (e.g. `lastTurnBoundaryIndex`) or state the `isMeta` case in the `readTurn` doc.
+  3. `useSupervisor.ts` `decideTurn`: the comment "every condition guarding it is read at the last possible moment" is now overstated. `supervisorEnabledRef` is read before `fireOne`, and the new ≤2 s completion wait sits between that read and the inject, on top of the ~3 s adjudication gap. The withhold-reason list in the same function is missing `transcript-incomplete` and `duplicate-turn-end`.
+  4. `turnEndDedupe.ts`: the claim store is module-level and only `activityFunnel.test.tsx` calls `resetTurnEnds()`. `useSupervisor.test.ts` and `supervisorActivityLive.test.tsx` also drive `onTurnEnd` and are safe only because they pass no `last_event_at`. Reset in a shared setup file.
+  5. `useSupervisor.ts` `onTurnEnd`: the parameter is widened ad hoc to `TurnEndSignal & Pick<WorkspaceStatusUpdate, "last_event_at">` instead of adding `last_event_at` to `TurnEndSignal`, whose doc calls it "the slice the turn-end decision reads".
+- **Priority:** low
+- **Status:** pending
+
 # supervisor-activity-record — 2026-09-28
 
 *(feature-review-quality on ship commit `dece979`, window `dece979^..dece979`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 8 MINOR, all auto-backlogged. The torn-append MAJOR was resolved 2026-09-28 by task `activity-log-append-tear`; 1 MAJOR + 8 MINOR remain.)*

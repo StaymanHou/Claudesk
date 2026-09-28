@@ -20,6 +20,13 @@
 - **Priority:** medium (decisions are already deduplicated; what remains is a leak plus missing `⚙` in the affected workspace)
 - **Status:** pending
 
+## Code-quality findings — silent-supervisor (2026-09-28)
+
+- **Pointer:** **1 MAJOR + 5 MINOR** from the review of `778fe72`. The MAJOR: the new transcript completion wait keys on undocumented CC transcript fields, so a CC format change would silently withhold every turn as `transcript-incomplete` with no alarm. The MINORs: a "stripped once" claim with two strip sites, a "user prose" floor that also counts `isMeta` skill bodies, a stale "read at the last possible moment" comment + reason list, a dedupe store only one test file resets, and an ad-hoc widened `onTurnEnd` param. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# silent-supervisor — 2026-09-28`.
+- **Priority:** medium (the MAJOR) / low (the rest)
+- **Status:** pending
+- **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
+
 ## Code-quality findings — supervisor-activity-record (2026-09-28)
 
 - **Pointer:** **1 MAJOR + 8 MINOR remain** from the review of `dece979` (rewritten 2026-09-28: the torn-append MAJOR was resolved by task `activity-log-append-tear`). The MAJOR that remains: the §B arch-doc enumeration guard scans a hand-kept file list. The MINORs: two stale comments, an ambiguous `sweep-threw` reason, a layering import, a 6-positional-param readout, a thrice-duplicated `2000` read limit, a `Workspace.tsx` extraction, and a popover Esc that may reach CC. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-activity-record — 2026-09-28`.
