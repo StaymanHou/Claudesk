@@ -263,11 +263,25 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
    deleted.
 
    ```bash
-   (cd src-tauri/target/release/bundle/macos && tar -czf Claudesk.app.tar.gz Claudesk.app)
+   (cd src-tauri/target/release/bundle/macos && \
+     COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -czf Claudesk.app.tar.gz Claudesk.app)
    ./node_modules/.bin/tauri signer sign \
      -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
      src-tauri/target/release/bundle/macos/Claudesk.app.tar.gz
    ```
+
+   ⚠️ **The `--no-mac-metadata --no-xattrs` flags (and `COPYFILE_DISABLE=1`) are load-bearing:
+   without them v0.7.1 shipped a payload that NO self-updating user could install.** If the
+   bundle root carries any extended attribute, macOS `tar` writes an AppleDouble entry
+   `._Claudesk.app` as the archive's FIRST member. For example, macOS adds `com.apple.macl` as
+   soon as the bundle's binary is executed, and a smoke-run of `Contents/MacOS/claudesk …` did
+   exactly that. `tauri-plugin-updater` strips the first path component of every entry
+   (`path().iter().skip(1)`), so that entry unpacks onto the extraction dir itself. The result
+   is `install: failed to unpack ._Claudesk.app into …/tauri_updated_appXXXX/`, and the update
+   aborts. macOS `tar -t` HIDES `._` entries (it folds them back into xattrs), so a normal
+   listing looks clean; check 4 below lists the RAW members instead. The stapled ticket is
+   not an xattr (it lives in `Contents/CodeResources`), so dropping xattrs loses nothing.
+   A no-xattr payload was measured 2026-09-29 as `source=Notarized Developer ID`.
 
    ⚠️ **Order is load-bearing: staple → re-tar → re-sign.** Re-tarring invalidates the
    original `.sig` (different bytes), so the re-sign is mandatory, not optional. Verify
@@ -300,6 +314,10 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
    xcrun stapler validate /tmp/payloadcheck/Claudesk.app
    spctl -a -t exec -vvv /tmp/payloadcheck/Claudesk.app
    rm -rf /tmp/payloadcheck
+   # 4b. ⚠️ the RAW member list (macOS `tar -t` hides AppleDouble `._` entries — see 3c).
+   #     Every member must sit under `Claudesk.app/`; a top-level non-dir entry breaks install.
+   python3 -c 'import tarfile,sys; ms=tarfile.open(sys.argv[1]).getmembers(); bad=[m.name for m in ms if m.name.split("/")[-1].startswith("._") or (len(m.name.strip("/").split("/"))<2 and not m.isdir())]; print(len(ms), "members, first", repr(ms[0].name), "BAD:" if bad else "OK", bad or ""); sys.exit(1 if bad else 0)' \
+     src-tauri/target/release/bundle/macos/Claudesk.app.tar.gz
    ```
 
    ⚠️ **`codesign` alone does not prove notarization.** The decisive line is `spctl`
@@ -316,9 +334,12 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
    `.app` with `cp -R` yields `spctl → rejected, source=Unnotarized Developer ID`. Extended
    attributes do not survive a plain copy. If you ever need to move a stapled bundle, use
    `ditto` (which preserves xattrs) or re-staple afterwards — and re-run this step. The
-   updater's own install path is safe: `tauri-plugin-updater` extracts via
-   `tar::Archive::unpack` + `rename`, and tar *does* restore xattrs (which is why 3c's
-   re-tar works).
+   updater's own install path extracts via `tar::Archive::unpack` + `rename`. ⚠️ **Corrected
+   2026-09-29:** this used to claim "tar *does* restore xattrs, which is why 3c's re-tar
+   works". That was the wrong reason. The payload stays notarized because a bundle's stapled
+   ticket is in `Contents/CodeResources`, a regular file. And the `tar` crate does NOT
+   interpret AppleDouble `._` entries: it unpacks them as literal files, which is what broke
+   v0.7.1 (see 3c).
 
 4. **Compute the SHA-256** (the cask needs it; keep the hash):
 
