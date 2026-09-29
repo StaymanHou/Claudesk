@@ -206,6 +206,18 @@ fn quit_now(app: tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    // `claudesk export-week …` is a CLI subcommand, not the app: dispatched BEFORE the Builder
+    // exists, so no window, plugin, socket or tracking writer ever starts. The identifier comes
+    // from the one embedded config, so a dev build reads the dev DB. See `time_store::export`.
+    let argv: Vec<String> = std::env::args().collect();
+    if time_store::export::is_export_invocation(&argv) {
+        std::process::exit(time_store::export::main(
+            &context.config().identifier,
+            &argv[2..],
+        ));
+    }
+
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -735,7 +747,7 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 

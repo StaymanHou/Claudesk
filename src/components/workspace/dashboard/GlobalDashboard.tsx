@@ -505,10 +505,11 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
   // so flipping the WP5 checkbox in the picker flips this view live — no remount, no
   // manual refresh. `cancelled` guards the async seed/listen under StrictMode.
   // (Mirror of ProjectPicker's tracking seed+listen effect.)
-  const [trackingEnabled, setTrackingEnabled] = useState(false);
-  // Active view. Day = interactive timeline; Week = rollup grid; Month = contribution
-  // calendar. (Custom: P3.)
-  const [view, setView] = useState<DashboardView>("day");
+  // `null` until the seed resolves — see `dashboardMode`'s `pending` for why it is not `false`.
+  const [trackingEnabled, setTrackingEnabled] = useState<boolean | null>(null);
+  // Active view — opens on Week (operator, 2026-09-28; was Day). Day = interactive timeline;
+  // Week = rollup grid; Month = contribution calendar.
+  const [view, setView] = useState<DashboardView>("week");
   // The fetched payloads, one slot per shape (null = not-yet-loaded / loading).
   const [dayData, setDayData] = useState<RangePayload | null>(null);
   const [weekData, setWeekData] = useState<WeekPayload | null>(null);
@@ -1056,7 +1057,14 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
       </header>
 
       <div className="global-dashboard-body">
-        {mode === "off" ? (
+        {mode === "pending" ? (
+          <div
+            className="dashboard-empty"
+            data-testid="dashboard-empty-loading"
+          >
+            <p className="dashboard-empty-hint">Loading activity…</p>
+          </div>
+        ) : mode === "off" ? (
           <div
             className="dashboard-empty"
             data-testid="dashboard-empty-tracking-off"

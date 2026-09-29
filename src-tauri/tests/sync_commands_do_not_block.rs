@@ -90,6 +90,17 @@ const LEDGER: &[(&str, &str)] = &[
     ),
 ];
 
+/// Commands that MUST stay `async` because their main-thread cost is work this guard cannot see.
+///
+/// ⚠️ CPU-bound work is not a seed, so a sync command that computes for 600 ms freezes the UI
+/// and passes [`no_sync_tauri_command_reaches_a_blocking_call`]. Each entry here is one such
+/// command, already moved off the main thread. Reverting it to sync fails. Naming a command
+/// that does not exist also fails, so an entry cannot outlive its command.
+const MUST_STAY_ASYNC: &[(&str, &str)] = &[(
+    "time_analytics_query",
+    "CPU-bound: the Day build ran ~600 ms on a 14-day window (analytics-week-export P2.1c)",
+)];
+
 /// A call whose final segment is one of these, at one of these arities, is blocking.
 /// `None` means any arity. The arity is what tells `handle.join()` (0 args, blocks) apart from
 /// `path.join(x)` (1 arg, does not), and `child.wait()` apart from nothing else that collides.
@@ -182,8 +193,9 @@ struct Command {
 struct Crate {
     fns: HashMap<String, Vec<FnFacts>>,
     commands: Vec<Command>,
-    /// Sync commands exempted because they are `async` (counted, for the anti-vacuity total).
-    async_commands: usize,
+    /// Commands exempted because they are `async` (for the anti-vacuity total and
+    /// [`MUST_STAY_ASYNC`]).
+    async_commands: Vec<String>,
 }
 
 impl Crate {
@@ -215,7 +227,7 @@ impl Crate {
                             .map(|l| l.tokens.to_string().contains("async"))
                             .unwrap_or(false);
                         if f.sig.asyncness.is_some() || async_attr {
-                            self.async_commands += 1;
+                            self.async_commands.push(name);
                         } else {
                             self.commands.push(Command {
                                 file: file.to_path_buf(),
@@ -428,11 +440,11 @@ fn no_sync_tauri_command_reaches_a_blocking_call() {
             })
             .sum::<usize>()
     };
-    let scanned = krate.commands.len() + krate.async_commands;
+    let scanned = krate.commands.len() + krate.async_commands.len();
     println!(
         "scanned {scanned} commands ({} sync, {} async); {} crate fns reach a seed",
         krate.commands.len(),
-        krate.async_commands,
+        krate.async_commands.len(),
         blocking_names(&krate).len()
     );
     assert_eq!(
@@ -443,6 +455,25 @@ fn no_sync_tauri_command_reaches_a_blocking_call() {
     assert!(
         !blocking_names(&krate).is_empty(),
         "no crate fn reaches a seed; the seed list or the call collector is broken"
+    );
+
+    let not_async: Vec<String> = MUST_STAY_ASYNC
+        .iter()
+        .filter(|(n, _)| !krate.async_commands.iter().any(|a| a == n))
+        .map(|(n, why)| {
+            let state = if krate.commands.iter().any(|c| c.name == *n) {
+                "is SYNC again"
+            } else {
+                "names no command"
+            };
+            format!("  {n} {state} ({why})")
+        })
+        .collect();
+    assert!(
+        not_async.is_empty(),
+        "these commands must stay `async` (their cost is invisible to the seed scan); keep the \
+         work on `spawn_blocking`, or delete the entry if the command is gone:\n{}",
+        not_async.join("\n")
     );
 
     let ledgered: BTreeSet<&str> = LEDGER.iter().map(|(n, _)| *n).collect();

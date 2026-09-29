@@ -894,6 +894,95 @@ fn explicit_workspace_close_marker_bounds_the_session_over_a_later_session_end()
 }
 
 #[test]
+fn a_session_resumed_under_the_same_id_is_a_second_life_not_truncated_at_its_first_exit() {
+    // CC's `--continue` / `--resume` (and Claudesk's own M12 auto-resume) reuses the session id:
+    // SessionEnd → later SessionStart(resume) on the SAME id. Measured 2026-09-28: taking the
+    // earliest SessionEnd as THE end dropped 104 sessions' post-resume work (17,206 tool calls),
+    // e.g. a day with 1 prompt before the exit and 26 prompts + 129 tools after it showed 0 AI
+    // minutes. Each life must tile on its own, and the exit→resume gap belongs to neither.
+    let d = day(2026, 5, 13);
+    let sid = "resumedabcd-1234";
+    let cwd = "/repo/proj-z";
+    let events = [
+        ev(at_minute(d, 600), sid, cwd, "SessionStart"),
+        ev(at_minute(d, 601), sid, cwd, "UserPromptSubmit"),
+        with_tool(ev(at_minute(d, 602), sid, cwd, "PreToolUse"), "Bash", "t1"),
+        with_tool(ev(at_minute(d, 603), sid, cwd, "PostToolUse"), "Bash", "t1"),
+        ev(at_minute(d, 604), sid, cwd, "Stop"),
+        ev(at_minute(d, 606), sid, cwd, "SessionEnd"),
+        // Resumed four minutes later under the same id.
+        ev(at_minute(d, 610), sid, cwd, "SessionStart"),
+        ev(at_minute(d, 611), sid, cwd, "UserPromptSubmit"),
+        with_tool(ev(at_minute(d, 612), sid, cwd, "PreToolUse"), "Edit", "t2"),
+        with_tool(ev(at_minute(d, 640), sid, cwd, "PostToolUse"), "Edit", "t2"),
+        ev(at_minute(d, 641), sid, cwd, "Stop"),
+        ev(at_minute(d, 645), sid, cwd, "SessionEnd"),
+    ];
+    let payload = build_day(d, &events, &no_names());
+    assert_eq!(payload.projects.len(), 1);
+    let sessions = &payload.projects[0].sessions;
+    assert_eq!(sessions.len(), 2, "one session per life, got {sessions:?}");
+    assert_ne!(
+        sessions[0].id, sessions[1].id,
+        "the frontend keys selection on `${{session.id}}:${{segIndex}}`, so lives need distinct ids"
+    );
+    assert!(
+        sessions.iter().all(|s| !s.id.contains(':')),
+        "an id containing ':' would break the seg-id split in sidePanelMath.ts"
+    );
+    assert_eq!((sessions[0].start, sessions[0].end), (600, 606));
+    assert_eq!(
+        (sessions[1].start, sessions[1].end),
+        (610, 645),
+        "the second life runs to ITS OWN SessionEnd, not the first one"
+    );
+    let second_ai_ms: i64 = sessions[1]
+        .segs
+        .iter()
+        .filter(|g| matches!(g.kind, Kind::AiDoing))
+        .map(|g| g.dur_ms)
+        .sum();
+    assert_eq!(
+        second_ai_ms,
+        28 * 60_000,
+        "the post-resume tool call is counted"
+    );
+    assert_eq!(sessions[1].prompts, 1, "the post-resume prompt is counted");
+    for s in sessions {
+        assert!(
+            s.segs.iter().all(|g| g.end <= 606 || g.start >= 610),
+            "no segment covers the exit→resume gap (606..610): {:?}",
+            s.segs
+        );
+    }
+}
+
+#[test]
+fn a_project_path_comes_from_its_sessions_modal_cwd_not_a_stray_rows_cwd() {
+    // Native `cc-N` session ids are PTY ids reused across workspaces and launches, so one
+    // native session can carry a few rows stamped with ANOTHER project's cwd. Measured
+    // 2026-09-28: `cc-10` held 3,484 scripture-reading rows + 6 `claudesk` rows, and because
+    // `path` was the alphabetically-first cwd over EVERY row, scripture-reading's path read
+    // `/Users/stayman/Personal/projects/claudesk`. Neo's weekly export carries `path`.
+    let d = day(2026, 5, 13);
+    let own = "/work/zz-proj";
+    let stray = "/a/other-proj"; // sorts BEFORE the real cwd
+    let mut names = no_names();
+    names.insert("zz-proj".to_string(), vec![own.to_string()]);
+    let mut events = vec![ev(at_minute(d, 600), "cc-10", stray, "WindowFocus")];
+    for m in 601..=640 {
+        events.push(ev(at_minute(d, m), "cc-10", own, "KeystrokeActivity"));
+    }
+    let payload = build_day(d, &events, &names);
+    let proj = payload
+        .projects
+        .iter()
+        .find(|p| p.alias == "zz-proj")
+        .expect("the session's modal cwd resolves to zz-proj");
+    assert_eq!(proj.path, own);
+}
+
+#[test]
 fn live_idle_session_under_cap_is_not_truncated() {
     // AC3 at the day level: a session with a genuine 25-min think/lunch gap (< 30-min cap)
     // between two real bursts stays ONE session spanning both — not cut at the gap.

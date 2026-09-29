@@ -96,6 +96,10 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # false` keeps it lean (no `oldtime`/serde-of-Duration surface we don't use). Used only
 # by `time_store::query`.
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# `export-week` CLI (2026-09-28): the IANA zone name (`America/New_York`) the weekly export
+# states, so a consumer need not assume the operator's calendar. Already in the lock as
+# chrono's own `clock` backend; promoted to direct, so no new code is fetched.
+iana-time-zone = "0.1"
 
 # M10 (in-app auto-updater): the official Tauri 2 updater + the process plugin needed
 # for the post-install relaunch. `tauri-plugin-updater` provides check()/download()/

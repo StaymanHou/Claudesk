@@ -1436,6 +1436,113 @@ fn dangling_ignores_a_recent_session_within_the_cap() {
     assert!(dangling_sessions(&events, now, CAP).is_empty());
 }
 
+fn life_events(lives: &[Vec<EventRow>]) -> Vec<Vec<&str>> {
+    lives
+        .iter()
+        .map(|l| l.iter().map(|e| e.event.as_str()).collect())
+        .collect()
+}
+
+#[test]
+fn split_lives_splits_only_at_a_session_start_that_follows_an_end_marker() {
+    // A leading SessionStart opens life 1 (nothing ended yet), so it is NOT a split point.
+    let one = sess_id(
+        "s",
+        "/r",
+        &[(0, "SessionStart"), (1, "UserPromptSubmit"), (5, "Stop")],
+    );
+    assert_eq!(split_lives(one).len(), 1);
+
+    // An end marker with NO later SessionStart never splits: the stray after a clean exit stays
+    // in life 1, where the end clip drops it (the pre-split behavior, unchanged).
+    let stray = sess_id(
+        "s",
+        "/r",
+        &[
+            (0, "UserPromptSubmit"),
+            (5, "Stop"),
+            (6, "SessionEnd"),
+            (50, "Notification"),
+        ],
+    );
+    assert_eq!(split_lives(stray).len(), 1);
+}
+
+#[test]
+fn split_lives_treats_a_workspace_close_as_an_end_marker_too() {
+    // Startup reconciliation writes a WorkspaceClose onto a crashed session; a later
+    // `--continue` resumes the same id. That resume is a new life.
+    let mut events = sess_id("s", "/r", &[(0, "UserPromptSubmit"), (5, "Stop")]);
+    let mut close = ev(5 * MIN, "s", "WorkspaceClose");
+    close.source = "claudesk-native".to_string();
+    events.push(close);
+    events.extend(sess_id(
+        "s",
+        "/r",
+        &[(30, "SessionStart"), (31, "UserPromptSubmit"), (40, "Stop")],
+    ));
+    let lives = split_lives(events);
+    assert_eq!(
+        life_events(&lives),
+        vec![
+            vec!["UserPromptSubmit", "Stop", "WorkspaceClose"],
+            vec!["SessionStart", "UserPromptSubmit", "Stop"],
+        ]
+    );
+}
+
+#[test]
+fn split_lives_handles_repeated_resumes_and_unsorted_input() {
+    // Three lives, fed out of order: the split sorts by ts first.
+    let mut events = sess_id(
+        "s",
+        "/r",
+        &[
+            (20, "SessionStart"),
+            (0, "SessionStart"),
+            (11, "SessionStart"),
+            (1, "SessionEnd"),
+            (12, "SessionEnd"),
+            (21, "UserPromptSubmit"),
+        ],
+    );
+    events.reverse();
+    let lives = split_lives(events);
+    let starts: Vec<Vec<i64>> = lives
+        .iter()
+        .map(|l| l.iter().map(|e| e.ts / MIN).collect())
+        .collect();
+    assert_eq!(starts, vec![vec![0, 1], vec![11, 12], vec![20, 21]]);
+}
+
+#[test]
+fn dangling_judges_a_resumed_session_by_its_last_life() {
+    // A session that exited cleanly (SessionEnd), was resumed under the same id, then died
+    // with no marker is dangling: the EARLIER life's marker says nothing about the later
+    // one. Judging by "any marker anywhere" left it unreconciled forever.
+    let now = 200 * MIN;
+    let events = sess_id(
+        "resumed-1",
+        "/repo/a",
+        &[
+            (0, "SessionStart"),
+            (1, "UserPromptSubmit"),
+            (5, "Stop"),
+            (6, "SessionEnd"),
+            (10, "SessionStart"),
+            (11, "UserPromptSubmit"),
+            (20, "Stop"),
+        ],
+    );
+    let d = dangling_sessions(&events, now, CAP);
+    assert_eq!(d.len(), 1, "the unterminated last life is dangling");
+    assert_eq!(
+        d[0].last_ts,
+        20 * MIN,
+        "closed at the last life's last event"
+    );
+}
+
 #[test]
 fn dangling_ignores_a_session_that_already_has_a_marker() {
     // A session past the cap but WITH a WorkspaceClose (or SessionEnd) is already closed →

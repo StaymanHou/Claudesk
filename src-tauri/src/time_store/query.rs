@@ -41,9 +41,9 @@ use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone};
 use serde::Serialize;
 
 use crate::reclassify::{
-    active_bursts, ai_busy_intervals, ai_component_spans, ai_segments_for_window,
-    authoritative_end, human_segments_for_window, merge_spans, resolve_session_end,
-    subagent_intervals, tool_intervals, EventRow, Kind, Segment,
+    active_bursts, ai_busy_intervals, ai_component_spans, authoritative_end,
+    human_segments_for_window, merge_spans, resolve_session_end, split_lives, subagent_intervals,
+    tool_intervals, AiIntervals, EventRow, Kind, Segment,
 };
 
 // ===========================================================================
@@ -166,20 +166,20 @@ pub struct RollupCell {
 /// Internal ms-precision accumulator for the week rollup. Durations are summed here at
 /// full ms precision, then converted to the minute-unit [`RollupCell`] once per kind
 /// (round-half-up) — so sub-minute AI-doing segments accrue their real time instead of
-/// each flooring to zero. Not serialized; never leaves the query layer.
-#[derive(Debug, Clone, Copy, Default)]
-struct RollupCellMs {
-    ai_doing_ms: i64,
-    subagent_ms: i64,
-    ai_reasoning_ms: i64,
-    typing_ms: i64,
-    reviewing_ms: i64,
-    away_ms: i64,
-    prompts: i64,
+/// each flooring to zero. Not serialized itself; the `export-week` CLI maps it to its own DTO.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct RollupCellMs {
+    pub(crate) ai_doing_ms: i64,
+    pub(crate) subagent_ms: i64,
+    pub(crate) ai_reasoning_ms: i64,
+    pub(crate) typing_ms: i64,
+    pub(crate) reviewing_ms: i64,
+    pub(crate) away_ms: i64,
+    pub(crate) prompts: i64,
 }
 
 impl RollupCellMs {
-    fn into_rollup_cell(self) -> RollupCell {
+    pub(crate) fn into_rollup_cell(self) -> RollupCell {
         RollupCell {
             ai_doing: ms_to_minutes_round(self.ai_doing_ms),
             subagent: ms_to_minutes_round(self.subagent_ms),
@@ -456,6 +456,11 @@ const UNKNOWN_SID: &str = "<unknown>";
 /// sentinel rule (`SURFACE-2026-07-15-QUALITY-WP6C1-BY-SID-GROUPING-DUP`). Distinct from
 /// `reclassify::group_by_session`, which borrows (`Vec<&EventRow>`), skips empty ids, and
 /// pre-sorts by ts — this owns + keeps the `<unknown>` bucket the day/metrics builders need.
+///
+/// ⚠️ **Keyed by LIFE, not by bare id.** Each id is expanded through
+/// [`crate::reclassify::split_lives`], so a session resumed under the same id yields one bucket
+/// per life: life 1 keeps the bare id, life N≥2 is keyed `<id>~N` ([`LIFE_SEP`]). Every builder
+/// reading this therefore tiles, caps and totals each life on its own.
 fn group_events_by_sid(events: &[EventRow]) -> HashMap<String, Vec<EventRow>> {
     let mut by_sid: HashMap<String, Vec<EventRow>> = HashMap::new();
     for e in events {
@@ -466,7 +471,37 @@ fn group_events_by_sid(events: &[EventRow]) -> HashMap<String, Vec<EventRow>> {
         };
         by_sid.entry(sid).or_default().push(e.clone());
     }
-    by_sid
+    let mut by_life: HashMap<String, Vec<EventRow>> = HashMap::with_capacity(by_sid.len());
+    for (sid, sid_events) in by_sid {
+        for (i, life) in split_lives(sid_events).into_iter().enumerate() {
+            let key = if i == 0 {
+                sid.clone()
+            } else {
+                format!("{sid}{LIFE_SEP}{}", i + 1)
+            };
+            by_life.insert(key, life);
+        }
+    }
+    by_life
+}
+
+/// Separates a session id from its life number in a [`group_events_by_sid`] key and in the
+/// payload's session `id`. ⚠️ Must never be `:` — the frontend's seg id is
+/// `` `${session.id}:${segIndex}` `` (`sidePanelMath.ts`).
+const LIFE_SEP: char = '~';
+
+/// The payload `id` for a [`group_events_by_sid`] key: the id's first 8 chars, plus the life
+/// suffix for life N≥2 so the lives of one session never share an id.
+fn session_display_id(key: &str) -> String {
+    let (base, life) = match key.rsplit_once(LIFE_SEP) {
+        Some((base, n)) if n.parse::<usize>().is_ok() => (base, Some(n)),
+        _ => (key, None),
+    };
+    let short: String = base.chars().take(8).collect();
+    match life {
+        Some(n) => format!("{short}{LIFE_SEP}{n}"),
+        None => short,
+    }
 }
 
 // ===========================================================================
@@ -531,12 +566,14 @@ fn segments_for_window(events: &[EventRow], window_start: i64, window_end: i64) 
     let mut segs: Vec<Segment> = Vec::new();
 
     // AI half: run the AI tiler over each AI-busy span (merged union of tool +
-    // subagent + burst intervals), clipped to the window.
+    // subagent + burst intervals), clipped to the window. The window-independent intervals
+    // are derived ONCE per session, not once per span — see `AiIntervals` for why.
+    let ai = AiIntervals::from_events(events);
     for (bs, be) in ai_busy_intervals(events) {
         let cs = bs.max(window_start);
         let ce = be.min(window_end);
         if ce > cs {
-            segs.extend(ai_segments_for_window(events, cs, ce));
+            segs.extend(ai.segments_for_window(cs, ce));
         }
     }
 
@@ -619,7 +656,7 @@ fn build_viz_session(
     }
 
     Some(SessionPayload {
-        id: sid.chars().take(8).collect(),
+        id: session_display_id(sid),
         start: ts_to_minutes(s_start_ts, day_start_ms),
         end: ts_to_minutes(s_end_ts, day_start_ms),
         prompts,
@@ -675,7 +712,11 @@ pub fn build_day(
     // Partition sessions into projects by the session's MODAL cwd (the cwd most of
     // its events occurred in; ties broken alphabetically for determinism).
     struct AliasBucket {
-        cwds: std::collections::BTreeSet<String>,
+        /// Each session's MODAL cwd, weighted by its row count — the source of `path`. Only the
+        /// modal cwd counts: a reused native `cc-N` id carries stray rows stamped with other
+        /// projects' cwds, and taking the alphabetically-first cwd over every row gave a project
+        /// another project's path.
+        cwd_weights: HashMap<String, usize>,
         sessions: Vec<SessionPayload>,
     }
     let mut by_alias: HashMap<String, AliasBucket> = HashMap::new();
@@ -691,17 +732,15 @@ pub fn build_day(
             continue;
         };
         let bucket = by_alias.entry(alias).or_insert_with(|| AliasBucket {
-            cwds: std::collections::BTreeSet::new(),
+            cwd_weights: HashMap::new(),
             sessions: Vec::new(),
         });
-        for e in sid_events {
-            let cwd = if e.cwd.is_empty() {
-                "<unknown>".to_string()
-            } else {
-                e.cwd.clone()
-            };
-            bucket.cwds.insert(cwd);
-        }
+        let cwd = if modal_cwd.is_empty() {
+            "<unknown>".to_string()
+        } else {
+            modal_cwd
+        };
+        *bucket.cwd_weights.entry(cwd).or_insert(0) += sid_events.len();
         bucket.sessions.push(session);
     }
 
@@ -710,7 +749,13 @@ pub fn build_day(
         .filter(|(_, b)| !b.sessions.is_empty())
         .map(|(alias, mut b)| {
             b.sessions.sort_by_key(|s| s.start);
-            let path = b.cwds.iter().next().cloned().unwrap_or_default();
+            // Heaviest modal cwd; ties → alphabetically first, for determinism.
+            let path = b
+                .cwd_weights
+                .iter()
+                .max_by(|(ca, wa), (cb, wb)| wa.cmp(wb).then_with(|| cb.cmp(ca)))
+                .map(|(c, _)| c.clone())
+                .unwrap_or_default();
             ProjectPayload {
                 id: alias.clone(),
                 alias,
@@ -944,15 +989,47 @@ pub fn build_range(
 // Week builder (mirrors build_week_data) — 7-day rollup, per-kind minute totals.
 // ===========================================================================
 
-/// Build a [`WeekPayload`] for the ISO week anchored at `monday` from the week's
-/// events. Reuses [`build_range`] over the 7-day window, then re-aggregates per-day
-/// per-project segment minutes into the rollup shape. Mirrors `build_week_data`,
-/// remapped to the 6-kind enum.
-pub fn build_week(
+/// One project's week at MILLISECOND precision, before the per-kind minute rounding
+/// [`build_week`] applies. The shape the `export-week` CLI serializes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WeekProjectMs {
+    pub(crate) alias: String,
+    /// The project's working directory: its sessions' heaviest modal cwd (see `build_day`).
+    pub(crate) path: String,
+    /// 7 cells, Mon→Sun.
+    pub(crate) cells: Vec<RollupCellMs>,
+}
+
+/// A whole week at millisecond precision — [`build_week`]'s source of truth.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WeekMs {
+    pub(crate) monday: NaiveDate,
+    /// e.g. `"WEEK 20 · MAY 11 — MAY 17"`.
+    pub(crate) label: String,
+    /// 7 day labels (`"MON 11"` …).
+    pub(crate) day_labels: Vec<String>,
+    /// Projects in the Week view's own order: AI-family minutes desc, then alias asc.
+    pub(crate) projects: Vec<WeekProjectMs>,
+}
+
+/// The Week view's sort key: AI-family (`ai_doing + subagent`) minutes, summed over the
+/// ROUNDED cells — the `WEEK TOTAL` badge's figure — so the export and the view agree on order.
+fn week_ai_minutes(cells: &[RollupCellMs]) -> i64 {
+    cells
+        .iter()
+        .map(|c| c.into_rollup_cell())
+        .map(|c| c.ai_doing + c.subagent)
+        .sum()
+}
+
+/// Build the ms-precision week for the ISO week anchored at `monday`. Reuses [`build_range`]
+/// over the 7-day window, then re-aggregates per-day per-project segment durations. Mirrors
+/// `build_week_data`, remapped to the 6-kind enum.
+pub(crate) fn build_week_ms(
     monday: NaiveDate,
     events: &[EventRow],
     project_names: &HashMap<String, Vec<String>>,
-) -> Result<WeekPayload, String> {
+) -> Result<WeekMs, String> {
     let sunday = monday + Duration::days(6);
     let days: Vec<NaiveDate> = (0..7).map(|i| monday + Duration::days(i)).collect();
     let day_labels: Vec<String> = days
@@ -967,15 +1044,15 @@ pub fn build_week(
 
     let range = build_range(monday, sunday, events, project_names)?;
 
-    // alias → 7-cell rollup. Accumulate per-kind duration at MS precision (`RollupCellMs`),
-    // then convert each cell's per-kind total to minutes ONCE (round-half-up) — summing
-    // the minute-quantized `seg.end - seg.start` would zero every sub-minute AI segment
+    // alias → (path, 7-cell rollup). Accumulate per-kind duration at MS precision; the minute
+    // conversion happens ONCE per kind per cell, in `build_week` — summing the minute-quantized
+    // `seg.end - seg.start` would zero every sub-minute AI segment
     // (SURFACE-2026-07-13-M9-WP4-MINUTE-QUANTIZATION-…). Prompts are counts, not durations.
-    let mut rollups_ms: HashMap<String, Vec<RollupCellMs>> = HashMap::new();
+    let mut rollups_ms: HashMap<String, (String, Vec<RollupCellMs>)> = HashMap::new();
     for proj in &range.projects {
-        let cells = rollups_ms
+        let (_, cells) = rollups_ms
             .entry(proj.alias.clone())
-            .or_insert_with(|| vec![RollupCellMs::default(); 7]);
+            .or_insert_with(|| (proj.path.clone(), vec![RollupCellMs::default(); 7]));
         for s in &proj.sessions {
             let Some(&i) = s.day_iso.as_ref().and_then(|iso| day_index.get(iso)) else {
                 continue;
@@ -995,40 +1072,49 @@ pub fn build_week(
         }
     }
 
-    // Convert each ms-cell to the minute-unit RollupCell (one round per kind per cell).
-    let rollups: HashMap<String, Vec<RollupCell>> = rollups_ms
+    let mut projects: Vec<WeekProjectMs> = rollups_ms
         .into_iter()
-        .map(|(alias, ms_cells)| {
-            let cells = ms_cells.into_iter().map(|c| c.into_rollup_cell()).collect();
-            (alias, cells)
-        })
+        .map(|(alias, (path, cells))| WeekProjectMs { alias, path, cells })
         .collect();
+    projects.sort_by(|a, b| {
+        week_ai_minutes(&b.cells)
+            .cmp(&week_ai_minutes(&a.cells))
+            .then_with(|| a.alias.cmp(&b.alias))
+    });
 
-    let mut projects: Vec<(i64, WeekProject)> = rollups
-        .into_iter()
-        .map(|(alias, rollup)| {
-            let total: i64 = rollup.iter().map(|c| c.ai_doing + c.subagent).sum();
-            (
-                total,
-                WeekProject {
-                    id: alias.clone(),
-                    alias,
-                    rollup,
-                },
-            )
-        })
-        .collect();
-    projects.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.alias.cmp(&b.1.alias)));
-
-    Ok(WeekPayload {
+    Ok(WeekMs {
+        monday,
         label: format!(
             "WEEK {} · {} — {}",
             monday.iso_week().week(),
             monday.format("%b %d").to_string().to_uppercase(),
             sunday.format("%b %d").to_string().to_uppercase()
         ),
-        days: day_labels,
-        projects: projects.into_iter().map(|(_, p)| p).collect(),
+        day_labels,
+        projects,
+    })
+}
+
+/// Build a [`WeekPayload`] for the ISO week anchored at `monday` — [`build_week_ms`] with each
+/// cell's per-kind durations rounded to minutes (round-half-up), in the same project order.
+pub fn build_week(
+    monday: NaiveDate,
+    events: &[EventRow],
+    project_names: &HashMap<String, Vec<String>>,
+) -> Result<WeekPayload, String> {
+    let week = build_week_ms(monday, events, project_names)?;
+    Ok(WeekPayload {
+        label: week.label,
+        days: week.day_labels,
+        projects: week
+            .projects
+            .into_iter()
+            .map(|p| WeekProject {
+                id: p.alias.clone(),
+                alias: p.alias,
+                rollup: p.cells.into_iter().map(|c| c.into_rollup_cell()).collect(),
+            })
+            .collect(),
     })
 }
 

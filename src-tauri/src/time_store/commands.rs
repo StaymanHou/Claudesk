@@ -30,7 +30,7 @@ use crate::reclassify::EventRow;
 /// Basename of the per-identity time-analytics DB under the app-data dir. Sibling to
 /// `hook.sock` (both resolved from `app_data_dir()`), so it inherits the same dev/prod
 /// isolation — `com.claudesk.app/time-analytics.sqlite` vs `.dev/…`.
-const TIME_STORE_DB_NAME: &str = "time-analytics.sqlite";
+pub(crate) const TIME_STORE_DB_NAME: &str = "time-analytics.sqlite";
 
 /// Resolve the time-analytics DB path: `<app-data>/time-analytics.sqlite`. Always via
 /// `app_data_dir()` (the bundle *identifier* dir on macOS, per-identity — the same
@@ -652,20 +652,43 @@ pub enum TimeAnalyticsResult {
 /// Note: this reads whatever rows EXIST; at WP4 the write-gate defaults OFF (WP2), so
 /// on a fresh install the DB is empty and the payload is empty — that is correct, and
 /// proves the read path. WP5's toggle turns writing on.
+///
+/// ⚠️ **`async` + `spawn_blocking`, never a sync command.** A sync `#[tauri::command]` runs on the
+/// MAIN thread, so every analytics query froze the whole app (every workspace, every terminal)
+/// for as long as the read + build took. That was 600+ ms for the Day view's 14-day window before
+/// the 2026-09-28 interval hoist, and it grows with the window and the DB. The work is CPU-bound,
+/// not a sleep or poll, so `tests/sync_commands_do_not_block.rs`'s seed scan cannot see it; its
+/// `MUST_STAY_ASYNC` table pins this command async instead.
 #[tauri::command]
-pub fn time_analytics_query(
+pub async fn time_analytics_query(
     app: AppHandle,
     scope: String,
     window: QueryWindow,
+) -> Result<TimeAnalyticsResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let store = app.try_state::<SharedTimeStore>();
+        run_analytics_query(store.as_deref(), &scope, &window)
+    })
+    .await
+    .map_err(|e| format!("time_analytics_query worker failed: {e}"))?
+}
+
+/// The body of [`time_analytics_query`], minus the `AppHandle` hop and the worker, so tests
+/// drive the command's own read + dispatch. `store` is `None` when the store failed to open at
+/// launch; the read path then returns an empty payload rather than an error.
+pub(crate) fn run_analytics_query(
+    store: Option<&SharedTimeStore>,
+    scope: &str,
+    window: &QueryWindow,
 ) -> Result<TimeAnalyticsResult, String> {
     if scope != "global" {
         return Err(format!(
             "time_analytics_query: unsupported scope {scope:?} (only \"global\" is implemented in v1)"
         ));
     }
-    let (start_ms, end_ms, mode) = resolve_window(&window);
+    let (start_ms, end_ms, mode) = resolve_window(window);
     // Read rows (empty when the store isn't managed or the window is empty).
-    let rows: Vec<EventRow> = match app.try_state::<SharedTimeStore>() {
+    let rows: Vec<EventRow> = match store {
         Some(store) => store.query_window(start_ms, end_ms)?,
         None => Vec::new(),
     };
@@ -868,7 +891,7 @@ fn resolve_window(window: &QueryWindow) -> (i64, i64, WindowMode) {
 
 /// The Monday of the ISO week containing `day` (Monday-first). `day` itself when it is a
 /// Monday; else steps back to it. Used to snap a Week-window anchor defensively.
-fn monday_of(day: chrono::NaiveDate) -> chrono::NaiveDate {
+pub(crate) fn monday_of(day: chrono::NaiveDate) -> chrono::NaiveDate {
     use chrono::{Datelike, Duration};
     let days_from_monday = day.weekday().num_days_from_monday() as i64;
     day - Duration::days(days_from_monday)
@@ -910,6 +933,82 @@ mod tests {
             .unwrap()
             .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))
             .unwrap()
+    }
+
+    /// The `time_analytics_query` command end-to-end, minus the `AppHandle` hop: hook events
+    /// written through the real gated writer, then the command's own body
+    /// ([`run_analytics_query`]) reading and dispatching them. A session resumed under the same id (`--continue` /
+    /// `--resume`) must count its post-resume work in the Week rollup AND the Metrics payload
+    /// — before the lives split, everything after its first `SessionEnd` was dropped
+    /// (`reclassify::split_lives`).
+    #[test]
+    fn a_resumed_session_counts_its_post_resume_work_in_the_week_and_metrics_payloads() {
+        use crate::time_store::query::local_midnight_ms;
+        let monday = chrono::NaiveDate::from_ymd_opt(2026, 5, 11).unwrap();
+        let t0 = local_midnight_ms(monday) + 9 * 3_600_000; // Mon 09:00 local
+        let min = 60_000i64;
+        let store = mem_store();
+        let hook = |name: &str, at_min: i64, tuid: Option<&str>| {
+            let mut e = base_event(name);
+            e.session_id = "resumed-sess-0001".to_string();
+            e.timestamp = Some((t0 + at_min * min) as u64);
+            if let Some(id) = tuid {
+                e.tool_use_id = Some(id.to_string());
+                e.tool_name = Some("Bash".to_string());
+            }
+            e
+        };
+        for e in [
+            hook("SessionStart", 0, None),
+            hook("UserPromptSubmit", 1, None),
+            hook("PreToolUse", 2, Some("t1")),
+            hook("PostToolUse", 3, Some("t1")),
+            hook("Stop", 4, None),
+            hook("SessionEnd", 5, None),
+            // `claude --continue` four minutes later: same session id.
+            hook("SessionStart", 9, None),
+            hook("UserPromptSubmit", 10, None),
+            hook("PreToolUse", 11, Some("t2")),
+            hook("PostToolUse", 31, Some("t2")),
+            hook("Stop", 32, None),
+            hook("SessionEnd", 33, None),
+        ] {
+            store.write_gated(&e, true).unwrap();
+        }
+        let week_window = QueryWindow::Week {
+            monday: Some("2026-05-11".to_string()),
+        };
+        let TimeAnalyticsResult::Week(week) =
+            run_analytics_query(Some(&store), "global", &week_window).unwrap()
+        else {
+            panic!("a week window returns a week payload");
+        };
+        assert_eq!(week.projects.len(), 1);
+        let monday_cell = &week.projects[0].rollup[0];
+        assert_eq!(monday_cell.prompts, 2, "both lives' prompts are counted");
+        assert_eq!(
+            monday_cell.ai_doing, 21,
+            "1 min of tool time before the exit + 20 min after the resume"
+        );
+
+        let start = local_midnight_ms(monday);
+        let end = local_midnight_ms(monday + chrono::Duration::days(7));
+        let metrics_window = QueryWindow::Metrics {
+            window: Box::new(QueryWindow::Custom {
+                start_ms: start,
+                end_ms: end,
+            }),
+        };
+        let TimeAnalyticsResult::Metrics(metrics) =
+            run_analytics_query(Some(&store), "global", &metrics_window).unwrap()
+        else {
+            panic!("a metrics window returns a metrics payload");
+        };
+        assert_eq!(
+            metrics.tool_call.effort_ms,
+            21 * min,
+            "the post-resume tool call reaches the metrics payload"
+        );
     }
 
     #[test]

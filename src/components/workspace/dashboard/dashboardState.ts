@@ -2,7 +2,8 @@
 //
 // The GLOBAL time-analytics view has three mutually-exclusive display modes,
 // decided from two inputs the view already holds:
-//   - `enabled`  — the WP5 tracking toggle (`time_get_tracking_enabled`), default OFF.
+//   - `enabled`  — the WP5 tracking toggle (`time_get_tracking_enabled`), default OFF, or
+//                  `null` while that seed has not resolved yet.
 //   - `hasData`  — whether the queried window returned any project rows.
 //
 // Repo posture (pure logic → vitest, live DOM → the MCP bridge): this predicate is
@@ -11,13 +12,16 @@
 // live flag + payload and renders the matching subtree.
 
 /** The DashboardPanel's render mode.
+ *  - `"pending"` — the tracking seed has not resolved → a neutral loading body. ⚠️ Never
+ *    `"off"`: rendering the OFF empty-state here claimed tracking was off on every open
+ *    while it was ON (seen by the operator, 2026-09-28).
  *  - `"off"`   — tracking disabled (WP5 toggle OFF) → the "enable tracking" empty-state.
  *  - `"empty"` — tracking ON but the window has no recorded activity → "no activity" msg.
  *  - `"data"`  — tracking ON and rows present → render the day breakdown. */
-export type DashboardMode = "off" | "empty" | "data";
+export type DashboardMode = "pending" | "off" | "empty" | "data";
 
 /**
- * Decide the render mode. Tracking-OFF dominates (the toggle is the gate — if it's
+ * Decide the render mode. An unresolved seed is `pending`, never `off`. Tracking-OFF dominates (the toggle is the gate — if it's
  * off there is nothing to show regardless of any stale payload). When ON, the mode
  * is data-vs-empty by whether the window produced rows.
  *
@@ -26,9 +30,10 @@ export type DashboardMode = "off" | "empty" | "data";
  * two-boolean fold with no DTO coupling.
  */
 export function dashboardMode(
-  enabled: boolean,
-  hasData: boolean,
+  enabled: boolean | null,
+  hasData: boolean | null,
 ): DashboardMode {
+  if (enabled === null) return "pending";
   if (!enabled) return "off";
   return hasData ? "data" : "empty";
 }

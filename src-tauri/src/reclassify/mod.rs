@@ -456,83 +456,121 @@ pub fn session_active_ms(events: &[EventRow]) -> HashMap<String, i64> {
 ///
 /// This is the Phase-2 AI half of the timeline; the human-gap half (between bursts) is
 /// Phase 3.
+// Test-only consumer today: the live caller derives [`AiIntervals`] once per session and clips
+// per span. Kept as the one-shot API the tiler's tests drive.
+#[allow(dead_code)]
 pub fn ai_segments_for_window(
     events: &[EventRow],
     window_start: i64,
     window_end: i64,
 ) -> Vec<Segment> {
-    if window_end <= window_start {
-        return Vec::new();
-    }
+    AiIntervals::from_events(events).segments_for_window(window_start, window_end)
+}
 
-    // Subagent intervals (with labels), clipped to the window. Subagent wins over tool.
-    let mut labeled_sub: Vec<(i64, i64, Option<String>)> = Vec::new();
-    for sid_events in group_by_session(events, is_subagent_event).values() {
-        let mut opens: HashMap<String, Vec<&EventRow>> = HashMap::new();
-        for e in sid_events {
-            let atype = e
-                .agent_type
-                .clone()
-                .unwrap_or_else(|| "<unknown>".to_string());
-            match e.event.as_str() {
-                "SubagentStart" => opens.entry(atype).or_default().push(e),
-                "SubagentStop" => {
-                    if let Some(start) = opens.get_mut(&atype).and_then(|v| pop_front(v)) {
-                        if e.ts > start.ts {
-                            if let Some(clip) = clip(start.ts, e.ts, window_start, window_end) {
-                                labeled_sub.push((clip.0, clip.1, Some(atype.clone())));
+/// The window-INDEPENDENT half of [`ai_segments_for_window`]: one session's paired subagent
+/// spans and tool spans, derived once and clipped per window by
+/// [`AiIntervals::segments_for_window`].
+///
+/// ⚠️ Exists for speed, not shape. The per-span caller (`query::segments_for_window`) tiles
+/// every AI-busy span of a session, and re-deriving these per span re-paired every subagent and
+/// re-parsed every tool row's `meta` JSON once PER SPAN — spans × events, measured at 85% of the
+/// Day view's build time (602 ms over 123K rows, 2026-09-28). Neither derivation reads the
+/// window, so deriving once is output-identical.
+pub struct AiIntervals {
+    /// Paired `SubagentStart → SubagentStop` spans (`stop > start`), UNCLIPPED, with their
+    /// label, in pairing order.
+    subagents: Vec<(i64, i64, String)>,
+    /// Every tool span from [`tool_intervals`], UNCLIPPED.
+    tools: Vec<(i64, i64)>,
+}
+
+impl AiIntervals {
+    /// Derive the window-independent intervals from one session's events.
+    pub fn from_events(events: &[EventRow]) -> Self {
+        // Subagent pairing: FIFO by agent_type per session. Subagent wins over tool.
+        let mut subagents: Vec<(i64, i64, String)> = Vec::new();
+        for sid_events in group_by_session(events, is_subagent_event).values() {
+            let mut opens: HashMap<String, Vec<&EventRow>> = HashMap::new();
+            for e in sid_events {
+                let atype = e
+                    .agent_type
+                    .clone()
+                    .unwrap_or_else(|| "<unknown>".to_string());
+                match e.event.as_str() {
+                    "SubagentStart" => opens.entry(atype).or_default().push(e),
+                    "SubagentStop" => {
+                        if let Some(start) = opens.get_mut(&atype).and_then(|v| pop_front(v)) {
+                            if e.ts > start.ts {
+                                subagents.push((start.ts, e.ts, atype.clone()));
                             }
                         }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
+        let tools = tool_intervals(events).into_values().flatten().collect();
+        AiIntervals { subagents, tools }
     }
 
-    // Tool intervals, clipped, EXCLUDING spans already covered by a subagent.
-    let sub_spans: Vec<(i64, i64)> = labeled_sub.iter().map(|(s, e, _)| (*s, *e)).collect();
-    let mut tool_segs: Vec<(i64, i64)> = Vec::new();
-    for intervals in tool_intervals(events).values() {
-        for &(s, e) in intervals {
+    /// Tile `[window_start, window_end]` from the precomputed intervals — the behavior
+    /// [`ai_segments_for_window`] documents.
+    pub fn segments_for_window(&self, window_start: i64, window_end: i64) -> Vec<Segment> {
+        if window_end <= window_start {
+            return Vec::new();
+        }
+
+        // Subagent intervals (with labels), clipped to the window.
+        let labeled_sub: Vec<(i64, i64, Option<String>)> = self
+            .subagents
+            .iter()
+            .filter_map(|(s, e, atype)| {
+                clip(*s, *e, window_start, window_end).map(|c| (c.0, c.1, Some(atype.clone())))
+            })
+            .collect();
+
+        // Tool intervals, clipped, EXCLUDING spans already covered by a subagent.
+        let sub_spans: Vec<(i64, i64)> = labeled_sub.iter().map(|(s, e, _)| (*s, *e)).collect();
+        let mut tool_segs: Vec<(i64, i64)> = Vec::new();
+        for &(s, e) in &self.tools {
             if let Some((cs, ce)) = clip(s, e, window_start, window_end) {
                 tool_segs.extend(subtract_spans(cs, ce, &sub_spans));
             }
         }
-    }
 
-    // Assemble labeled segments: subagent (label) + ai-doing (no label).
-    let mut segs: Vec<Segment> = Vec::new();
-    for (s, e, label) in labeled_sub {
-        segs.push(Segment {
-            kind: Kind::Subagent,
-            start_ms: s,
-            end_ms: e,
-            label,
-        });
-    }
-    for (s, e) in tool_segs {
-        segs.push(Segment {
-            kind: Kind::AiDoing,
-            start_ms: s,
-            end_ms: e,
-            label: None,
-        });
-    }
+        // Assemble labeled segments: subagent (label) + ai-doing (no label).
+        let mut segs: Vec<Segment> = Vec::new();
+        for (s, e, label) in labeled_sub {
+            segs.push(Segment {
+                kind: Kind::Subagent,
+                start_ms: s,
+                end_ms: e,
+                label,
+            });
+        }
+        for (s, e) in tool_segs {
+            segs.push(Segment {
+                kind: Kind::AiDoing,
+                start_ms: s,
+                end_ms: e,
+                label: None,
+            });
+        }
 
-    // ai-reasoning fills the residual (window minus the AI-busy cover).
-    let mut busy: Vec<(i64, i64)> = segs.iter().map(|s| (s.start_ms, s.end_ms)).collect();
-    for (rs, re) in complement(window_start, window_end, &mut busy) {
-        segs.push(Segment {
-            kind: Kind::AiReasoning,
-            start_ms: rs,
-            end_ms: re,
-            label: None,
-        });
-    }
+        // ai-reasoning fills the residual (window minus the AI-busy cover).
+        let mut busy: Vec<(i64, i64)> = segs.iter().map(|s| (s.start_ms, s.end_ms)).collect();
+        for (rs, re) in complement(window_start, window_end, &mut busy) {
+            segs.push(Segment {
+                kind: Kind::AiReasoning,
+                start_ms: rs,
+                end_ms: re,
+                label: None,
+            });
+        }
 
-    segs.sort_by_key(|s| (s.start_ms, s.end_ms));
-    segs
+        segs.sort_by_key(|s| (s.start_ms, s.end_ms));
+        segs
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -724,8 +762,12 @@ pub const EVENT_SESSION_END: &str = "SessionEnd";
 /// The authoritative session-end ts from an observed teardown, or `None`. Scans the
 /// session's events for an explicit [`EVENT_WORKSPACE_CLOSE`] marker (signal 1) FIRST — it
 /// is Claudesk's synchronous ground truth — else a CC [`EVENT_SESSION_END`] (signal 3).
-/// Within a kind, the EARLIEST matching ts wins (a session ends once; a later duplicate is
+/// Within a kind, the EARLIEST matching ts wins (a life ends once; a later duplicate is
 /// ignored). Feeds [`resolve_session_end`]'s level-1 precedence (D3).
+///
+/// ⚠️ Pass ONE LIFE's events, never a whole resumed session id — the earliest marker of a
+/// session resumed under the same id is its FIRST exit, and everything after it would be
+/// dropped. [`split_lives`] produces the lives; `query::group_events_by_sid` applies it.
 ///
 /// Precedence rationale (D3): a `WorkspaceClose` and a `SessionEnd` typically co-occur on a
 /// clean Claudesk close (the close both writes the marker AND causes CC's `/exit`→
@@ -748,6 +790,53 @@ fn earliest_end_marker<'a>(events: impl Iterator<Item = &'a EventRow> + Clone) -
             .min()
     };
     earliest(EVENT_WORKSPACE_CLOSE).or_else(|| earliest(EVENT_SESSION_END))
+}
+
+/// CC's session-start hook event name. After an end marker it opens a new LIFE of the same
+/// session id — see [`split_lives`].
+pub const EVENT_SESSION_START: &str = "SessionStart";
+
+/// The index at which EACH life of one session's ts-sorted events begins — always starting
+/// with `0`, one more entry per resume. The single encoding of the life rule; [`split_lives`] and
+/// [`dangling_sessions`] both read it.
+fn life_starts<E: std::borrow::Borrow<EventRow>>(sorted: &[E]) -> Vec<usize> {
+    let mut starts = vec![0];
+    let mut ended = false;
+    for (i, e) in sorted.iter().enumerate() {
+        let name = e.borrow().event.as_str();
+        if name == EVENT_WORKSPACE_CLOSE || name == EVENT_SESSION_END {
+            ended = true;
+        } else if name == EVENT_SESSION_START && ended {
+            starts.push(i);
+            ended = false;
+        }
+    }
+    starts
+}
+
+/// Split ONE session id's events into its **lives**: a new life begins at a `SessionStart`
+/// that follows an end marker (`WorkspaceClose` / `SessionEnd`) in the current life.
+///
+/// ⚠️ CC's `--continue` / `--resume` (and Claudesk's own M12 auto-resume) reuse the session
+/// id, so one id can hold several exit→resume cycles. [`authoritative_end`] takes the EARLIEST
+/// marker, which is right *within* a life and wrong across them: measured 2026-09-28, it dropped
+/// 104 sessions' post-resume work (39,461 hook events, 17,206 tool calls). Tile each life on its
+/// own; the exit→resume gap then belongs to neither.
+///
+/// Rows between an end marker and the next `SessionStart` stay in the earlier life, whose end
+/// clip drops them — so a stray after a clean exit is still discarded, exactly as before. A
+/// marker with no later `SessionStart` never splits. Returns the lives in order, each sorted by
+/// ts (stable, so equal-ts rows keep their input order); never empty for non-empty input.
+pub fn split_lives(mut session_events: Vec<EventRow>) -> Vec<Vec<EventRow>> {
+    session_events.sort_by_key(|e| e.ts);
+    let starts = life_starts(&session_events);
+    let mut lives: Vec<Vec<EventRow>> = Vec::with_capacity(starts.len());
+    // Peel lives off the tail so each `split_off` is a single move, then restore order.
+    for &start in starts.iter().rev() {
+        lives.push(session_events.split_off(start));
+    }
+    lives.reverse();
+    lives
 }
 
 /// One dangling session to reconcile: its id + the `cwd` of its last event + the last-seen
@@ -781,10 +870,13 @@ pub fn dangling_sessions(events: &[EventRow], now_ms: i64, cap_ms: i64) -> Vec<D
         let evs = &by_sid[sid];
         // group_by_session sorts each session's events by ts, so last() is the latest.
         let Some(last) = evs.last() else { continue };
-        // Already has an authoritative end (WorkspaceClose/SessionEnd) → not dangling. `evs` is
-        // `&[&EventRow]`; feed the iterator core directly (`.copied()` → `&EventRow`) so we skip
-        // the per-session owned clone `authoritative_end`'s `&[EventRow]` API would force.
-        if earliest_end_marker(evs.iter().copied()).is_some() {
+        // Already has an authoritative end (WorkspaceClose/SessionEnd) → not dangling. Judged on
+        // the LAST life only: an earlier life's clean exit says nothing about a resumed life
+        // that later died (see `split_lives`). `evs` is `&[&EventRow]`; feed the iterator core
+        // directly (`.copied()` → `&EventRow`) so we skip the per-session owned clone
+        // `authoritative_end`'s `&[EventRow]` API would force.
+        let last_life = &evs[*life_starts(evs).last().unwrap_or(&0)..];
+        if earliest_end_marker(last_life.iter().copied()).is_some() {
             continue;
         }
         // Still within the idle cap of now → treat as live/recent, not dangling.

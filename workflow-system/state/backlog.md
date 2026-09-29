@@ -1,5 +1,15 @@
 # Backlog
 
+## SURFACE-2026-09-28-ANALYTICS-PROJECT-PATH-FROM-STRAY-CWDS
+- **Source:** feature:build (analytics-week-export, Phase 1 verify-self re-verify)
+- **Target level:** product:arch
+- **Type:** bug
+- **Summary:** A time-analytics project's `path` is the alphabetically-first cwd over every event in its bucket, so stray rows from a reused native `cc-N` id can give it another project's path.
+- **Context:** In `query::build_day`, `bucket.cwds` collects `e.cwd` for **every** event, and `path` is `cwds.iter().next()`. Native session ids (`cc-N`) are PTY ids reused across workspaces and launches. On 2026-09-25, `cc-10` held 3,484 scripture-reading rows and 6 `claudesk` rows, so scripture-reading's SidePanel read `/Users/stayman/Personal/projects/claudesk`. Neo's weekly export carries `path`, which makes this user-facing.
+- **Suggested action:** Derive `path` from the bucket's sessions' **modal** cwds (the cwd that resolved to the alias). Being fixed in `analytics-week-export` P2.2.
+- **Priority:** medium
+- **Status:** pending
+
 ## SURFACE-2026-09-28-SUPERVISOR-FIRES-ON-A-TRANSITION-TOKEN-QUOTED-IN-PROSE
 - **Source:** feature:verify-self (`silent-supervisor` Phase 3)
 - **Target level:** feature:spec
