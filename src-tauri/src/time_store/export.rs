@@ -1,5 +1,5 @@
 //! `claudesk export-week` — the Week view's data as JSON on stdout, for a consumer that runs
-//! unattended (Neo's Monday report; `HANDOFF-from-neo-2026-09-28-weekly-export.md`).
+//! unattended (Neo's Monday report; requested 2026-09-28, request and reply kept in Neo's repo).
 //!
 //! ```text
 //! /Applications/Claudesk.app/Contents/MacOS/claudesk export-week [--monday YYYY-MM-DD] [--json]

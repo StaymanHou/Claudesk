@@ -32,7 +32,7 @@ Four asks against time analytics, gathered in one session.
 - Corpus-wide: **104 sessions, 39,461 hook events, 17,206 tool calls dropped.**
 - ⚠️ **Operator ruling:** split one session id into **lives** at each end marker followed by a later `SessionStart`. The exit→resume gap counts as nothing. The idle cap applies per life.
 
-**4. Neo's weekly export** (`HANDOFF-from-neo-2026-09-28-weekly-export.md`). Neo needs the Week view's data as a machine-readable file so it can draft the Monday report without a screenshot.
+**4. Neo's weekly export** (a 2026-09-28 handoff from Neo; deleted from this repo 2026-09-29 because it names private projects). Neo needs the Week view's data as a machine-readable file so it can draft the Monday report without a screenshot.
 - ⚠️ **Operator rulings:** a CLI subcommand on the app binary, `claudesk export-week --monday YYYY-MM-DD`, writing JSON to **stdout**. It is **UNFILTERED**: no exclude flag and no stored list; Neo filters on its side.
 - It must run without the operator (no GUI), open the DB **read-only**, and be safe while the app is running.
 
@@ -146,7 +146,7 @@ Problem statement unchanged. The F9b back-loop was a missing consuming-surface o
     - The read-only assertion was positive-controlled: a READ_WRITE + INSERT mutant fails both tests.
     - ⚠️ Found at build: a read-only open of a WAL DB with no sidecars CREATES `-shm` and an empty `-wal`. The tested property is therefore "no DATA changed" (DB + non-empty `-wal`), not "no file changed".
   - [x] P2.4 Wire the `export-week` intercept into `run()` before `Builder`, with the identifier taken from the single `generate_context!()`. Smoke run against the real prod DB, with the installed app running: EXIT=0 in 1.64 s (debug), 17 projects, tz `America/New_York` / `-04:00`, scripture-reading path correct. The main-file shasum was unchanged across a run.
-  - [x] P2.5 Document the command (arch/time-analytics.md) and write `HANDOFF-to-neo-<date>-weekly-export.md` with the path, schema, field meanings and the release caveat. Written to this repo's root (not Neo's repo).
+  - [x] P2.5 Document the command (arch/time-analytics.md) and write `HANDOFF-to-neo-<date>-weekly-export.md` with the path, schema, field meanings and the release caveat. Written to this repo's root at first; per the operator, deleted from this repo before the v0.7.1 push (it names private projects and weekly hours). It lives only in Neo's repo.
   - [x] verify-auto — `pnpm verify:auto` EXIT=0 in 46s (frontend 3221, Rust 1007 lib; only the pre-existing XtermPane warning)
     - First run failed: `pnpm verify:auto` EXIT=1 at `prettier --check` because the P2.1b edit in `GlobalDashboard.tsx` wasn't formatted. F9 → build ran `prettier --write` on that file (formatting only: `useState<boolean | null>(null)` collapsed to one line). `prettier --check .` is clean.
   - [x] verify-self — every outcome PASS.
@@ -167,7 +167,7 @@ Problem statement unchanged. The F9b back-loop was a missing consuming-surface o
   - [x] verify-human — operator approved 2026-09-29
     - [x] P2.verify-human.1 Consuming-surface capture: `claudesk export-week --monday 2026-09-21`, agent-run against the REAL DB with the installed app running. Exit 0; trimmed output shown in chat.
     - [x] P2.verify-human.2 Open Analytics in **Claudesk Dev** a few times → lands on Week, with no "Time tracking is off" flash — operator: pass (dev build relaunched; boot smoke `#root` mounted)
-    - [x] P2.verify-human.3 The export's shape and field meanings suit Neo (see `HANDOFF-to-neo-2026-09-28-weekly-export.md`), and where that reply should live — operator: shape ok; reply lives in BOTH repos (copied byte-identical to `~/Work/Kenosis/neo/`, left uncommitted there; this repo's copy is archived at finalize with `HANDOFF-from-neo-…`)
+    - [x] P2.verify-human.3 The export's shape and field meanings suit Neo (the handoff reply to Neo), and where that reply should live — operator: shape ok; reply copied to `~/Work/Kenosis/neo/`. The operator later (2026-09-29, before the v0.7.1 push) had BOTH handoff files untracked and deleted here, rewriting the unpushed finalize commit so they never reached origin.
   - [x] verify-codify — 2 new guards (5 test cases).
     - Integration boundary: the `export-week` CLI dispatch in `run()` and the `time_analytics_query` command. Consuming-surface test: `src-tauri/tests/export_week_cli.rs` runs the REAL built `claudesk` binary under a fake `$HOME` with a 20 s kill deadline. It checks a usage error → exit 2, empty stdout, nothing written; a valid week with no DB → exit 1, stderr naming `$HOME/Library/Application Support/<tauri.conf identifier>/time-analytics.sqlite`, nothing created; and `--help` → exit 0 with usage on stdout.
       - Mutants each landed and were killed: `argv[1..]` (off by one) killed 2 of 3; a wrong identifier killed the path test.
