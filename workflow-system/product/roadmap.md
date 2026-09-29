@@ -149,3 +149,6 @@ workspaces. The spec settles what selects the depth and what "review" includes. 
   Execution order set by the operator: **M16 media viewer** → a supervisor-hardening bucket (gated
   on a live fire) → a `/product-vision` revisit before M17. The mccc asks went to its inbox.
 - *Earlier revisions, 2026-06-15 → 2026-09-25, are in the archive under their original headings.*
+
+## Session Handoff — 2026-09-29 10:36
+Handed off. See `workflow-system/state/.session.md` to restore.
