@@ -6,1200 +6,146 @@ updated: 2026-09-29
 
 # Roadmap
 
-Claudesk grows in dogfood-able increments, each independently usable. **Launch-friction relief comes first** (Milestone 1 — also lays down the tab-shell substrate even though only one workspace is open at a time); **the in-app lite editor + diff viewer** comes second (Milestone 2) — a must-have, not a nice-to-have, now that projects live in tabs (see the resequencing rationale in the 2026-06-19 revision below); **the architectural heart** — stateful CC controller, three status surfaces, orchestration — comes third (Milestones 3–12, resequenced dogfood-first 2026-06-22 so CC-state + the multi-workspace filmstrip land first as the daily-driver replacement point); **release polish** comes fourth (Milestone 13). *(A demo-assets milestone — M8 — was inserted 2026-06-29b after the filmstrip + PiP shipped, to capture their value before further feature work.)*
-
-Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). The `## Group` headings below are **cosmetic clustering only** — they carry no numbering or dependency semantics; they just organize the flat list for readability. Dependencies, where they exist, are stated in each milestone's prose.
-
-## Group A — Launch friction (PoC)
-
-### Milestone 1: Bare Shell + Tab Substrate (PoC) ✅ COMPLETE 2026-06-19
-
-> **Cycle closed 2026-06-19.** All 9 work packages shipped (WP1–WP9); the full decomposition is archived at [`docs/product/archive/phase-1-bare-shell-poc/wbs.md`](archive/phase-1-bare-shell-poc/wbs.md).
-
-**Goal:** Prove the Tauri shell + embedded terminal + project picker + tab-shell substrate work together. Replaces *only* the "open terminal + cd + run claude" step at the user-visible level — the biggest reported pain point (launch friction) is solved before any editor work begins. The tab substrate ships now (even though only one workspace is ever open) so later status-surface work builds on an existing foundation rather than reshaping it.
-
-**Deliverables (all shipped):**
-- [x] **Tauri 2 app skeleton** (macOS bundle, launches, shows one window). Single `WebviewWindow` per the research decision — no multi-webview. *(WP1, commit c50a785.)*
-- [x] **Project picker UI** (recents list, "Open Folder" button), persisted to `~/Library/Application Support/Claudesk/projects.json`. *(WP5 prototype 777c0b8; WP6 real config store + filter/search 525b7e8; WP9 added prune-missing-on-mount + toast, 91fae7f.)*
-- [x] **Tab-shell substrate** — a workspace-list React component holds an array of workspace records; the center stage mounts the focused workspace; the filmstrip area exists but is empty. Background workspaces stay mounted (`display: none`), never unmounted on switch. **Only one workspace ever opens here, but the substrate is already in place.** *(WP5 777c0b8; confirmed at WP9.)*
-- [x] **Embedded terminal pane** (xterm.js + `portable-pty`), **DOM renderer only — no WebGL addon**, auto-runs `claude --dangerously-skip-permissions` in the selected project dir, full-size in the center stage. *(WP7 50ca322 — raw `portable-pty` behind our own Tauri commands; WP9 added a friendly "claude not on PATH" error.)*
-- [x] **Thumbnail-rendering probe** (gating for the later filmstrip strategy). **PASS** — Apple M4 / macOS 26.5.1: idle CPU 4.5% (<10% ✅), active median 13.3% (<20% ✅; p95 ~30% on bursts — caveat), RAM 240 MB (<300 ✅), center frame p95 18 ms / 0 dropped (✅). Validated path: `@xterm/addon-serialize` `serializeAsHTML()` from the buffer at ~1 fps (beat `cloneNode`; off-screen-DOM-mirror non-viable). **→ live ~1 fps mirrors are viable.** *(WP4, commit 3ae90eb; full outcome [`wp4-thumbnail-probe-outcome.md`](archive/phase-1-bare-shell-poc/wp4-thumbnail-probe-outcome.md).)*
-- [x] **Right half: empty placeholder** (reserved for the lite editor, Milestone 2). *(WP5 "Coming in Phase 3" card 777c0b8; WP8 added the in-app Sublime toolbar/button in the right panel.)*
-- [x] **Hotkey to pop Sublime Text** at the project root (`subl <project-path>`). *(WP8 74dfc2c — in-app `⌘⇧E` webview keydown handler + right-panel button, NOT OS-global `tauri-plugin-global-shortcut`; that approach was built then rejected at verify-human in favor of in-app, no Accessibility permission.)*
-
-**Exit Criteria (met):** Click a project in the picker → working CC session running in the project dir, in <10s, **inside a workspace in the existing Claudesk window** (not a new OS window). Sublime Text pops via the `⌘⇧E` hotkey when manual editing is needed *(a stopgap until the in-app editor lands — retired in Milestone 2)*. The tab-shell substrate is in place even though only one workspace ever opens. The thumbnail-rendering probe produced a documented pass/fail outcome selecting the filmstrip-rendering strategy (→ live mirrors). Sublime Merge still launched manually.
-
-## Group B — Lite editor & diff viewer (right half)
-
-> **Resequenced to second, 2026-06-19.** With the pivot from one-project-per-window to one-project-per-tab, the right half can no longer stay a placeholder behind an external Sublime pop-up: popping a separate Sublime/Sublime-Merge window per tab fragments the workflow across OS windows and reintroduces the exact window-juggling tax the tab model exists to remove. The in-app editor + diff viewer is therefore a **must-have**, built before the multi-workspace/status-surface work — so the right half is real the moment more than one tab is in play.
-
-### Milestone 2: Lite Editor + Diff Viewer ✅ COMPLETE 2026-06-22
-
-> **Cycle closed 2026-06-22.** All work packages shipped (WP1, 2, 3a/b/c, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13); the full decomposition is archived at [`docs/product/archive/milestone-2-lite-editor-diff-viewer/wbs.md`](archive/milestone-2-lite-editor-diff-viewer/wbs.md). Beyond the original three editor/diff deliverables, the cycle added a file-tree navigator (WP10), a multi-file editor tab strip (WP12), ⌘W close-tab (WP13), and tree/editor density + Sublime-style git indicators (WP11); one P1 incident (terminal blank-cursor) was resolved at close.
-
-**Goal:** Cover the daily-use Sublime Text features inside Claudesk so the right half stops being a placeholder and becomes the **primary** routine-editing surface. With projects in tabs, in-app editing/diffing is the difference between a coherent single-window workflow and a window-juggling mess. *(Revised 2026-06-20, WP8: the in-app editor is the primary surface but does **not remove** Sublime Text — both Sublime launchers, Text + Merge, are kept permanently as icon buttons in the panel tab row. See the WP8 deliverable below.)*
-
-**Deliverables (all shipped):**
-- [x] **Lite editor** — **CodeMirror 6** (via `@uiw/react-codemirror`; decided over Monaco in research) covering multi-cursor / Cmd-drag column selection, Cmd+P fuzzy file finder, ⌘⇧P command palette (syntax selection), project-wide find/replace, split panes, minimap, font-zoom; plus a multi-file tab strip (WP12), ⌘W close-tab (WP13), and a left file-tree rail (WP10). *(WP2, 3a, 3b, 3c, 6, 7, 10, 12, 13.)*
-- [x] **Git diff viewer** for unstaged + staged changes (file list + per-file diff + commit log) — backend `git2` hunks rendered as styled +/- lines (not `@codemirror/merge`, as-built). *(WP4, commit 4e2d742.)*
-- [x] **Right-half panel-switch hotkeys** — per-panel **direct-select** (⌘⇧E Editor / ⌘⇧D Diff / ⌘⇧T Terminal — NOT a cycle, as-built WP5) + clickable tabs, per-workspace, coexisting with CM6's keymap via the WP1 capture-phase registration. *(WP5, commit 4546ffb.)*
-- [x] **Consolidate the Sublime launchers into the panel tab row (WP8 ✅ 2026-06-20).** *(REDEFINED 2026-06-20 — was "Remove the Sublime Text pop once the editor proves parity.")* The Sublime Text pop is **NOT removed**. Both launchers (Text via `sublime_open` + Merge via `smerge_open`) are kept permanently as inlined-SVG **icon buttons** in the `right-panel-toggle` tab row; the redundant Sublime-Text `⌘⇧O` `keydown` hotkey was deleted (the button is the sole affordance, `⌘⇧O` freed). The backend `sublime` module is untouched. Rationale: the in-app editor is the primary surface, but keeping a one-click Sublime Text escape hatch (alongside the permanent Sublime Merge button for staging/blame/history) costs nothing and the operator wanted both retained.
-
-**Exit Criteria:** A full working day of editing + diff review completes entirely inside Claudesk's right half, with the editor ↔ diff viewer panel-switch hotkey as the navigation. *(Revised 2026-06-20, WP8: "the Sublime Text pop is removed" is NO LONGER an exit criterion — both Sublime launchers are kept as permanent panel-tab-row icon buttons; `subl`/`smerge` are companion surfaces, not dependencies to eliminate.)*
-
-## Group C — Stateful CC controller, multi-workspace & status surfaces
-
-> The architectural heart of the product: stop treating CC as a black box, and light up the full multi-workspace UX (filmstrip with live thumbnails, PiP, menu-bar status item). This is what makes Claudesk genuinely *aware* of CC, the workflow system, and the user's project-juggling pattern.
->
-> **Resequenced 2026-06-22 (operator dogfood-first reorder — see the Revision 2026-06-22 note below).** Execution order is now **M3 → M4 (multi-workspace) → M5 (PiP) → M6 (menu-bar) → M7 (auto-resume) → M8 (skill orchestration)**. The driver: **M3 + M4 alone are the dogfood-replace point** — once Claudesk knows CC state (M3) and shows N projects in a filmstrip (M4), the operator can drop the current terminal+Sublime setup and daily-drive Claudesk. The CC-lifecycle "hand-holding" surfaces (smart auto-resume M7, skill-button orchestration M8) are livable-without for now and slid to last-before-polish. **PiP (M5) now ships before the menu-bar (M6)** and is **no longer conditional** — the earlier "menu-bar first, PiP gated on a dogfood week" plan is dropped (operator decision 2026-06-22). The status-broadcaster (M3) still fans out to all three surfaces regardless of their build order.
-
-### Milestone 3: CC lifecycle & state plumbing ✅ COMPLETE 2026-06-22
-
-> **Cycle closed 2026-06-22.** Critical path shipped (WP1 probe → WP2 hook script + `settings.json` registration → WP3 `AF_UNIX` listener + parse → WP4 status broadcaster + DTO → WP6 frontend subscribe + honest indicator); verified live (real `pnpm tauri dev` + real `claude`: idle→running→awaiting-input observed purely from the hook channel, terminal output scrolled away = not PTY scraping). The planned **WP5 (`workflow/.session.md` file-watcher) was DROPPED** — `.session.md` is a manual handoff bookmark created by `/session-handoff` and deleted by `/session-restore` (⚠️ named `/session-pause` / `/session-resume` when this cycle closed; **both were renamed at M9 WP5 and neither old name exists** — corrected here at M12 WP5 because the sentence states the mechanism in the present tense, so a reader would take the dead names as current), not a live workflow-state stream, so watching it yields a near-constant, trivially-derivable signal known to the user before any watcher could report it. M3's exit criterion is met by the hook channel alone. The full decomposition is archived at [`docs/product/archive/milestone-3-cc-lifecycle-state-plumbing/wbs.md`](archive/milestone-3-cc-lifecycle-state-plumbing/wbs.md).
-
-**Goal:** Claudesk owns each workspace's CC process lifecycle and knows its idle/running/awaiting-input state from CC's official signals — never by scraping PTY output.
-
-**Deliverables (all shipped except the dropped file-watcher):**
-- [x] **CC process lifecycle ownership:** spawn (Milestone 1), detect idle vs running via CC's official hook channel (`UserPromptSubmit`→Running / `Stop`→Idle / `Notification`→AwaitingInput), detect exit. *(WP2–WP4, WP6.)*
-- [x] **Hook handler via Unix socket** (research-decided): Claudesk installs a **Perl** hook script (`resources/claudesk-hook.pl`, ~15 ms/call) and registers it additively/idempotently/reversibly in `~/.claude/settings.json` (coexists with claude-time + notify-telegram); the Rust core binds an `AF_UNIX` `UnixListener` (blocking, dedicated thread — not tokio) at `<app-data>/hook.sock` and parses each JSON line to a typed `HookEvent`. No shared-file polling. *(WP2 commit `77d6a6e`, WP3 commit `4355e00`.)*
-- [x] **Rust-side status broadcaster** — single source emitting `WorkspaceStatusUpdate { workspace_id, state, last_event_at, last_output_snippet? }` (snake_case end-to-end DTO) via Tauri event channel (`app.emit("workspace-status", …)`); designed so the three (later-milestone) surfaces all subscribe. The state enum carries an honest `Unknown` default (never emitted). *(WP4 commit `8bc2d68`; frontend subscribe + honest dot indicator WP6 commit `b377a97`.)*
-- [x] ~~**File-watcher for `workflow/.session.md`**~~ — **DROPPED** (wrong file; manual pause bookmark, not a live signal — see cycle-close note above). A future milestone (M4+) may instead watch the live workflow document hierarchy (`roadmap → wbs → wip(s) → backlog`); tracked at `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY`.
-
-**Exit Criteria (met):** A workspace's CC state transitions (idle→running→awaiting-input→exit) are observed in Claudesk solely from the hook channel, broadcast to subscribers, with no PTY-output parsing. *(The file-watcher half of the original criterion was dropped with WP5; the hook channel alone satisfies the milestone goal.)*
-
-### Milestone 4: Multi-workspace UX (filmstrip + center stage) ✅ COMPLETE 2026-06-24 *(was Milestone 6)*
-
-> **Cycle closed 2026-06-24 — the M3+M4 dogfood-replace point is REACHED.** All 6 WPs shipped (WP1 N-cost probe → GO for eager-mount; WP2 N>1 lift; WP3 filmstrip tiles + status + live ~1 fps mirror + click/⌘⇧+digit + drag-reorder; WP4 collapse toggle; WP4b left/right focus indicator; WP5 verify-at-N, all exit criteria operator-PASSED at N≥4 real sessions). Three inserted-but-shipped items also landed this cycle (dev/prod isolation, the GUI-PATH fix, the Reveal-in-Finder launcher) — see the arch.md Revision 2026-06-24 note. WBS archived at [`docs/product/archive/milestone-4-multi-workspace-ux/wbs.md`](archive/milestone-4-multi-workspace-ux/wbs.md).
-
-**Goal:** N projects open concurrently as workspaces in one window, switched via the filmstrip. **This + M3 is the dogfood-replace point — once it ships, Claudesk replaces the current terminal + Sublime setup as the daily driver.** *(Depends on Milestone 3's status broadcaster for tile status dots, and Milestone 1's tab-shell substrate.)*
-
-**Deliverables:**
-- [x] **Multi-workspace UX:** opening a project from the picker adds a new workspace tab rather than reusing the existing one; the focused one is center-stage, the others render in the filmstrip.
-- [x] **Filmstrip** along the top of the window, one tile per **open workspace including the center-staged one**, in a user-arranged order, each showing project name + idle/running/awaiting-input status dot. Background-workspace tiles render a **live ~1 fps terminal mirror** (per the Milestone 1 probe PASS) via `serializeAsHTML()` from the off-viewport terminal's buffer; the **center-staged workspace's tile is a static, active-marked placeholder** (no live mirror — it's already full-size on the center stage) so the row is a complete roster and tile indices never renumber on switch. Clicking a tile promotes that workspace to center stage and demotes the previous one.
-- [x] **`⌘⇧+digit` workspace-switch hotkey** — `⌘⇧1..⌘⇧9` jump to the Nth filmstrip tile (keyboard equivalent of clicking it), firing regardless of focus (capture-phase, like the M2 panel chords). The chord is **already reserved** for this — the M2 editor tab-switch uses *bare* `⌘+digit`, deliberately disjoint (see the chord-ownership map in `paletteCommands.ts`).
-- [x] **Drag-and-drop filmstrip reorder** — the user arranges the filmstrip tile order by dragging; the order persists (localStorage) and is what `⌘⇧+digit` indexes into (so the digits map to *the user's* layout, not open-order).
-- [x] **Left/right focus indicator** — a subtle border (analogous to the M2 split-pane active-editor border) marks which half of the center-stage workspace — the left CC terminal or the right panel (editor/diff/terminal) — currently holds keyboard focus, since at N workspaces with two halves each "where will my keystrokes land" otherwise has no on-screen answer. *(Folds in the focus-ambiguity gap surfaced 2026-06-22.)*
-- [x] **Filmstrip collapse toggle** — one-click control collapses the filmstrip into a row of mini status tiles (project name + status dot only) and back. Collapsed workspaces render nothing (`display: none`); PTY output continues to buffer.
-
-**Exit Criteria (met):** Idle/running/awaiting-input of every workspace is visible from inside the Claudesk window without clicking (filmstrip or collapsed-tile row); clicking a tile switches the center stage.
-
-> **Scope notes for the M4 `/product-wbs` pass (operator decisions 2026-06-22):**
-> - **Open M4 with a cost-probe WP1** — the N-workspace mount cost (N≈8, each with editor+diff+terminal mounted) is unmeasured (M1's probe covered N=8 *terminals* only, not CM6 editors; `SURFACE-2026-06-21-WP9-N-EDITORS-COST-AT-MULTIWORKSPACE`). M4's whole premise (keep-everything-mounted + serialize-mirror) rests on the <300MB/<20% envelope holding at N. If it busts, the mitigation is `React.lazy` the EditorPanel (`SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD`) — a *mount-architecture* decision, so measure before building the filmstrip, not after.
-> - **Fold the picker IPC error-surfacing MAJORs into the N>1 lift** — the WP6-M1 picker MAJORs (mount loader swallows a rejected `list_projects`; mutation handlers drop rejections) were deferred specifically to pair with the multi-workspace open-flow rework (N=1→append). Fixing standalone means touching the open-handler twice. In scope for M4.
-> - **N=1-clamp ripple** — the lift from "replace the single workspace" to "append a workspace" surfaces latent N=1 assumptions to resolve: `kill_all` serializing 3s grace windows under one lock (WP7-M1), the `active`-prop defaults (WP3b-M2), the `"terminal"` panel-seam guard (WP5-M2).
-> - **Workflow-doc-hierarchy watcher does NOT land in M4** — deferred and anchored to M6 (see `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY`). M4's filmstrip status dot is driven by the M3 CC-hook channel alone.
-
-### Milestone 5: Picture-in-picture *(was Milestone 8 — now unconditional, and ordered before the menu-bar)*  ✅ COMPLETE 2026-06-27
-
-**Goal:** An always-on-top floating status surface for when the Claudesk window is out of focus. *(Resequenced 2026-06-22: ships **before** the menu-bar item and is **no longer conditional** — the prior "build the menu-bar first, gate PiP on a dogfood week" plan is dropped per operator decision. Depends on Milestone 3's broadcaster + Milestone 4's filmstrip-tile rendering.)*
-
-**Deliverables:**
-- [x] **PiP NSPanel** via `tauri-nspanel` v2.1 (WP1 GO → WP3): `PanelBuilder` with `PanelLevel::Floating` + `CanJoinAllSpaces | FullScreenAuxiliary | Stationary` + `NonactivatingPanel` style mask (NOT `no_activate(true)` — WP1 proved it destructive). User-toggled via the in-Claudesk right-panel PiP icon + a View-menu tri-state radio (Off/On/Auto). Display-only — clicking a tile does NOT bring the workspace forward (Future Possibility). **Plus (operator scope-adds):** 4 selectable layouts (horizontal/vertical mirror, compact, minimal) with persisted switcher + content-driven auto-resize (WP4); auto-summon-on-blur tri-state `PipMode` lifecycle (WP5).
-- [x] **PiP rendering mode** matches the filmstrip outcome: live ~1 fps mirrors via the shared `useMirrorTicker` serialize (WP3 — one serialize loop feeds both filmstrip + PiP, no second loop).
-
-**Exit Criteria:** The PiP panel ships and mirrors the same status surface as the filmstrip; workspace status is visible while the Claudesk window is out of focus. *(Agent-verified PASS on the dev build via the MCP bridge at WP6; the installed-`.app` out-of-focus confirmation is operator-deferred to the `/release` gate before Homebrew distribution — `SURFACE-2026-06-27-M5-INSTALLED-BUILD-VERIFY-DEFERRED-TO-RELEASE`.)*
-
-### Milestone 6: Friend-requested QoL polish ✅ COMPLETE 2026-06-28 *(new — inserted 2026-06-26; an OPEN collection bucket)*
-
-**Goal:** A batch of small, friend-sourced quality-of-life refinements to the workspace UI, landing after the dogfood-replace point (M3+M4) and the out-of-focus status surface (M5) — once real friend-users are exercising the daily driver. **This milestone is deliberately an OPEN collection:** the three deliverables below are the first batch (2026-06-26); **more friend requests are expected before this milestone is reached and should be appended as additional WPs** (or new SURFACEs anchored here) rather than forced into the initial three. Each item mirrors an already-shipped pattern (the file-tree rail resizer, the editor font-zoom, the editor extension array), so the milestone is low-risk polish. *(Depends on Milestone 2's editor/right-panel + Milestone 1's terminal — both shipped; benefits from Milestone 4's WP4b focus indicator for the focus-scoped zoom routing.)*
-
-**Deliverables (first batch — expect more before this milestone is reached):**
-- [x] **FIRST ITEM — Fix the stuck-`Running` status dot** ✅ SHIPPED 2026-06-27 (probe WP1+WP1b commits + fix WP2 commit `bafee80`) — root cause pinned via the prod file-telemetry: cwd-match-miss when CC's last shell cwd was a *subdirectory* of the workspace root; `resolve_cwd` rewritten to longest-prefix/ancestor matching. Installed-`.app` live dot-flip → OC.2, confirmed at the v0.2.2 /release gate. *(`SURFACE-2026-06-25-STATUS-STUCK-RUNNING-AFTER-CLEAN-TURN-END`.)*
-- [x] **Adjustable left/right split width** ✅ SHIPPED 2026-06-27 (WP3, commit `0b68f5a`) — reframed at spec time from free-drag to a discrete collapse + ratio-preset cycle control (`workspace-split-control`); xterm re-fits via the existing `ResizeObserver` on each ratio change.
-- [x] **Adjustable CC terminal font size** ✅ SHIPPED 2026-06-27 (WP4, commit `67c3f54`; extended to the right-panel terminal by WP10, commit `baaaa4c`) — focus-scoped ⌘+/⌘−/⌘0 via `terminalFontZoom.ts` + `data-focus-half` routing. *(Plus the WP8 editor-font 13→11 tweak so editor + terminal share a default size.)*
-- [x] **Editor auto-wrap toggle** ✅ SHIPPED 2026-06-27 (WP5, commit `16ce60a`) — default OFF, `⌘\` chord + status-bar pill, live reconfigure via a CM compartment, persisted under `claudesk.editor.lineWrap`.
-- [x] **FileTree reaches gitignored-but-editable files** ✅ SHIPPED 2026-06-28 (WP6, commit 61db3d4) — DECIDED: re-base the walker+watcher exclusion from "is gitignored" → "is a heavy/generated dir" (NOT an allowlist), walker-wide (tree + Cmd+P + search). Gitignored-but-editable files (`.env`/`.session.md`/`.claude/*`) are now shown/openable/editable/watched; heavy dirs (`node_modules`/`target`/… by name or detected-big) are listed-but-not-descended + rendered "(not indexed)". *(`SURFACE-2026-06-26-FILETREE-EXCLUDES-GITIGNORED-EDITABLE-FILES`.)*
-- [x] **Settings option: open CC without yolo by default** ✅ SHIPPED 2026-06-28 (WP7, commit `4db7b82`) — `AppSettings.cc_yolo` (default yolo-ON) gates `--dangerously-skip-permissions` in the CC spawn argv, synced across 3 surfaces (picker checkbox / native View-menu / `cc-yolo` broadcast). No-yolo next-spawn → OC.3, confirmed at the v0.2.2 /release gate. *(`SURFACE-2026-06-26-M6-SETTING-NO-YOLO-DEFAULT`.)*
-- [x] **(fold-ins) WP9 empty-PiP suppression** ✅ SHIPPED 2026-06-28 (commit `7b36853`); **WP10 right-panel terminal zoom** ✅ (commit `baaaa4c`); **WP11 multiple right-panel terminals** ✅ (commit `f9e3292`); **WP8 milestone-exit verification** ✅ (2026-06-28, verification-only + editor-font 13→11 polish, commit `3895a32`). The open collection grew exactly as designed.
-
-**Exit Criteria:** The left/right split is drag-resizable (terminal re-fits cleanly); the CC terminal font size is adjustable via focus-scoped ⌘+/⌘−/⌘0; the editor offers a persisted auto-wrap toggle; gitignored-but-editable files (e.g. `.env`) are reachable in the in-app editor; a settings toggle can open the CC terminal without yolo (default stays yolo-on). (Plus any additional friend-requested QoL items folded in before this milestone's `/product-wbs`.)
-
-> Full first-batch analysis + confirmed code seams: `SURFACE-2026-06-26-FRIEND-QOL-BATCH-1` in `workflow/backlog.md`.
-
-### Milestone 7: Menu-bar status item *(was Milestone 6 → M7; SHRUNK to ambient alarm + actuator 2026-06-29)*  ✅ COMPLETE 2026-06-29 (commit 3888dd6)
-
-**Goal:** The menu bar carries an **ambient "is a project waiting on me?" alarm**, visible system-wide even when the Claudesk window is hidden or on another Space — exploiting the one thing the menu bar offers that the shipped M5 PiP does not: it's a strip the user already passively watches. *(Shrunk at the M7 spec debate 2026-06-29: a full status surface — popover list + navigate-on-click — would be a strict subset of PiP and was cut as redundant. See the Revision 2026-06-29 note below + design-prior `new-surface-must-earn-its-place-against-existing-ones`.)*
-
-**Deliverables:**
-- [x] **Menu-bar tray icon — 2-state ambient alarm** via `tauri::tray::TrayIconBuilder` (`icon_as_template` for light/dark; blink-free `set_icon_with_as_template` swap — the real 2.11.2 method; the planned `set_icon_and_icon_as_template_atomic` name doesn't exist). **Lit when ANY workspace is `AwaitingInput`; neutral otherwise** (Running + Idle collapse). Reduced by a pure `aggregate_alarm` fold; subscribes to the existing M3 `workspace-status` event (no broadcaster change). Glyph is a faithful monochrome app-icon portrait (window + 4 filmstrip tiles + main CC box) with a lower-right corner badge on attention.
-- [x] **Native actuator menu** (shown on click): Show Claudesk / Toggle PiP / Quit — wired BACKEND-side through the app-level `on_menu_event` (fires for tray menu events too); operator-approved live.
-- [ ] ~~Popover `WebviewWindow` with per-workspace status list + navigate-on-click + `tauri-plugin-positioner`~~ — **CUT** (PiP subset; see Revision 2026-06-29).
-
-**Exit Criteria:** ✅ MET (agent-GREEN slice + operator-live-approval). The menu-bar tray icon is lit when any workspace is awaiting input and neutral otherwise, updating live and visible when the Claudesk window is NOT in focus / on another Space / full-screen; clicking it opens a native menu (Show Claudesk / Toggle PiP / Quit) whose items each perform their existing action. *(Native-glyph badge transition + out-of-focus/cross-Space + installed-`.app` parity carried as OC.1–OC.4 DEFERRED-TO-RELEASE for the next `/release` gate, the M5/M6 pattern; the substantive glyph + all 4 actuators were operator-approved live in `pnpm tauri:dev`.)*
-
-> **Watcher re-anchor (2026-06-29):** the workflow-doc-hierarchy watcher (below) was anchored here on the premise that the menu-bar popover's per-workspace list is the natural form factor for a workflow-position line. **M7's shrink removed the popover entirely** — so the watcher's home is now firmly the **workflow-docs markdown viewer** (M8 at the time of this note; renumbered to **M10** by the 2026-06-29b demo-milestone insert + time-analytics swap), the rendering counterpart; nothing M7-shaped remains for it. Re-anchored in `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY`. The note below is retained as history.
-
-> **Anchored here (operator decision 2026-06-22; the menu-bar milestone, now M7): the workflow-doc-hierarchy watcher** (`SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY`, the dropped-M3-WP5 replacement idea — watch `roadmap→wbs→wip(s)→backlog` to surface where each project sits in the workflow). The menu-bar popover's one-row-per-workspace LIST is the natural form factor for a workflow-position line (e.g. `acme-api · WBS M2/WP3 · building`); by M7 the operator will have dogfooded M4+M5 and know what's worth showing. Builds the `notify` watcher seam (shared with `SURFACE-2026-06-21-EDITOR-FILE-WATCHER`). Decide at M7's `/product-wbs` whether it's an M7 WP or — if it outgrows a popover line into a real tree view — a standalone feature after M7. *(Note: the workflow-docs markdown viewer (M10 after the 2026-06-29b reorder) is the adjacent surface — the watcher answers "where does each project sit in the workflow" as a status line; the docs viewer renders the docs themselves. Decide at the docs-viewer's `/product-wbs` whether the watcher feeds that doc panel rather than the popover.)*
-
-### Milestone 8: Demo assets — filmstrip & PiP value showcase  ✅ COMPLETE 2026-06-29 *(inserted 2026-06-29b)*
-
-**Goal:** Produce a pair of short demo recordings (GIF and/or video — format decided in WP1) that *show*, not tell, the two hardest-to-explain value props of the now-shipped multi-workspace UX: **(a) the filmstrip** — multitasking ~4 CC-driven projects at once, the operator's attention moving between them as their status dots change; **(b) the PiP** — staying in deep/mentally-intensive work (or even watching YouTube) in another app while an always-on-top PiP keeps CC's progress monitorable in the corner. These are marketing/communication assets for the README, GitHub release pages, and open-source launch (M13) — they make the "attention across N parallel projects" thesis legible to someone who hasn't used the tool. *(Depends on Milestone 4's filmstrip + Milestone 5's PiP — both shipped + released in v0.2.0–v0.2.3, so the features to demo already exist on the installed `.app`.)*
-
-> **Why a milestone, and why now (operator decision 2026-06-29b):** the filmstrip (M4) and PiP (M5) are the most distinctive things Claudesk does and the hardest to convey in prose; with both shipped and released, this is the moment to capture them. Placed *before* the time-analytics (M9) and docs-viewer (M10) feature work — communicating the existing value comes before building more of it. **Agent-produced end-to-end:** Claude Code drives the capture (staging the scenario on the real `.app`, recording, rendering, embedding), with the operator verifying + giving feedback at checkpoints — NOT operator-recorded. This makes WP1 a genuine **feasibility probe**, not a formality (see below).
-
-**Deliverables:**
-- [x] **WP1 — Capture/render pipeline probe + format decision (FIRST; gates the rest).** RESOLVED 2026-06-29 — operator ruled out real screen capture; chose a **synthesized hi-fi animation** (no TCC/staging/MCP-bridge). Format = **looping GIF**; pipeline = HTML harness reusing the real status-dot CSS → Playwright seek-per-frame screenshot → ffmpeg palettegen. (Remotion rejected — non-OSS license.)
-- [x] **Filmstrip demo** (WP3, commit a42ba61) — looping ~334KB GIF: 4 unrelated projects, a live CC session, one flips to AwaitingInput, a cursor click promotes it, a `1`/`⏎` answer resumes — "4 in flight, one glance, one click."
-- [x] **PiP demo** (WP4, commit 5625658) — looping ~367KB GIF: a vertical corner PiP holding 2 live-mirrored projects over an active Slack work-backdrop; one pings (AwaitingInput), ⌘+Tab switches to the real Claudesk window, `1`/`⏎` answers.
-- [x] **Embed + place** (WP5, commits f7b1310/157242d/c34925a) — both GIFs committed to `docs/demo/`, embedded near the top of `README.md` (value one-liner → problem/feature/demo blocks → original content) + 2 new philosophy bullets; pushed + operator-approved on the github.com render.
-
-**Exit Criteria:** ✅ MET 2026-06-29 — two demo assets exist as looping GIFs, agent-produced, each legibly conveying its value prop (filmstrip = parallel-project attention; PiP = monitor-while-elsewhere), embedded in the README and operator-approved at the verify checkpoint. WP1's pipeline probe produced a documented GO + format decision before the final assets were rendered.
-
-### Milestone 9: Time-analytics panel (absorb claude-time) ✅ COMPLETE 2026-07-16 *(was Milestone 8 in the 2026-06-26 insert → M9 after the 2026-06-26b QoL insert → kept M9 but moved AHEAD of the docs-viewer 2026-06-29b)*
-
-> **M9 COMPLETE 2026-07-16** — all 10 WPs shipped (WP1 probe → WP2 hook 4→10 + write-gated `time_store` SQLite → WP2.5 native-signal source → WP3 reclassifier REDESIGN → WP4 query layer → WP5 `time_tracking_enabled` toggle (default OFF) → WP6a/6b/6c dark dashboard tab (day/week/month/metrics/compare, lazy-loaded) → WP6.5 session-termination model → WP7 deprecate standalone claude-time + doc-resync). Exit criteria MET for the agent-verifiable slice (toggle-OFF zero-IO + status-dots-unaffected + per-project breakdown rendering all live-verified via the MCP bridge across the WP6 series); the **installed-`.app`** half of the exit-verify (Finder-launched GUI-PATH + hook-registration parity) is an operator-carry to the next `/release` gate (as M5/M6/M7 exits were). The whole M9 tree is committed locally, unpushed (batched per commit-only-when-asked). One net-new arch element — the feature-local SQLite DB — reconciled into `arch.md` at WP7 (see `arch/time-analytics.md` + the SQLite scoped-exception in `arch/foundations.md` → "Key Decisions"). Cycle archived to `docs/product/archive/milestone-9-time-analytics/`. **Next execution milestone: M10 (in-app auto-updater).**
-
-> **Reordered ahead of the workflow-docs viewer (2026-06-29b).** Operator-directed swap of the former M8 (docs-viewer) ↔ M9 (time-analytics): time-analytics now precedes the docs-viewer. No deliverable content changed — only sequence + numbering. See the Revision 2026-06-29b note.
-
-**Goal:** Bring CC time-tracking inside Claudesk as a native, default-OFF analytics panel — "where did this week's session time actually go, per project?" — by **absorbing** the standalone `claude-time` tool (`_ref/claude-customization/tools/claude-time/`) and deprecating it. This is the *retrospective* counterpart to the real-time status surfaces (M4 filmstrip / M5 PiP / M7 menu-bar): the same "attention across N parallel projects" thesis, viewed after the fact. *(Depends on Milestone 2's right-half panel model + Milestone 3's hook plumbing — both shipped.)*
-
-**This is a UNIVERSAL feature, not workflow-coupled.** It observes generic CC lifecycle hook events, not the customization *skills* — so unlike the Docs viewer (M10), smart auto-resume (M11), and skill orchestration (M12), it is **not** in the off-by-default *workflow-coupled* bucket. It has its own simple Settings toggle, **default OFF** (to keep CPU/memory/storage at zero for users — including the first friend-users — who don't want it), but any user can enable it and get value without running the workflow system.
-
-**Deliverables:** *(all shipped — see the M9 COMPLETE note above; as-built architecture in `arch/time-analytics.md`)*
-- [x] **Tracking toggle (default OFF), write-gated** *(WP5).* Settings toggle `time_tracking_enabled` (default OFF); the CC hook fires regardless (drives the live status dots, unchanged); the time-row write happens only when ON → toggle off = zero storage/IO. The project's first concrete universal-vs-workflow-coupled feature-flag instance.
-- [x] **Absorbed hook + DB writer (Rust, in `time_store`)** *(WP2 + WP2.5).* Persistence is a second, gated drain of the existing `AF_UNIX` `HookEvent` stream — NOT a second Perl hook. `claudesk-hook.pl` registration extended 4→10 events (incl. `PreToolUse`/`PostToolUseFailure`/`SubagentStart`/`SubagentStop`/`SessionStart`/`SessionEnd`), forwarding the extra fields (`tool_use_id`/`agent_type`/`prompt_length_chars`/`source`); WP2.5 added a native-signal source (focus/blur + PTY keystrokes + registry) to the same store. The standalone `claude-time-hook.pl` is NOT touched (Claudesk stops depending, never deletes — WP7). **Privacy invariant preserved:** prompt lengths only, tool names + ids only — never content.
-- [x] **Per-identity SQLite DB under `app_data_dir()`** *(WP2).* `<app-data>/time-analytics.sqlite`, per bundle-identity (`com.claudesk.app` vs `.dev`), WAL + busy_timeout. No migration of the legacy `~/.claude-time/events.sqlite` (fresh per identity). The scoped exception to the flat-JSON rule (arch.md).
-- [x] **Reclassifier — Rust REDESIGN (not a port)** *(WP3 + WP6.5).* Spec-first metric-definitions redesign: 6-kind model (`ai-doing`/`ai-reasoning`/`subagent` + `typing`/`reviewing` + `away`) FUSING CC-hook gaps + native signals (measure where a signal exists, infer only where none does). WP6.5 added a coherent session-termination model (explicit close-marker + max-idle cap + CC `SessionEnd` + startup reconciliation). `test_reclassify.py` was the starting reference, adapted-not-ported.
-- [x] **Native dashboard GLOBAL view** *(WP6a/6b/6c).* A dark-themed, lazy-loaded full-window global surface (mount-scope=data-scope — the store is machine-global, so NOT a per-workspace tab) with day (continuous flexible timeline) / week / month / metrics / compare, fed by a Rust query layer (`time_store::query`, ms-precision duration summing). Renders in-window — no unpkg/Babel CDN, no separate browser window. The standalone `claude-time` CLI (`report`/`visualize`) is deprecated and did not move (WP7).
-
-**Exit Criteria:** ✅ MET (agent-verifiable slice, via the MCP bridge across the WP6 series): with the tracking toggle ON, CC usage produces a per-project time breakdown rendered in a native Claudesk panel; with the toggle OFF, the feature adds zero storage/IO and the live status dots are unaffected; the standalone `claude-time` tool is documented as retired. **Carry:** the installed-`.app` half of the exit-verify (Finder-launched GUI-PATH + hook-registration parity) → next `/release` gate (operator-only, per the installed-build smoke-test convention — as M5/M6/M7 exits were).
-
-### Milestone 10: In-app auto-updater ✅ COMPLETE 2026-07-18 *(inserted 2026-07-06; brew decision reversed 2026-07-17)*
-
-> **✅ M10 COMPLETE 2026-07-18 — all 6 WPs shipped.** WP1 (probe) → WP2 (updater core) → WP3 (install-source gate, later reverted) ∥ WP4 (user-control UX) ∥ WP5 (`/release` pipeline) → **WP6 (milestone-exit verify) = GO**. The Homebrew decision was **reversed** mid-milestone (detect-and-defer → option B: brew installs self-update in-app too); WP6 re-planned around it (Phase 1 error-surface fold + Phase B1 revert-to-one-self-update-path + Phase B2 brew self-update live pass). **Verified GO on the operator's REAL Homebrew prod install:** a brew-installed 0.2.7 self-updated in-app to a no-op 0.2.8 target with ZERO Homebrew commands, relaunching clean past Gatekeeper — the exact path current users experience. Published v0.2.7 (updater-capable) + v0.2.8 (target); tap at 0.2.8 (`auto_updates true`). Ready for `/product-finalize`.
-
-> **Why here (operator decision 2026-07-06):** inserted **right after M9 and before the next release** so that whatever version ships next carries an update mechanism — the milestone is about *how future versions reach users*, so it must precede a publish to be useful (a v0.2.x cut without it can't self-update; the first release that *includes* it is the first that later versions can update *from*).
-
-**Goal:** Claudesk can check for updates, and download/install a newer version, from inside the app — with the user always in control: **skip a version**, **disable update notifications**, and **cancel / confirm** each install. No silent forced updates.
-
-**Research findings + LOCKED decisions (2026-07-06):**
-- **Homebrew → REVERSED 2026-07-17 to (B): brew installs self-update in-app too (same UX as direct-download).** ⚠️ **This supersedes the 2026-07-06 "detect-and-defer" lock below.** The original decision rested on a false premise the agent asserted — that a Homebrew install *could not* get the self-update UX. That is wrong: brew self-update is not only possible, it is the **idiomatic** pattern (VS Code ships a built-in auto-updater with the *same* `app` stanza mechanics + `auto_updates true`). Deep-research (2026-07-17, cited) established: "brew desync" is **recoverable metadata drift, not corruption** (the `.app` keeps working; `brew reinstall` fixes records); its one real harm — a later `brew upgrade` downgrading the self-updated app — is now **absorbed by Homebrew PR #21882** (merged Apr 2026, live Jul 2026), which reads the installed app's `Info.plist` bundle version and skips/reconciles, **provided** the cask declares `auto_updates true` AND the self-update bumps `CFBundleVersion`. **New locked decision (operator, 2026-07-17):** brew installs get the SAME in-app self-update UX as direct-download. **Next-session rework:** (1) add `auto_updates true` to the cask; (2) ensure each release bumps `CFBundleVersion`; (3) rip out the install-source detect-and-defer gate + the copy-`brew upgrade` banner branch (the M10 WP6 Phase-2 work, now to be reversed). *(Superseded original below, kept for the audit trail.)*
-- **~~Homebrew coexistence → DECIDED: detect-and-defer~~ (SUPERSEDED 2026-07-17 — see above).** ~~Claudesk is distributed via a Homebrew *cask* today. A cask app that self-updates **desyncs `brew`**… the updater **detects whether the running app was installed via Homebrew** and, if so, **does NOT self-install — it points the user to `brew upgrade`** instead; only **direct-download installs self-update in-app.**~~ *(Reversed: the "desync = must avoid" framing over-weighted a recoverable metadata issue, and the driving "brew can't self-update" premise was false. See the 2026-07-17 reversal above.)*
-- **Signing → ~~DECIDED: stay UNSIGNED for now; updater surfaces the quarantine-clear step.~~ ⚠️ REVERSED at M14 WP2 (2026-09-18) — SIGNED + NOTARIZED as of v0.5.2; the quarantine-clear mechanism is DELETED. The independence claim below still holds (minisign verifies the updater payload; notarization satisfies Gatekeeper) and the anchor `774E2E8429FDF78A` is unchanged.** Original M10 record:  The two signing systems are independent: (1) the **updater's minisign keypair** (`tauri signer generate`) is **free, no Apple account**, and verifies update-artifact authenticity; (2) **macOS notarization** needs the **$99/yr Apple Developer Program** — separate. **Locked (operator, 2026-07-06): do NOT pay the $99 yet.** Claudesk stays unsigned (as today — `/release` already ships the `xattr -dr com.apple.quarantine` guidance). Consequence the updater MUST handle: a freshly-downloaded `.app` hits the **Gatekeeper "unverified/damaged" block on relaunch**, so **the updater surfaces the quarantine-clear step** to the user (show the `xattr` command / run it on its own bundle before relaunch if feasible — mechanism TBD at WP-decomposition). Revisit notarization later (a future call, not this milestone).
-
-**Deliverables (all shipped — M10 COMPLETE 2026-07-18):**
-- [x] **Update check + notify** — on launch (and/or on demand) check for a newer published version; show a non-modal notification when one exists. Respects the disable-notifications preference and the per-version skip list. *(WP2 core + WP4 gating/banner.)*
-- [x] **Download + install with explicit confirm** — on user confirm, download the new version, verify its signature (minisign, per `tauri-plugin-updater`), install, and relaunch. **Cancel** at any point leaves the current version untouched. *(WP2 split download()/install() cancel boundary + WP4 confirm dialog + progress bar.)*
-- [x] **User controls (the operator's three asks):** **skip this version** (never re-notify for that exact version), **disable update notifications** (a setting; the app stops proactively checking/notifying but a manual "check now" still works), **cancel / confirm** each install (never silent, never forced). Preferences persist per bundle-identity (consistent with `pip_mode` / the M9 tracking toggle). *(WP4 `config_store` prefs `update_notifications_enabled` default-ON + `skipped_version`, per-identity.)*
-- [x] **~~Homebrew detect-and-defer~~ → REVERSED 2026-07-17 to: brew installs self-update in-app too.** Declared `auto_updates true` in the cask + `CFBundleVersion` = semver `version` each release; **removed the install-source gate** (WP6 Phase B1 — the WP3 code reverted). Brew installs get the same self-update UX as direct-download (idiomatic; brew's PR #21882 reconciles the version records). *(Verified GO on the operator's real brew prod install: 0.2.7→0.2.8 self-update, zero brew commands.)*
-- [x] **~~Unsigned-relaunch quarantine handling~~ — ⚠️ SHIPPED at M10, then DELETED at M14 WP2 (2026-09-18) when the app became notarized. Historical:** the updater self-ran `xattr -dr com.apple.quarantine` on its own bundle pre-relaunch (the WP1 self-clear core; instruct-user fallback seam-gated behind `QUARANTINE_FALLBACK_ACTIVE`, default false/GO). The `/release` skill publishes the update manifest + minisign signature per release (no notarization — staying unsigned). *(WP1 probe → GO; WP5 pipeline; confirmed clean-past-Gatekeeper on the real brew install at WP6.)*
-
-**Exit Criteria (updated 2026-07-17 for the (B) reversal):** From an older installed build — **direct-download OR Homebrew** — Claudesk detects a newer published version, the user can skip it / disable notifications / confirm the install, and on confirm the app downloads, verifies (minisign), installs, and relaunches into the new version — handling the unsigned-Gatekeeper quarantine step so relaunch isn't a silent failure. The cask declares `auto_updates true` and each release bumps `CFBundleVersion` so a later `brew upgrade` reconciles rather than downgrades (Homebrew PR #21882). The `/release` skill publishes the update manifest + signature per release. *(Superseded: the earlier criterion that a Homebrew build defers to `brew upgrade` instead of self-installing — reversed 2026-07-17.)*
-
-### Milestone 10.5: QoL polish bucket (before the next release) ✅ COMPLETE 2026-07-19 *(inserted 2026-07-16; an OPEN collection bucket like the completed M6 friend-QoL — closed at 4 WPs, no WP5+ added)*
-
-> **Why here + why "10.5" (operator decision 2026-07-16):** a small batch of daily-driver papercuts the operator hit while dogfooding M9, to clear **after M10 (auto-updater) and before the next release cut** — so the release the auto-updater ships *from* is clean. Numbered "10.5" (not a tail-renumber) because it's a between-milestones polish insert, not a new feature stream — same spirit as M6. An OPEN bucket: more QoL items may be added before decomposition. Source: `SURFACE-2026-07-16-M10.5-QOL-BUCKET`.
-
-**Goal:** Fix four dogfooding papercuts — two UX/lifecycle extensions of existing infra, two reproduce-first bug-shapes.
-
-**Deliverables:**
-- [x] **PiP default position = top-right corner.** ✅ SHIPPED 2026-07-18 (uncommitted, HEAD `75ef6f8`). The PiP NSPanel opens **150px inset from the screen's top+right edges** (computed from `visibleFrame`; operator asked for a gap, not flush), not the current ~center default. Preserves a later drag position; anchors only when the panel has no prior position (in-session `positioned` flag). *(As-built: `anchor_top_right` runs inside `pip_resize` gated on `positioned==false` — NOT `pip_set_visible`'s build branch, since the real content-driven size arrives async; `top_right_origin` + `PIP_ANCHOR_MARGIN=150` in `pip/mod.rs`; `pip_move` sets `positioned`. 3/3 outcomes verified live via MCP bridge + operator verify-human.)*
-- [x] **Active-close confirmation.** ✅ SHIPPED 2026-07-18 (committed `92cb0cc`). A confirm popup before closing a workspace whose CC is **active** (`Running`/`AwaitingInput`) or quitting the app while any workspace is active. **Extended the QoL-WP1 close-confirm gate** with an `isActiveState` probe on the same gate; app-quit routes FRONTEND-DECIDES (`CloseRequested` `prevent_close` + `quit-requested` round-trip → enumerated confirm → `quit_now` → shared `perform_quit_teardown`). Terminal-"active" scoped to CC-status-only for v1 (no job-control detection — the `explicit-selectable-mode-over-inferred-mode` design-prior lean).
-- [x] **Proper CC / terminal kill with a clean exit.** ✅ SHIPPED 2026-07-19 (committed `ea223a2`). Reproduce-first captured TWO coupled defects: the ~5s kill latency + subagent-orphan risk AND (the operator's PRIMARY concern) **lost right-panel shell command history** on close-without-`exit`. One fix for both — a **SIGHUP-first process-GROUP kill** (`cc_session/mod.rs` `kill()`: 500ms exit-poll → `killpg(pgid, SIGHUP)` + 300ms grace → `killpg(pgid, SIGKILL)` → reap): SIGHUP lets an interactive zsh run its on-exit history save (SIGTERM/SIGKILL don't) AND reaches subagents a single-PID kill can't. `libc` direct dep; committed integration test `tests/shell_history_on_kill.rs`.
-- [x] **CC input/output encoding fix (mojibake, e.g. `-�.`).** ✅ SHIPPED 2026-07-19 (committed `ea223a2`). Reproduce-first found the SURFACE's prime suspect was already mitigated (FE writes bytes to xterm), so TWO **different** root causes were fixed: **(input)** `encodeBase64`'s `charCodeAt(i) & 0xff` truncated multi-byte glyphs → replaced with `TextEncoder` UTF-8 bytes; **(output)** the shared spawn env `color_tty_env()` had no `LANG` → a Finder-launched `.app` inherits the launchd env with `LANG` unset → `LC_CTYPE=C` mangles UTF-8 output; fixed by adding `LANG`/`LC_ALL=en_US.UTF-8`. Output bug is installed-`.app`-only (not reproducible in `pnpm tauri:dev`) → rendering check rides `/release`.
-
-**Exit Criteria:** ✅ **ALL MET — M10.5 COMPLETE 2026-07-19** (cycle closed via `/product-finalize`; WBS archived to `docs/product/archive/milestone-10.5-qol-polish-bucket/`). PiP summons to the top-right corner ✅; closing an active CC/app prompts a confirm ✅; CC/terminal sessions exit cleanly on kill (SIGHUP-first, no hang/orphan, history preserved) ✅; no input encoding mojibake ✅ (output-rendering installed-`.app` check carried to the next `/release` gate per the installed-build-verify-deferred-to-release convention). The bucket took no WP5+ (stayed at 4). Next execution milestone: **M10.9 (workflow-features gate)**, then M11 (docs-viewer).
-
-### Milestone 10.9: Workflow-features opt-in gate ✅ COMPLETE 2026-07-31 *(inserted 2026-07-20; sits BEFORE M11 in execution — the "secondary non-workflow user" experience decision)*
-
-> **Why here + why "10.9" (operator decision 2026-07-20):** decides how a **secondary user who does NOT run the custom CC workflow system** experiences Claudesk. M11 (Docs viewer) is the FIRST workflow-coupled UI a non-workflow user would meet, so the gate must land **before M11 ships** — hence positioned before it. Numbered "10.9" (a between-milestones insert, same convention as M10.5) to avoid re-renumbering the M11→M14 tail yet again (renumber churn is a documented hazard). Source: this session's design discussion (2026-07-20) + the vision §Target Audience stance refinement (see Revision 2026-07-20).
->
-> **✅ UNBLOCKED + DECOMPOSED 2026-07-28.** The companion repo shipped all five handed-over items and returned `HANDOFF-from-mccc-2026-07-28.md` (repo root) with the three deliverables this milestone was waiting on. M10.9 is decomposed into **5 WPs** at `workflow-system/product/wbs.md`; M11's decomposition is parked at `m11-wbs-parked.md` (paths corrected for the unified layout) and returns on M10.9's close. **Key WBS finding:** an audit of `src/` + `src-tauri/src/` found **zero** shipped workflow-coupled surfaces, so OFF=byte-identical is *already* true and there is **no de-wiring work** — the milestone's weight is the gate *seam* (the door M11–M13 must come through, plus a guard test that bites when a future surface bypasses it) and the *on-ramp*, not hiding existing UI. Cross-repo constraint carried into the WBS: the **only** stable coupling is the command name `/tutorial-getting-started`, and invite copy may not promise a "5-minute" tour (both structurally pinned upstream).
->
-> **WP2 (the gate) SHIPPED 2026-07-28** — commits `467593f` + `a1d7494`. The gate is live and **OFF for everyone**: `workflow_features_enabled` (8th `AppSettings` field) + its commands/broadcast in a new `workflow_gate` module, the `useWorkflowFeaturesEnabled` consumption seam (zero consumers by design — M11 is the first gated surface), and the **OFF-invariant guard** that asserts the seam contract mechanically so it bites when M11 wires its Docs tab. Verdict (a) delivered in full: a `⌘,` Settings panel with 4 labelled groups, the 3 app-global controls **migrated off the picker strip**, and the strip **deleted** — the operator's screenshot confirms 6 projects above the fold (the predicted 3→6). Two additions beyond the verdict: a **picker-header Settings gear**, added when the operator noticed Analytics had a visible affordance and Settings did not (specifying entry points ≠ specifying discoverability), and one **operator decision to record — the panel ships with no dimmed backdrop** (accepted at verify-human, test-pinned; don't add a scrim at M14 without asking). The milestone's load-bearing invariant is verified live *and* now guarded by a standing test: **enabling writes nothing into `~/.claude/`** (`settings.json` byte-identical across toggles). review-quality: 0 CRITICAL / 4 MAJOR / 4 MINOR — one MAJOR was a live StrictMode double-write defect and was fixed immediately; the rest backlogged. **One filed finding is schedule-sensitive: `SURFACE-2026-07-28-QUALITY-WP2-CHORD-ARM-MISSES-PANELHOST` should be paid BEFORE M11 lands**, since the guard's chord arm currently skips the module most likely to host a Docs chord. Next: **WP3** (the one-time invite + soft `~/.claude/skills/` presence check); its `[Enable]` calls the WP2 setter.
-
-> **WP1 (probe) SHIPPED 2026-07-28 — and it changed M14's scope.** Both verdicts are recorded in `wbs.md` → "Probe outcomes". **Verdict (a): M10.9 builds a minimal `⌘,` Settings panel** (+ a `Settings…` menu item, 4 labelled groups), **migrates the 3 existing app-global controls off the ad-hoc `ProjectPicker` strip into it**, adds the gate as the 4th, and **retires the strip**. The trigger was an operator screenshot showing those controls consuming ~1/4–1/3 of the picker modal above the project list — so the *cheap* option (a 4th strip control) was rejected for making the app's most-used surface worse. **Consequence for M14: its Settings-UI line shifts from "fold the gate into a consolidated Settings surface" to "EXTEND a panel that already exists"** (project-list management, hotkeys) — a smaller, better-shaped job than migrating controls that would otherwise have kept accumulating in the wrong place. ✅ **That scope-line correction was made 2026-09-18 (WP4 Phase 1):** ~~it lists "menu-bar / PiP visibility toggles" and "default CLI args for `claude` (e.g. yolo-mode toggle)" as *future* work~~ — PiP mode shipped at **M5** and the permission-mode dropdown at **M6**. **Verdict (b):** the invite triggers on first launch with ≥1 project (not unconditionally — a fresh install has zero projects, so the pitch would have no referent), and carries **three** buttons: primary enable · `[Later]` (persists nothing → returns next launch) · `[Dismiss]` (permanent). WP2 re-sized **S → M** to absorb the panel + migration.
->
-> **WP3.5a (sandbox foundation + install wizard) SHIPPED 2026-07-29** (`a6fb194` + `b95466f`). Claudesk can now install the companion workflow system itself: a location picker, a consent step naming every side effect, `git clone` → the repo's own `install.sh` with streamed output, and a provenance record. **This is the first Claudesk code to mutate state outside its own app-data dir**, exercising milestone property 2's revised form — *enable touches nothing in `~/.claude/` EXCEPT through an explicit, user-driven wizard* — while keeping the two acts separate: the toggle still writes only Claudesk's own `settings.json`.
->
-> **The safety model is provenance, not abstinence:** what Claudesk installed is *recorded at install time and never inferred from a resolved path*, so a substrate with no record reads `developer` and is never offered for removal — which is what protects the operator's own `~/.claude/skills/` symlinks into a repo they actively edit. WP3.5b inherits the sandbox fixture, the error vocabulary, and the terminal-state reducer; its **task ONE is the refuse-guard**, before any deleting path exists.
->
-> **Two CRITICAL findings were caught at code review and fixed before close** (`b95466f`), both worth remembering because neither was visible to any automated gate: eleven CSS classes were referenced with **zero defined**, re-introducing the whole-Settings-panel horizontal-overflow bug the *previous* WP had diagnosed live and warned about one file away (the "pin" that comment claimed did not exist — it does now); and the install worker thread had **no panic boundary**, so one omission yielded two unrecoverable states (a permanently wedged single-run lock and a wizard stuck mid-install with no Close button). **Remaining for the milestone: WP3.5b · WP4 · WP5.**
->
-> **⚠️ (Historical) Execution-blocked on the companion workflow-system repo.** The RICH parts of this milestone (the evangelistic invite's step-by-step install instructions, the onboarding flow) *consume* deliverables the companion **`my-claude-code-customization`** repo must ship first (canonical `install.sh`/`uninstall.sh`, the doc-folder unification, the onboarding/tutorial content). **Execution order (operator decision 2026-07-20): roadmap re-open (this) → companion-repo updates → Claudesk M10.9 (gate + rich invite) → M11.** The handoff to the companion repo is authored this session (see "Cross-repo split" below + the handoff artifact). Building Claudesk's invite *before* the companion repo settles would hardcode against a moving target (the coupling built backwards). This milestone is scheduled AFTER the companion-repo work even though it is positioned before M11.
-
-**Goal:** A secondary user who does not run the custom CC workflow system gets a clean, coherent lite-IDE with **zero** dead affordances — and a one-time, dismissible, evangelistic invitation to discover + adopt the workflow system if curious. The primary user (operator) gets the full workflow-aware tool after one conscious opt-in.
-
-**The model (settled 2026-07-20):**
-- **A single `workflow_features_enabled` setting, default OFF for everyone (incl. the operator).** One-time conscious enable; the operator is fine flipping it once per fresh install, so there is **no environment auto-detection** — same code path for all users. The setting gates **all** workflow UI as a set (M11 Docs tab, M12 auto-resume + drive-mode selector, M13 skill-buttons, and any future workflow surface inherits the gate automatically).
-- **OFF = byte-identical to a Claudesk that never had the features.** No greyed-out controls, no empty tabs, no dead affordances. This is the load-bearing UX invariant.
-- **Enable = a pure Claudesk UI-state flip. It touches NOTHING in `~/.claude/`** — no install, no copy, no symlink. Critical because on the operator's machine the skills are live symlinks into the companion repo they actively edit; an install step would risk clobbering that source. (This also removes any system-modification/consent concern — enable writes only Claudesk's own settings.)
-- **Evangelistic first-run invite (once), shown only while OFF:** pitches the workflow-orchestration features and shows **step-by-step clone-repo + install instructions** for the companion workflow system (authored by that repo, displayed by Claudesk), plus `[Enable]` / `[Not now]`. `[Not now]` → clean app; re-enable anytime in Settings.
-- **Soft, non-blocking presence check on enable:** if `~/.claude/skills/` is absent when the user enables, show a dismissible note ("features enabled, but the workflow system doesn't appear installed — [how to install ↗]"). Doesn't block. The operator never sees it (their skills are present).
-- **Easy disable/uninstall to de-friction testing:** a one-click **disable** in Settings (flips the gate off → byte-identical clean app) so a user trying the workflow system + Claudesk together can back out cleanly. The workflow system's OWN standalone uninstall (works without Claudesk) is a **companion-repo** deliverable, not Claudesk's.
-
-**Deliverables:**
-- [x] **`workflow_features_enabled` gate** ✅ SHIPPED at WP2 (`467593f` + `a1d7494`) — the setting (default OFF, persisted per bundle-identity in `config_store`), the conditional-render plumbing so every workflow surface is present iff enabled, and the OFF=byte-identical invariant (verified: no workflow DOM, no chords, no menu items when off). *(As-built note: the "conditional-render plumbing" is the `useWorkflowFeaturesEnabled` **seam** with **zero consumers by design** — M11 is the first. The baseline audit found nothing workflow-coupled shipped, so OFF=byte-identical was already true and the deliverable's real content was the seam + a guard that bites when M11 arrives.)*
-- [x] **Settings entry** ✅ SHIPPED at WP2 — a toggle to enable/disable at any time; disable is the one-click clean-backout. *(Grew beyond the line: WP1's verdict built a whole minimal `⌘,` Settings panel, migrated the 3 existing app-global controls into it, and **retired the ad-hoc `ProjectPicker` settings strip** — see the WP1 note above. Consequence: M14's Settings line becomes "extend a panel that exists," not "consolidate scattered controls.")*
-- [x] **One-time evangelistic first-run invite** ✅ SHIPPED at WP3 (`6193615` + 3 more) — shown once while OFF. **⚠️ Shipped DIFFERENTLY than written, by operator rescope mid-WP3:** the invite carries **no install steps** and **does not flip the gate** — it owns **discovery** only and **routes** to Settings, which owns the substrate (status, provenance, install wizard, manual steps). Buttons are primary-route / `[Later]` (persists nothing, returns next launch) / `[Dismiss]` (permanent), not `[Enable]`/`[Not now]`. Trigger is first launch with **≥1 project** (a fresh install has none, so the pitch would have no referent).
-- [x] **Soft presence check + non-blocking note** ✅ SHIPPED at WP3, **relocated to Settings** by the same rescope (it is not on the enable path). **⚠️ The predicate was WRONG TWICE and is now marker-based** (WP3.5b): bare `is_dir()` shipped in v0.2.9, then a "non-empty" near-fix, both passing their suites — it now requires a **symlink resolving into a repo whose `install.sh` carries the `claude-workflow-system` marker**, degrading to "not installed" in every failure mode. The v0.2.9 exposure is `SURFACE-2026-07-31-SUBSTRATE-DETECTION-CANNOT-TELL-MCCC-FROM-THE-USERS-OWN-SKILLS`, deferred to the next release by operator decision.
-- [x] **Onboarding surface** ✅ **CLOSED at WP4 as a documented NO-OP — nothing shipped, and that is the deliverable's honest outcome.** The companion repo's design landed *smaller* for Claudesk than expected: per §4c the entire coupling is **one command name**, and the invite + Settings already name it. The one genuine non-overlap (Claudesk *auto-starting* the tour via `cc_input`) was cut — it would be the app's first programmatic PTY write, the invite fires at the picker where no CC session exists to inject into, and a mistimed inject strands a first-run user to save one paste. See `archive/milestone-10.9-workflow-features-gate/wbs.md` → Verdict (c).
-- [x] **(added mid-cycle, not in the original list) Install + uninstall wizards** ✅ SHIPPED at WP3.5a (`a6fb194` + `b95466f`) + WP3.5b (`da4a854` + `8626ba7`) — **added 2026-07-29 by operator decision and split the same day.** Claudesk clones the companion repo to `~/.claudesk/vendor/` and runs its own `install.sh`/`uninstall.sh`, with a consent step naming every side effect and a `--dry-run`-driven removal preview. **This REVISED milestone property 2** from "enable touches NOTHING in `~/.claude/`" to "**except through an explicit, user-driven wizard**" — the toggle itself still writes only Claudesk's own `settings.json`. Safety model: **provenance, not abstinence** (recorded at install time, never inferred from a resolved path), with the refuse-guard **compiler-enforced**.
-
-**Exit Criteria:** ✅ **ALL MET — M10.9 COMPLETE 2026-07-31, exit verdict GO** (cycle closed via `/product-finalize`; WBS archived to `workflow-system/product/archive/milestone-10.9-workflow-features-gate/`). Verified clause-by-clause at WP5 — see that WBS → "Probe outcomes" → Verdict (f). With the gate OFF, Claudesk is byte-identical to a build without any workflow features (no dead affordances) ✅ *(held two ways: the OFF-invariant guard's five arms, each **proven to fail** on a real bypass, plus zero workflow surfaces in the live post-disable DOM)*; a non-workflow user sees a coherent lite-IDE ✅; a one-time invite offers enable + shows how to install the workflow system ✅ *(as-built: the invite **routes** to Settings, which holds the install content — see the deliverable note above)*; enabling flips all workflow UI on without touching `~/.claude/` ✅ *(the milestone's load-bearing claim, verified by `md5`-hashing every file under `~/.claude/` **around each toggle** — byte-identical both directions; the only `~/.claude/` mutation path is the explicit wizard)*; disabling cleanly reverts ✅; the operator enables once and gets the full tool ✅. Plus the WBS's own added clause: the seam guard demonstrably fails when a surface bypasses it ✅ *(five times over)*.
-
-**Two items carried out of the cycle (neither blocking):** the **installed-`.app` fresh-profile first-run** check rides the next `/release` gate per `[[installed-build-verify-deferred-to-release]]` (same posture as M5/M6/M7 — `pnpm tauri:dev` cannot reproduce a genuinely fresh Finder-launched profile); and the **proven** chord-arm gap `SURFACE-2026-07-28-QUALITY-WP2-CHORD-ARM-MISSES-PANELHOST` is scheduled in **M11.5, before M11** — M10.9's exit does not depend on it (nothing gated exists yet), but M11's correctness does. *(The companion-repo deliverables this milestone depended on — install/uninstall UX, folder unification, onboarding content — all landed 2026-07-28 per `HANDOFF-from-mccc-2026-07-28.md`.)*
-
-**Cross-repo split (authored as a handoff this session — see the handoff artifact):**
-- **Claudesk owns:** the gate setting, OFF=byte-identical, the Settings toggle, the invite *surface* (dialog UI), the onboarding *surface* (where it renders), the soft presence check, M11's doc-discovery following whatever folder layout the companion repo settles on.
-- **Companion `my-claude-code-customization` repo owns:** canonical `install.sh` + a standalone `uninstall.sh` (works without Claudesk); the doc-folder unification (`docs/product/` + `workflow/` → a friendlier single-folder layout for new users); the "pause" ambiguity (course-correct vs `session-pause`); the "research" collision (CC's built-in deep-research vs the workflow's `product-research`/`feature-research`); the onboarding/tutorial design + any dedicated onboarding skill / tutorial project; and the canonical install-instruction copy Claudesk's invite displays.
-- **Seam:** Claudesk *presents*, the companion repo *authors + provides mechanics*. Claudesk never hardcodes workflow internals — it points at / renders what the companion repo produces.
-
-### ✅ Milestone 11: Workflow-docs markdown viewer — **COMPLETE + CLOSED 2026-08-03** *(was Milestone 7 → M8 → M10 → M11; GATED behind M10.9's `workflow_features_enabled`)*
-
-> **▶ ACTIVATED 2026-08-01.** M11.5 closed and its WP4 discharged this milestone's one hard dependency — the OFF-invariant guard's chord arm now sees `panelHost.ts`, the module M11's Docs tab and chord live in. The parked decomposition (`m11-wbs-parked.md`) was **re-audited against the tree and unparked** into `wbs.md`: all five load-bearing claims held, and two corrections were applied, both fallout from M11.5 landing after the file was written. The load-bearing one is **measured, not predicted** — adding `"docs"` to the `RightPanel` type union *alone* now fails the guard, so WP2's real question is *where the `"docs"` identity may live at all*, not "register the panel conditionally." WP2 re-sized **M → M/L**. See `wbs.md` → "Activation audit."
->
-> **Progress 2026-08-02 — WP1 · WP2 · WP3 SHIPPED; WP4 + WP5 remain.** The Docs panel now *renders*: read-only formatted markdown, auto-select-on-open (most-downstream-wins), and link navigation. Docs is the **first tab and the default panel** when the gate is on — an operator call made at WP3 verify-human, on the grounds that a workflow user opens a workspace on *"where is this project?"* before any editing question; gate-OFF ordering is bit-for-bit unchanged. **One architectural decision came out of this WP and binds every future HTML-rendering surface: raw HTML is BLOCKED** (`arch/security-posture.md`), stated bluntly — no raw HTML at all, benign tags included — because markdown deliberately permits it and the realistic bad change is a one-line PR adding `rehype-raw` for `<details>` support. Setting a real CSP is agreed-desirable and filed separately; it needs `style-src 'unsafe-inline'` and an app-wide verification pass. ⚠️ **Six defects surfaced during WP3 and none was caught by the automated gates** — including a blank panel caused by the fix meant to make its own latch safer, and an empty-href webview hijack whose guard passed the full 1645-test suite. The durable lesson, three iterations in the making: *a `?raw` source-text guard cannot express a behavioral property*, so the click handler was extracted for tests to import the real code rather than a replica.
->
-> **⚠️ Execution order: M11.5 ran BEFORE this milestone** (inserted 2026-07-31 — see below). The numbering does not match execution order here, by design: "11.5" was chosen over a tail-renumber, and the bucket carries `SURFACE-2026-07-28-QUALITY-WP2-CHORD-ARM-MISSES-PANELHOST` — a guard fix whose deadline **is** this milestone's Docs tab landing. Do not start M11 before that item is paid.
-
-**Goal:** Read the conventional product/workflow docs as formatted markdown without leaving Claudesk or popping an external editor — so the workflow document hierarchy (vision → roadmap → wbs → wip → backlog) is glanceable inside the workspace it belongs to. *(Depends on Milestone 2's right-half panel model.)*
-
-**Deliverables:**
-- [x] **`Docs` right-panel tab** — a new panel alongside Editor / Diff / Terminal in the `right-panel-toggle` tab row, switched via a `⌘⇧`-chord (next free chord, disjoint from `⌘⇧E`/`⌘⇧D`/`⌘⇧T` and the `⌘⇧+digit` workspace switch) and a clickable tab. Per-workspace, scoped to the workspace's project.
-- [x] **Auto-discovered conventional doc set** — lists, if present in the workspace's project: `workflow-system/product/*.md` (vision, roadmap, research, arch, context, **plus `design-priors.md` + `transitions.md`** at the order tail — and **glob-matched `*wbs*.md`** so temporary/scratch WBS files surface alongside the canonical `wbs.md`), `workflow-system/state/wip/*.md`, `workflow-system/state/backlog.md`, and `workflow-system/state/.session.md`. No config; absent files are silent no-ops. **CHANGELOG.md and `archive/**` are deliberately out of scope.** *(As-built corrections to this line, 2026-08-03: paths are the post-migration `workflow-system/` layout; discovery is a **curated ordered set, not a flat glob**; and **legacy pre-migration-layout support was built then REMOVED** by operator decision at WP2 — an unmigrated project shows no docs rather than a partial list, reversing the parked WBS's "tolerate the legacy layout too.")*
-- [x] **Read-only markdown render** — formatted display with scroll and clickable in-doc / cross-doc links; the WIP Work-Tree checkboxes and frontmatter render legibly. Editing those docs stays in the Editor panel or Claude Code — the viewer never writes to disk.
-- [x] **Scroll-preserving live reload** — when a rendered doc changes on disk (the `fs-change` watcher fires — the common case: watching a `workflow/wip/*.md` file update live while CC edits it), re-render the content **without resetting scroll to the top**. Preserve the scroll offset (or anchor) across the reload so a doc the operator is reading mid-file stays put. *(Surfaced 2026-07-07 — `SURFACE-2026-07-07-DOCS-VIEWER-RELOAD-PRESERVE-SCROLL`; the naive "re-read file → replace content" reload scrolls to top, which is disruptive precisely when watching a live-updating WIP.)*
-
-**Exit Criteria:** From any workspace, the `Docs` tab renders that project's conventional product/workflow docs as formatted, scrollable, link-navigable markdown, read-only, with no external editor pop — and a live on-disk change re-renders in place without jumping scroll to the top.
-
-> **✅ MILESTONE 11 COMPLETE 2026-08-02 — exit verdict GO** (WP5, commits `0951d2d` + `8cda041`). All 5 WPs shipped: WP1 renderer probe → WP2 panel + discovery → WP3 render + auto-select + links → WP4 scroll-preserving live reload → WP5 exit verify. Every exit-criterion clause driven live on the real WKWebView; 12-clause evidence table in `wbs.md` → "Probe outcomes" → WP5 verdict. **One clause is operator-accepted-as-asserted:** *"from any workspace"* was driven on one scratch workspace. **Docs is the first tab and the default panel when the gate is on** (WP3 operator call); gate-OFF ordering is bit-for-bit unchanged and the OFF-invariant guard still passes 14/14 including M11.5's meta-tests. WP5 also shipped a fix beyond its verification-only scope — a `settled` fourth precedence tier so mtime churn on a sibling doc cannot move the auto-selection — and **retracted two WP4 evidence claims** (the browser supplies the answer unaided for both the deferred scroll restore and the doc-shrink clamp, so neither was ever proven live; no code defect). Ready for `/product-finalize`.
-
-> **Gated behind M10.9 (2026-07-20):** the `Docs` tab is a workflow-coupled surface, so it renders **only when `workflow_features_enabled` is on** (M10.9). With the gate off it does not exist (no tab, no chord) — a non-workflow user never sees an empty Docs tab. M11's WBS already reflects the auto-discovered doc set + auto-select; if the companion repo unifies the `docs/product/` + `workflow/` folders (a companion-repo deliverable), M11's `docs_list` discovery follows that layout.
-
-### ✅ Milestone 11.5: QoL polish bucket — per-project model override + pre-M11 guard debt — **COMPLETE + CLOSED 2026-08-01** *(inserted 2026-07-31; an OPEN collection bucket like M6 and M10.5)*
-
-> **Closed 2026-08-01 via `/product-finalize` — 3 shipped / 1 deferred-by-decision / 0 remaining.**
-> **WP1** per-project CC `default_model` (`e0c28ac` + `df8e002`) · **WP3** time-tracking offline/local-only copy (`0f5a8c7` + `7a1a185` + `17cf4a9`) · **WP4** OFF-invariant guard chord arm (`0bac2c6`).
-> **WP2 (editor minimap) was REMOVED from the bucket, not completed** — reproduced, root-caused, and a geometry-only patch built, measured, and reverted for making things worse; it is **feature-sized, not papercut-sized**, and the bucket's stated value is staying tight. It survives as `SURFACE-2026-07-31-EDITOR-MINIMAP-STALE-ON-FILE-UPDATE` with all diagnosis banked. **The operator explicitly ruled that this deferral closes the cycle**, so the milestone was finalized with WP2 scoped out rather than ticked — its task checkboxes in the archived WBS are deliberately left unticked, because the work did not land.
-> **⚠️ The M11 gate is DISCHARGED.** WP4 was the one item with an external deadline: `panelHost.ts` (which owns `panelForChord`) was provably invisible to the guard's chord arm, and M11's Docs tab landing is exactly when that arm must fire. The hole is closed and **mutation-proven** — the M10.9 WP5.2 probe that passed 10/10 now fails, naming the file.
-> **One carry into M11's planning — DEFERRED at the M11 arch back-loop, and its severity corrected down:** WP4's own review found the arm guards chord *predicates* but not chord *registration* (`SURFACE-2026-08-01-QUALITY-WP4-ARM-GUARDS-PREDICATES-NOT-REGISTRATION`). **The "structurally closest analogue / weigh it before M11" framing written here at the close was an overstatement**, corrected 2026-08-01 on measured evidence: every non-test keydown registration site delegates to a predicate module **13/13, zero inline chord matches**. Unlike `panelHost.ts` (a live, proven miss), this is conditional on a future author first breaking that convention — so **M11 proceeds without paying it**, keeping its Docs chord in a predicate module where the arm already sees it. When paid, the right shape is a convention guard, not a sixth arm. See `arch/right-panel-surfaces.md` → "The Docs panel" (the archived pre-build revision is linked from there).
-> **Bucket discipline held:** opened at 2 deliverables, grew to 4 in one scoping pass, and closed at 4 with no accretion — the M10.5 precedent.
-
-> **Why here + why "11.5" (operator decision 2026-07-31):** the operator asked for the per-project CC model override "sooner than later," and it is **pure lite-IDE core** — a workflow-independent papercut that any Claude Code user benefits from, so it does not belong inside the gated M11–M13 stream. Numbered "11.5" (a between-milestones insert, same convention as M6 and M10.5) to avoid re-renumbering the M12→M14 tail. **Executes immediately after M10.9 closes and BEFORE M11's docs viewer** — which is also the natural slot for the one piece of backlog debt that carries a hard pre-M11 deadline. Source: `SURFACE-2026-07-31-PER-WORKSPACE-CC-MODEL-OVERRIDE`.
->
-> **Why not M14 (the trap that was rejected):** M14's Settings deliverable already lists *"default CLI args for `claude` (e.g. yolo-mode toggle)"*, which makes it the natural-looking home. Three reasons it is wrong: (1) M14 is the **last** milestone — behind M11+M12+M13 — which is the opposite of "sooner than later"; (2) that M14 line is **already partly stale** (it also lists "menu-bar / PiP visibility toggles," but PiP mode shipped at M5 and the permission-mode dropdown at M6 — the `--model` flag is the *same shape* as `--permission-mode`, which is already done); and (3) this is not app-global Settings work at all — a per-**project** override is a `projects.json` field + a per-project **picker-row** cell (the header placement was tried and rejected at Phase 2 verify-human, 2026-07-31), which is M6's QoL-bucket pattern, not M14's app-global Settings work. ✅ **M14's "default CLI args" line was corrected 2026-09-18 (WP4 Phase 1)** — this milestone consumed most of it.
-
-**Goal:** A batch of daily-driver papercuts — the CC model choice follows the **project** rather than the machine, the editor minimap stops lying about the buffer, time-tracking says out loud that it is local-only — plus pay the one guard-debt item whose deadline is M11's arrival. An OPEN bucket: more papercuts may be appended as WPs before decomposition.
-
-**Deliverables (first batch — expect more before this milestone is reached):**
-- [x] **Per-project CC default-model override.** ✅ **SHIPPED 2026-07-31** (`e0c28ac` + review fixes `df8e002`). A `default_model` field in `projects.json`, surfaced as a **picker-row** cell (⚠️ **RESOLVED at build 2026-07-31** — the parenthetical "workspace-header (or picker-row)" is settled: it was built on the workspace header, the operator **rejected that placement at Phase 2 verify-human**, and it now lives **only** on the picker row, right-aligned, as a compact click-to-edit label. Not both surfaces — two homes for one per-project value would need a sync path, and there is deliberately no broadcast event for it. New design prior: `set-a-spawn-time-choice-where-the-spawn-is-chosen` — a value read once at creation belongs on the *creation* surface, where it is actionable and comparable across candidates), passed to the spawned CC as `--model <value>` in `cc_spawn` / `PtyCcSession`. **Unset = inherit the CC global default** (today's behavior, so existing projects are untouched). The operator's framing: *the global CC default means you forget to switch models back after using a particular one on a project.* **Precedent to mirror — ⚠️ CORRECTED at `/product-wbs` 2026-07-31 (the original claim was materially wrong):** mirror the M6 permission-mode **mechanism** (typed value → persisted → read-at-spawn → `--flag` → pure `build_cc_argv` → event rebroadcast), but **NOT its storage** — that mode is **app-global** (`AppSettings.cc_permission_mode`), not per-workspace. And `default_drive_mode` in `projects.json` was, **at the time of this M11.5 decision**, a **typed placeholder with no read path, no write path, and no UI** ("Reserved for Phase 2… never read or written"). *(⚠️ No longer true as of M12 WP4b/WP4c, 2026-08-07/08-10 — it is now fully live: written by the picker-row cell, read at spawn, and delivered to CC via `CLAUDESK_DRIVE_MODE`. Its doc comment was corrected in the same commit. Retained here as the state that made this decision correct, not as a current fact.)* So `default_model` is Claudesk's **first genuinely per-project, read-at-spawn setting** — the per-project storage/read/write path must be built, not cloned. Mitigating: `SessionRegistry::spawn(app, project_path)` already receives the project path, so no signature change is needed. Also note the argv asymmetry: `--permission-mode` is passed *unconditionally* (even for `default`), whereas `--model` must be **omitted entirely when unset** — "inherit CC's global default" has no representable flag value. See `wbs.md` → "Scope-audit findings" → Finding 1. Per `[[explicit-selectable-mode-over-inferred-mode]]` the selected model must be **visible without interaction**, not silent state — satisfied on the picker row, where every project's model reads as a column (the *edit affordance* sits behind one click; the *state* never does). **Constraint:** model *names* drift with CC releases — prefer free-text / recently-used / derived over a hardcoded model-ID list, so the control does not rot on the next CC release. **✅ CONSTRAINT SATISFIED + the `claude --help` probe is DONE (2026-07-31) — recorded here so it is not re-run:** (1) `--model` accepts **either** an alias (`fable` / `opus` / `sonnet`) **or** a full ID (`claude-fable-5`), so the value set is genuinely **open** — this independently confirms the no-hardcoded-list constraint rather than merely assuming it; (2) an invalid value **fails loudly** — *"There's an issue with the selected model (X). It may not exist or you may not have access to it."* — and CC does **not** silently fall back; (3) ⚠️ **that failure is rendered by CC INSIDE the session, not at exec** — the PTY spawn still succeeds, so the message lands in the terminal pane the user is already looking at. **Design consequence: Claudesk must NOT validate client-side.** CC's check knows about *entitlements*, not just existence, and any Claudesk allowlist would reject models released after a given build. Ships as free-text + a three-alias `datalist` of **hints, never a validation allowlist**.
-- [ ] **Editor minimap goes stale on file update** *(operator-reported 2026-07-31 — `SURFACE-2026-07-31-EDITOR-MINIMAP-STALE-ON-FILE-UPDATE`)*. The minimap does not re-render when the file content changes; the document text updates correctly, so the minimap stops corresponding to the buffer it summarizes — **actively misleading as a navigation aid, which is worse than absent**. Prime suspect from a static read: `editorExtensions.ts:217` registers it as `showMinimap.compute([], …)` with an **empty dependency array**, so the facet (and its `create`d container) is computed once and frozen for the `EditorView`'s life. **Reproduce-first** — do not assume the deps array is the whole story until it is confirmed against `@replit/codemirror-minimap`'s own update cycle, and check **both** change sources (external disk reload — the common Claudesk case where CC edits the file — *and* local typing; if typing is also stale the bug is larger than the reload path). The disk-reload plumbing is **not** suspected: `EditorSplit`'s `checkDisk` → `diskDecision` → `reloadFromDisk` path is sound and consistent with the text updating. A fix that recreates the container must preserve the WP11 `cm-minimap-narrow` marker class or the 90px width clip in `App.css` silently regresses.
-- [x] **Time-tracking says it is offline + local-only** ✅ **SHIPPED 2026-08-01** (WP3; `0f5a8c7` + `7a1a185`, review fixes `17cf4a9`) *(`SURFACE-2026-07-20-TIME-TRACKING-OFFLINE-LOCAL-ONLY-MESSAGING`)*. A short reassurance line on the `time_tracking_enabled` setting, and the dashboard empty-state. The feature has **always** been local-only (a local SQLite `time_store`, no network path) — nothing in the UI ever said so, which is a trust gap for a privacy-conscious user toggling it on. **Copy-only; no data-flow change** — held: 0 `src-tauri/` files changed.
-  **Shipped differently from this line in three ways, all recorded honestly rather than glossed:** (1) the copy **discloses SCOPE as well as locality** — *"records Claude Code activity across the whole Mac, not just projects open in Claudesk"* — because the candidate wording *"visible only to you"* is true but silent on breadth, and omitting breadth leaves the copy misleading by omission; the scope claim is **verified in code** (`time_store::drain_loop` has no workspace filter, unlike `status_broadcaster`), not trusted to memory. (2) **There is no per-setting help-line slot** — `SettingsGroup` takes one hint per **group**, already populated, so this edited existing copy and preserved its ON-vs-OFF fact rather than filling an empty slot. (3) The **`PRIVACY-TEST-COINCIDENTAL-SUBSTRING` re-verification named above is not possible as written** — that identifier exists in the docs and **nowhere in the code**; the two real Rust privacy tests — `time_store::mod::tests::native_keystroke_row_carries_byte_count_and_session_not_content` and `native_row_never_carries_content` — assert on structured row fields and therefore cannot be tripped by UI copy at all (both were run by name regardless). ⚠️ Named here because until the 2026-08-12 paydown sweep every site said only *"the two real tests"*, so a reader still could not grep for them. Also folded in: the dashboard empty-state's *"in the project picker"* pointer, stale since M10.9 WP2 deleted that strip.
-- [ ] **`SURFACE-2026-07-28-QUALITY-WP2-CHORD-ARM-MISSES-PANELHOST`** (MAJOR, from M10.9 WP2's review) — the OFF-invariant guard's chord arm selects files by **basename** (`/hord…/`), so it skips `panelHost.ts`, the module owning `panelForChord` and the most natural home for an M11 Docs chord. Select by **content**, not basename. **This is the reason the bucket sits before M11 rather than after:** M11 landing its Docs tab is precisely the moment the arm needs to fire, and a guard that cannot see the module it is guarding is decorative.
-
-**Exit Criteria:** Opening a workspace spawns CC with that project's chosen model (unset → CC's own default), the choice is **visible on that project's picker row** without interaction and persists across relaunch, and the model control does not depend on a hardcoded model-ID list. *(⚠️ "visible on the workspace" → "visible on the picker row", 2026-07-31: the operator relocated the control at Phase 2 verify-human. **Model-override criteria all MET and proven on live processes** — set → `claude … --model sonnet`; unset → **no `--model` token at all** (neither `--model default` nor an empty value); `--permission-mode` present on both, so the deliberate argv asymmetry holds in production; persistence confirmed across a real relaunch; no hardcoded list — free-text with three documented aliases as `datalist` hints only, and an unrecognized value is stored verbatim for CC to adjudicate.)* The editor minimap tracks the buffer through **both** an external disk reload and local typing (red-green: a test that fails on today's behavior). The `time_tracking_enabled` setting states that capture is offline and local-only. The OFF-invariant guard's chord arm selects by content and is **mutation-proven to bite** on a chord added in `panelHost.ts`.
-
-> **Explicitly NOT in this bucket** (considered at scoping, 2026-07-31): the rest of the `?raw`-guard family (`SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING` + `WP3-POSITIONAL-RAW-SLICING` — same idiom, same root cause, best paid together in their own pass) and the remaining M10.9 MINORs; **per-result / per-file replace** (`SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE` — a real gap, but it needs a writable result surface, making it a small *feature* rather than a papercut); **turn-output re-orientation** (`SURFACE-2026-07-14-...` — its own entry marks it roadmap/vision-level and requires a transcript-mining first step; milestone-shaped, not bucket-shaped); and **split-pane cursor reset** (`SURFACE-2026-06-20-WP3C-SHARED-DOC-CURSOR-RESET` — low; its own entry says dismiss if dogfooding didn't make it annoying, and ~5 weeks passed without the operator raising it). A full `util-backlog-paydown` sweep at this boundary was also considered and scoped out. **The bucket's value is that it stays tight** — M10.5 closed at 4 WPs without accreting, and every item added pushes out the model override the operator asked for "sooner than later."
-
-### Milestone 12: Smart auto-resume + drive mode — ✅ **COMPLETE + CLOSED 2026-08-12** (exit verdict **GO**, all 8 WPs) *(was Milestone 4 → M8 → M9 → M10 → M11; slid +1 again by the 2026-07-06 auto-updater insert)*
-
-> **Cycle closed 2026-08-12** (`/product-finalize`). Both deliverables shipped and both exit criteria
-> were verified **live on the running app**, not inferred: the signal was read from the spawned CC's
-> real process environment (`ps eww`), and the negative arm (mode cleared ⇒ the variable **absent**,
-> not empty) was asserted just as hard on two independent spawns. As-built architecture in
-> `arch/session-resumption.md`, which is the authority wherever it and this section
-> differ. WBS + probe outcomes archived at
-> `workflow-system/product/archive/milestone-12-smart-auto-resume-drive-mode/`.
->
-> ⚠️ **The milestone was re-designed TWICE mid-cycle** (at decomposition, then again at WP4), both
-> times because a premise in this file did not survive contact with the machine. The refuted designs
-> are recorded rather than deleted — both read as perfectly reasonable, which is exactly why.
-> ⚠️ **Two limits are part of the GO, not footnotes:** 5.7's *interactive* negative arm (a
-> plain-terminal `claude` still showing the mode menu) was accepted on **mechanism** evidence by
-> operator decision — the gate is by **absence**, so the skill cannot behave differently, but the
-> menu itself was not eyeballed outside Claudesk; and **long-context durability of per-turn
-> re-injection remains ASSUMED**, validated by dogfooding rather than by a synthetic probe (declined
-> deliberately: filler is not the same pressure as a real long session, so it would be expensive
-> *and* weak evidence).
-
-**Goal:** Opening a workspace lands on the correct resumption command automatically, and the active drive mode is always visible and one-click changeable.
-
-> ⚠️ **THIS MILESTONE WAS RE-DESIGNED AT DECOMPOSITION (2026-08-03) FROM LOG EVIDENCE, AND THE SPEC BELOW
-> IS THE AS-BUILT ONE.** The original three-branch design — struck through in spirit below — had a premise
-> that does not survive contact with the machine: it keyed on *"whether CC has a resumable conversation
-> for the project dir"*, which is **both unqueryable and permanently true** (`claude --help` exposes
-> `-c/--continue` and `-r/--resume` to *act* but nothing to *ask*; the only proxy,
-> `~/.claude/projects/<slug>/`, **never prunes** — 194 transcripts for this project, and a throwaway
-> scratch repo had 5). As specced, that arm would fire for any directory ever opened, **starving
-> `/session-start` permanently**. Two further corrections: **precedence REVERSES** (the explicit unclean
-> flag beats `.session.md`, not the other way round), and **`/session-resume` does not exist** (renamed
-> `/session-restore` at M9 WP5). Full evidence: `wbs.md` → "Scope-audit findings".
-
-**Deliverables:**
-- [x] **Smart auto-resume on workspace open** — **two** signals, checked in this order; `/session-start` is **never** auto-fired:  <!-- ✅ SHIPPED 2026-08-05 as M12 WP1+WP2+WP3 (`cc3dfa2`, `0b07e81`, `80b82a1`) -->
-  - **Unclean-exit flag set** → spawn with the **`--continue` CLI flag** (⚠️ *not* a typed `/resume`, which opens an interactive picker rather than resuming). The flag is **DEFAULT-SET on open** and cleared **only** by a clean exit, so a power loss and a button click produce identical state — the unobservable inference is *deleted*, not solved.
-  - **`workflow-system/state/.session.md` present** → inject **`/session-restore`** after the prompt settles.
-  - **Neither** → fire **nothing**; a manual `/session-start` button lives in the workspace header.
-
-  ⚠️ **Precedence: the unclean flag WINS** — it is an explicit user signal, `.session.md` is semi-automated. This **reverses** the original "prefer `/session-resume`, workflow context is richer." Mutation-proven in `predictAction.ts`. **Auto-fire is ANNOUNCED before the click** (the picker row states the predicted command) with a `⊘` door that opens **without** firing — a per-open routing decision, nothing persisted by either choice. ⚠️ **As built the `⊘` is NESTED inside the open button's gutter, not a sibling** (a `<span role="button">` guarded by `stopPropagation` on both pointerdown and click plus an Enter/Space mirror, verified live to hit-test to itself). The planned sibling and the as-built nested solution deliberately DIFFER; do not "correct" it back. Note `isSiblingOfOpenButton` does **not** protect it — that predicate is `cell !== "open"`, tautological for a nested element.
-- [x] **Drive-mode selector + indicator on the PICKER ROW (✅ SHIPPED — WP4a–WP4c, 2026-08-10)** — ⚠️ **not the workspace header** (operator decision 2026-08-03, consistent with where M11.5 WP1's model control landed after being rejected on the header). The mode stacks as a second line **inside the existing model column**, so it costs zero extra width on every row; unset states are labelled (`Drive Mode: None`), set values render bare. Showing the current drive mode (1 `stepping` / 2 `orchestrated` / 3 `autopilot` / 4 `fsd`), changeable in one click. Persisted per-project in Claudesk's own `projects.json`; delivered to CC as an **env-var-gated `UserPromptSubmit` hook signal** (`CLAUDESK_DRIVE_MODE`), so a Claudesk-opened session isn't re-asked a question the operator already answered — while a plain-terminal `claude` behaves byte-identically.  <!-- M12 WP4a–WP4c — SHIPPED -->
-
-  ⚠️ **Three as-built corrections, recorded 2026-08-11 (WP4d), because this line's original text was wrong on each:**
-  - **The frontmatter mirror was REJECTED, not built.** The original wording — *"mirrored to the active WIP file's `drive_mode:` frontmatter so Claudesk's UI and the workflow's pause-policy logic share a single source of truth"* — was invalidated at the WP4 re-decomposition: `/session-restore` **deletes** `.session.md` at step 7 and `feature-finalize` **archives** the WIP file, so at the exact moment a new WP starts there is nothing to mirror into, and five WIP templates never declare the field. Measured: a persisted mode already exists in **93%** of manual restores and is **already ignored 74%** of the time. **Claudesk does not write into `workflow-system/`.**
-  - **It IS a native `<select>`** — the original *"never a live `<select>` on every row"* was reversed by operator decision. The four values are a **closed** set, the opposite of the model override's deliberately-open one, and the asymmetry is a **correctness requirement**: a bad model string is adjudicated by CC in the pane, whereas a bad drive-mode string fails serde on read and **takes the whole project list down**.
-  - **The wire vocabulary was wrong on 2 of 4** — `step-by-step` → **`stepping`**, `full-autopilot` → **`fsd`** (authority: upstream `transitions.md`; pinned by per-variant serde renames).
-
-**Exit Criteria:** Workspace open always fires the right resumption command without manual selection **and announces it beforehand**; the active drive mode is visible on the picker row, switchable in one click, and **reaches the CC session** so `/session-restore` does not re-ask for it. ⚠️ **Verified against the SIGNAL, not against a stored value** — the deliverable is a signal, not a store, so "the mode is persisted" would be an insufficient exit check (a persisted mode already existed and was already being ignored). The real criterion is the one WP4b/WP4c proved live: cell → `projects.json` → `CLAUDESK_DRIVE_MODE` in the spawned CC's **actual process environment** → the `UserPromptSubmit` hook, with the negative arm (cleared ⇒ variable **absent**) asserted just as hard. ⚠️ **Long-context durability of per-turn re-injection remains ASSUMED, not proven** — both live proofs were on short, cold contexts; validated by dogfooding, a deliberate operator call (a synthetic filler probe would be expensive *and* weak evidence).
-
-✅ **Success metric 5 was restated at WP4d and verified at WP5** — `vision.md:88` now reads *"visible **on the picker row**, at the moment of the click that uses it"*, so the metric is **satisfiable for the first time** (as originally written it required the mode in the workspace header, which is not where it shipped). ⚠️ The WP4d sweep found **10** wrong sites, not the 5 its task list named — the extras held the *disproven* three-branch auto-resume table and both dead command names still standing as live design. **A scope list of known-wrong places is a floor, not a boundary.**
-
-### Milestone 13: Skill orchestration *(was Milestone 5 → M9 → M10 → M11 → M12; slid +1 again by the 2026-07-06 auto-updater insert; livable-without for now)*
-
-**Goal:** Common workflow operations are clicks, not typed slash commands.
-
-**Deliverables:**
-- [ ] **Skill registry:** scan `~/.claude/skills/` (global) + `<project>/.claude/skills/` (project-local); render each skill as a clickable button that sends the matching slash command to the active CC pane.
-      ⚠️ **NOT BUILT — deliberately narrowed at M13, and confirmed still-unbuilt at the M14-remainder cycle close (2026-09-18).** The skill row shipped as a
-      **fixed five** (`/session-start`, `/session-restore`, `/session-capture`, `/util-prune-claude-md`, `/util-backlog-paydown`), not a dynamic scan.
-      ⚠️ **M15's decomposition independently MEASURED the gap**: `skills_dir_exists()` answers one boolean and enumerates nothing, and no YAML
-      frontmatter parser exists in either manifest — so a registry needs an enumerator + parser, which **reverses a recorded §4c anti-brittleness
-      decision** (the command name is the only stable cross-repo coupling; a path is not). That makes it a **product decision, not a leftover task**.
-      Left unticked on purpose: this deliverable is M13's to re-scope or drop, and ticking it here would falsify the record.
-- [x] **"Recycle Session" one-click button:** `/session-handoff` → wait for `.session.md` write completion → Ctrl+D → wait for CC exit → spawn fresh CC → `/session-restore`. Manually triggered only; never automatic. ⚠️ **Command names corrected 2026-08-05** — `/session-pause` and `/session-resume` were **renamed** to `/session-handoff` and `/session-restore` at M9 WP5 (specifically so "restore" would not collide with the harness built-in `/resume`), and neither old name exists. ⚠️ **Recycle is a CLEAN boundary, so it MUST CLEAR the unclean-exit flag** (M12 WP2 task 2.5 pinned this so M13 does not rediscover it) — otherwise every recycle leaves a false mark and the next open fires a spurious `--continue`. ⚠️ M12 WP3 shipped the reusable pieces: `slash_command_bytes` for injection, `session_state::consume` for the flag, and `sessionStartButton.ts` as the single-button precedent this registry either absorbs or keeps pinned.  ✅ **SHIPPED 2026-08-18 (WP3, commit `be29dea`).** ⚠️ **Shipped as a CALLABLE OPERATION with the button as ONE caller** (per the 2026-08-14 M15 scope note), and the sequence differs from this line in two ways worth recording rather than glossing: (a) **the wait is NOT "`.session.md` write completion"** — WP1 measured that the file lands **9–12s BEFORE the skill finishes**, so firing there kills CC mid-skill and truncates the WIP annotation; the real marker is a **composite** (a fresh write whose mtime beats a baseline sampled BEFORE the operation, ignoring `*.tmp.*`, **followed by the next `Stop`**). (b) **Not Ctrl+D** — teardown reuses the pane's existing `handleRelaunch` (kill → clear the spawn-once latch → one nonce-bump path), so no second respawn route exists. ⚠️ The flag clear IS wired (`CleanExitRoute::RecycleSession`, now with a production caller). ⚠️ **The WP3 'accepted gap' is CLOSED, and its diagnosis was WRONG** — resolved at WP4 Phase 3 (2026-08-18). WP3 filed the unproven success path as *fixture*-blocked (CC refuses to hand off from an empty scratch repo); on a fixture with ample real content the handoff **still failed twice**, and CC named the cause itself: the DEV profile had drifted to `cc_permission_mode: "dontAsk"`, which **suppresses the prompt without granting the write**. No fixture engineering would have fixed it, and the next retry would have blamed the fixture again (`SURFACE-2026-08-18-DEV-PROFILE-PERMISSION-MODE-BLOCKS-SKILL-WRITES`). With the mode corrected **and the session respawned** (the mode is read at spawn; the pane footer is the tell), one click composed the whole sequence end-to-end on a real session. The two failures **bracket** the success on the same fixture, so the difference is attributable to the permission mode rather than fixture luck — and they re-prove the FAILURE arm, the one that can destroy work, against two independent real refusals. ⚠️ **A post-Recycle flag reads `true` and that is NOT a missed clear** — clearing precedes the kill by design and the respawn re-sets it for a live session; **the only honest observable is the reopen announcement** (a cleared project announces nothing).
-
-  **M12 → M13 hand-off note on the drive-mode signal** *(written 2026-08-11, WP4d task 4d.4 — record-only)*. Recycle ends in `/session-restore`, which is **exactly** the skill M12 WP4b taught not to re-ask for a drive mode, so Recycle is the natural second caller of that signal. ⚠️ **Reuse is NOT pre-committed** — operator decision 2026-08-06: *"I'll need to open the spec and re-evaluate if it's reusable when we get there."* So this records **what exists** and deliberately builds **no generalized abstraction** for a caller that has not been specced.
-  - **What exists to reuse.** The mode is stored per-project in `projects.json` (`default_drive_mode: Option<DriveMode>`), composed into the CC spawn's environment by `cc_spawn_env` (CC-only — ⚠️ **not** `color_tty_env`, which is shared with the raw login shell), and read back by `claudesk-hook.pl` on `UserPromptSubmit`, which returns it as `hookSpecificOutput.additionalContext`. Gate: `workflow_features_enabled`; inertness is by **absence** of `CLAUDESK_DRIVE_MODE`.
-  - **The question M13 actually has to answer**, and the reason this is a note rather than an abstraction: Recycle **re-spawns** CC, so it gets the signal for free from the ordinary spawn path **if** it spawns through the same seam — in which case there is nothing to build. The re-evaluation is therefore *"does Recycle's respawn go through `cc_spawn_env`?"*, not *"how do we generalize the injector?"*
-  - **Pairs with the flag rule already in this bullet:** Recycle must **clear** the unclean-exit flag (clean boundary) **and** will re-acquire the drive-mode signal on its fresh spawn. Two separate mechanisms, one moment — don't conflate them.
-
-**Exit Criteria:** No slash-command typing for common skills; Recycle Session is a single click.
-
-> **⚠️ SCOPE NOTE added 2026-08-14 (M15 dependency): Recycle must be PROGRAMMATICALLY CALLABLE, not button-only.** M15's context-pressure rule invokes Recycle without a click (see Milestone 15 → deliverable 4), so the Recycle sequence must be built as a callable operation with the button as *one* caller — not as a click handler with the sequence inlined. Building it button-only and retrofitting a programmatic entry point later is the predictable-and-avoidable version of this cost. ⚠️ This does **not** widen M13's user-visible scope: the button is still the only surface M13 ships, and the seam is an internal shape requirement.
->
-> **No other M13 scope change.** The skill registry and the Recycle sequence stay exactly as specified above. The 2026-08-14 supervisor discussion moved the state-machine/enforcement work into a **new Milestone 15**, deliberately *not* into M13 — see the Revision 2026-08-14 note at the end of this file for why the split was chosen over expanding M13.
-
-> **Group C exit (all six vision success metrics):** (1) time-to-productive <10s; (2) Recycle Session is one click; (3) no slash-command typing for common skills; (4) every workspace's status visible in-window without clicking; (5) workspace open always lands on the right resumption command without manual selection AND the active drive mode is always visible; (6) every workspace's status visible WHEN THE CLAUDESK WINDOW IS NOT IN FOCUS (PiP + menu-bar item). Combined with the Milestone 2 editor/diff viewer, Claudesk is now a full daily driver — projects in tabs, edited and diffed in-window, with no external Sublime juggling. *(Note: the dogfood-replace point arrives earlier than full Group-C completion — at M3 + M4 — per the 2026-06-22 reorder.)*
->
-> **⚠️ Metric numbering resynced at the M12 close 2026-08-12** — this block previously said *"metrics 2/3/5 land with the later M11/M12"*, using **pre-insert milestone numbers**; the M14 note below had flagged it for the next finalize sweep. Current status against `vision.md`'s six:
->
-> | # | metric | status |
-> |---|---|---|
-> | 1 | time-to-productive < 10s | ✅ M1–M4 |
-> | 4 | every workspace's status visible in-window | ✅ M3 + M4 |
-> | 6 | …and visible when Claudesk is NOT focused | ✅ M5 (PiP) + M7 (menu-bar) |
-> | **5** | **workspace open lands on the right resumption command, and the drive mode is visible** | ✅ **M12** — ⚠️ this metric was **unsatisfiable as originally written** (it required the mode in the *workspace header*, which is not where it shipped); restated against the **picker row** at WP4d and verified at WP5 |
-> | 2 | Recycle Session is one click | ✅ **M13 WP3** — verified end-to-end on a real session at WP4 Phase 3 (2026-08-18) |
-> | 3 | no slash-command typing for common skills | ✅ **M13 WP2** — verified live at WP4 Phase 2 (2026-08-18) |
->
-> **✅ ALL SIX ARE MET. Group C is CLOSED (M13 WP4, 2026-08-18.)**
->
-> ⚠️ **Both metrics needed their own wording corrected before they could be marked met — see `vision.md` for each.** Metric 2 named a 4-step dance using **two commands that do not exist** (`/session-pause`/`/session-resume`, renamed at M9 WP5) and a **Ctrl+D** teardown that is not what shipped. Metric 3 said *"**Every** installed workflow skill is a clickable button"*, which WP1's measurement **refuted** — only 11 of 50 invocable skills were ever typed by hand, and zero `feature-*`/`task-*`/`product-*` ones, so an exhaustive row would have surfaced the *agent's* vocabulary to a human who never types it. The exit criterion's operative word is **"common"**, and the shipped set is a deliberate fixed five plus Recycle. ⚠️ **This is the second time a Group-C metric proved unsatisfiable as originally written** (metric 5 was restated at M12 WP4d against the picker row) — worth noting at the next `/product-vision`: metrics written as *"every X"* or naming a *specific mechanism* tend to be refuted by the build, whereas metrics naming an *outcome* survive.
->
-> ⚠️ **Group C still closes at M13 — the new M15 (workflow supervisor) does NOT belong to it** (inserted 2026-08-14). None of the six vision success metrics covers mechanical auto-chain enforcement; metrics 2 and 3 are about *clicks*, which M13 delivers in full. M15 is a **new capability** in its own Group E, deliberately kept out of Group C so its research risk cannot block this close.
-
-### Milestone 13.5: QoL polish bucket *(new — inserted 2026-08-19; an OPEN collection bucket)*
-
-**Goal:** A fourth batch of daily-driver papercuts found while dogfooding v0.3.x, cleared before the
-supervisor and the OSS release. Decomposed in `wbs.md`.
-
-> **Why a bucket rather than a milestone or standalone tasks (the thrice-executed convention):**
-> **M6** (friend-QoL, closed 2026-06-28), **M10.5** (closed 2026-07-19) and **M11.5** (closed
-> 2026-08-01) are all OPEN collection buckets of dogfooding papercuts, all numbered as
-> between-milestone inserts to avoid tail-renumber churn, all closed at 4 WPs. Two backlog items
-> were already tagged *"queued for the next QoL polish bucket (none currently open)"*, which is what
-> the bucket exists to absorb. Numbered **13.5** so M14/M15 keep their numbers.
-
-**Deliverables:**
-- [x] **WP1 — window size/position persistence.** ✅ **SHIPPED 2026-08-21** (`25a68bc`; review
-      `fe091f9`). The main window was hardcoded 1280×800 on every launch with nothing persisted; a
-      maximized window now relaunches maximized (operator ask 2026-08-05, clarified by screenshot to
-      mean **maximized**, not macOS native fullscreen — flags are `SIZE | POSITION | MAXIMIZED`,
-      `FULLSCREEN` deliberately omitted). First-party `tauri-plugin-window-state` 2.4.1.
-      ⚠️ **Two of the three traps resolved toward the SIMPLER build, and this line's framing of one
-      was wrong:** off-screen safety is **skip-if-no-monitor-intersects, NOT clamping** (the plugin
-      applies `set_position` only when a monitor intersects the saved rect, while `set_size` applies
-      unconditionally — so a window saved on a disconnected monitor returns at its saved *size* at an
-      OS-chosen *position*), so **no hand-rolled clamping was needed**; and dev/prod isolation holds
-      via `app_config_dir()` (**not** `app_data_dir()` as the backlog stated — on macOS both resolve
-      to the same per-identity dir). The third trap was real: scoping to `main` via a denylist keyed
-      on `pip::commands::PANEL_LABEL`. ⚠️ Also load-bearing and **not** in this line: the plugin
-      writes to disk **only** on `RunEvent::Exit`, and Claudesk's quit path holds the close
-      (`prevent_close` → `quit_now` → `app.exit(0)`) — verified live 3× that the save still lands.
-- [x] **WP2 — the status model's missing background-work state(s).** ✅ **SHIPPED 2026-08-22**
-      (`e3eaed8`). Both halves resolved, and ⚠️ **this WP's own framing above was wrong in two
-      places.** (a) **The stale-blue diagnosis was REFUTED:** `SubagentStop` was never involved — CC
-      sends `notification_type: "agent_completed"`, the type was unlisted, and the deliberate
-      unknown-type fallback classified it as input-needed, so the dot was lit **wrongly** and there
-      was nothing to clear. `SubagentStop` fires unpaired at a **3.2:1** surplus and the per-agent
-      counter alternative is impossible (`agent_type` is NULL on 100% of 3,977 events). Fix was two
-      lines, elsewhere. (b) **The probe-gate resolved YES, so the blocked-upstream branch was never
-      taken:** `Stop` already carries a structured background-task signal, decidable at the exact
-      moment the dot goes gray — better than the hypothesised launch-flag inference. As built:
-      `WorkspaceState::BackgroundWork`, **purple `#a371f7`** (teal shipped first and was
-      operator-rejected as blue-adjacent), threaded through filmstrip · PiP · tray, with
-      `aggregate_alarm` rewritten to an exhaustive match so a 5th state fails to **compile**.
-      ⚠️ **The signal is `background_task_count > 0` — a COUNT, not the `background_tasks[]` array**;
-      the hook forwards only the length, deliberately (shell text is prompt-class privacy).
-- [x] **WP3 — turn-output reorientation.** ✅ **SHIPPED 2026-08-25** (`2086ae8`). ⚠️ **The scope risk
-      above played out in an unexpected direction:** WP3 was **escalated out** of the bucket on a
-      mechanism refutation and **re-admitted the same day** when its own probe overturned that
-      refutation — the claim that CC runs in the xterm *alternate* buffer was **false** (measured:
-      `buffer.active.type === "normal"`, alt buffer never used), and the real blocker was **two unset
-      xterm options**. Shipped as bidirectional `↑ N/N ↓` navigation in the ungated split-control
-      cluster. ⚠️ **Partially resolves** its source item — 1 of 4 directions; the **answer-burial**
-      half remains open. ⚠️ **The banked lesson: a REFUTATION needs the same empirical bar as a
-      claim, arguably higher, because a refutation CLOSES work.**
-- [x] **WP4 — drive-mode readout + selector on the workspace surface.** ✅ **SHIPPED 2026-08-26**
-      (`efa7798`). ⚠️ **NOT the "bucket exit verify" this line originally named** — that became WP5.
-      WP4 was **added 2026-08-20 from a direct operator ask** (the bucket convention working as
-      intended), and it **deliberately reverses** M12's recorded "picker row **only**" decision.
-      ⚠️ Its own interaction design was **rejected mid-flight and re-planned**: changing the mode
-      **is** the intent to apply it, so it raises a confirm and Apply drives the respawn itself.
-      Root cause of the rejected design: an assumption recorded in §Assumed and then cited downstream
-      as "operator-reviewed" when it never was — **an unchallenged assumption is not an approved one.**
-- [x] **WP5 — bucket exit verify + close.** ✅ **COMPLETE 2026-08-26.**
-
-**Exit Criteria — ✅ ALL MET, with two corrections to the criteria themselves:** A relaunch restores
-the window's size and position, maximized included. ⚠️ **The parenthetical "an off-screen restore is
-**clamped**" was FACTUALLY WRONG and is corrected here rather than inherited:** the mechanism is
-**skip-if-no-monitor-intersects**, not clamping — `restore_state` applies `set_position` only inside
-`if m.intersects(...)` while `set_size` applies unconditionally, so the window returns at its saved
-size in an OS-chosen position. Verified live by seeding `-9000,-9000`. **No hand-rolled clamping was
-needed and none should be added.** A finished background agent no longer leaves a stale blue dot —
-⚠️ though **not for the reason the criterion assumed** (see WP2 above: the dot was lit wrongly, not
-left uncleared). And the wrongly-gray-dot question is answered **YES**: a fourth state ships across
-all three surfaces, so the blocked-upstream branch was never taken.
-
-**⚠️ Bucket closed at FIVE WPs, not the four its own convention predicted** — WP3's
-escalate-then-re-admit and WP4's mid-bucket arrival each added one beyond the M6/M10.5/M11.5
-precedent. Closed 2026-08-26.
-
-## Group D — Polish & open-source release
-
-### Milestone 14: Polish & Open-Source Release ✅ **COMPLETE 2026-09-18** — all 4 deliverables `[x]`; the remainder cycle shipped 6/6 WPs
-
-> ⚠️ **SPLIT 2026-09-06 — do NOT decompose this milestone as a whole; part of it has shipped.** The
-> operator cut the **release half** (release note + MIT LICENSE + README correctness pass) out of
-> this milestone and shipped it as a single task, deliberately skipping `/product-wbs`. **Still
-> open here:** the Settings UI (project-list management + hotkeys, *extending* the `⌘,` panel),
-> Developer-ID signing + notarization, the full two-tier setup docs, and repo description/topics —
-> and those now execute **after M15**, though the M14 → M15 *order* itself is unchanged. See
-> **Revision 2026-09-06**. The README/license deliverables below are **DONE**; read them as history.
->
-> ⭐ **2026-09-15 — M15 IS CLOSED, so this remainder is NEXT UP.** It is deliberately sequenced
-> ahead of the supervisor dogfeedback because it does **not** depend on the dogfooding clock (see
-> **Revision 2026-09-15**). ✅ **The "default CLI args for `claude`" Settings line was corrected
-> 2026-09-18 (WP4 Phase 1)** — ~~it misstates PiP (shipped M5) and permission-mode (shipped M6) as
-> future work~~; the authoritative, corrected statement is the `[x]` **Settings UI** deliverable
-> line above.
-
-**Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. *(2026-06-22: PiP is no longer parked here — it ships unconditionally as Milestone 5; the "home for deferred PiP" role is retired.)* *(2026-06-25: the workflow-docs markdown viewer was inserted as Milestone 7, sliding Skill orchestration to M9 and this Polish milestone to M10.)* *(2026-06-26: the time-analytics panel was inserted as Milestone 8, sliding Skill orchestration to M10 and this Polish milestone to M11.)* *(2026-06-26b: the friend-QoL milestone was inserted as Milestone 6, sliding everything after it +1 — time-analytics → M9, Skill orchestration → M11, this Polish milestone → M12.)* *(2026-06-29b: the demo-assets milestone was inserted as Milestone 8 and the time-analytics ↔ docs-viewer pair swapped, sliding the tail +1 again — time-analytics → M9, docs-viewer → M10, auto-resume → M11, Skill orchestration → M12, this Polish milestone → M13.)* *(2026-07-06: the in-app auto-updater was inserted as Milestone 10, sliding the tail +1 again — docs-viewer → M11, auto-resume → M12, Skill orchestration → M13, this Polish milestone → M14.)*
-
-> **Overlap note (2026-07-06):** M14 deliverable "code-signing / notarization strategy decided and documented" now **overlaps** M10 (auto-updater), which forces the sign-vs-unsigned decision earlier because the updater's post-install relaunch depends on it. At M10 the decision gets *made*; M14 inherits it as *documented/finalized for the public release* rather than deciding it fresh. Reconcile at M10 close.
-
-**Deliverables:**
-- [x] **Settings UI — ✅ DONE 2026-09-17 (M14 WP3, commit `5e3ecd9`), shipped narrowed as a READ-ONLY hotkey reference.** ⚠️ **NARROWED 2026-09-15 (WBS ruling R-2): HOTKEY CONFIGURATION ONLY.** ⚠️ **Project-list management is DROPPED from M14** by operator ruling at decomposition — dropped, not deferred; if wanted later it re-enters as new work, not as an unticked M14 leftover. ⚠️ **CORRECTED 2026-07-31 (M11.5 WP1); most of the old line had already shipped.** What remains for M14: **project list management** and **hotkeys**, plus **EXTENDING** the `⌘,` Settings panel that M10.9 WP2 already built (the framing shifted from "fold in / consolidate" to "extend what exists" — the panel, its 4 labelled groups, and the `workflow_features_enabled` toggle all shipped at M10.9). **Struck from this line as already delivered:** menu-bar visibility (M7 tray), PiP mode (M5, a View-menu window command — deliberately *not* a preference), the `claude` permission-mode dropdown (M6, app-global), and the per-project `--model` override (**M11.5 WP1** — and note it is *not* a Settings control at all: it lives on the **picker row**, because a value read once at spawn belongs on the surface where the spawn is chosen; see design prior `set-a-spawn-time-choice-where-the-spawn-is-chosen`). If a further "default CLI args" need appears, add the specific flag then rather than carrying a generic placeholder.
-- [x] **macOS app bundle + DMG; code-signing + notarization — ✅ DONE 2026-09-18, shipped as `v0.5.2` (M14 WP1+WP2).** Developer-ID signed with the hardened runtime + a 4-key entitlements file, Apple-notarized and stapled; `spctl` reports `source=Notarized Developer ID`. The self-quarantine-clear mechanism is **deleted** (backend, frontend seam, fallback dialog, and every user-facing `xattr` instruction incl. the Homebrew cask's caveats). ⚠️ **minisign RETAINED, anchor `774E2E8429FDF78A` unchanged** — verified byte-identical across `v0.2.9`→`v0.5.1`→the signed build, so no install is stranded. ⚠️ **Hardened runtime did NOT break subprocess spawning** (proved directly: a harness signed with these exact entitlements ran `forkpty()`+`execlp(perl)`). ⚠️ **REVERSED 2026-09-15 (WBS ruling R-1): SIGN AND NOTARIZE.** This **overturns the M10 decision** recorded in `arch/build-update-release.md` (*"Unsigned + minisign, not notarized — $99 NOT purchased, a deliberate accepted cost"*), which had reconciled this deliverable down to *inherit and document that decision* while naming M14 as the home of *"a future notarize-yes reversal."* **That reversal is now taken**, so this is an **implementation** deliverable, not a documentation one. ⚠️ **The operator was NOT enrolled at decomposition** — Apple Developer Program enrollment (~$99/yr, **24h published / 2–7+ weeks reported (2026)**) is an **operator-only prerequisite** and is the milestone's long pole. ⚠️ **minisign STAYS; notarization is ADDITIVE** — the trust anchor `774E2E8429FDF78A` must NOT change or existing installs are stranded. **Payoff:** deletes the self-quarantine-clear mechanism, the `QUARANTINE_FALLBACK_ACTIVE` seam + fallback dialog, and the six README `xattr -dr com.apple.quarantine` sites. ⚠️ **Highest technical risk: hardened runtime is mandatory for notarization and may break subprocess spawning (`claude`, `subl`, PTY)** — probed at WBS WP1 task 1.6, and a break there is a NO-GO, not something to work around.
-- [x] **README + minimum setup docs — ✅ COMPLETE 2026-09-18 (M14 WP4, commit `9acae28`).** ~~PARTIAL — the correctness pass shipped 2026-09-06; the full two-tier buildout defers to after M15.~~ The buildout landed: a `## Setup` section with **tier 1 (the lite IDE)** readable as a complete product on its own (requirements, a 4-step path, a 17-row capability table, all verified against shipped modules) and **tier 2 (the opt-in workflow layer)** documenting `workflow_features_enabled` as a first-class concept — default OFF, byte-identical when off, and enabling the UI strictly separate from installing the substrate. Pinned by a 10-test guard (`readmeTierOneHonesty.test.ts`) driven from the production registries in BOTH directions. ⚠️ The pass also corrected three defects its own task list did not name: the "Checks" block was not the real gate (no `tsc --noEmit`, no `--all-targets`, and it claimed a CI that does not exist), a `roadmap.md` link dead since M1 was archived, and the OFF-invariant guard's subject count stale at 8 across five live docs plus the guard file's own header. *(Stance refined 2026-07-20 — see Revision 2026-07-20 + vision §Target Audience.)* The workflow-coupled features are **opt-in and gated** (M10.9), so the README no longer "assumes the workflow system is installed with no hand-holding." It documents **two coherent tiers**: (1) the workflow-independent lite-IDE core (picker, workspaces, terminal, editor/diff, hook-driven status surfaces) that any Claude Code user gets out of the box; (2) the opt-in workflow-orchestration layer (behind the gate) for users who install the companion workflow system, with a pointer to that system.
-- [x] **Public repo + open-source license** chosen and added. ✅ **DONE 2026-09-06 — MIT.** The repo was already public with no license; `LICENSE` added + linked from the README.
-
-**Exit Criteria:** A stranger **who does NOT run the workflow system** can install Claudesk and use the lite-IDE core with a clean, coherent UX (gate off → no dead affordances) and discover the workflow system via the one-time invite. A stranger **who DOES** run the workflow system (installed at `~/.claude/skills/`) enables the gate once and gets the full workflow-aware tool. *(Refined 2026-07-20 — the old single-audience exit criterion "a stranger WITH the workflow system…" is superseded by this two-tier one.)*
-
-## Group E — Workflow supervision
-
-> **Inserted 2026-08-14.** Claudesk stops being a launcher-and-observer and becomes a **supervisor**: it holds the workflow state machine as executable code, detects when a CC turn ended without the auto-chain the pause policy required, and fires the next command itself. This is vision's *"Migrate workflow state-machine enforcement into Claudesk"* Future Possibility arriving early — promoted out of the future-possibility list by a **measured 10x regression** in auto-chain adherence (see Revision 2026-08-14). Placed as its own Group because it is neither a Group-C status surface nor Group-D release polish: it is a new architectural capability.
->
-> **⚠️ Ordering: this executes AFTER M13, and its position relative to M14 is deliberately UNDECIDED.** It depends on M13's Recycle (deliverable 4 invokes it). Whether the OSS release (M14) should wait for the supervisor or ship before it is an open operator call — the supervisor is a *dogfooding* win first, and its value to a stranger is unproven, which argues for shipping M14 first. Numbered **15** rather than 13.5 so it does not imply it precedes M14.
-
-### Milestone 15: Workflow supervisor (state machine as code + auto-chain enforcement)
-
-**Goal:** The drive mode's chaining policy is enforced **mechanically by Claudesk**, not advisorily by prose the model may drift from. When a CC turn ends where the pause policy said AUTO, Claudesk fires the next command — across every open workspace, not just the focused one.
-
-**Why this exists (evidence, not intuition).** A 2026-08-14 mining pass over **187 substantive claudesk sessions** (2,460 `Skill` invocations across two clean model epochs) measured the auto-chain break rate at **0.36 per 100 invocations** under opus-4-7/4-8 (7 breaks / 1,937, Jun 16 – Jul 20) versus **3.63** under opus-5 (19 / 523, Jul 28 – Aug 14) — a **10x regression**, with drive mode checked and cleared as a confound (autopilot declared in 111/134 and 33/38 skill-using sessions; exactly **one** `orchestrated` declaration corpus-wide, so essentially no break is excusable as a correct Mode-2 pause). ⚠️ **The class is chronic, not new** — the companion repo's archive holds **three prior P1/P2 incidents** for this exact behavior, all pre-dating opus-5, one titled *"…after Opus 4.8 upgrade"*. The rate spiked; the failure mode did not appear. **Every prior mitigation was prose-based and decayed.** That is the architectural argument: a supervisor is robust to prompt-adherence drift in a way better prompting structurally is not.
-
-**⚠️ THE LOAD-BEARING FINDING — the discriminator is ABSENCE, not content.** Wrongful stops and legitimate pauses are **textually indistinguishable**. Wrongful stops emit the *correct* `TRANSITION: F8` / `F39` / `F38` token; they name the right next skill (one ends literally *"Autopilot: chaining to `/task-act`."* and then makes no tool call); only **2 of 19** end in anything question-shaped, so the modal wrongful stop is a declarative summary identical in shape to a correct verify-human handoff. **The agent's state-machine reasoning is right; only turn-continuation fails.** Therefore:
-- ⚠️ **A prose-reading adjudicator cannot decide this**, and any detector keyed on "did it emit a valid transition?" would pass **every one** of the 19 confirmed breaks.
-- ✅ **A mechanical rule decides it exactly:** parse the emitted `TRANSITION: <id>`, look up the row for the active drive mode, and assert the turn's last content block is a `Skill` tool_use. Decidable from data already present in every transcript.
-- **This is also why three rounds of prose mitigation decayed** — they asked the model to police a rule an external check can enforce deterministically.
-
-**Where breaks cluster** (design-relevant): concentrated at *"a unit of work just completed and produced a reportable artifact"* — `build → verify-auto` (F8, 4×), `review-quality → finalize` (F39, 3×), `finalize → product-finalize` (2×), end-of-WBS. Edges with nothing to report (back-loops, `verify-auto → verify-self`) **never** break. Narrative completion appears to compete with state-machine continuation: the richer the summary, the likelier the stop. The dominant edge also *shifted between epochs* (opus-4: `wbs → context`; opus-5: `build → verify-auto`), which argues the driver is model judgment, not one bad doc line.
-
-**Deliverables:**
-
-- [x] ✅ **SHIPPED as WP1 2026-09-12 (`446a033`).** Reported GO; six questions answered, rulings R-5/R-6/R-7 taken. **1 — Probe WP (FIRST; gates every design decision below).** ⚠️ **Nothing else in this milestone may be built before the probe reports.** Five questions, each of which changes the build:
-  1. **What fraction of real stops does the mechanical rule decide?** Replay the existing corpus (187 sessions already located) through a candidate detector. Success = it flags all 19 known breaks and zero of the 46+5 known legitimate pauses. ⚠️ **The corpus is the test fixture** — this is a rare case where the regression suite can be built from real history rather than synthesized.
-  2. **Can a question-shaped / answer-awaiting tail be reliably identified?** ⚠️ **This gates silent firing** (see deliverable 3). 2 of 19 confirmed breaks ended in a question (*"Want me to clear them?"*) while the rule would still read AUTO — firing silently there consumes the answer-slot and CC interprets a slash command as the operator's reply. If the detector can exclude those, silent-always is safe for the other ~90%; if not, the operator is accepting a ~2-in-19 wrong-fire rate **on workspaces nobody is watching**.
-  3. **Skill-frontmatter state identity — does it work without breaking current behavior?** (Operator lean, explicitly probe-gated 2026-08-14.) Each skill's YAML declares its state name; Claudesk reads them on the same scan M13's registry already performs. ⚠️ **CORRECTED AT M15 WP5 (2026-09-15): the "same scan" premise is FALSE, and R-7 DECLINED this coupling.** There is no registry and no scan — `skills_dir_exists()` answers **one boolean** and enumerates nothing, and **no YAML parser exists in either manifest**. An enumerator + frontmatter parser would be **net-new** work that **reverses a recorded §4c anti-brittleness decision**, and **R-5 removed the motive** (the policy lookup already works from the transition token alone at 0 FP on the decidable population). ⚠️ Compatibility was never the blocker — probe Q3a measured extra frontmatter keys as INERT. **Do not build it.** ⚠️ **"Must not break current behavior" is a stated constraint, not a hope** — the probe proves an added frontmatter key is inert to the harness and to every skill's own parsing before the coupling is adopted.
-  4. **Mode 0 / direct invocation — can Claudesk detect it?** ⚠️ **A live correctness risk for silent firing.** `transitions.md:39` defines Mode 0 (**Direct**): a skill invoked as a bare slash command rather than via `/session-start` runs **once and stops, no chaining, regardless of the stored drive mode**. Claudesk stores mode per-project in `projects.json` and today has **no way to know** whether a turn came from an orchestrated run or a one-step direct invocation. Fire silently in that case and Claudesk chains a workflow the operator deliberately ran one step at a time.
-  5. **Idempotency — can the supervisor tell that CC already chained correctly?** ⚠️ **The main new risk this design introduces.** Claudesk's mechanical check is redundant *by intent* with mccc's prose rules (the prose stays as the floor for bare terminals — see the ownership boundary below), so both will sometimes be right at once. The supervisor must never fire a duplicate command.
-
-- [x] ✅ **SHIPPED as WP2 2026-09-12 (`938750e` + `2c08459`).** **2 — The state machine as executable code (absorb the machine, NOT the skills).** States, edges, the AUTO/PAUSE matrix, and the four drive modes become a **typed model in Claudesk** rather than a markdown table Claudesk parses. ⚠️ **The table is intricate and the cells are NOT binary** — `transitions.md`'s feature workflow alone is **25 rows** with `AUTO-SKIP` (verify-human, conditional on *no integration boundary + verify-self all-PASS*), `SKIP (entire skill)` (review-quality in Mode 4), `n/a` cells, and an `F17b` alternate path where ship routes *around* a skipped state — **plus Mode 0, which is not one of the four modes at all.** A boolean AUTO/PAUSE model is wrong on its face.
-  - ⚠️ **This absorbs part of mccc's test harness, and the split runs in two directions.** `check-structure.sh` is **3,206 lines / ~18 phases**. **Stays in mccc** (prose-shape: argument-hints, CLAUDE.md content, debug-skill invariants, install/symlinks, hook integrity, settings-fixture drift, close-commit discipline, path-qualification, design priors, memory symlink, doc-layout, research tiers, name-collision) — those assert *the prose says the right thing* and have no meaning in Claudesk. **Moves to Claudesk:** Phase 3d (the `TRANSITION:` regex contract, since Claudesk's detector parses that token — mccc keeps its own copy while skills still emit it) and Phase 18 (the boundary auto-chain pin). **DISAPPEARS ENTIRELY:** ⚠️ **Phase 9** ("Orchestrator pause-policy cheat-sheet presence") exists *only* to keep four `AGENTS.md` copies of the pause table in sync with `transitions.md` — once Claudesk owns the graph, **the duplication it polices is gone**. That is a genuine simplification, not a transfer.
-  - ⚠️ **Claudesk gains tests mccc never had, and they carry a known trap.** A typed graph needs exhaustiveness over (state × mode) cells, which prose-grep cannot express. ⚠️ **Enumerating those cells as data makes the SET testable but does NOT prove each cell has a CALLER** — the M12 dead-`/exit` shape at larger scale, and the same trap `CLAUDE.md` already flags for M13's registry. Funnel every policy read through ONE function and guard *that*.
-
-- [x] ✅ **SHIPPED as WP3 2026-09-13 (`e186e33`)** — GO-WITH-CONDITIONS per R-6. **3 — Break detection + auto-fire, across ALL open workspaces.** On CC turn end, Claudesk reads the transcript, applies the rule, and — where the policy says AUTO and the turn didn't chain — **injects the next command**, in every open workspace rather than only the focused one (operator decision 2026-08-14: matches the product's core thesis that attention across parallel projects is the scarce resource).
-  - **Fire policy: silently, always** (operator decision 2026-08-14, chosen over announce-then-click and over a countdown veto). ⚠️ **The dissent is recorded because it is sized, not speculative:** ~2-in-19 confirmed breaks were question-shaped, and a wrong fire on an unwatched workspace consumes an answer-slot with no record that a question was asked. **Probe question 2 is what makes this decision safe** — if a question-shaped tail cannot be excluded, revisit the fire policy before building this deliverable, do not build it anyway.
-  - **Evidence source: the transcript JSONL** at `~/.claude/projects/<slug>/<uuid>.jsonl`. ⚠️ **This does NOT violate the no-PTY-scraping rule** — that rule forbids inferring state from *terminal output*; this reads CC's own structured log. Claudesk must learn the uuid↔workspace mapping (new). ⚠️ **NOT the xterm buffer** (lossy, and the documented DOM-read traps make it a false-verdict machine).
-  - **Residual adjudicator: a headless `claude -p`, DEMOTED to the ambiguous tail** — turns with no transition token, or cases the mechanical rule cannot decide. ⚠️ **NOT the primary mechanism** (operator lean 2026-08-14, gated on probe question 1): an LLM adjudicator is itself a model-judgment component that can drift — the same failure class this milestone exists to remove — so it must not sit on the path that handles the dominant case.
-
-- [x] **4 — Context-pressure recycle at phase boundaries.** ⚠️ **CORRECTED AT M15 WP5 (2026-09-15): the threshold is an ABSOLUTE TOKEN COUNT — above 400,000 tokens — NOT "above 50% context usage".** The percentage framing is **superseded by ruling R-2** (the form) and **R-7** (the value: 400k as a tunable starting point, ≤37.7% upper-bound firing rate; next rung down if too eager is 500k/21.7%). R-2 deletes the model→window map entirely, because M-5 refuted the premise that the window is derivable from `message.model`. Above that count, Claudesk still auto-chains as usual, **except** at a **phase boundary that is not the last phase**, where it instead **recycles the session** automatically (handoff → fresh CC → restore), carrying the workflow forward in a clean context rather than degrading toward the window limit. **Shipped M15 WP4 (`79c67e5`).**
-  - **Measuring context (SOLVED 2026-08-14, verified against a known reference).** Every assistant line in the transcript carries `message.usage`; context used = `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`. Verified on a live session: 2 + 124,382 + 4,143 ≈ **128.5k**, which against a 1M window is ~12.9% — matching the operator's statusline reading of **13.0%**. ⚠️ **Read the LAST assistant line only — do NOT sum across lines**; `usage` is a point-in-time reading of the most recent request (`iterations` is an array within one turn). ⚠️ **CORRECTED AT M15 WP5 (2026-09-15) — THE WINDOW SIZE IS NOT DERIVABLE, AND IS NO LONGER NEEDED.** This paragraph originally read *"`message.model` is on the line so it is derivable, but the model→window map is a hardcoded table that goes stale"*. **M-5 REFUTED the premise:** `claude-opus-5` was observed at **833,567** tokens and `claude-opus-4-7` at **268,743**, with **no `[1m]` suffix appearing anywhere in 238 transcripts** (a `<synthetic>` value also occurs) — so the window is **not a function of the model string** and no map could be correct. ⚠️ **R-2 then removed the need for it**: the threshold is an absolute token count, so the model→window seam is **deleted, not maintained**. The `usage` read itself is unaffected and remains correct as described above.
-  - ⚠️ **`npx ccstatusline` is NOT the mechanism.** The operator's statusline runs it as a `statusLine` command and it derives the same number, but Claudesk must not shell out to a third-party npm package per turn when the data is one file read away.
-  - **Phase boundary = the Work Tree's `Phase N` nodes** ⇒ ⚠️ **this rule is FEATURE-WORKFLOW-ONLY** (operator confirmed 2026-08-14). Task/incident/product workflows have no phase structure and are out of scope for the recycle rule (auto-chain enforcement still applies to them).
-  - **Claudesk parses WIP files** to know whether a later phase exists — a **new capability** (today it only watches `.session.md`). Operator confirmed.
-  - **⚠️ Depends on M13's Recycle being programmatically callable** — see the M13 scope note. This deliverable is the caller that makes the requirement real.
-  - **⚠️ CROSS-REPO DEPENDENCY (mccc): the Work Tree format must be ENFORCED, not just documented.** Operator decision 2026-08-14: rather than have Claudesk heuristically parse whatever prose a WIP file happens to contain, mccc adds a `check-structure.sh` phase pinning the Work Tree schema, so Claudesk's parser is a **contract-reader** rather than a guesser. Hand off as a companion-repo item before this deliverable is built.
-
-**⚠️ THE OWNERSHIP BOUNDARY (decided 2026-08-14 — "absorb the machine, not the skills").** Full absorption of mccc into Claudesk was **considered and rejected**; so was leaving enforcement wholly upstream. The line:
-
-| | Owner | Why |
-|---|---|---|
-| The state **graph** + AUTO/PAUSE matrix + drive modes, as typed code | **Claudesk** | Externally decidable; removes the stale-table risk and the four-way `AGENTS.md` duplication |
-| **Turn-boundary continuation** (did it chain when policy said AUTO?) | **Claudesk** | Mechanically enforceable; the measured 10x failure lives here |
-| The mode's **current value** (per project) | **Claudesk** | Already true since M12 — `projects.json` + the env-var signal; a persisted mode in `.session.md`/WIP frontmatter was measured **already ignored 74%** of the time |
-| **Intra-turn** mode semantics (how thorough verify-human is; whether `session-capture` confirms; whether review-quality auto-refactors) | **mccc** | Expressible only as prose inside skill bodies; ⚠️ **Claudesk has NO seam to enforce it through** |
-| The **skill bodies** — Work Tree schema, capture discriminant, disposition models, the guard lessons | **mccc** | ~85% of mccc's bulk is instructions-to-a-model, and can only ever be that |
-| The prose chaining rules, as the **no-Claudesk floor** | **mccc** | ⚠️ **877 transcripts across dozens of projects; mccc runs in bare terminals.** Removing the floor to install the ceiling leaves holes wherever Claudesk isn't running |
-
-**One-line statement:** ⚠️ **Claudesk owns the mode's VALUE and its TURN-BOUNDARY enforcement; mccc owns the mode's MEANING and its INTRA-TURN semantics.**
-
-**Why full absorption was rejected** (recorded so it is not re-litigated): (1) ~85% of mccc is prose Claudesk could own but never *enforce*, so absorption means shipping ~50 prompt files inside a self-described *lite* IDE; (2) it breaks the **M10.9 two-tier stance** — a `workflow_features_enabled` gate whose OFF state is byte-identical is incoherent when the workflow system *is* half the product, and it inverts the dependency direction the gate exists to protect; (3) it strands every non-Claudesk session, including the recursive case that **mccc is developed using mccc**; (4) **distribution asymmetry** — a skill is a markdown edit effective next turn, while a Claudesk feature needs a release + `.dmg` + tap bump + self-update, so absorption puts the fastest-iterating artifact behind the slowest pipeline.
-
-**Exit Criteria:** In autopilot across **N open workspaces**, a turn that ends where the pause policy says AUTO is detected and the next command fired **without operator input** — verified against the **replayed real corpus** *and* live on at least one real multi-workspace session. ⚠️ **TWO CORRECTIONS AT M15 WP5 (2026-09-15).** (1) *"all 19 known breaks flagged"* is **superseded by R-3**: the 19 existed only as prose with no fixture, ID list, or recorded selection method, so chasing them would mean fitting the detector to a list nobody can verify. The fixture was **rebuilt fresh** (2,284 records) and the standing criterion is now `verdictReplay.test.ts` — **34/36 on the non-circular, operator-corroborated set, with both misses pinned as correct behavior**. (2) *"Above 50% context"* is **superseded by R-2/R-7**: the threshold is an **absolute 400,000 tokens**, not a percentage. ⚠️ **Verified against the DECISION, not against a stored value** — the deliverable is an enforcement decision, so "the graph is modeled" is an insufficient exit check; the criterion is that a break is *caught and corrected* end-to-end. ⚠️ **The negative arm asserted just as hard:** a legitimate `verify-human` pause, an ESCALATE, and a **Mode-0 direct invocation** must each produce **no fire at all**.
-
-> ⚠️ **CYCLE CLOSED 2026-09-15 WITH THIS EXIT CRITERION PARTIALLY UNMET — RECORDED, NOT HIDDEN.**
-> All 5 WPs shipped and **the mechanical half is fully met**: the detector is pinned against the
-> frozen 2,284-record corpus by a standing test (`verdictReplay.test.ts`, **34/36** on the
-> non-circular operator-corroborated set, both misses pinned as correct), and the negative arm —
-> `verify-human` PAUSE, `ESCALATE`, Mode-0/no-stored-mode — is pinned by `verdict.test.ts`,
-> including the **verify-human GATE** case added at WP5 after it was found to have no
-> edge-specific test.
->
-> ⚠️ **THE LIVE HALF WAS NEVER OBSERVED.** No real multi-workspace fire, no live negative arm, no
-> observed context-pressure recycle, and **Esc recovery is still unconfirmed** — which matters
-> because R-1's accepted cost rests on it. WBS tasks **5.1 and 5.4 are deliberately left unticked**
-> for this reason. An agent cannot close them: an agent-launched CC emits no hook events
-> (`SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT`), so the operator's
-> first real dogfooding is the only available trigger.
->
-> **Carried forward at `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`
-> (high), which now holds all six checks.** Closing the cycle does not close that item.
-> ⚠️ **Do not read M15's `[x]` deliverables as evidence the supervisor has been observed acting.**
->
-> ⚠️ **UPDATE 2026-09-25: observed firing ONCE, then observed NOT firing.** The supervisor fired
-> live on 2026-09-15 (v0.5.0; an unwanted six-fire run that produced the WP0 hotfix). Since
-> v0.5.1, no transcript shows a fire, and at least six plain AUTO-edge (F8) breaks on supervised
-> projects went unfired. **The live half is now a probable DEFECT, not just unobserved** — see
-> Revision 2026-09-25 below.
-
-## Revision 2026-09-25 — dogfeedback CLOSED as a wall-clock item; it found the supervisor silent; activity surface → investigation inserted next
-
-**Context.** The dogfeedback pass (item 2 of the 2026-09-15 order below) is **closed as a
-wall-clock item**. The operator has dogfooded through v0.6/v0.7 and reported **no more feedback**
-(2026-09-24). ⚠️ **But the pass did not end in "observed working".** Before resolving anything,
-the close-out checked for positive evidence of a fire, because silence from a supervisor that never
-fires looks exactly like success. CC transcripts show:
-
-- **A confirmed live fire on 2026-09-15** (v0.5.0): six `/feature-build` commands about 4s after
-  turn end, which the operator confirmed in-session and which produced the WP0 hotfix.
-- **Zero machine-speed fires from v0.5.1 (2026-09-17) through 2026-09-25.**
-- **At least six textbook misses in that window.** Each was a supervised project (`autopilot`
-  stored, per-workspace toggle ON, gate ON), each ran inside Claudesk, and each turn ended on a
-  bare `TRANSITION: F8` with no question. The operator restarted the chain by hand after
-  31s–49min ("next", "so?"). The google-newsroom product run of 09-23 also broke at P3/P5/P7/P9.
-
-So `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (**high**) is
-**re-framed as a probable defect** ("silent since v0.5.1", evidence table and reproducible method
-in the entry). ⚠️ **The top-ranked suspect is WP0's own unsent-input suppression**, the one
-mechanism that changed at v0.5.1. That is still a hypothesis. The discriminating observable (the
-`withheld … — <reason>` line) is computed on every non-fire and then discarded to an unreadable
-`console.warn`.
-
-**Operator decision 2026-09-25 — execution order from here:**
-
-1. ✅ **SHIPPED 2026-09-28 (`dece979`, feature `supervisor-activity-record`).** Supervisor activity surface
-   (`SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE`, high): a JSONL record
-   per turn end (`<app-data>/supervisor-activity.log`), the badge's "last action" hint plus a `▾`
-   popover, and a `⚙` on supervisor-started turns. As-built: `arch/workflow-supervisor.md` §F/§G.
-   ⚠️ It took NO seventh guard arm: every surface derives from `workspaceSupervisorReadout` (arm 6's
-   existing subject). The record has already named two causes of the silence (a transcript read
-   racing `Stop`; terminal reports raising the unsent-input watermark). Original plan: **planned
-   next**, because it is the investigation's instrument. It opens with its own `/util-grill-me`
-   (the item's questions 1–6 are the agenda). ⚠️ It owns the **seventh** OFF-invariant guard arm,
-   and must itself be gated OFF with the supervisor.
-2. ✅ **SHIPPED 2026-09-28 (`778fe72`, feature `silent-supervisor`).** Silent-supervisor
-   investigation. The activity record accounted for the silence with **three** causes, each fixed in
-   its own phase: (a) the transcript read raced `Stop`, because CC flushes the turn's final line
-   74–109 ms after it, so every decision read the previous turn's tail. The supervisor now waits
-   for the turn's close (≤2 s, `transcript-incomplete` otherwise) and scopes the verdict to after
-   the last user prose line. (b) Terminal reports (focus, DA, CPR) raised the unsent-input
-   watermark, so every new workspace started suppressed. (c) A turn end could be decided twice;
-   a module-level per-`Stop` claim records the repeat as `duplicate-turn-end`. A live fire was
-   read from the activity record on a dev build across two workspaces. ⚠️ **The operator's live
-   checks (fire + `⚙`, another app focused, Esc) are DEFERRED to the next release and
-   dogfooding, not passed.** Original plan: driven by the activity record, an operator-driven
-   break in a dev build, then read the withhold reason.
-3. **Previously queued, unchanged relative to each other:** the F-a/F-b code-quality minor items
-   (✅ **CLOSED 2026-09-28**, task `f-b-quality-cleanup`: both F-b MAJORs and its MINOR batch, bar a
-   low stringly-typed-return remainder; F-a's one leftover is routed to the comment-convention pass),
-   then the right-panel media viewer (`SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER`, filed today).
-   ⚠️ Their position relative to items 1–2 was not re-ruled. The operator had queued them after
-   "the dogfeedback close-out", which is now done, so reorder freely.
-4. ✅ **SHIPPED 2026-09-29 (`c7042af`, feature `analytics-week-export`). Inserted, operator ask,
-   ahead of the media viewer.** Four time-analytics fixes:
-   - The Day view's 14-day build is 5.7× faster (557 → ~100 ms release, output identical).
-   - Resumed sessions are split into lives, so work after the first `SessionEnd` is no longer
-     dropped (104 sessions / 17,206 tool calls across the DB).
-   - Analytics opens on Week with no false "tracking is off" flash.
-   - `time_analytics_query` is now `async`, and a project's `path` comes from its modal cwd.
-   It also added `claudesk export-week`, read-only weekly JSON for Neo. ⚠️ It reaches Neo only
-   after the next `/release`.
-
-⚠️ **The dogfeedback's six deferred checks and WP0's seven are NOT passed and NOT waived.** They are
-**void until firing is restored**, because a no-fire check passes vacuously while nothing fires.
-Their re-scoped list is in the NEVER-OBSERVED entry.
-
-## Revision 2026-09-15 — v0.5.0 cut; execution order set to M14-remainder → dogfeedback → Group F (operator-requested capabilities)
-
-**Context.** M15 closed 2026-09-15 with its exit criterion **partially unmet by design** — the
-supervisor's mechanical half is pinned by standing tests, but it has **never been observed firing
-in a live session**. `v0.5.0` was cut the same day (22 commits, the whole M15 supervisor), which
-**clears the structural blocker**: the installed app was `v0.4.0` and predated every line of the
-feature, so `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (**high**) was
-unsatisfiable. It is now satisfiable but **not yet satisfied**.
-
-⚠️ **Dogfooding is WALL-CLOCK, not a work package — and it is deliberately NOT a milestone.**
-Operator decision 2026-09-15: the supervisor needs **at least one full week of real use** before
-its feedback is worth acting on, and the upgrade to `v0.5.0` waits until **all mid-flight tasks
-reach a clean boundary** (a `brew upgrade` kills every running Claudesk, so upgrading mid-flight
-destroys live sessions). This is why the order below puts M14's remainder FIRST: it is the work
-that does not depend on the dogfooding clock.
-
-**Execution order from here:**
-
-1. **M14's remainder** — Settings UI (⚠️ **hotkeys only**; project-list management was **dropped**
-   by ruling R-2, not deferred), Developer-ID signing + notarization, the two-tier setup docs, repo
-   description/topics. ✅ **The "default CLI args for `claude`" Settings line was corrected
-   2026-09-18 (WP4 Phase 1)** — ~~it misstates PiP (shipped M5) and permission-mode (shipped M6) as
-   future work~~; see the `[x]` **Settings UI** deliverable line for the corrected statement.
-2. ✅ **CLOSED 2026-09-25 — see Revision 2026-09-25 (it found the supervisor silent since v0.5.1).** **Dogfeedback pass** — read the week of real supervisor use and decide what it changed. Not a
-   milestone; a decision point that **may insert one**. The six deferred checks live in
-   `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`; ⚠️ **check 5 (does Esc
-   actually interrupt a wrong fire) is the one carrying real risk** — ruling R-1's accepted cost
-   rests on it and it is unconfirmed.
-3. **Group F** — the operator-requested capabilities below, sized at the roadmap pass that follows
-   the dogfeedback. ⚠️ **TWO items** (F-a staging area, F-b isolated CC profiles); turn-output
-   re-orientation was **dropped** from the group by the operator on the same day it was opened.
-   ⭐ **Each opens with its own `/util-grill-me` pass** — booked, and the grill is the *entry* step,
-   not a review step.
-
-## Group F — Operator-requested capabilities *(opened 2026-09-15; NOT yet milestone-numbered)*
-
-⚠️ **These are ASKS with sizing notes, NOT designs.** Each was recorded with its blockers measured
-at surface time, and each carries an explicit operator instruction that **the design discussion
-happens when the work starts**. Do not decompose either of them from the backlog entry alone — the
-entry fences the problem; it does not specify the solution. Numbering is deliberately deferred
-until the dogfeedback pass, because that pass may reorder or insert ahead of them.
-
-⚠️ **TWO items, not three** — F-c (turn-output re-orientation) was **dropped by the operator
-2026-09-15**; see the struck section below before re-proposing it.
-
-⭐ **BOOKED: a `/util-grill-me` pass opens EACH of these — operator instruction 2026-09-15.** When
-F-a starts, and again when F-b starts, run `/util-grill-me` **before** committing to a design. Not
-one pass for the group — **one per item, at that item's start**, because they are separated by the
-dogfeedback and by M14's remainder, and the answers to one do not inform the other. ⚠️ **The grill
-is the entry step, not a review step**: its value is interviewing the operator on the decisions
-that are theirs and expensive to reverse (F-a: persistence scope, draft lifecycle across Recycle;
-F-b: profile-vs-project modelling, hook-registration ownership, the self-hosting property) *before*
-a spec exists to anchor on. Running it after a plan is written inverts its purpose.
-
-### F-a: Staging area for prompt input ✅ **SHIPPED 2026-09-22** *(`SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT`, medium)*
-
-> **✅ CYCLE CLOSED 2026-09-22 — all 4 WPs shipped.** WP1 probe (`58aab90`, ASSUMED-PASS), WP2
-> store/ring/payload (`c26a9bd`), WP3 the prompt surface (`ec7490c`), WP4 send and stage
-> (`5af55f6`). WBS archived at `archive/group-f-a-prompt-staging-area/wbs.md`.
->
-> ⚠️ **THE EXIT CRITERION IS NOT FULLY MET, AND THAT IS RECORDED RATHER THAN PAPERED OVER.** All
-> three named failure modes are addressed in mechanism — *messed up midway* (editable CM6 buffer
-> with undo/redo), *deleted by accident* (undo + a non-destructive sent-draft ring), *unintended
-> shutdown* (per-project `localStorage`, debounce-saved, reseeded on open). But **the motivating
-> case — voice dictation — is ASSUMED WORKING, NOT VERIFIED**: macOS text-input services do not
-> engage under `pnpm tauri:dev`, so it cannot be exercised in a dev build, and WP1's probe closed
-> with its question unanswered (task 1.4 never ran, deliberately left unticked). The backlog entry
-> is therefore **rewritten to that one open question, not deleted**. Reopening is narrow and
-> operator-owned: only on a dictation issue reported **after a release** containing F-a.
->
-> **Two operator rulings landed mid-cycle and both improved the result:** the rename
-> Staging → Prompt with a move to 2nd position (WP3), which also yielded the ratified design prior
-> `[[group-surfaces-by-the-question-they-answer]]`; and the reversal of append-on-recover to
-> **confirm-then-overwrite** (WP4), because a merged document is a cost paid on every recover while
-> a confirm is paid only when something would actually be lost.
-
-An **optional** Claudesk-owned buffer to compose a prompt in before sending it to CC — not a
-replacement for typing into the terminal. ⚠️ **The motivating case is VOICE DICTATION**: long,
-single-take input where a mid-stream glitch costs the whole utterance. The value is **durability +
-editability of in-progress text**, not a nicer text box. Three distinct failure modes with three
-different fixes: garbled midway (needs editability), deleted by accident (needs undo/history),
-lost to unintended shutdown (needs persistence — the only one forcing a storage decision).
-
-⚠️ **THE MULTI-LINE GATE IS DISSOLVED BY MEASUREMENT — grill 2026-09-21. The earlier
-"RESOLVED BY SCOPE" ruling (2026-09-15) is SUPERSEDED; do not restore it.** That ruling held
-that staged content must be newline-free dictated prose, that the feature "does **not** need
-bracketed paste", and that the surface must **reject or normalize** an embedded newline. ⚠️ **All
-three are wrong**, and the reasoning that produced them was sound but incomplete — it correctly
-noted that raw-mode `\r` *is* Enter, and did not account for **bracketed paste**, which is
-precisely the mechanism that neutralizes that hazard.
-
-**What was measured** (operator counter-evidence: multi-line paste into CC has always worked, in
-both vanilla Terminal and Claudesk):
-- `node_modules/@xterm/xterm/lib/xterm.js` — xterm's own paste path is `\r?\n → \r`, **then**
-  wraps the result in `ESC[200~`…`ESC[201~` when `decPrivateModes.bracketedPasteMode` is set.
-- **Live PTY probe of `claude`** — emits `ESC[?2004h` at startup and **never** `ESC[?2004l`.
-  Bracketed paste is ON for the session's whole life, so the envelope will be honored.
-
-⚠️ **Consequences for the design — newlines are PRESERVED, never normalized.** F-a emits the
-bracketed-paste envelope with interior newlines as `\r` (matching xterm's own transform), and
-the **trailing `\r` is a SEPARATE byte**: the envelope inserts *literal text* and does **not**
-submit. That single byte is the only difference between the two send modes. ⚠️ **`slashCommandPayload`
-is NOT modified** — a new builder sits alongside it, so M12/M13/M15 callers stay byte-identical.
-⚠️ The tripwire is **discharged, not carried**: F-a is no longer restricted to dictated prose, and
-paste-in of multi-line text is a supported case rather than a deferred question.
-
-### F-a decisions — `/util-grill-me`, 2026-09-21 (settled; do not re-litigate)
-
-1. **Persistence** — `localStorage`, keyed by canonicalized `project_path`, **one draft per
-   project**, debounced. ⚠️ **Deliberately NOT `projects.json`**: a draft is unbounded operator
-   prose, and that file is read at startup through serde where a bad value takes the whole project
-   list down (the same hazard that forced the drive-mode cell to a closed `<select>`).
-   ⚠️ **Workspace identity is NOT durable** — `nextWorkspaceId()` is an in-memory `ws-${++counter}`
-   reset every launch — so `project_path` is the only durable key. It is a *valid* per-workspace
-   key because `openWorkspace` dedups on the canonical path: **workspace↔project is bijective**.
-2. **Lifecycle at send** — **clear on send, keep the last ~10 sent drafts per project** as
-   recoverable history. Clearing and discarding are separable; sending is itself destructive to
-   the draft, and re-dictating is the expensive thing F-a exists to avoid.
-3. **Surface** — a **right-panel tab**, joining `docs`/`editor`/`diff`/`terminal` via the existing
-   `selectPanel` seam. Chosen for **full panel height** on a long dictation. (A strip under the CC
-   pane and a floating panel were both considered and declined. ⚠️ The only overlay precedent in
-   the tree is a **modal** — `FileFinder`/`CommandPalette`, backdrop + `role="dialog"` +
-   Escape-dismiss — which is actively wrong for a buffer holding a long dictation.)
-   ⚠️ **NOT gated on `workflow_features_enabled`** — F-a is lite-IDE core, not workflow orchestration.
-4. **Two send modes, both offered** — **auto-submit** (`⌘↵`) and **stage-only** (`⇧⌘↵`), differing
-   by the one trailing `\r`. Not a hedge: one payload builder, one boolean. Stage-only restores a
-   pre-send look that `injectCommand` structurally lacks. ⚠️ **Accepted cost:** stage-only's success
-   is unverifiable by Claudesk (no retry, no readback, and parsing CC's output is forbidden) — the
-   terminal is the evidence, which is acceptable because the operator is looking at it next.
-   Both enter through `injectCommand` with `label: "staging"`.
-5. **Editor substrate** — CM6 (already bundled), **but `editorExtensions.ts` is NOT reused.**
-   ⚠️ `basicSetup` brings line numbers + the code keymap as a bundle; this is a **prose** surface.
-   Compose deliberately: history (**undo AND redo** — CM6 ships them as a pair), search-within-draft,
-   dark theme, persisted font zoom. Exclude line numbers, syntax highlighting, bracket matching,
-   autocompletion.
-6. **One draft per project — no tabs, no queue, no second "preamble" slot in v1.** The history ring
-   covers the multi-draft case retroactively; promoting history entries to named slots is additive,
-   whereas retrofitting single-draft semantics onto a queue is not.
-
-⚠️ **WORD WRAP IS A REQUIREMENT, NOT A PROBE OUTCOME (operator, 2026-09-21).** The probe below
-finds **how to make wrap work**, not *whether* to wrap. Only an outright infeasibility finding
-would reopen the default, and that is the unlikely branch.
-
-⭐ **GATING PROBE — macOS dictation into CM6.** ⚠️ **Cannot be agent-verified**: dictation is
-physical operator input, not agent-triggerable or agent-observable. **Unknown:** whether dictation
-composes cleanly into a CM6 `contenteditable`, and specifically whether **line wrapping** interacts
-badly with composition-event insertion (dictation inserts via IME/composition, not keystrokes; a
-wrapping view reflows mid-composition). ⚠️ **`grep` confirms ZERO IME/composition handling exists
-anywhere in the codebase** — no prior art to reason from. ⚠️ **The operator's "dictation doesn't
-work well in the CC input area" is a CONTROL, not a precedent** — that is xterm.js, a terminal grid
-with no text-field semantics, so it does **not** predict CM6 behavior. **Home:** a third mode on the
-existing probe entry point — `?cm6probe&mode=dictation`, alongside `hotkey` and `nmount`. Throwaway
-harness, mounted in the real app (not bare Vite — a WKWebView is the actual target). Instrumented by
-the agent, **run by the operator**. **Decides:** the composition-handling approach wrap needs — cheap
-if known before build, expensive to retrofit into a shipped surface.
-
-⚠️ **Shape: this is a WBS, not a single feature (operator, 2026-09-21)** — because a gating probe
-whose outcome feeds the build is a dependency a single `/feature-spec` → `/feature-plan` cannot
-express. **Simpler than M15's**, whose WP1 gated *every* downstream decision; F-a's probe gates
-**one mechanism** inside an otherwise settled build.
-
-⚠️ `injectCommand` remains the single injection funnel; the feature enters through it with **its
-own `label`**, not a second path to `cc_input`.
-
-### F-b: Isolated CC profiles as Claudesk workspaces *(`SURFACE-2026-09-14-MANAGE-ISOLATED-CC-PROFILES-AS-CLAUDESK-WORKSPACES`, medium)*
-
-✅ **SHIPPED 2026-09-24** as the single feature `f-b-isolated-cc-profiles` (5 phases). The as-built is `arch/profiles.md`; the spec and per-phase record are in `workflow-system/state/archive/f-b-isolated-cc-profiles.md`. Deferred to the `/release` gate: an installed-`.app` profile spawn plus dot, and whether `trash::delete` needs a Finder Automation grant. Two MAJOR code-quality findings are backlogged (transcript root stored-vs-live; `create`'s missing already-listed-dir check).
-
-Manage the operator's isolated Claude Code environments (`CLAUDE_CONFIG_DIR`-rooted profiles, each
-with its own `CLAUDE.md`, skills, subagents, MCP servers, memory and history) as first-class
-Claudesk workspaces, inheriting everything already built. **Milestone-sized, not a task.**
-
-⚠️ **Two hard blockers, measured.** (1) The profiles are **zsh functions, not binaries** — Claudesk
-spawns a hardcoded `CC_CMD: &str = "claude"`, and a shell function is invisible to a direct exec
-(capturing the login-shell `PATH` does **not** capture functions). (2) **The status channel would
-go DARK** — the hook registers only into `~/.claude/settings.json`, so a profile session emits no
-hook events and loses the idle/running/awaiting-input dot, *which is the product's core value
-proposition*. ⚠️ **"Just spawn it and see" is therefore NOT a viable first step** — it would look
-like it worked while silently losing the thing the app is for. ✅ `cc_spawn_env()` is the obvious
-insertion point for `CLAUDE_CONFIG_DIR`, which likely sidesteps blocker 1; blocker 2 needs a real
-answer (per-config-dir hook registration).
-
-⭐ **SCOPE EXPANDED — operator direction 2026-09-15: absorb the boilerplate, do not just consume
-its output.** The ask is no longer only "run an existing profile as a workspace." Claudesk should
-own **profile creation** — folding in what
-`~/Personal/projects/claude-code-wrapper-agent-boilerplate` does today, so the initial setup of a
-profile is a Claudesk operation rather than a shell script the operator runs beforehand. ⚠️ **This
-changes the milestone's shape, not just its size:** the `create-env.sh` step that appends a
-`claude-<name>()` function to `~/.zshrc` is exactly the mechanism behind **blocker 1**, so
-absorbing creation means Claudesk can **stop generating the shell-function indirection entirely**
-and spawn `claude` directly with `CLAUDE_CONFIG_DIR` set. ⚠️ **Blocker 2 is NOT dissolved by this
-and gets harder** — owning creation means owning **per-config-dir hook registration** as part of
-provisioning, including teardown when a profile is deleted. A profile Claudesk created but cannot
-see the status of is worse than one it never created.
-
-⭐ **And the boilerplate itself is a profile.** Operator direction: the boilerplate project should
-be manageable **as an agent profile in its own right**, not treated as external tooling that sits
-outside the model. ⚠️ **This is a self-hosting property and it is a design constraint, not a
-nice-to-have** — if the thing that creates profiles cannot itself be represented as one, the model
-has a special case at its center. Check it early in the spec; it is the kind of property that is
-cheap to design for and expensive to retrofit.
-
-⚠️ **Sequencing note:** this expansion makes F-b clearly the larger of the two Group F items and
-pushes it further from "size it and build it." It wants a real spec pass, not a plan pass — the
-operator said so explicitly ("we will need to think it through and work on the spec well").
-
-### F-b decisions — `/util-grill-me`, 2026-09-23 (settled; do not re-litigate)
-
-**Measured before asking** (so these are facts, not rulings): 6 config dirs exist under
-`~/.config/claude-*` (4 with a `~/.zshrc` wrapper: `tube`/`original`/`eos`/`neo`); 4 are bound to
-one directory, `presentation` to 3 related ones, and `original` — a deliberately near-empty
-"vanilla" profile with **no workflow system** — spans 9 unrelated dirs. ⚠️ **4 directories already
-run under TWO profiles** (boilerplate repo, `friday-pres`, `Downloads`, `Tmp`). ⚠️ **A fresh
-config dir starts "Not logged in"** despite the shared keychain — creation implies one `/login`.
-⚠️ **Transcripts land under `$CLAUDE_CONFIG_DIR/projects/`** — probed with `claude -p` under a
-scratch config dir (CC 2.1.280), which also showed `--settings '<json>'` hooks DO fire per-spawn
-(considered for registration and **declined** — ruling 3).
-
-1. **A profile IS a `CLAUDE_CONFIG_DIR` — a per-row picker cell, not a workspace kind.** It sits
-   beside the model and drive-mode cells on the picker row; ⚠️ **the picker container may widen**
-   to fit (operator). `~/.claude` is the profile "default" — not a special case in the model.
-   ⚠️ **One row = one directory = one profile at a time**: running the same dir under two profiles
-   *concurrently* is **not** a v1 case, so `WorkspaceRegistry` stays path-keyed; the 4 dual-use
-   dirs just switch the cell. A row's "inherit" model means inherit **the profile's** default
-   (`presentation` sets `sonnet`).
-2. **Creation is a NATIVE WIZARD; the boilerplate repo is OUT OF SCOPE.** ⚠️ The earlier
-   "the boilerplate must itself be representable as a profile" constraint is **satisfied
-   trivially, not designed for**: when an agent is needed to reshape a config dir (deny fences,
-   skills, MCP — `neo`'s 8-rule fence came from a conversation, not a form), the operator opens the
-   boilerplate repo as an **ordinary picker row**. The wizard steps through options with good
-   defaults: `cleanupPeriodDays` (default `99999` — every real profile uses it), permission mode
-   (⚠️ **the step is ALWAYS shown**, pre-selected — preserves the boilerplate's "silence is not a
-   gate" rule), the seeded `CLAUDE.md` guard (never touch `~/.claude`). **Writes NO `~/.zshrc`
-   function** — and never edits the existing ones, which remain the bare-terminal floor. First
-   spawn shows CC's own `/login` in the PTY. Existing dirs are **adopted** via an explicit
-   "Add existing config dir…" (suggesting `~/.config/claude-*`), **not auto-imported** —
-   `m7-sandbox` is a harness artifact. Delete = **move the config dir to Trash** behind a confirm,
-   never `rm -rf` (history + memory are unrecoverable).
-3. **Hook registration is PERSISTENT — written into each profile's `settings.json`, mirroring M3
-   exactly.** ⚠️ Per-spawn `--settings` injection was offered (no teardown at all) and **declined**:
-   a profile session launched from a bare terminal must stay visible + time-tracked, as default
-   sessions are today. **Cleanup is exactly three triggers, and only one is new work:**
-   **register-on-launch** for every listed profile (idempotent, self-healing); **unregister only on
-   "remove from Claudesk (keep dir)"**; nothing on delete (the registration goes with the dir) and
-   nothing on uninstall (no code runs — same as `~/.claude` today, harmless because the hook script
-   exits 0 unconditionally). ⚠️ **A hooks off-switch stays OUT OF SCOPE** — `hook_uninstall` has
-   no frontend caller today either. The existing `~/.claude` registration is **untouched**.
-4. ⚠️ **The workflow layer is ALWAYS OFF for non-default profiles** (operator, hardened from an
-   assumption to a rule). Supervisor, skill row, `/session-restore` auto-inject and the drive-mode
-   signal all presume the workflow skills exist; `original` states it has none, so a fire there
-   types a slash command into a session that cannot run it. **Not "off in v1" — off.**
-
-⚠️ **Requirement, not a ruling:** every slug-path computation — the M15 supervisor's transcript
-reader first — must follow `CLAUDE_CONFIG_DIR`, not assume `~/.claude/projects/<slug>/`. Time
-analytics captures profile sessions (the hook fires) but gets **no per-profile dimension** in v1.
-
-⚠️ **Shape: a single `/feature-spec`, NOT a WBS** — unlike F-a, no probe outcome feeds the build.
-
-### ~~F-c: Turn-output re-orientation~~ — ⛔ **DROPPED from Group F (operator, 2026-09-15)**
-
-⚠️ **Not deferred, not parked — dropped from the group.** The operator removed it on review of the
-three asks. The backlog item
-(`SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION`) is **not deleted** — it stays as a recorded ask
-with its history intact, because half of it genuinely shipped (M13.5 WP3's turn-boundary markers +
-`↑ N/N ↓` jump) and the remaining half is a real, articulated problem. It simply is **not scheduled
-work**, and Group F is now **two items, not three**.
-
-⚠️ **Do NOT re-promote it by citing the product thesis.** It reads as a strong fit for *attention
-is the scarce resource*, which is exactly why it keeps resurfacing; the operator has now looked at
-it against the other two and chosen not to carry it. Re-open only on a fresh operator ask.
-
-## Revision 2026-09-06 — M14 SPLIT: the release ships now as a task; the polish defers to after M15
-
-⚠️ **M14 is no longer executing as a milestone.** Operator decision 2026-09-06, on reading the M14
-decomposition prompt: *"Just treat M14 as a feature. I just want to publish the works so far with a
-proper release note. The full polish should be after M15."* `/product-wbs` was **not** run.
-
-**What ships now**, as the single task `release-prep-m13-5-publish` (then a manual `/release`):
-- a **human-readable release note** for the work since `v0.3.4`,
-- an **MIT LICENSE** — ⚠️ the repo was already **public with no license at all**, so nobody had
-  rights to use the code; this closes a live exposure, not a formality, and
-- a **README correctness pass** — four independent staleness classes, all verified at source: a
-  status block 5 milestones and 11 releases behind; the status-dot vocabulary still claiming
-  **three** states after M13.5 WP2 shipped a fourth; the *"no design concession"* stance the vision
-  **refined** on 2026-07-20 into the two-tier framing; and two **404** `docs/product/*` links (the
-  tree moved 2026-07-28) plus a footnote calling in-app auto-update deferred when it shipped at M10.
-
-**What defers to after M15** — the rest of M14's deliverable list stands unchanged and unstarted:
-the **Settings UI** (project-list management + hotkeys, extending the `⌘,` panel), **Developer-ID
-signing + notarization**, the **full two-tier setup docs**, and repo **description/topics**
-(explicitly out of scope for this pass).
-
-⚠️ **The execution order is NOT changed by this split** — it remains **M14 → M15** per the
-2026-08-26 revision below. What changed is M14's *size*: its release half is being cut off and
-shipped immediately, and its polish half now lands after M15. ⚠️ **A release was already a
-VERIFICATION prerequisite** (M13.5 WP1's installed-`.app` tier is unsatisfiable until a build
-containing `25a68bc` exists), so shipping the release half first also unblocks a deferred check.
-
-⚠️ **The M13.5 handoff misstated what is undelivered** — it said "M13, M13.5 and the paydown sweep".
-Verified false: `v0.3.4` was tagged **2026-08-19, after M13 closed on 08-18**, and the tag contains
-12 `m13-` commits. **Undelivered = M13.5 + the workspace-close-hang incident fix.** The release note
-is written from that, not from the handoff's phantom three-milestone backlog.
-
-## Revision 2026-08-26 — execution order REVERSED back to M14 → M15 (operator, at the M13.5 close)
-
-⚠️ **THIS SUPERSEDES THE 2026-08-19 ORDER BELOW. The order is now M14 (polish + OSS release) → M15
-(workflow supervisor).** Operator-directed at the M13.5 close, with the stated rationale: **release
-everything up to and including M13.5.**
-
-⚠️ **Do NOT "correct" this back to M13.5 → M15 → M14, and do not read the 2026-08-19 note's own
-"do not correct it back" guard as still binding** — that guard protected the *earlier* decision from
-being reverted toward this roadmap's original lean. The operator has now made that reversion
-deliberately, which lands back on **the lean this roadmap recorded in the first place** (*"the
-supervisor is a dogfooding win first, and its value to a stranger is unproven, which argues for
-shipping M14 first"*). Both decisions are the operator's; this is the current one.
-
-**What changed between the two calls:** on 2026-08-19 the dogfooding-first argument won because the
-measured 10x auto-chain regression was being paid every session while M14's value accrued to
-strangers who did not exist yet. By 2026-08-26, M13.5 had closed at five WPs and **`main` stood 40
-commits ahead of the last release tag (`v0.3.4`)** — an unreleased backlog spanning M13, M13.5, and
-the paydown sweep. That inverts the "value accrues to nobody yet" premise: the shipped work is real
-and undelivered. ⚠️ **The M13.5 close supplied concrete evidence for this** — WP1's installed-`.app`
-verification tier was **unsatisfiable** precisely because the installed build predates the feature
-(commit `25a68bc` is not an ancestor of `v0.3.4`), so a release is now a **prerequisite for
-verification**, not only a distribution act.
-
-**The M15 argument is unchanged and still stands** — the auto-chain regression is still being paid
-every session. It is deferred, not refuted.
-
-## Revision 2026-08-19 — QoL bucket inserted as Milestone 13.5; execution order settled M13.5 → M15 → M14
-
-**Operator-directed insert (2026-08-19), at the clean boundary after the backlog-paydown sweep closed
-8/8.** A fourth **QoL polish bucket** as **Milestone 13.5**, per the thrice-executed M6 / M10.5 /
-M11.5 convention. Decomposed in `wbs.md` (4 WPs). Trigger: two backlog items already tagged *"queued
-for the next QoL polish bucket (none currently open)"*, plus the window-geometry ask.
-
-**⚠️ EXECUTION ORDER SETTLED — and it REVERSES this roadmap's own recorded lean. Do not "correct" it
-back.** The operator's order is **M13.5 → M15 (workflow supervisor) → M14 (polish + OSS release)**.
-Milestone 15's own insert note argues the opposite (*"the supervisor is a dogfooding win first, and
-its value to a stranger is unproven, which argues for shipping M14 first"*), and that argument was
-put to the operator explicitly along with the counter-argument (the measured 10x auto-chain
-regression is being paid every session now, while M14's value accrues to strangers who do not exist
-yet). **The operator chose the dogfooding-first order.** The prior lean stands as recorded reasoning,
-not as a pending correction.
-
-⚠️ **Consequence worth naming:** the OSS release is now **last**, so Claudesk stays private until
-both the bucket and a probe-gated architectural milestone land. If that becomes uncomfortable, the
-cheap reversal is to move M14 ahead of M15 — M14 has no dependency on the supervisor, whereas M15
-depends on M13's Recycle (already shipped).
-
-**Also settled this revision:** `SURFACE-...-RECYCLE-TYPES-SESSION-RESTORE-BEFORE-THE-FRESH-TUI-IS-READY`
-is **already fixed** (2026-08-19, `42bfe0c`) and is NOT a bucket item. ⚠️ **The fix was not "add a
-delay"** — the 1500 ms settle already existed but was being spent concurrently with the respawn
-rather than after it; reordering was the fix, and raising the number would have bought more
-spawn-wait instead of more settle.
-
-## Revision 2026-08-14 — Workflow supervisor inserted as Milestone 15; M13 scope note; ownership boundary with mccc
-
-**Trigger.** The operator opened the M13 spec for re-scoping ("the current orchestration layer is too simple") and reported that since the opus-5 release the agent increasingly **returns control where the state machine said to auto-chain**, pointing at the raw session logs as evidence. What began as an M13 scope question became a **new architectural capability** — and, over the course of the discussion, an ownership renegotiation with the companion repo.
-
-**The claim was tested before it was designed against.** A mining pass over **187 substantive claudesk sessions** / 2,460 `Skill` invocations **supported** the 10x regression (0.36 → 3.63 breaks per 100 invocations across two clean model epochs), with drive mode cleared as a confound. ⚠️ **But it also found the class is CHRONIC** — three prior P1/P2 incidents pre-dating opus-5, one titled *"…after Opus 4.8 upgrade"*, meaning the operator has attributed this to "a newer model" **at least twice before**. Honest reading: model-sensitive, genuinely spiked, and **every prose mitigation has decayed**. Caveats recorded: the 19 opus-5 breaks cluster in a few long sessions (×3, ×4, ×2) so per-session independence is weak, and the transcripts carry **no client-version field**, so the model-vs-client confound flagged in the June incident remains unseparated.
-
-**The finding that reshaped the design.** The original ask was *"spawn a standalone claude agent on control-return to judge whether to chain."* The evidence **inverted** it: wrongful stops emit the *correct* transition token and often *name the correct next skill*, so they are **textually indistinguishable** from legitimate pauses — a prose-reading adjudicator is the wrong instrument, while a **mechanical** check (transition token + policy row + was-there-a-`Skill`-call) decides all 19 exactly. The LLM adjudicator survives, **demoted to the residual**.
-
-**Decisions taken this session** (operator, 2026-08-14): probe the adjudicator split first (leaning deterministic-first / LLM-residual) · **fire silently, always** (dissent recorded and sized: ~2-in-19 question-shaped tails) · supervise **all** workspaces · **split** rather than expand M13 · **absorb the machine, not the skills** · coupling via skill-frontmatter state identity **gated on a probe** that proves current behavior is unbroken · phase-boundary recycle is **feature-workflow-only** · Claudesk **may** parse WIP files, **and** mccc should enforce the Work Tree schema so the parser reads a contract.
-
-**Why split rather than expand M13.** Three reasons: the supervisor **depends on** M13's Recycle; the adjudicator is a genuine **research risk** needing a probe before anyone commits to a design; and **Group C's exit metrics are only about clicks** (metrics 2 and 3) — the supervisor belongs to none of them, so folding it into M13 would let its uncertainty block the Group-C close.
-
-**Roadmap changes.** (1) **New Group E + Milestone 15** (above). (2) **M13 scope note** — Recycle must be programmatically callable; no other M13 change. (3) **Numbered 15, not 13.5** — deliberately *not* implying it precedes M14; the M14-vs-M15 order is an **open operator call**, since the supervisor is a dogfooding win whose value to a stranger is unproven. (4) **No milestone renumbering** — the M11→M14 tail keeps its numbers (renumber churn is a documented hazard). (5) **Vision's Future Possibility** *"Migrate workflow state-machine enforcement into Claudesk"* is now **partially in-roadmap** — the *enforcement* half is M15; the *GUI visualization* half (rendering current state, valid next transitions, pending SURFACE items) stays a Future Possibility. ⚠️ **`vision.md` needs this reconciled at the next touch** — its Future Possibilities section still says "explicitly NOT scoped into the initial roadmap," and its Core Principles / two-tier audience stance should record that the supervisor sits **behind the M10.9 gate** like the rest of the workflow layer.
-
-## Revision 2026-07-31 — QoL polish bucket inserted as Milestone 11.5 (after M10.9, before M11)
-
-**Operator-directed insert (2026-07-31):** a new **Milestone 11.5 — QoL polish bucket** placed to execute **immediately after M10.9 closes and before M11's docs viewer**. The trigger was the operator's request for the **per-project CC default-model override** "sooner than later" (`SURFACE-2026-07-31-PER-WORKSPACE-CC-MODEL-OVERRIDE`): the global CC default means the model choice fails to follow the project, so you forget to switch back after using a particular model on one repo.
-
-**Why a QoL bucket rather than a milestone or a standalone task.** The project has a documented, twice-executed convention for exactly this shape — **M6 (friend-QoL)** and **M10.5 (QoL polish bucket)**, both OPEN collection buckets of dogfooding papercuts, both numbered as between-milestone inserts to avoid tail-renumber churn, both closed at 4 WPs. This item is textbook for it: a daily-driver papercut found while dogfooding, `/feature-plan`-scale, and a direct extension of M6's own permission-mode dropdown. Numbered **"11.5"** so the M12→M14 tail keeps its numbers.
-
-**Why not M14 (the trap).** M14's Settings deliverable already lists *"default CLI args for `claude`"*, making it the natural-looking home. Rejected for three reasons: (1) M14 is the **last** milestone — behind M11+M12+M13 — the opposite of "sooner than later"; (2) that M14 line is **already partly stale**, since it also lists PiP/menu-bar visibility toggles that shipped at M5 and the permission-mode dropdown that shipped at M6 — and `--model` is the *same shape* as `--permission-mode`, already done; (3) it is not app-global Settings work at all — a per-**project** override is a `projects.json` field + a per-project **picker-row** cell (header placement tried and rejected at verify-human, 2026-07-31), which is M6's pattern, not M14's. ✅ **M14's "default CLI args" line was corrected 2026-09-18 (WP4 Phase 1)** — M11.5 consumed most of it.
-
-**Why the slot is specifically before M11.** The bucket also absorbs the one backlog item with a hard pre-M11 deadline: **`SURFACE-2026-07-28-QUALITY-WP2-CHORD-ARM-MISSES-PANELHOST`** (MAJOR, from M10.9 WP2's review). The OFF-invariant guard's chord arm selects files by *basename*, so it skips `panelHost.ts` — the module owning `panelForChord` and the most likely home for an M11 Docs chord. M11 landing that tab is exactly when the arm must fire, so the fix has to precede it.
-
-**Scope (operator decisions, 2026-07-31).** The bucket opened at two deliverables (model override + chord-arm fix) and the operator added two more during the same scoping pass: the **time-tracking offline/local-only copy** (`SURFACE-2026-07-20`, whose cost dropped once WP2 shipped a per-setting help line) and a **newly-reported bug — the editor minimap goes stale on file update** (`SURFACE-2026-07-31-EDITOR-MINIMAP-STALE-ON-FILE-UPDATE`, filed this session; prime suspect is an empty `compute([])` deps array in `editorExtensions.ts`, to be confirmed reproduce-first). **Four candidates were considered and scoped out** — the `?raw`-guard family, per-result/per-file replace, turn-output re-orientation, and split-pane cursor reset — each for a stated reason (see the milestone's own scoped-out note). A full `util-backlog-paydown` sweep at the boundary was likewise declined. Like M6 and M10.5, the bucket stays **OPEN**: further papercuts may be appended as WPs before `/product-wbs`.
-
-**Not workflow-coupled.** The model override is **pure lite-IDE core** — a workflow-independent capability any Claude Code user benefits from — so it sits outside M10.9's `workflow_features_enabled` gate and outside the gated M11–M13 stream entirely. No interaction with the gate seam.
-
-## Revision 2026-07-20 — Workflow-features opt-in gate inserted as Milestone 10.9 (before M11); vision audience-stance refined; companion-repo handoff authored
-
-**What changed & why.** A design discussion on *"how do secondary users who don't run the custom CC workflow system experience Claudesk?"* produced a settled model and a new milestone. The trigger: M11 (Docs viewer) is the first workflow-coupled UI a non-workflow user would meet, and the old vision stance ("no design concession for users who don't share the workflow") was too absolute — it implied a non-workflow user would hit dead affordances (an empty Docs tab), which is bad for them and clutter for the operator.
-
-**The decision (settled this session):**
-- **New Milestone 10.9 — Workflow-features opt-in gate** (before M11 in execution). A single `workflow_features_enabled` setting, **default OFF for everyone including the operator** (operator is fine with a one-time conscious enable → no environment auto-detection). OFF = **byte-identical** to a Claudesk without any workflow features (the load-bearing invariant — no dead affordances). Enable = a **pure Claudesk UI flip that touches nothing in `~/.claude/`** (critical: the operator's skills are live symlinks into the companion repo they edit — enable must not install/clobber). A **one-time evangelistic invite** (shown while OFF) pitches + shows step-by-step install instructions for the companion workflow system; `[Not now]` → clean app, re-enable in Settings later. A **soft non-blocking presence check** warns if `~/.claude/skills/` is absent on enable. One-click **disable** de-frictions testing the workflow system + Claudesk together.
-- **Numbered "10.9"** (a between-milestones insert like M10.5) to avoid re-renumbering the M11→M14 tail again (renumber churn is a documented hazard). M11–M14 keep their numbers; M11 is now noted as **gated behind M10.9**.
-- **M14 updated:** its Settings-UI deliverable folds in the gate toggle; its README/exit-criteria refined from a single-audience "assumes the workflow system installed" to a **two-tier** framing (workflow-independent lite-IDE core for any CC user + opt-in gated workflow layer).
-
-**Execution order (operator decision 2026-07-20):** roadmap re-open (this revision) → **companion `my-claude-code-customization` repo ships its part** → Claudesk **M10.9** (gate + rich invite + onboarding surface) → **M11**. M10.9 is *positioned* before M11 but *scheduled* after the companion-repo work, because M10.9's rich parts (install instructions, onboarding) consume companion-repo deliverables — building Claudesk's invite first would hardcode against a moving target.
-
-**Cross-repo split (handoff authored this session).** Claudesk owns the *presentation surfaces* (gate setting, OFF=byte-identical, Settings toggle, invite dialog, onboarding surface, soft presence check, M11 doc-discovery following the companion's folder layout). The **companion `my-claude-code-customization` repo** owns the *content + mechanics*: canonical `install.sh` + a **standalone `uninstall.sh`** (works without Claudesk); **doc-folder unification** (`docs/product/` + `workflow/` → a friendlier single-folder layout for new users); the **"pause" ambiguity** (course-correct vs the `session-pause` skill); the **"research" collision** (CC's built-in deep-research skill vs the workflow's `product-research`/`feature-research`); the **onboarding/tutorial design** + any dedicated onboarding skill / tutorial project + the "aha" moments (brainstorm pending); and the canonical install-instruction copy Claudesk's invite displays. **Seam:** Claudesk *presents*, the companion repo *authors + provides mechanics* — Claudesk never hardcodes workflow internals. The handoff is delivered to the companion repo as SURFACE entries in its own `workflow/backlog.md` + a `HANDOFF.md` cover doc that references this project's path (`/Users/stayman/Personal/projects/claudesk`) and the specific docs (this roadmap revision, vision §Target Audience, `docs/product/wbs.md`) for lookup.
-
-**Design prior.** This is a recurring audience/anti-persona tradeoff with a transferable why — proposed for capture to `design-priors.md` this session (same family as `operator-helpful-friend-misfiring-as-offswitchable-setting`, but distinct: that one defaults to the operator's benefit for a *misfiring* behavior; this one gates an *entire feature class* behind an opt-in, default-off, with an evangelistic on-ramp).
-
-## Revision 2026-07-06 — In-app auto-updater inserted as Milestone 10 (right after M9, before the next release)
-
-**Operator-directed insert (2026-07-06):** a new **Milestone 10 — In-app auto-updater** placed immediately after M9 (time-analytics) and **before the next release**. Claudesk gains an in-app "check for updates → download/install newer version" flow with the user in control: **skip a version, disable update notifications, cancel/confirm each install** (no silent/forced updates). Rationale for the slot: the milestone governs *how future versions reach users*, so it must ship before a publish to be useful.
-
-**Two decisions this milestone turns on — BOTH LOCKED (operator, 2026-07-06):**
-1. **Homebrew → detect-and-defer.** A self-updating cask desyncs `brew`. Chosen (the correctness path over the simpler `auto_updates true` stanza): the updater **detects a brew-managed install and directs the user to `brew upgrade`** there; only direct-download installs self-update in-app. No desync.
-2. **~~Signing → stay UNSIGNED (no $99 yet).~~ ⚠️ REVERSED 2026-09-18 (M14 WP2): the $99 program WAS purchased and builds are signed + notarized. Historical record:** The updater's minisign keypair is free (no Apple account); notarization is a separate $99/yr Apple Developer Program requirement. Operator: **not paying $99 yet.** Claudesk stays unsigned, so the updater **surfaces the `xattr` quarantine-clear step** on the post-update relaunch (Gatekeeper would otherwise block the fresh bundle). Notarization revisitable later.
-
-**Old → new mapping** (tail slides +1; M1–M9 unchanged):
-
-| Was | Now | Milestone |
-|-----|-----|-----------|
-| — | **M10** | In-app auto-updater *(new)* |
-| M10 | **M11** | Workflow-docs markdown viewer |
-| M11 | **M12** | Smart auto-resume + drive mode |
-| M12 | **M13** | Skill orchestration |
-| M13 | **M14** | Polish & Open-Source Release |
-
-> **Note:** the M14 (Polish) "code-signing / notarization strategy" deliverable now overlaps M10 — the decision is *made* at M10 (the updater forces it), *finalized/documented for public release* at M14. ✅ **The Group-C metric-numbering item is DONE** — resynced at the M12 close (2026-08-12) into a status table in that block: four of six metrics met, metrics 2 and 3 remaining and both M13's.
-
-## Revision 2026-06-29b — Demo-assets milestone inserted as M8; time-analytics ↔ docs-viewer swapped
-
-**Two operator-directed changes, stacked (2026-06-29b):**
-
-1. **Swapped the former M8 (workflow-docs viewer) ↔ M9 (time-analytics)** so time-analytics now precedes the docs-viewer. No deliverable content changed for either — only sequence + numbering.
-2. **Inserted a NEW milestone — Demo assets (filmstrip & PiP value showcase)** — as the next execution milestone, *before* the (post-swap) time-analytics. A pair of short demo recordings (GIF and/or video — format decided in the milestone's first WP) that *show* the filmstrip's parallel-project-attention value (multitasking ~4 CC-driven projects) and the PiP's monitor-while-elsewhere value (deep work / YouTube while CC runs in the corner). Marketing/communication assets for the README + GitHub release pages + the M13 open-source launch.
-
-**Demo-milestone specifics (operator decisions 2026-06-29b):** (a) it's a **roadmap milestone**, not a one-off task — gets a full WBS; (b) the **format (GIF vs MP4 vs both) is deferred** to the milestone's **first WP, framed as a feasibility probe** — establish *how* an agent can capture + render these on macOS before committing to a format; (c) **agent-produced end-to-end** — Claude Code drives the capture (staging the scenario on the real installed `.app`, recording, rendering, embedding), with the operator verifying + giving feedback at checkpoints, NOT operator-recorded. **Why here:** the filmstrip (M4) and PiP (M5) are the most distinctive + hardest-to-explain things Claudesk does, both now shipped + released (v0.2.0–v0.2.3) — so communicating that existing value comes before building more features.
-
-**Old → new mapping** (everything from the former M8 onward shifts; M1–M7 unchanged):
-
-| Old | New | Milestone |
-|-----|-----|-----------|
-| — | **M8** | Demo assets — filmstrip & PiP value showcase *(new, probe-first, agent-produced)* |
-| M9 | **M9** | Time-analytics panel (absorb claude-time) *(moved ahead of docs-viewer)* |
-| M8 | **M10** | Workflow-docs markdown viewer *(demoted below time-analytics)* |
-| M9→M10 *(was)* | **M11** | Smart auto-resume + drive mode |
-| M10→M11 *(was)* | **M12** | Skill orchestration |
-| M11→M12 *(was)* | **M13** | Polish & open-source release |
-
-Decompose M8 at its `/product-wbs` pass; WP1 (the capture/render pipeline probe + format decision) gates the two demo deliverables + the README embed.
-
-## Revision 2026-06-26b — Friend-requested QoL milestone inserted as Milestone 6
-
-**Inserted a new Milestone 6 (friend-requested QoL polish) between PiP (M5) and the menu-bar item,** sliding the entire Group-C tail +1. Operator-directed: a first batch of three small UI requests from friend-users, framed as an **OPEN collection bucket** — more friend requests are expected before the milestone is reached and should be appended as additional WPs, not forced into the initial three. Full first-batch analysis + confirmed code seams at `SURFACE-2026-06-26-FRIEND-QOL-BATCH-1` in `workflow/backlog.md`.
-
-**First batch (three, all mirroring already-shipped patterns):** (1) **drag-resizable left/right split** (CC terminal ↔ right panel), like the file-tree rail resizer — terminal re-fits automatically via XtermPane's existing `ResizeObserver → fit()`, so no reflow risk; (2) **adjustable CC terminal font size**, like the editor's font-zoom, with **focus-scoped** ⌘+/⌘−/⌘0 (zooms whichever half holds keyboard focus, routed via the WP4b `data-focus-half` tracking — operator decision); (3) **editor auto-wrap toggle** (`EditorView.lineWrapping`, currently off by deliberate 2026-06-20 decision), default OFF, persisted, ⌘\ proposed.
-
-**Old → new mapping** (everything after M5 shifts +1; M1–M5 unchanged):
-
-| Old | New | Milestone |
-|-----|-----|-----------|
-| — | **M6** | Friend-requested QoL polish *(new, open collection)* |
-| M6 | **M7** | Menu-bar status item |
-| M7 | **M8** | Workflow-docs markdown viewer |
-| M8 | **M9** | Time-analytics panel (absorb claude-time) |
-| M9 | **M10** | Smart auto-resume + drive mode |
-| M10 | **M11** | Skill orchestration |
-| M11 | **M12** | Polish & open-source release |
-
-**Why here:** after the dogfood-replace point (M3+M4) and the out-of-focus status surface (M5), once friend-users are actively exercising the daily driver and surfacing ergonomic friction — but before the workflow-coupled and absorb-claude-time milestones. Low-risk polish (each item clones an existing seam). Decompose at its `/product-wbs` when reached, folding in any further friend requests that arrive first.
-
-## Revision 2026-06-26 — Time-analytics panel (absorb claude-time) inserted as Milestone 8
-
-**Inserted a new Milestone 8 (time-analytics panel) between the workflow-docs viewer (M7) and smart auto-resume.** Claudesk **absorbs** the standalone `claude-time` tool (`_ref/claude-customization/tools/claude-time/` — a hook-driven CC time-tracker: SQLite event log → reclassifier → Gantt dashboard) as a native, **default-OFF** right-panel analytics tab, and the standalone tool is **deprecated**. Operator-directed; full analysis + locked decisions at `SURFACE-2026-06-26-ABSORB-CLAUDE-TIME-INTO-CLAUDESK` in `workflow/backlog.md`.
-
-**Locked decisions:** (1) **full absorption, not reader-only** — claude-time is deprecated, so the bare-terminal-coverage / cross-repo-schema constraints that argued for reader-only are gone and "don't maintain two copies" wins; (2) it is a **universal feature, NOT workflow-coupled** (observes generic CC hook events, not the skills) — so it is NOT in the off-by-default *workflow-coupled* bucket (Docs viewer / auto-resume / skill-orch); it gets its own Settings toggle, default OFF, that a friend may enable; (3) **write only when the toggle is ON** — the hook still fires for the universal status dots, but the time-row SQLite write is gated, so cost-when-off is zero; (4) **per-identity DB** under `app_data_dir()` — dev and prod do NOT share a tracking DB, consistent with the `com.claudesk.app` / `.dev` isolation, no legacy-history migration.
-
-**Absorption shape:** persistence folds into the Rust `hook_socket` listener (not a second Perl hook; `claudesk-hook.pl`'s registration extends to the fuller event set the reclassifier needs, and the legacy `claude-time-hook.pl` registration is removed); `reclassify.py` ports to Rust (29-assertion oracle); `viz/dashboard.jsx` ports to a React right-panel tab fed by a Rust query layer; the `claude-time` CLI is retired.
-
-**Old → new mapping** (Group C tail only; M1–M7 unchanged):
-
-| Old | New | Milestone |
-|-----|-----|-----------|
-| — | **M8** | Time-analytics panel (absorb claude-time) *(new)* |
-| M8 | **M9** | Smart auto-resume + drive mode |
-| M9 | **M10** | Skill orchestration |
-| M10 | **M11** | Polish & open-source release |
-
-**Why here:** dependencies (M2 right-panel tab model + M3 hook plumbing) are both shipped; it's a natural neighbor to the Docs viewer (another read-mostly right-panel tab on the same panel pattern) and sits before the genuinely workflow-coupled hand-holding milestones. Decompose at its `/product-wbs` pass when reached (open sub-decisions: exact DB path, config/tuning surface, panel scope, the universal-vs-coupled toggle pattern).
-
-> **Numbering superseded by Revision 2026-06-26b (same day):** the friend-QoL milestone was then inserted as M6, shifting this time-analytics milestone from M8 → **M9** and the tail to M10 (auto-resume) / M11 (skill-orch) / M12 (polish). The mapping table above reflects this revision's *then*-current numbering; the current numbering is in 2026-06-26b above.
-
-## Revision 2026-06-25 — Workflow-docs markdown viewer inserted as Milestone 7
-
-**Inserted a new Milestone 7 (workflow-docs markdown viewer) between the menu-bar item (M6) and smart auto-resume.** A read-only `Docs` right-panel tab that renders the conventional product/workflow docs (`docs/product/*.md` incl. glob-matched `*wbs*.md`, `workflow/wip/*.md`, `workflow/backlog.md`, `workflow/.session.md`; CHANGELOG out of scope) as formatted, link-navigable markdown, per-workspace. Operator-directed.
-
-**Old → new mapping** (Group C tail only; M1–M6 unchanged):
-
-| Old | New | Milestone |
-|-----|-----|-----------|
-| — | **M7** | Workflow-docs markdown viewer *(new)* |
-| M7 | **M8** | Smart auto-resume + drive mode |
-| M8 | **M9** | Skill orchestration |
-| M9 | **M10** | Polish & open-source release |
-
-**Why here:** it sits naturally after the status surfaces (M5/M6) and before the CC-lifecycle hand-holding (M8/M9) — and is the rendering counterpart to the M6-anchored workflow-doc-hierarchy watcher (the watcher answers *where* a project sits; M7 renders the docs themselves). Read-only by design; editing stays in the Editor panel / CC.
-
-## Revision 2026-06-22 — Group C resequenced dogfood-first; PiP unconditional, before menu-bar
-
-**Reordered Milestones 3–8 to reach the daily-driver-replacement point as early as possible, and dropped the PiP conditionality.** No deliverable content changed — only sequence, numbering, and the removed PiP gate. Operator-directed at the M2 cycle close.
-
-**Old → new mapping** (Group C only; M1, M2, M9 unchanged):
-
-| Old | New | Milestone |
-|-----|-----|-----------|
-| M3 | **M3** | CC lifecycle & state plumbing |
-| M6 | **M4** | Multi-workspace UX (filmstrip + center stage) |
-| M8 | **M5** | Picture-in-picture *(now unconditional)* |
-| M7 | **M6** | Menu-bar status item |
-| M4 | **M7** | Smart auto-resume + drive mode |
-| M5 | **M8** | Skill orchestration |
-| M9 | **M9** | Polish & open-source release |
-
-**Why:** The operator's dogfood-replace bar is **M3 + M4 (new numbering)** — CC-state awareness plus an N-project filmstrip is enough to drop the current terminal+Sublime setup and daily-drive Claudesk. The two CC-lifecycle "hand-holding" milestones (smart auto-resume, skill-button orchestration) are livable-without for now and slid to last-before-polish (M7, M8). **PiP moved ahead of the menu-bar (M5 before M6) and is no longer gated** — the prior "menu-bar first, dogfood a week, defer PiP if sufficient" plan (old M7→M8 gate + the M9 deferred-PiP slot) is fully dropped; PiP ships unconditionally as M5. The status broadcaster (M3) is unaffected — it fans out to all three surfaces no matter their build order.
-
-**Cross-doc impact:** `arch.md`'s Phase-2 forward-look sub-sections (A/B/C/D) describe these surfaces by content, not by milestone number, so they remain accurate; the one numbered reference (the N-editors-cost note) is updated to the new numbering. Historical Revision sections below keep their original numbers (they're history). Next `/product-wbs` decomposes from M3.
-
-## Revision 2026-06-19 (d) — Sublime Text pop is a stopgap, not a permanent escape hatch
-
-> **SUPERSEDED 2026-06-20 by the WP8 redefinition** (see Milestone 2's WP8 deliverable + arch.md's top-of-file Revision 2026-06-20 note): both Sublime launchers (Text + Merge) are KEPT permanently as panel-tab-row icon buttons. The "remove the pop once the editor proves parity" plan below did NOT happen. Retained here as history.
-
-**The in-app lite editor will *replace* Sublime Text, not coexist with it.** The Sublime Text `⌘⇧E` pop + right-panel button that shipped in Milestone 1 (WP8) are reframed from a permanent escape hatch to a **temporary stopgap** that made the right half usable before the in-app editor existed. Milestone 2 now includes a deliverable to **remove** them once the lite editor is proven to cover the daily-use feature set (drop the `keydown` handler, the toolbar button, and the `sublime` backend command). What survives long-term is the **right-half panel-switch hotkeys** (editor ↔ diff viewer ↔ second terminal) — the actual in-window navigation, distinct from the Sublime pop.
-
-**Vision impact:** this reverses the vision's prior "Sublime Text is sacred — a hotkey pops the real Sublime, no second-class compromise" principle, which treated the pop as permanent. `vision.md` and `CLAUDE.md` are updated in step to reflect "in-app editor replaces Sublime; the pop is a Phase-1 stopgap." Milestone 2's goal/exit-criteria updated accordingly (full editing + diff day inside the right half, no `subl` dependency for routine work).
-
-## Revision 2026-06-19 (c) — Dropped the Sublime Merge hotkey milestone
-
-**Removed the standalone "Sublime Merge hotkey" milestone** (was Milestone 9 after revision (b)). Polish & Open-Source Release moved up to Milestone 9; the roadmap is now 9 milestones.
-
-**Why:** the in-app **git diff viewer** shipped in Milestone 2 covers the day-to-day git review need that a Sublime Merge pop-up used to serve. The remaining external-Sublime-Merge use cases (interactive staging, rebase, blame, conflict resolution) don't justify a dedicated roadmap milestone — they can be served, if needed, by a low-effort `smerge <path>` escape hatch added during Milestone 9 polish, mirroring the already-shipped Sublime **Text** `⌘⇧E` hotkey. The Sublime Text escape hatch stays (it pairs with the lite editor); the Sublime Merge one is demoted from a milestone to "optional later polish" and noted as such in Milestone 2's deliverables. No other milestone numbers changed (Milestones 1–8 unaffected; only the old M9→dropped, old M10→M9).
-
-## Revision 2026-06-19 (b) — Lite editor resequenced to second
-
-**Moved the lite editor + diff viewer from last-before-polish to immediately after the PoC** (now Group B / Milestone 2; was Group C / Milestone 9). The stateful-CC-controller + multi-workspace + status-surface block slid down one (now Group C / Milestones 3–9); polish stays Milestone 10. No deliverables changed — only ordering and the resulting renumbering.
-
-**Why:** the product pivoted from one-project-per-**window** to one-project-per-**tab**. Under tabs, leaving the right half a placeholder and relying on the external Sublime pop-up means a separate Sublime/Sublime-Merge OS window per project — which fragments the workflow back across windows and reintroduces the exact window-juggling tax the tab model exists to eliminate. So the in-app editor/diff viewer is now a **must-have**, sequenced before the multi-workspace build-out so the right half is real the moment a second tab opens. Cross-references updated (Milestone 1's right-half "reserved for Milestone 2"; the Milestone 2 editor no longer claims the Sublime Merge hotkey, which stays in Milestone 9; PiP-defer target unchanged at Milestone 10).
-
-## Revision 2026-06-19 (a) — Structural re-format
-
-**Structural re-format to the current `product-roadmap` skill conventions** (no scope or content change — same deliverables, same status, same exit criteria; only the structure and terminology were updated):
-
-- **"Phase" → "Milestone", flat single-integer numbering.** The four phases + Phase 2's dotted sub-milestones (`2.1`–`2.7`) flattened into one continuous list, `Milestone 1` … `Milestone 10`. Dotted hierarchical numbering removed per the skill's flat-numbering rule (the feature Work Tree's `P1.1` dotted IDs are a different artifact and keep their form). Old "Phase N" references elsewhere remain valid as read-aliases.
-- **Phases became cosmetic `## Group` headings.** As originally re-formatted: Group A (launch friction), Group B (stateful CC controller + multi-workspace + status surfaces), Group C (lite editor), Group D (polish + release). *(Superseded the same day by revision (b), which moved the lite editor to Group B and slid the CC-controller block to Group C — see above for the current mapping.)* Groups carry no numbering or dependency semantics; cross-milestone dependencies are stated in each milestone's prose.
-- **Standardized milestone shape** to Goal / Deliverables / Exit Criteria. The Phase 1 completion status, ship commits, and the WP4 probe outcome are preserved verbatim under Milestone 1.
-
-### Prior revisions
-
-> 2026-06-15: Major rewrite driven by the vision pivot (multi-window → single-window tabbed workspaces + filmstrip + PiP + menu-bar) and research resolving the open design questions. Phase 1 gained the tab-shell substrate + a gating thumbnail-rendering probe; xterm.js settled on DOM-renderer-only (WebGL ~16-context cap); the prior "cross-window CC status indicator" milestone was replaced by three status surfaces (filmstrip / menu-bar / PiP) fed by a single Rust broadcaster over a Unix-socket hook channel (resolving the old "WP9b probe").
-> 2026-05-22: Replaced the single auto-resume bullet with a three-branch Smart auto-resume milestone; added a drive-mode selector + indicator milestone. Both additive to the stateful-controller phase.
-
-## Session Handoff — 2026-09-29 09:53
-Handed off. See `workflow-system/state/.session.md` to restore.
+Claudesk grows in increments you can dogfood, and each one is usable on its own. **Every milestone
+planned so far has shipped** (M1–M15, both Group F asks, and the features inserted after them). This
+file now holds three things: a one-line index of what shipped, the rulings that still bind future
+work, and what comes next.
+
+⚠️ **The full milestone and revision text (1,202 lines) is archived VERBATIM at
+[`archive/revision-log/roadmap-2026-06-to-09.md`](archive/revision-log/roadmap-2026-06-to-09.md)**
+(condensed 2026-09-29). Section headings are unchanged there, so an older citation like
+*"`roadmap.md` → Revision 2026-08-14"* resolves to the same heading in that file. **The as-built
+record is `arch/<subsystem>.md`** (indexed by `arch.md`). Where the two disagree, `arch/` wins.
+
+**Conventions (unchanged):**
+- Milestones are a **flat, continuous list**, and `## Group` headings are cosmetic only.
+- A between-milestone insert is numbered `N.5` (or `N.9`) so the tail does not renumber.
+- A **QoL bucket** is an OPEN collection of dogfooding papercuts. There have been four so far
+  (M6, M10.5, M11.5, M13.5), and each closed at 4–5 WPs.
+- Operator asks may enter as **un-numbered items** (Group F) and get numbered only when scheduled.
+
+## Shipped
+
+| # | Milestone | Closed | What it delivered |
+|---|---|---|---|
+| M1 | Bare shell + tab substrate (PoC) | 2026-06-19 | Tauri shell, picker, PTY terminal running `claude`, tab substrate; thumbnail probe PASS (live ~1 fps mirrors) |
+| M2 | Lite editor + diff viewer | 2026-06-22 | CM6 editor (finder, palette, find/replace, splits, tabs, file tree), git diff viewer, panel hotkeys, Sublime Text + Merge buttons (kept permanently) |
+| M3 | CC lifecycle & state plumbing | 2026-06-22 | Hook script + `AF_UNIX` socket + status broadcaster; state comes from hooks, never PTY scraping |
+| M4 | Multi-workspace UX | 2026-06-24 | Filmstrip with live mirrors, `⌘⇧`+digit, drag-reorder, collapse, focus indicator. **This was the dogfood-replace point** |
+| M5 | Picture-in-picture | 2026-06-27 | NSPanel PiP with 4 layouts and auto-summon on blur; display-only |
+| M6 | Friend-requested QoL (bucket) | 2026-06-28 | Stuck-dot fix, split control, terminal zoom, wrap toggle, gitignored-file reach, no-yolo setting |
+| M7 | Menu-bar status item | 2026-06-29 | Tray alarm (lit when any workspace is awaiting input) and an actuator menu; the popover was cut as a PiP subset |
+| M8 | Demo assets | 2026-06-29 | Synthesized filmstrip and PiP GIFs in the README |
+| M9 | Time-analytics panel | 2026-07-16 | Absorbed claude-time: write-gated SQLite, reclassifier, dashboard (default OFF) |
+| M10 | In-app auto-updater | 2026-07-18 | minisign-signed updater; Homebrew installs self-update too |
+| M10.5 | QoL bucket | 2026-07-19 | PiP top-right default, active-close confirm, SIGHUP-first group kill, UTF-8 fixes |
+| M10.9 | Workflow-features opt-in gate | 2026-07-31 | `workflow_features_enabled` (default OFF, byte-identical when off); the two-tier audience |
+| M11.5 | QoL bucket | 2026-08-01 | Per-project `--model` override on the picker row, plus pre-M11 guard debt |
+| M11 | Workflow-docs markdown viewer | 2026-08-03 | Gated docs panel with live reload |
+| M12 | Smart auto-resume + drive mode | 2026-08-12 | Two-signal resume (unclean flag → `--continue`, else `.session.md` → `/session-restore`); drive mode on the picker row, delivered through a hook |
+| M13 | Skill orchestration | 2026-08-18 | A fixed five-button skill row, plus Recycle Session as a callable operation. **Group C closed: all six vision metrics met** |
+| M13.5 | QoL bucket | 2026-08-26 | Window-state persistence, the BackgroundWork (purple) state, turn-boundary `↑ N/N ↓`, drive mode on the workspace surface |
+| M14 | Polish & open-source release | 2026-09-18 | MIT license, a README with two setup tiers, a read-only hotkey reference, Developer-ID signing and notarization (`v0.5.2`) |
+| M15 | Workflow supervisor | 2026-09-15 | Typed policy graph, turn-end break detection, auto-fire, `claude -p` adjudicator, context-pressure recycle at 400k tokens |
+| F-a | Prompt staging area | 2026-09-22 | CM6 prompt panel, bracketed-paste send (`⌘↵`) and stage-only (`⇧⌘↵`), sent-draft ring |
+| F-b | Isolated CC profiles as workspaces | 2026-09-24 | `CLAUDE_CONFIG_DIR` profiles spawned directly, with per-profile hook registration (`arch/profiles.md`) |
+| — | Supervisor activity record | 2026-09-28 | `supervisor-activity.log` JSONL, badge hint, `▾` popover, turn `⚙` |
+| — | Silent-supervisor fix | 2026-09-28 | Three causes fixed (`778fe72`); shipped in `v0.7.1` |
+| — | Analytics week export | 2026-09-29 | Day view 5.7× faster, resumed-session lives, Week default, `claudesk export-week` (`v0.7.1`) |
+
+**Carried forward from shipped work. These are not complete, so read them before reading any `[x]` as "done":**
+- ⚠️ **M15's live half has not yet been observed on an installed build.** The fix (`778fe72`) is in
+  `v0.7.1`. The live checks (a fire with its `⚙`, a fire while another app is focused, Esc recovery)
+  are tracked at `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (high).
+  The deferred checks from dogfeedback and WP0 are **void until a fire is observed, not passed.**
+- ⚠️ **F-a's motivating case, voice dictation, is ASSUMED WORKING, NOT VERIFIED.** macOS text-input
+  services do not engage under `pnpm tauri:dev`, so it needs an installed build.
+- ⚠️ **F-b has two checks deferred to the release gate:** an installed-`.app` profile spawn with its
+  status dot, and whether `trash::delete` needs a Finder Automation grant.
+- ⚠️ **M13's dynamic skill registry was NEVER BUILT, and that was deliberate.** The fixed five shipped
+  instead. A registry would need an enumerator plus a YAML parser, which reverses the §4c decision
+  (the command name is the only stable cross-repo coupling). M15 R-7 declined it. It re-enters only
+  as a product decision.
+
+## Standing rulings (settled; do not re-litigate)
+
+Each ruling is one line here. Its full text is in the archive, under the heading named.
+
+- **Ownership boundary with mccc (2026-08-14): "absorb the machine, not the skills."** Claudesk owns
+  the drive mode's VALUE and TURN-BOUNDARY enforcement. mccc owns its MEANING and INTRA-TURN
+  semantics, and mccc's prose remains the fallback for sessions run without Claudesk. Full absorption
+  of mccc was rejected. → *Milestone 15*, *Revision 2026-08-14*.
+- **M15 R-1–R-7.** Among them: the stored mode is the authority, and Mode 0 is not a suppressor. The
+  recycle threshold is an absolute token count, and no model→window map exists. The verdict lives in
+  TypeScript. → `arch/workflow-supervisor.md`.
+- **M14 R-1:** sign and notarize, with minisign kept and the trust anchor `774E2E8429FDF78A`
+  unchanged. **M14 R-2:** project-list management was **DROPPED, not deferred**. → *Milestone 14*.
+- **F-a:** newlines are preserved through bracketed paste, and `slashCommandPayload` is not modified.
+  → *F-a decisions — `/util-grill-me`, 2026-09-21*.
+- **F-b:** the profile/project model, hook-registration ownership, and self-hosting. → *F-b decisions
+  — `/util-grill-me`, 2026-09-23*.
+- ⛔ **Turn-output re-orientation (F-c) was DROPPED** (2026-09-15). Re-open it only on a fresh operator
+  ask, never by citing the product thesis. → *F-c*.
+- **Group C lesson for the next `/product-vision`:** success metrics written as "every X", or that
+  name a mechanism, were refuted by the build twice. Metrics that name an outcome survived.
+  → *Milestone 13*, Group C exit.
+- ⭐ **A `/util-grill-me` pass is the ENTRY step of each operator-requested capability**, not a review
+  step. (This was the Group F convention, and it carries forward.)
+
+## Next
+
+**Order set by the operator on 2026-09-29.** There is no live `wbs.md`.
+
+### Milestone 16: Right-panel media viewer — **NEXT**
+
+**Goal:** The right-panel editor shows images and plays audio and video, so the files that matter in
+a non-coding (media-production) workspace can be opened in-app. F-b's isolated profiles triggered
+this. It belongs to the lite-IDE core (tier 1), so it is **not** behind `workflow_features_enabled`.
+Full measured state and open questions: `SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER`.
+
+⚠️ **Operator ruling (2026-09-29, early grill): the viewer's depth follows the workspace.**
+Software projects mostly *glance*; media projects (a video-production pipeline) *review*. So a
+review-grade player is in scope for media workspaces, and the viewer is not uniform across
+workspaces. The spec settles what selects the depth and what "review" includes. See the backlog entry.
+
+**Shape:** a single feature (`/feature-spec`), like F-a.
+- It opens with a **`/util-grill-me`** covering transport (asset protocol vs IPC), scope boundary, and
+  SVG handling.
+- A **codec probe in the real WKWebView** comes before any UI work.
+
+**Exit Criteria:** set at spec time.
+
+### Then, in order
+
+1. ✅ **mccc upstream asks were delivered 2026-09-29** to mccc's `workflow-system/inbox/` as three
+   messages: M15 WP2 (delete Phase 9), M15 WP4 (Work Tree schema pin), and the 2026-09-23 paydown's
+   13 asks. No Claudesk milestone is needed. The Claudesk backlog entries close as each ask lands
+   upstream.
+2. **A supervisor-hardening bucket** (numbered at the time; likely `16.5`). ⚠️ **It is gated on
+   observing a real fire on an installed `v0.7.1`**, which is wall-clock, not work. As of
+   2026-09-29 the installed 0.7.1 logs decisions correctly, but no AUTO-edge break has occurred yet.
+   Seeds:
+   - a fire on a transition token quoted in prose
+   - a leaked workspace subscription
+   - `is_turn_start` firing on mid-turn dequeues
+   - the adjudicator margin
+   - the missing alarm for a transcript-format change
+   - closing `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` itself
+3. **A short `/product-vision` revisit BEFORE numbering anything past M16.** All six vision success
+   metrics are met, and every milestone since M14 has been an operator ask. The open question is
+   whether **non-coding workspaces** (the direction F-b opened, which M16 serves) is a product
+   direction or a one-off. The two remaining vision Future Possibilities (PiP click-to-focus and a
+   visual view of workflow state) are weighed there too.
+
+**Held open, not scheduled:**
+- A fifth QoL bucket, which collects papercuts. Seeds so far: the stale minimap, per-result replace,
+  a go-to-line hotkey row, the file-op error surface, and dynamic model-alias hints.
+- A `/util-backlog-paydown` pass over the ~26 open code-quality findings.
+
+## Revisions
+
+- **2026-09-29** — Condensed. All closed milestone and revision text moved verbatim to
+  `archive/revision-log/roadmap-2026-06-to-09.md`; the file went from 1,202 lines to about 110.
+  Execution order set by the operator: **M16 media viewer** → a supervisor-hardening bucket (gated
+  on a live fire) → a `/product-vision` revisit before M17. The mccc asks went to its inbox.
+- *Earlier revisions, 2026-06-15 → 2026-09-25, are in the archive under their original headings.*

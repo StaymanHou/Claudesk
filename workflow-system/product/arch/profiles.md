@@ -8,7 +8,7 @@ A **profile** is a named `CLAUDE_CONFIG_DIR`. Each picker row names one, and its
 Code session runs under it. The built-in profile **`default`** means *no* `CLAUDE_CONFIG_DIR`
 (`~/.claude`). It is never stored and can be neither removed nor deleted. Spec, rulings and the
 per-phase record are in `workflow-system/state/archive/f-b-isolated-cc-profiles.md`; the four
-grill rulings are in `roadmap.md` → "F-b decisions — `/util-grill-me`, 2026-09-23".
+grill rulings are in `archive/revision-log/roadmap-2026-06-to-09.md` → "F-b decisions — `/util-grill-me`, 2026-09-23".
 
 ⚠️ **Lite-IDE core — NOT gated** on `workflow_features_enabled`. The profile line and the Settings
 Profiles group exist with the gate OFF.
