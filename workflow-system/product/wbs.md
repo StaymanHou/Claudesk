@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-09-29
+updated: 2026-09-29  # WP1 probe shipped (GO with a 4 GiB cap)
 cycle: milestone-16-right-panel-media-viewer
 ---
 
@@ -102,7 +102,7 @@ projects mostly *glance*; media projects (a video-production pipeline) *review*.
 
 ## Work Packages
 
-### WP1: Probe — media in the real WKWebView ✅ CLOSED 2026-09-29 (GO with a 4 GiB cap — see "Probe outcomes")
+### WP1: Probe — media in the real WKWebView ✅ SHIPPED 2026-09-29 (commit 3bb81c5) — GO with a 4 GiB cap, see "Probe outcomes"
 
 **Type:** probe
 **Milestone:** M16. It **gates WP2 and WP3**: nothing in either is built before its outcome is
@@ -191,7 +191,20 @@ unplayable or binary shows the info card. This WP carries all the plumbing WP3 r
 
 **Tasks:**
 - [ ] 2.1 **Backend transport:**
-  - The `protocol-asset` feature + `assetProtocol` config.
+  - The `protocol-asset` feature + `assetProtocol {enable: true, scope: []}` config **already landed
+    at WP1 (`c1d68f5`). Keep them.** They are pinned by `src-tauri/tests/asset_protocol_scope.rs`.
+    Relabel the `Cargo.toml` comment from "M16 WP1 probe" to the M16 media transport, so a probe
+    sweep cannot remove it.
+  - ⚠️ **DELETE THE WP1 PROBE, every touch point.** Otherwise the dev build keeps two unconfined read
+    paths: `media_probe_allow` allows any root with no `validate_root`, and `mprobe://` serves any
+    absolute path with `ACAO: *`. The touch points:
+    - `src-tauri/src/media_probe/` (module + `mod` line)
+    - the `mprobe://` `register_uri_scheme_protocol` block in `lib.rs`
+    - `media_probe::media_probe_allow` in `generate_handler!`
+    - `src/probe/media/`
+    - the `?mediaprobe` flag + its `main.tsx` comment line
+
+    Grep `M16 WP1 PROBE` and `mediaprobe` to zero afterwards.
   - Add each workspace root to the asset scope at runtime when the workspace opens.
   - Add a **`stat_media(root, path)`** command that resolves the path through `editor_fs`'s
     Layer 1 (`validate_root`) and Layer 2 (`resolve_within`, which is private, so the command lives
@@ -200,7 +213,7 @@ unplayable or binary shows the info card. This WP carries all the plumbing WP3 r
     returned.** Its tests use `TempDir` and include the escaping-leaf-symlink case.
 - [ ] 2.2 **`read_file` size cap:** stat before read, with a new typed `EditorFsError` variant. It
       routes to the info card, not to `editor-error`. The number is set at spec time.
-- [ ] 2.3 *(R-4b)* **`open_in_default_app(root, path)`, plus its tab-row ICON BUTTON** in the launcher cluster (`sublime/sublimeLaunch.ts` is the precedent). It acts on the active file tab and is enabled for any file tab. **`open_in_default_app(root, path)`:** root-confined through the same guard, spawning
+- [ ] 2.3 *(R-4b)* **`open_in_default_app(root, path)`, plus its tab-row ICON BUTTON** in the launcher cluster (`sublime/sublimeLaunch.ts` is the precedent). It acts on the active file tab and is enabled for any file tab. The command is root-confined through the same guard and spawns
       `/usr/bin/open <file>`. `finder`'s spawn is the precedent. ⚠️ It is an external-process spawn,
       so it gets the installed-build smoke check (it rides `env_path`'s captured PATH).
 - [ ] 2.4 **One pure classifier `mediaKind(path)`** → `image | svg | pdf | video | audio | null`,
@@ -330,7 +343,7 @@ Measured with the throwaway `?mediaprobe` harness (`src/probe/media/`), first in
 (origin `http://localhost:1420`), then in a **debug `.app` bundle** built with the dev identity and
 launched through LaunchServices (`open`; origin **`tauri://localhost`**, MCP bridge present). **Every
 row matched between the two origins.** Full evidence: `workflow-system/state/archive/m16-wp1-media-probe.md`
-(the WIP file until archive).
+.
 
 **GO / NO-GO: GO.**
 - The asset protocol serves root-scoped files in both builds.

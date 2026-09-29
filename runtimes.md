@@ -38,7 +38,9 @@ real chronology.
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
-  - 109s — 2026-09-29
+  - 98s — 2026-09-29 (m16-wp1-media-probe P2 verify-codify)
+  - 46s — 2026-09-29 (m16-wp1-media-probe P1 verify-codify, post-`cargo fmt`)
+  - 109s — 2026-09-29 (m16-wp1-media-probe P1 verify-auto, cold `protocol-asset` rebuild)
   - 54s — 2026-09-29 (analytics-week-export P2 verify-codify)
   - 46s — 2026-09-28 (analytics-week-export P2 verify-auto)
   - 41s — 2026-09-28 (analytics-week-export P1 verify-codify)

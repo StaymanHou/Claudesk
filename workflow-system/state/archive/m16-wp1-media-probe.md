@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16 WP1 — Probe: media in the real WKWebView
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-09-29 (finalize)
 **Created:** 2026-09-29
 **WBS:** `workflow-system/product/wbs.md` → WP1 (tasks 1.1–1.9). The rulings are settled there.
 
@@ -81,8 +81,7 @@ it is not worked around with base64 IPC. Output is knowledge, and the probe code
         afconvert). Copy, do not move, the real pilot render. It is gitignored scratch, never
         committed.  <!-- status: done -->
   - [x] P1.2 Backend: add the `protocol-asset` feature, `assetProtocol: {enable: true, scope: []}`,
-        and a `#[cfg(debug_assertions)]` `media_probe_allow(root)` command →
-        `app.asset_protocol_scope().allow_directory(root, true)`. Registered only in debug.
+        and a `media_probe_allow(root)` command. It is **always registered** in `generate_handler!`, but its body (`app.asset_protocol_scope().allow_directory(root, true)`) compiles **only under `debug_assertions`**; the release arm returns `Err`. *(Wording corrected at finalize; it previously said "Registered only in debug".)*
         <!-- status: done -->
   - [x] P1.3 `src/probe/media/MediaProbeApp.tsx`: lazy-mounted on `?mediaprobe` in `main.tsx`
         beside the existing probe flags. It runs the matrix (1.3), the confinement + SVG-script
@@ -162,11 +161,67 @@ it is not worked around with base64 IPC. Output is knowledge, and the probe code
     - Nothing new to codify: docs-only, no integration boundary. The durable invariant (the empty static asset scope) was codified at Phase 1. Full gate `pnpm verify:auto` EXIT=0 in 98 s (vitest 3221, cargo 1007 lib + all integration targets).
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality
+- **Path:** Feature > complete (archived)
+- **Active scope:** none
 - **Blocked:** none
 - **Unvisited:** none (Phase 2 is the last phase)
 - **Open discoveries:** SURFACE-2026-09-29-MEDIA-OVER-CUSTOM-SCHEME-CAPS-AT-4GIB — DECIDED (a) at P1.verify-human.1; closes with WP1
+
+## Code-Quality Review
+
+*(feature-review-quality on ship commit `3bb81c5`, window `c1d68f5^..3bb81c5`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged to `backlog-quality-findings.md` under `# m16-wp1-media-probe — 2026-09-29`.)*
+
+### Strengths
+- `tests/asset_protocol_scope.rs` pins the one security property that actually ships: an empty static scope, plus no `assetProtocol` block in the dev overlay. Its rationale is stated, and each test was mutation-proven on its own.
+- The release gating is decided when the code compiles: `media_probe_allow` has a `cfg(not(debug_assertions))` arm that only returns `Err`, and `mprobe://` is registered only in debug builds.
+- The harness checks its own instruments: a self-tested error listener, an SVG `<object>` control that does run its script, and an in-root symlink control.
+- The 4 GiB tests narrow the cause cleanly (a trimmed cut, 4.04 vs 5.05 GB synthetic files, HTTP, and a hand-written scheme), which stops WP2 from trying to fix the wrong layer.
+- Every probe touch point carries a greppable `M16 WP1 PROBE (throwaway)` marker.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`wbs.md` task 2.1] It lists the already-landed `protocol-asset` feature and `assetProtocol` config as new work, and never schedules deleting the probe (`media_probe/`, the `mprobe://` registration, `media_probe_allow` in `generate_handler!`, `src/probe/media/`, the `?mediaprobe` flag). Left in place, the dev build keeps two unconfined read paths: `media_probe_allow` allows any root with no `validate_root`, and `mprobe://` serves any absolute path with `ACAO: *`.
+
+**MINOR**
+- [`media_probe/mod.rs` buffer sizing] `(end - start + 1)` underflows, and `start + CHUNK - 1` can overflow, when a Range start is at or past EOF. That is a debug-only panic path.
+- [`Cargo.toml` `tauri` features comment] The durable `protocol-asset` feature is labeled "M16 WP1 probe", so a probe-cleanup sweep could remove it.
+- [WIP P1.2] Says `media_probe_allow` is "Registered only in debug"; in fact it is always registered, and only its body is gated by `cfg`.
+- [`MediaProbeApp.tsx` `DEFAULT_ROOT`] Hardcodes an operator home path into the release frontend bundle. `?mediaprobe` is not gated to dev.
+- [`wbs.md` task 2.3] The R-4b splice repeats `open_in_default_app(root, path)`.
+- [`runtimes.md` `pnpm verify:auto`] The later 46 s and 98 s runs were not added to History.
+
+### Assessment
+Well built for a timeboxed probe. What ships is small, guarded, and pinned by mutation-proven tests. The debt is in the plan, not the code: WP2 task 2.1 has to schedule the probe's deletion.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:**
+  - **WebKit will not load media of 4 GiB or more over any custom URL scheme**, while HTTP works. So the transport choice has a size ceiling that no scheme handler can fix, and the media workspace's real output sits above it.
+  - WKWebView plays more than assumed: VP9 webm, ogg vorbis/opus, ProRes and HEIC all work. Only mkv fails.
+  - The asset scope resolves symlinks and refuses dot-paths by default.
+- **Assumptions that held:**
+  - The asset protocol streams with range requests (a 206 comes back and a far seek works).
+  - `<img>` does not run SVG script.
+  - PDF renders natively.
+  - `requestVideoFrameCallback` exists and gives an exact fps.
+  - Dev and the bundled origin behave identically.
+- **Assumptions that were wrong:**
+  - "The pilot uses a standard codec, so it will play." Size, not codec, decided it.
+  - "Exit fullscreen is broken" was my misreading of the operator. Fullscreen works; they meant *no need to handle quitting while fullscreen*.
+- **Approach delta:**
+  - A mid-probe discriminator chain was added that the plan did not foresee: a trimmed cut, 4.04/5.05 GB synthetic files, HTTP, and a hand-rolled `mprobe://` scheme. It was worth its cost, because without it the transport would have been blamed and redesigned.
+  - The installed-style tier used a **debug** `.app` via `open` rather than a release build, so hardened runtime is deferred to `/release`.
+  - The code-quality review caught that WP2's plan never scheduled the probe's deletion, and that was fixed in `wbs.md` 2.1 at finalize.
+
+## Closure
+> **Feature complete:** M16 WP1 (media probe) has shipped. It measured, in the real WKWebView on both the dev and bundled origins, which images, video, audio and PDFs Claudesk can show over the asset protocol, and found a hard 4 GiB ceiling for audio and video. The format matrix and the GO line are in `workflow-system/product/wbs.md` → "Probe outcomes".
+
+Requester = operator — closure notice for self-record.
 
 ## Discoveries
 - 2026-09-29 build notes: ffmpeg here has no webp or libvorbis encoder, so webp comes from `cwebp` and ogg from the native `vorbis` encoder (plus an opus ogg). The real pilot render is a 4.8 GB 1080p24 H.264 file, cloned with `cp -c` (APFS, no extra disk). The script SVG signals by `postMessage`, because an asset-origin document cannot write a page global cross-origin.

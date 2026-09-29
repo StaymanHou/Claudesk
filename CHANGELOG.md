@@ -4,6 +4,13 @@
 
 - **Feature shipped:** Time analytics: the Day view builds 5.7× faster, and work after a resumed session's first exit is no longer dropped. Analytics now opens on Week with no false "tracking is off" flash, queries no longer freeze the app, a project's path is its sessions' real working directory, and a new read-only `claudesk export-week` CLI emits the week as JSON for Neo's weekly report.
 - **Backlog resolved:** SURFACE-2026-09-28-ANALYTICS-PROJECT-PATH-FROM-STRAY-CWDS — a project's `path` now comes from its sessions' modal cwd (the heaviest by row count), so stray rows from a reused `cc-N` id no longer give it another project's directory.
+- **Feature shipped:** M16 WP1 media probe: measured in the real WKWebView, on both the dev and bundled origins, that the asset protocol serves images, SVG, PDF, H.264/HEVC/ProRes/VP9 video and mp3/m4a/wav/flac/ogg audio with range seeking and symlink-safe root confinement, and found that WebKit will not load audio or video of 4 GiB or more over any custom URL scheme.
+- **Backlog resolved:** SURFACE-2026-09-29-MEDIA-OVER-CUSTOM-SCHEME-CAPS-AT-4GIB — decided at WP1 verify-human: a 4 GiB cap on audio/video plus an "Open in default app" tab-row button, with the loopback HTTP transport declined.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-WBS-2-1-DOES-NOT-SCHEDULE-THE-PROBE-DELETION — `wbs.md` task 2.1 now keeps the already-landed asset-protocol config and explicitly deletes every WP1 probe touch point.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-WIP-OVERSTATES-MEDIA-PROBE-ALLOW-GATING — the WP1 record now says `media_probe_allow` is always registered and only its body is debug-gated.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-WBS-2-3-REPEATS-THE-COMMAND-NAME — the duplicated command name in `wbs.md` task 2.3 was merged.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-RUNTIMES-MISSES-TWO-VERIFY-AUTO-OBSERVATIONS — the 46 s and 98 s `pnpm verify:auto` runs were added to the runtime registry.
+- **Milestone:** M16 WP1: Probe — media in the real WKWebView (GO with a 4 GiB cap).
 
 ## 2026-09-28
 

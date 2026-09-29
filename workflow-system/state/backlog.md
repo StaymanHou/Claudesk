@@ -126,23 +126,13 @@
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-09-29-MEDIA-OVER-CUSTOM-SCHEME-CAPS-AT-4GIB
-- **Source:** feature:verify-self (M16 WP1 probe, Phase 1)
-- **Target level:** product:arch
-- **Type:** gap
-- **Summary:** In Claudesk's WKWebView, a `<video>`/`<audio>` source of **4 GiB or more fails (MEDIA_ERR_SRC_NOT_SUPPORTED, within ~60 ms) over ANY custom URL scheme**: both Tauri's `asset://` and a hand-written u64-correct scheme handler. The same file plays over plain HTTP. Files under 4 GiB play and seek normally over `asset://`.
-- **Context:** The media workspace's real output (`scripture-reading/assets/renders/pilot-psalms-v1.mp4`) is **4.86 GB / 2 h 15 m**, so the ruled transport cannot play the files M16 exists for. Discriminators: a stream-copied 10-min cut of the same file plays; a 4.04 GB synthetic plays while a 5.05 GB one from the same stream fails; `fetch` ranges past 4 GiB over `asset://` return correct 206s. Full evidence is in `workflow-system/state/wip/m16-wp1-media-probe.md` → Phase 1 verify-self.
-- **Suggested action:** Operator decision at M16 WP1 verify-human. Either (a) accept a **4 GiB cap**, where larger files get the info card and "Open in default app"; or (b) add a **loopback HTTP transport** for media (127.0.0.1, per-launch token, root-confined, range-capable) and back-loop to `/product-arch`. (b) adds a local listener, which is new trust surface.
-- **Priority:** high (it gates WP2/WP3's transport)
-- **Status:** **DECIDED 2026-09-29: (a), the 4 GiB cap**, plus an "Open in default app" tab-row launcher button (M16 WP1 P1.verify-human.1). The ruling is now in `wbs.md`. This entry resolves at the WP1 close.
-
 ## SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER
 
 - **Priority:** medium
 - **Surfaced by:** operator request (2026-09-25, at session restore after v0.7.0)
 - **Target:** product:roadmap (a new feature ask, not a defect in shipped code)
 - **Type:** new-work
-- **Status:** pending — **decomposed as Milestone 16** (`wbs.md`, 2026-09-29). The grill finished the same day, and its rulings in `wbs.md` supersede the open questions below.
+- **Status:** pending — **decomposed as Milestone 16** (`wbs.md`, 2026-09-29). **WP1 (probe) shipped 2026-09-29: GO with a 4 GiB cap.** The grill and probe rulings in `wbs.md` supersede the open questions below. This entry closes when M16 completes.
 
 **The ask:** the right-panel editor should **show images and play audio and video.** The trigger is
 F-b. Now that isolated profiles exist, some workspaces are **non-coding** (media production), and
@@ -977,6 +967,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium-high (MAJOR 1, a real defect that can leave the single-run lock stuck) / medium (MAJORs 2–3) / low (the rest)
 - **Status:** pending
 - **Pickup shape:** one small task. Do `spawn_blocking` for the dry run, keeping the lock-guard anchor, together with the guard's async-exemption rule and the `cfg` predicate fix, each with a fixture test and a mutant. The provenance labels go to the T1/T2 comment pass.
+
+## Code-quality findings — m16-wp1-media-probe (2026-09-29)
+- **Pointer:** **3 MINOR remain** from the review of ship commit `3bb81c5`. The MAJOR and 3 doc MINORs were resolved at the WP1 finalize. What remains: an mprobe range underflow, a Cargo comment that reads as a probe marker, and `DEFAULT_ROOT` shipping a home path. **All three vanish with the WP2 probe deletion (`wbs.md` task 2.1).**
+  - Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m16-wp1-media-probe — 2026-09-29`.
+- **Priority:** low
+- **Status:** pending
+- **Pickup shape:** closes with M16 WP2 task 2.1.
 
 ## Code-quality findings — f-b-isolated-cc-profiles (2026-09-24)
 - **Pointer:** **1 MINOR remainder** from review of ship commit `409f458`. Both MAJORs and the rest of the MINOR batch were resolved 2026-09-28 (task `f-b-quality-cleanup`). What remains: `profile_create::create` / `delete_created` still return `Result<_, String>`.
