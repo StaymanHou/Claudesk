@@ -10,12 +10,15 @@ import { join } from "node:path";
 // codify, when four new commands shipped and only a live run proved they were wired.
 //
 // Scope: literal `invoke("name")` / `invoke<T>("name")` calls in non-test source, with type
-// arguments nested up to three deep (`invoke<Record<string, Array<X>>>("name")`). A command name
-// built at runtime is invisible to this guard.
+// arguments nested up to three deep (`invoke<Record<string, Array<X>>>("name")`), AND the
+// injectable-launcher form `invoker("name")` (finder/sublime/mediaIpc take `invoker: Invoker =
+// invoke`). ⚠️ `invoker(` was invisible to this guard until M16 WP2 Phase 1 codify: five shipped
+// commands, including `finder_open`, sat outside it. A command name built at runtime, or an
+// invoke function bound to any other local name, is still invisible.
 
 /** A literal-name `invoke` call; group 1 is the command name. */
 const INVOKE_CALL =
-  /\binvoke(?:<(?:[^<>]|<(?:[^<>]|<[^<>]*>)*>)*>)?\(\s*"([a-z0-9_]+)"/g;
+  /\binvoker?(?:<(?:[^<>]|<(?:[^<>]|<[^<>]*>)*>)*>)?\(\s*"([a-z0-9_]+)"/g;
 
 const ROOT = process.cwd();
 
@@ -69,6 +72,17 @@ describe("frontend invoke() names vs lib.rs generate_handler!", () => {
       expect(registered.has(name), `registered: ${name}`).toBe(true);
       expect(invoked.has(name), `invoked: ${name}`).toBe(true);
     }
+    // The injectable-launcher form, `invoker("name")` (M16 WP2 widening).
+    for (const name of [
+      "finder_open",
+      "sublime_open",
+      "smerge_open",
+      "stat_media",
+      "open_in_default_app",
+    ]) {
+      expect(registered.has(name), `registered: ${name}`).toBe(true);
+      expect(invoked.has(name), `invoked via invoker(): ${name}`).toBe(true);
+    }
     expect(registered.size).toBeGreaterThan(50);
     expect(invoked.size).toBeGreaterThan(50);
   });
@@ -79,9 +93,11 @@ describe("frontend invoke() names vs lib.rs generate_handler!", () => {
     expect(
       names(
         'invoke("a"); invoke<string>("b"); invoke<Record<string, X>>("c"); ' +
-          'invoke<Map<string, Array<Y>>>("d");',
+          'invoke<Map<string, Array<Y>>>("d"); invoker("e"); ' +
+          // Not a call to invoke: a longer identifier that merely starts with it.
+          'invokers("f"); reinvoke("g");',
       ),
-    ).toEqual(["a", "b", "c", "d"]);
+    ).toEqual(["a", "b", "c", "d", "e"]);
   });
 
   it("every invoked command is registered", () => {

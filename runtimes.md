@@ -31,13 +31,14 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 109s (2026-09-29, m16-wp1-media-probe P1 verify-auto; incl. a cold `protocol-asset` rebuild, EXIT=0)
-- **Use timeout:** 224000
+- **Last:** 53s (2026-09-29, m16-wp2 P1 verify-auto, EXIT=0)
+- **Use timeout:** 140000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 53s — 2026-09-29
   - 98s — 2026-09-29 (m16-wp1-media-probe P2 verify-codify)
   - 46s — 2026-09-29 (m16-wp1-media-probe P1 verify-codify, post-`cargo fmt`)
   - 109s — 2026-09-29 (m16-wp1-media-probe P1 verify-auto, cold `protocol-asset` rebuild)

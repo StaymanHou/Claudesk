@@ -22,15 +22,16 @@ use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
 use super::{
-    create_dir_core, delete_file_core, read_file_core, stat_file_core, trash_path_core,
-    validate_root, write_file_core, FileMarker,
+    create_dir_core, default_app_target_core, delete_file_core, open_command, read_file_core,
+    stat_file_core, stat_media_core, trash_path_core, validate_root, write_file_core, FileMarker,
+    MediaStat,
 };
 use crate::config_store::{self, commands::resolve_data_dir};
 
 /// Authenticate a frontend-supplied `root` against the known project list, returning the
 /// canonicalized root to confine against. Resolves the project list server-side from the
 /// real app-data dir, so the renderer can't widen the guard by passing an arbitrary
-/// `root`. Shared by all six editor-fs commands.
+/// `root`. Shared by every editor-fs command.
 ///
 /// `pub(crate)` rather than private so [`crate::docs::commands`] shares this exact
 /// implementation instead of holding a copy. A second copy of a security boundary is one
@@ -111,4 +112,48 @@ pub fn trash_path(app: AppHandle, root: String, path: String) -> Result<(), Stri
 pub fn create_dir(app: AppHandle, root: String, path: String) -> Result<(), String> {
     let root = validate_frontend_root(&app, &root)?;
     create_dir_core(&root, Path::new(&path)).map_err(|e| e.to_string())
+}
+
+/// M16 WP2 — stat a media file for the editor tab's viewer and admit its workspace root to the
+/// asset protocol.
+///
+/// Both guard layers run first (`root` authenticated, path confined). Only then is the
+/// **validated canonical root** added to the asset scope (`allow_directory(root, true)`); the
+/// static scope is empty (`tests/asset_protocol_scope.rs`), so a root no `stat_media` call has
+/// validated is never reachable through `asset://`. Re-adding an already-allowed root is harmless,
+/// and a root stays allowed until the app quits: it is a known project `editor_fs` can already
+/// read and write, so that adds no reach (spec assumption A-5).
+#[tauri::command]
+pub fn stat_media(app: AppHandle, root: String, path: String) -> Result<MediaStat, String> {
+    use tauri::Manager;
+
+    let root = validate_frontend_root(&app, &root)?;
+    let stat = stat_media_core(&root, Path::new(&path)).map_err(|e| e.to_string())?;
+    app.asset_protocol_scope()
+        .allow_directory(&root, true)
+        .map_err(|e| format!("could not admit {} to the asset scope: {e}", root.display()))?;
+    Ok(stat)
+}
+
+/// M16 WP2 (R-4b) — open a file inside the workspace in its default macOS app
+/// (`/usr/bin/open <file>`), for the tab-row "Open in default app" button and the media info card.
+///
+/// Confined by the same two guard layers as every editor-fs command, so it can only ever open a
+/// file inside a known project. Fire-and-forget like `finder_open`: it spawns and returns, never
+/// waits (the `sync_commands_do_not_block` rule).
+#[tauri::command]
+pub fn open_in_default_app(app: AppHandle, root: String, path: String) -> Result<(), String> {
+    let root = validate_frontend_root(&app, &root)?;
+    let target = default_app_target_core(&root, Path::new(&path)).map_err(|e| e.to_string())?;
+    let (program, args) = open_command(&target);
+    std::process::Command::new(&program)
+        .args(&args)
+        .spawn()
+        .map_err(|e| {
+            format!(
+                "failed to open {} in its default app: {e}",
+                target.display()
+            )
+        })?;
+    Ok(())
 }

@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16 WP2 — Media in the editor tab (transport, glance viewer, unsupported card)
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** verify-codify (phase 1 complete)
 **Created:** 2026-09-29
 **Entry:** spec (complex feature)
 **Source:** `workflow-system/product/wbs.md` → WP2 (tasks 2.1–2.11). The grill rulings Q1–Q3, R-4a/b/c
@@ -229,7 +229,7 @@ project, so `stat_media` accepts it with `root = <claudesk>`. Phase-local additi
 `.hidden/shot.png`, a >64 MiB text file) are created **inside that fixtures dir** and listed in
 the outcome that makes them.
 
-- [ ] Phase 1: Backend transport, read cap, default-app command, probe deletion  <!-- status: NOT-STARTED -->
+- [x] Phase 1: Backend transport, read cap, default-app command, probe deletion  <!-- done 2026-09-29 -->
   **Observable outcomes:**
   - CLI: `pnpm verify:auto` exits 0, including new `editor_fs` tests: `stat_media` returns the
     canonical path + size + mtime for an in-root file; refuses `..`, an absolute out-of-root path,
@@ -257,31 +257,76 @@ the outcome that makes them.
     returns Ok, and `pgrep -x Preview` finds a process within 3 s. Out-of-root path → Err, no spawn.
   **Alignment questions:**
   - none (no user-visible surface yet; the cap and dot-path decisions become visible in Phase 2).
-  - [ ] P1.1 Delete the WP1 probe, every touch point: `src-tauri/src/media_probe/` + `mod media_probe;`
+  - [x] P1.1 Delete the WP1 probe, every touch point: `src-tauri/src/media_probe/` + `mod media_probe;`
         (`lib.rs`), the `mprobe` `register_uri_scheme_protocol` block, `media_probe_allow` in
         `generate_handler!`, `src/probe/media/`, the `?mediaprobe` branch + comment in `main.tsx`.
-        Relabel the `Cargo.toml` `protocol-asset` comment. Grep to zero.  <!-- status: NOT-STARTED -->
-  - [ ] P1.2 `tauri.conf.json` scope → `{"allow": [], "requireLiteralLeadingDot": false}`; update
-        `asset_protocol_scope.rs` to pin both fields; mutation-prove each mutant individually.  <!-- status: NOT-STARTED -->
-  - [ ] P1.3 `read_file_core`: stat first → `EditorFsError::TooLarge { path, size, limit }` above
+        Relabel the `Cargo.toml` `protocol-asset` comment. Grep to zero.  <!-- done 2026-09-29 -->
+  - [x] P1.2 `tauri.conf.json` scope → `{"allow": [], "requireLiteralLeadingDot": false}`; update
+        `asset_protocol_scope.rs` to pin both fields; mutation-prove each mutant individually.  <!-- done 2026-09-29 -->
+  - [x] P1.3 `read_file_core`: stat first → `EditorFsError::TooLarge { path, size, limit }` above
         `READ_FILE_MAX_BYTES = 64 MiB`; then read the first 8 KiB and refuse a NUL as `NotUtf8`
         before the full read. Define one stable error **prefix** constant per variant the frontend
-        routes on (`TooLarge`, `NotUtf8`) and export it for a cross-side test.  <!-- status: NOT-STARTED -->
-  - [ ] P1.4 `stat_media_core(root, path)` + `stat_media` command **inside `editor_fs`**
+        routes on (`TooLarge`, `NotUtf8`) and export it for a cross-side test.  <!-- done 2026-09-29 -->
+  - [x] P1.4 `stat_media_core(root, path)` + `stat_media` command **inside `editor_fs`**
         (`validate_frontend_root` → `resolve_within` → metadata + 5-byte `%PDF-` sniff) returning a
         `MediaStat { path, size, mtime_ms, pdf_magic }` (snake_case DTO). On success, `allow_directory(root, true)`
-        on the validated canonical root (idempotent; A-5). Register in `generate_handler!`.  <!-- status: NOT-STARTED -->
-  - [ ] P1.5 `open_in_default_app(root, path)`: same guard, then `/usr/bin/open <canonical>` fire-and-forget,
+        on the validated canonical root (idempotent; A-5). Register in `generate_handler!`.  <!-- done 2026-09-29 -->
+  - [x] P1.5 `open_in_default_app(root, path)`: same guard, then `/usr/bin/open <canonical>` fire-and-forget,
         pure `open_command` builder unit-tested like `finder_command`. Lives in `editor_fs` (it needs
-        `resolve_within`). Register; confirm `sync_commands_do_not_block.rs` stays green.  <!-- status: NOT-STARTED -->
-  - [ ] P1.6 TS mirrors: `MediaStat` type, `statMedia()` / `openInDefaultApp()` wrappers, and a
+        `resolve_within`). Register; confirm `sync_commands_do_not_block.rs` stays green.  <!-- done 2026-09-29 -->
+  - [x] P1.6 TS mirrors: `MediaStat` type, `statMedia()` / `openInDefaultApp()` wrappers, and a
         `classifyReadError(msg)` that maps the pinned prefixes → `"too-large" | "not-utf8" | "other"`,
         with a test that imports the SAME prefix strings the Rust side asserts (a Rust test reads
-        the TS constant file via `include_str!`, or vice versa — one source, two readers).  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+        the TS constant file via `include_str!`, or vice versa — one source, two readers).  <!-- done 2026-09-29 -->
+  - [x] verify-auto  <!-- done 2026-09-29 -->
+    - `pnpm verify:auto` → EXIT=0 (53 s): eslint 0 errors (1 pre-existing warning, `XtermPane.tsx:932`,
+      untouched file); prettier clean; `tsc --noEmit` clean; `check:link` clean; vitest 246 files /
+      3226 tests pass; `cargo fmt --check` clean; `clippy --all-targets -D warnings` clean;
+      `cargo test` lib 1019 pass + integration suites pass (incl. `asset_protocol_scope` 3,
+      `sync_commands_do_not_block`).
+    - First run failed on prettier for the new `mediaIpc.test.ts` only; fixed by formatting it.
+  - [x] verify-self  <!-- done 2026-09-29; driven by the orchestrator over the MCP bridge (pnpm tauri:dev, origin http://localhost:1420) -->
+    - [x] Boot check — `#root.children.length` = 1 after the probe deletion, before any other reading.
+    - [x] `stat_media {root:claudesk, path:fixtures/image.png}` → `{path:<canonical>, size:33942, mtime_ms, pdf_magic:false}`;
+          its `convertFileSrc` URL loads (640×480). `doc.pdf` → `pdf_magic:true`.
+    - [x] Negative control (root never stat'ed in this process): `yitang-copy/.playwright-mcp/page-….png`
+          asset URL → **refused**; after `stat_media` on it → loads (1920 px). Proves the static scope is
+          empty, roots are admitted only at runtime, and **dot-paths load** (A-2).
+    - [x] Escapes refused at BOTH layers: `fixtures/escape-out.png` (symlink → a file outside every
+          project root) → `stat_media` OutsideWorkspace, and its asset URL fails to load; a direct asset URL
+          to the outside file fails; `/etc/hosts` → OutsideWorkspace; `root:/etc` → "not a known project".
+          ⚠️ Fixture premise corrected: WP1's `escape-link.png` points into `tmp/scratch/media-probe-outside/`,
+          which is INSIDE the claudesk root, so with `root = claudesk` it is correctly allowed. The WP1 probe
+          used the fixtures dir as its root. The new `escape-out.png` (state change: a symlink in the
+          fixtures dir + a PNG copy in the session scratchpad) replaces it for this check.
+    - [x] `open_in_default_app` (state-changing, operator-visible): escaping path and directory → Err, no
+          spawn; `fixtures/image.png` → Ok in 2 ms (non-blocking) and `pgrep -x Preview` found PID 93962
+          within 0.5 s (Preview was not running before). That PID was then closed.
+    - [x] grep for the probe → 0; `check:link` clean; scope-guard mutants killed (build + verify-auto records).
+    - [ ] Cosmetic: a directory target reports `"… is a directory; recursive directory delete is not
+          supported"` from `stat_media` / `open_in_default_app` (the `IsDirectory` Display is delete-specific).
+          Not user-visible yet; folded into P2.3.  <!-- status: FAILED-cosmetic -->
+    - Bridge note: `webview_execute_js` reports "Script execution timeout" for every async script
+      even though the script runs (a documented caveat in `docs/lessons/mcp-tauri-bridge-caveats.md`);
+      every reading above used fire-then-poll. `ipc_execute_command` only runs built-in commands.
+  - [x] verify-human  <!-- done 2026-09-29: zero admissible leaves, auto-advanced (F11, autopilot) -->
+    - Boundary evidence (consuming surface `read_file`, live): `CLAUDE.md` → 58,253 chars; `not-media.bin`
+      and `image.png` → NotUtf8 (sniff arm); `pilot-psalms-v1.mp4` (4.86 GB) → TooLarge; `image.svg` → text.
+  - [x] verify-codify  <!-- done 2026-09-29 -->
+    - Existing coverage kept (no duplicates): the 12 new `editor_fs` unit tests (cap, sniff arms,
+      prefixes, `stat_media` escapes/magic/dir, `open_command`, default-app confinement) and the
+      3 `asset_protocol_scope` tests already fail on the mutants recorded in build.
+    - **New:** `src/__tests__/invokedCommandsAreRegistered.test.ts` widened from `invoke(` to
+      `invoker?(`. ⚠️ The injectable `invoker("name")` form (finder, sublime, mediaIpc) was
+      invisible to it, so `stat_media`, `open_in_default_app`, `finder_open`, `sublime_open` and
+      `smerge_open` were unguarded. Positive controls name all five; the pattern test adds
+      `invoker("e")` plus two non-matches (`invokers`, `reinvoke`). Strict superset (the regex only
+      gains an optional `r`). Mutation: dropping `stat_media` from `generate_handler!` → "every
+      invoked command is registered" FAILS; restored by `shasum`.
+    - Not codified (recorded, not hidden): the runtime scope ADMIT inside the `stat_media` command
+      (it needs a real `AppHandle` + `projects.json`) — covered by the live negative-control reading
+      in verify-self. Phase 2's render tests will exercise the frontend side.
+    - Full gate `pnpm verify:auto` → EXIT=0 (48 s), 3226 vitest.
 
 - [ ] Phase 2: Media branch in the file tab — image glance viewer, info card, default-app button  <!-- status: NOT-STARTED; depends on Phase 1 -->
   **Observable outcomes:**
@@ -323,7 +368,7 @@ the outcome that makes them.
   - [ ] P2.2 `PaneTabs`: gate the `prevPaths` `onTabOpen`/`onTabClose` diff on `mediaKind(path) === null`;
         render a lazy `MediaView` before the `EditorPanel` branch (keep the SyntheticView
         fall-through); update `lazyBundleWiring.test.ts` for the new lazy import.  <!-- status: NOT-STARTED -->
-  - [ ] P2.3 `MediaView` shell: `statMedia` on mount → state machine
+  - [ ] P2.3 (also: give `stat_media`/`open_in_default_app` a directory error that does not mention delete — Phase 1 verify-self cosmetic) `MediaView` shell: `statMedia` on mount → state machine
         `loading | ready(stat) | card(reason) | error(msg)` as a pure reducer (tested), then dispatch by
         kind. Video/audio and ≥4 GiB → card (WP2 arm, AC-10).  <!-- status: NOT-STARTED -->
   - [ ] P2.4 `ImageView`: fit / zoom in / zoom out / 1:1; readout (dimensions from `naturalWidth/Height`,
@@ -388,10 +433,20 @@ the outcome that makes them.
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > P1.1
-- **Active scope:** P1.1 (delete the WP1 probe)
+- **Path:** Feature > Phase 2 > P2.1
+- **Active scope:** P2.1 (mediaKind classifier)
 - **Blocked:** none
-- **Unvisited:** Phase 2 → Phase 3 → ship → review-quality → finalize
+- **Unvisited:** Phase 3 → ship → review-quality → finalize
 - **Open discoveries:** none
+- **Build notes (Phase 1):**
+  - The shared error prefixes live in `src/components/workspace/editor/readErrorPrefixes.json`; Rust
+    pins them with `include_str!` + `serde_json`, TS imports the JSON.
+  - `open_in_default_app` does NOT call `record_external_launch`: no `NativeLaunchTool` identity
+    fits an arbitrary default app, and inventing one is analytics scope, not WP2's.
+  - Mutation-proven individually: scope `allow:["**"]`, dot flag removed, NUL sniff disabled,
+    size cap disabled, `pdf_magic` weakened to a 3-byte prefix. Each landed and was killed.
+    ⚠️ The cap mutant is killed because the sparse fixture's zero bytes then hit the NUL sniff
+    first (the variant identity catches it), not by the bounded-read backstop — both still refuse.
 
 ## Discoveries
+- [NOTE-2026-09-29] Phase 1 verify-self — ran in the orchestrator, not the `feature-verify-self-runner` subagent: `mcp__tauri__*` tools do not reach subagents, which silently fall back to bare Vite (`[[mcp-bridge-tools-not-exposed-to-subagents]]`). Deliberate deviation from the skill's unconditional spawn.

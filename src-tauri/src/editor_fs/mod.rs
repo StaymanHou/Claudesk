@@ -69,8 +69,14 @@ pub struct FileMarker {
 pub enum EditorFsError {
     #[error("file I/O error: {0}")]
     Io(#[from] std::io::Error),
+    // ⚠️ The leading text of this message and of `TooLarge`'s is a CONTRACT: the frontend routes
+    // these two to the media info card by prefix (`classifyReadError`). Both sides read the prefixes
+    // from `src/components/workspace/editor/readErrorPrefixes.json`; the tests below pin it.
     #[error("file is not valid UTF-8 text: {0}")]
     NotUtf8(String),
+    /// M16 WP2: the file is larger than [`READ_FILE_MAX_BYTES`], so it is refused before it is read.
+    #[error("file is too large to open as text: {path} ({size} bytes; limit {limit})")]
+    TooLarge { path: String, size: u64, limit: u64 },
     #[error("path {requested} is outside the workspace root {root}")]
     OutsideWorkspace { requested: String, root: String },
     /// The frontend-supplied `root` is neither a known project nor a descendant of one. Distinct
@@ -264,11 +270,49 @@ fn resolve_within_lexical(root: &Path, requested: &Path) -> Result<PathBuf, Edit
     Ok(normalized)
 }
 
-/// Read a UTF-8 text file under `root`. Rejects paths escaping the workspace and
-/// non-UTF-8 (binary) content with typed errors.
+/// The largest file [`read_file_core`] will read as text (M16 WP2, assumption A-1). Real text
+/// files in the operator's projects reach ~45 MB, so the cap sits above them; its job is huge
+/// text, while [`SNIFF_BYTES`] is what keeps a large *binary* out of memory.
+pub const READ_FILE_MAX_BYTES: u64 = 64 * 1024 * 1024;
+
+/// How much of a file is read first to look for a NUL byte, the binary tell.
+const SNIFF_BYTES: u64 = 8 * 1024;
+
+/// Read a UTF-8 text file under `root`. Rejects paths escaping the workspace, files over
+/// [`READ_FILE_MAX_BYTES`], and non-UTF-8 (binary) content with typed errors.
+///
+/// Order: stat → size cap → read the first [`SNIFF_BYTES`] and refuse a NUL → read the rest from
+/// the SAME handle, bounded by the cap (so a file that grows after the stat is still refused).
+/// A binary is therefore refused after at most 8 KiB of IO, never after a full read.
 pub fn read_file_core(root: &Path, requested: &Path) -> Result<String, EditorFsError> {
+    use std::io::Read;
+
     let target = resolve_within(root, requested)?;
-    let bytes = std::fs::read(&target)?;
+    let too_large = |size: u64| EditorFsError::TooLarge {
+        path: target.display().to_string(),
+        size,
+        limit: READ_FILE_MAX_BYTES,
+    };
+    let size = std::fs::metadata(&target)?.len();
+    if size > READ_FILE_MAX_BYTES {
+        return Err(too_large(size));
+    }
+
+    let mut file = std::fs::File::open(&target)?;
+    let mut bytes = Vec::with_capacity(size as usize);
+    (&mut file).take(SNIFF_BYTES).read_to_end(&mut bytes)?;
+    if bytes.contains(&0) {
+        return Err(EditorFsError::NotUtf8(format!(
+            "{} (binary: NUL byte in the first {SNIFF_BYTES} bytes)",
+            target.display()
+        )));
+    }
+    let head = bytes.len() as u64;
+    file.take(READ_FILE_MAX_BYTES + 1 - head)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > READ_FILE_MAX_BYTES {
+        return Err(too_large(bytes.len() as u64));
+    }
     String::from_utf8(bytes)
         .map_err(|e| EditorFsError::NotUtf8(format!("{} ({e})", target.display())))
 }
@@ -305,6 +349,72 @@ pub fn stat_file_core(root: &Path, requested: &Path) -> Result<FileMarker, Edito
         mtime_ms,
         size: meta.len(),
     })
+}
+
+/// M16 WP2 — what the media viewer needs to know about a file before it builds an asset URL.
+///
+/// `path` is the **canonical absolute** path [`resolve_within`] returned: the frontend builds an
+/// asset URL ONLY from this field, never from a path it assembled itself. snake_case on the wire,
+/// like [`FileMarker`].
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct MediaStat {
+    /// Canonical absolute path (symlinks resolved, confined to the root).
+    pub path: String,
+    /// File size in bytes. The viewer decides the 4 GiB audio/video cap from this (R-4a).
+    pub size: u64,
+    /// Modification time as ms since the Unix epoch; the viewer cache-busts its URL with it.
+    pub mtime_ms: f64,
+    /// The file really starts with `%PDF-`. The PDF `<iframe>` is gated on this, because the asset
+    /// handler serves an unrecognized extension as `text/html`, so an HTML file named `x.pdf` would
+    /// otherwise run as a page.
+    pub pdf_magic: bool,
+}
+
+const PDF_MAGIC: &[u8] = b"%PDF-";
+
+/// Stat a media file under `root` for the viewer: confine it with [`resolve_within`], then read
+/// its metadata and its first five bytes (the `%PDF-` check). Never reads the body. A missing file
+/// or a directory is an error, so the viewer shows its card instead of a broken element.
+pub fn stat_media_core(root: &Path, requested: &Path) -> Result<MediaStat, EditorFsError> {
+    use std::io::Read;
+
+    let target = resolve_within(root, requested)?;
+    let meta = std::fs::metadata(&target)?;
+    if meta.is_dir() {
+        return Err(EditorFsError::IsDirectory(target.display().to_string()));
+    }
+    let marker = stat_file_core(root, requested)?;
+    let mut head = Vec::with_capacity(PDF_MAGIC.len());
+    std::fs::File::open(&target)?
+        .take(PDF_MAGIC.len() as u64)
+        .read_to_end(&mut head)?;
+    Ok(MediaStat {
+        path: target.display().to_string(),
+        size: marker.size,
+        mtime_ms: marker.mtime_ms,
+        pdf_magic: head == PDF_MAGIC,
+    })
+}
+
+/// The absolute `open` binary. Absolute so the launch never depends on the GUI app's PATH.
+pub const OPEN_BIN: &str = "/usr/bin/open";
+
+/// Build the `(program, args)` that opens `file` in its default macOS app. Pure, so it is
+/// unit-testable with no spawn (the `finder_command` precedent).
+pub fn open_command(file: &Path) -> (String, Vec<String>) {
+    (OPEN_BIN.to_string(), vec![file.display().to_string()])
+}
+
+/// Confine `requested` to `root` and return the canonical file to hand to [`open_command`].
+/// A directory is refused: the tab-row button acts on a file tab, and `open <dir>` would open
+/// Finder, which the Finder launcher already does.
+pub fn default_app_target_core(root: &Path, requested: &Path) -> Result<PathBuf, EditorFsError> {
+    let target = resolve_within(root, requested)?;
+    let meta = std::fs::metadata(&target)?;
+    if meta.is_dir() {
+        return Err(EditorFsError::IsDirectory(target.display().to_string()));
+    }
+    Ok(target)
 }
 
 /// Delete a single file under `root`. Rejects paths escaping the workspace (the same
@@ -944,5 +1054,220 @@ mod tests {
         let dir = TempDir::new().unwrap();
         create_dir_core(dir.path(), Path::new("a/../b")).unwrap();
         assert!(dir.path().join("b").is_dir());
+    }
+
+    // ── M16 WP2: read cap + NUL sniff ─────────────────────────────────────────────────────
+
+    /// A sparse file of `len` bytes (no real disk cost), optionally with `head` written at byte 0.
+    fn sparse(dir: &Path, name: &str, len: u64, head: &[u8]) -> PathBuf {
+        use std::io::Write;
+        let p = dir.join(name);
+        let mut f = std::fs::File::create(&p).unwrap();
+        f.write_all(head).unwrap();
+        f.set_len(len).unwrap();
+        p
+    }
+
+    #[test]
+    fn read_over_the_cap_is_too_large_with_its_size_and_limit() {
+        let dir = TempDir::new().unwrap();
+        sparse(dir.path(), "big.txt", READ_FILE_MAX_BYTES + 1, b"text");
+        match read_file_core(dir.path(), Path::new("big.txt")) {
+            Err(EditorFsError::TooLarge { size, limit, .. }) => {
+                assert_eq!(size, READ_FILE_MAX_BYTES + 1);
+                assert_eq!(limit, READ_FILE_MAX_BYTES);
+            }
+            other => panic!("expected TooLarge, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_exactly_at_the_cap_is_allowed() {
+        let dir = TempDir::new().unwrap();
+        let text = "a".repeat(READ_FILE_MAX_BYTES as usize);
+        std::fs::write(dir.path().join("edge.txt"), &text).unwrap();
+        let out = read_file_core(dir.path(), Path::new("edge.txt")).unwrap();
+        assert_eq!(out.len() as u64, READ_FILE_MAX_BYTES);
+    }
+
+    #[test]
+    fn read_nul_in_the_head_takes_the_sniff_arm() {
+        // 60 MiB (under the cap), NUL at byte 0: refused by the sniff, whose message names it.
+        let dir = TempDir::new().unwrap();
+        sparse(dir.path(), "blob.bin", 60 * 1024 * 1024, b"\0PK");
+        match read_file_core(dir.path(), Path::new("blob.bin")) {
+            Err(EditorFsError::NotUtf8(msg)) => {
+                assert!(
+                    msg.contains("NUL byte in the first"),
+                    "sniff arm not taken: {msg}"
+                )
+            }
+            other => panic!("expected NotUtf8 from the sniff, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_invalid_utf8_without_a_nul_takes_the_decode_arm() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("latin1.txt"), [b'c', b'a', b'f', 0xe9]).unwrap();
+        match read_file_core(dir.path(), Path::new("latin1.txt")) {
+            Err(EditorFsError::NotUtf8(msg)) => {
+                assert!(!msg.contains("NUL byte"), "wrong arm: {msg}")
+            }
+            other => panic!("expected NotUtf8 from the decoder, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_utf8_longer_than_the_sniff_window_is_read_whole() {
+        let dir = TempDir::new().unwrap();
+        let text = "é".repeat(10_000); // 20 000 bytes, a multibyte char straddles the 8 KiB edge
+        std::fs::write(dir.path().join("long.txt"), &text).unwrap();
+        assert_eq!(
+            read_file_core(dir.path(), Path::new("long.txt")).unwrap(),
+            text
+        );
+    }
+
+    /// The frontend routes these two errors to the media card by message PREFIX. Both sides read
+    /// the prefixes from one JSON file, so a reworded `#[error]` fails here.
+    #[test]
+    fn routed_error_messages_start_with_the_shared_prefixes() {
+        let prefixes: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../src/components/workspace/editor/readErrorPrefixes.json"
+        ))
+        .unwrap();
+        let not_utf8 = EditorFsError::NotUtf8("x".into()).to_string();
+        let too_large = EditorFsError::TooLarge {
+            path: "x".into(),
+            size: 2,
+            limit: 1,
+        }
+        .to_string();
+        assert!(
+            not_utf8.starts_with(prefixes["notUtf8"].as_str().unwrap()),
+            "{not_utf8}"
+        );
+        assert!(
+            too_large.starts_with(prefixes["tooLarge"].as_str().unwrap()),
+            "{too_large}"
+        );
+        // Neither prefix may be a prefix of the other, or routing becomes order-dependent.
+        let (a, b) = (
+            prefixes["notUtf8"].as_str().unwrap(),
+            prefixes["tooLarge"].as_str().unwrap(),
+        );
+        assert!(!a.starts_with(b) && !b.starts_with(a));
+    }
+
+    // ── M16 WP2: stat_media ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn stat_media_returns_the_canonical_path_size_and_mtime() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir(dir.path().join("img")).unwrap();
+        std::fs::write(dir.path().join("img/a.png"), [0x89, b'P', b'N', b'G', 1, 2]).unwrap();
+        let stat = stat_media_core(dir.path(), Path::new("img/../img/a.png")).unwrap();
+        let canon = dir.path().join("img/a.png").canonicalize().unwrap();
+        assert_eq!(stat.path, canon.display().to_string());
+        assert_eq!(stat.size, 6);
+        assert_eq!(
+            stat.mtime_ms,
+            stat_file_core(dir.path(), Path::new("img/a.png"))
+                .unwrap()
+                .mtime_ms
+        );
+        assert!(!stat.pdf_magic);
+    }
+
+    #[test]
+    fn stat_media_pdf_magic_reads_content_not_extension() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("real.pdf"), b"%PDF-1.7\n...").unwrap();
+        std::fs::write(
+            dir.path().join("evil.pdf"),
+            b"<html><script>1</script></html>",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("renamed.bin"), b"%PDF-1.4").unwrap();
+        std::fs::write(dir.path().join("short.pdf"), b"%PD").unwrap();
+        let magic = |n: &str| stat_media_core(dir.path(), Path::new(n)).unwrap().pdf_magic;
+        assert!(magic("real.pdf"));
+        assert!(!magic("evil.pdf"));
+        assert!(magic("renamed.bin"));
+        assert!(!magic("short.pdf"));
+    }
+
+    #[test]
+    fn stat_media_refuses_every_escape() {
+        let outer = TempDir::new().unwrap();
+        let ws = outer.path().join("ws");
+        let out = outer.path().join("out");
+        std::fs::create_dir_all(&ws).unwrap();
+        std::fs::create_dir_all(&out).unwrap();
+        std::fs::write(out.join("secret.png"), b"x").unwrap();
+        std::os::unix::fs::symlink(out.join("secret.png"), ws.join("leaf.png")).unwrap();
+        std::os::unix::fs::symlink(&out, ws.join("dirlink")).unwrap();
+        for req in [
+            PathBuf::from("../out/secret.png"),
+            out.join("secret.png"),
+            PathBuf::from("leaf.png"),
+            PathBuf::from("dirlink/secret.png"),
+        ] {
+            let r = stat_media_core(&ws, &req);
+            assert!(
+                matches!(r, Err(EditorFsError::OutsideWorkspace { .. })),
+                "{req:?} was not refused: {r:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn stat_media_on_a_directory_or_missing_file_is_an_error() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        assert!(matches!(
+            stat_media_core(dir.path(), Path::new("sub")),
+            Err(EditorFsError::IsDirectory(_))
+        ));
+        assert!(matches!(
+            stat_media_core(dir.path(), Path::new("gone.png")),
+            Err(EditorFsError::Io(_))
+        ));
+    }
+
+    // ── M16 WP2: open in default app ──────────────────────────────────────────────────────
+
+    #[test]
+    fn open_command_is_absolute_open_with_the_file() {
+        let (program, args) = open_command(Path::new("/p/a b.png"));
+        assert_eq!(program, "/usr/bin/open");
+        assert_eq!(args, vec!["/p/a b.png".to_string()]);
+    }
+
+    #[test]
+    fn default_app_target_is_confined_and_file_only() {
+        let outer = TempDir::new().unwrap();
+        let ws = outer.path().join("ws");
+        std::fs::create_dir_all(ws.join("d")).unwrap();
+        std::fs::write(outer.path().join("x.png"), b"x").unwrap();
+        std::fs::write(ws.join("in.png"), b"x").unwrap();
+        std::os::unix::fs::symlink(outer.path().join("x.png"), ws.join("leaf.png")).unwrap();
+        assert_eq!(
+            default_app_target_core(&ws, Path::new("in.png")).unwrap(),
+            ws.join("in.png").canonicalize().unwrap()
+        );
+        assert!(matches!(
+            default_app_target_core(&ws, Path::new("../x.png")),
+            Err(EditorFsError::OutsideWorkspace { .. })
+        ));
+        assert!(matches!(
+            default_app_target_core(&ws, Path::new("leaf.png")),
+            Err(EditorFsError::OutsideWorkspace { .. })
+        ));
+        assert!(matches!(
+            default_app_target_core(&ws, Path::new("d")),
+            Err(EditorFsError::IsDirectory(_))
+        ));
     }
 }

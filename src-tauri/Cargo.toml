@@ -23,8 +23,9 @@ tauri-build = { version = "2", features = [] }
 # tray-icon: the M7 menu-bar status item (TrayIconBuilder + set_icon_with_as_template).
 # image-png: decode the bundled lit/neutral tray PNG glyphs via Image::from_bytes
 # (neither is in tauri's default feature set).
-# protocol-asset: M16 WP1 probe, the asset protocol (`convertFileSrc`) for the media viewer.
-# The static scope is EMPTY (tauri.conf.json), so nothing is reachable until a runtime allow.
+# protocol-asset: the M16 media transport, the asset protocol (`convertFileSrc`) behind the
+# editor tab's media viewer. The static scope is EMPTY (tauri.conf.json); `editor_fs::stat_media`
+# adds each validated workspace root at runtime. Pinned by tests/asset_protocol_scope.rs.
 tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png", "protocol-asset"] }
 # M5 WP1 (PiP probe): NSPanel wrapper for the always-on-top floating PiP panel.
 # Git-only (not on crates.io); branch v2.1 is the Tauri-2.x line (its Cargo.toml
