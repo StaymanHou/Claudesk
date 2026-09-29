@@ -94,7 +94,7 @@ Each ruling is one line here. Its full text is in the archive, under the heading
 
 ## Next
 
-**Order set by the operator on 2026-09-29.** There is no live `wbs.md`.
+**Order set by the operator on 2026-09-29.** M16 is decomposed in `wbs.md` (2026-09-29).
 
 ### Milestone 16: Right-panel media viewer — **NEXT**
 
@@ -108,12 +108,14 @@ Software projects mostly *glance*; media projects (a video-production pipeline) 
 review-grade player is in scope for media workspaces, and the viewer is not uniform across
 workspaces. The spec settles what selects the depth and what "review" includes. See the backlog entry.
 
-**Shape:** a single feature (`/feature-spec`), like F-a.
-- It opens with a **`/util-grill-me`** covering transport (asset protocol vs IPC), scope boundary, and
-  SVG handling.
-- A **codec probe in the real WKWebView** comes before any UI work.
+**Shape (revised at decomposition, 2026-09-29):** one probe and two build WPs in `wbs.md`, not a
+single feature. The grill ran on 2026-09-29, and its rulings are recorded there:
+- depth is chosen by **file type**
+- the review scope is set
+- media opens in the **existing editor file tab**, with no new tab kind
+- a codec and transport probe comes before any UI work
 
-**Exit Criteria:** set at spec time.
+**Exit Criteria:** see `wbs.md` → "Exit criteria (M16)".
 
 ### Then, in order
 
@@ -149,6 +151,3 @@ workspaces. The spec settles what selects the depth and what "review" includes. 
   Execution order set by the operator: **M16 media viewer** → a supervisor-hardening bucket (gated
   on a live fire) → a `/product-vision` revisit before M17. The mccc asks went to its inbox.
 - *Earlier revisions, 2026-06-15 → 2026-09-25, are in the archive under their original headings.*
-
-## Session Handoff — 2026-09-29 10:36
-Handed off. See `workflow-system/state/.session.md` to restore.

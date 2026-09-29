@@ -132,7 +132,7 @@
 - **Surfaced by:** operator request (2026-09-25, at session restore after v0.7.0)
 - **Target:** product:roadmap (a new feature ask, not a defect in shipped code)
 - **Type:** new-work
-- **Status:** pending — **scheduled as Milestone 16, next up** (operator, 2026-09-29; roadmap → "Next"). Everything the earlier sequencing put ahead of it has shipped.
+- **Status:** pending — **decomposed as Milestone 16** (`wbs.md`, 2026-09-29). The grill finished the same day, and its rulings in `wbs.md` supersede the open questions below.
 
 **The ask:** the right-panel editor should **show images and play audio and video.** The trigger is
 F-b. Now that isolated profiles exist, some workspaces are **non-coding** (media production), and
