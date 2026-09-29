@@ -4,6 +4,64 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m16-wp2-media-in-editor-tab — 2026-09-29
+
+*(feature-review-quality on ship commit `5ea1aeb`, window `4455cf9^..5ea1aeb`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-09-29-QUALITY-MEDIA-MISSING-CARD-STICKS-WHEN-FILE-RETURNS-UNCHANGED
+- **Severity:** MAJOR
+- **Location:** `src/components/workspace/editor/mediaDisplay.ts` → `mediaReducer` (`stat-ok` short-circuit + `stat-fail` arm)
+- **Finding:** Once a media tab shows the `missing` card, a file that comes back with the SAME mtime, size and path never clears it: `stat-fail` keeps the last stat and only swaps the display, and the `stat-ok` short-circuit then returns `state` unchanged because the stat is equal.
+- **Why it matters:** Real triggers: `mv` out and back (mv keeps mtime), `rsync -a` / `cp -p` restores, a Time Machine restore, or a transient stat failure during an fs-event burst. The tab sticks on a false "no longer on disk" until reopened. The only restore test (`mediaTabLive.test.tsx` → "a media file deleted on disk…") changes the mtime before the file returns, so right and wrong look identical (source-text-guards entry 15).
+- **Suggested action:** Do not short-circuit when `state.display` is the `missing` card (or recompute the display whenever the current one is a card set by a stat failure). Add a same-mtime restore test and mutation-prove it.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-29-QUALITY-READ-ERROR-CARD-STATS-VIA-THE-SCOPE-ADMITTING-COMMAND
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/MediaCard.tsx` → `ReadErrorCard`
+- **Finding:** The card for a non-media binary / oversized file calls `stat_media` only to learn the size, which also admits the root to the asset scope. `stat_file` (no side effect, returns `FileMarker.size`) already exists.
+- **Why it matters:** A read-only need depends on the scope-widening command. No new reach today (A-5), but the coupling is easy to miss if scope admission is ever narrowed.
+- **Suggested action:** Use `stat_file` for the size in `ReadErrorCard`.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-29-QUALITY-STAT-MEDIA-CORE-RESOLVES-AND-STATS-TWICE
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/editor_fs/mod.rs` → `stat_media_core`
+- **Finding:** `resolve_within` → `metadata` → `stat_file_core` (resolves + stats again) → `File::open`: three filesystem lookups where two do, and the confinement check runs twice.
+- **Why it matters:** Small redundant IO and a slightly wider check-then-use window.
+- **Suggested action:** Derive size and mtime from the first `meta` (share the mtime conversion with `stat_file_core` through a helper).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-29-QUALITY-PDF-IFRAME-SANDBOX-QUESTION-LEFT-OPEN
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/MediaView.tsx` → `PdfView`
+- **Finding:** The PDF `<iframe>` has no `sandbox` attribute. The Phase 3 build notes left "does WebKit's PDF viewer still render under `sandbox`?" for verify-self, and it was never answered.
+- **Why it matters:** Defense-in-depth on the only script-capable element in a `csp: null` webview. The `%PDF-` gate is the real control (a live positive control proved it load-bearing).
+- **Suggested action:** Measure it live: `sandbox=""` (and `sandbox="allow-same-origin"`) on the PDF iframe in dev + a debug bundle. If the PDF still renders, keep the attribute and pin it; if not, record the finding in `arch/security-posture.md`.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-29-QUALITY-PANETABS-MEDIAKIND-CALLED-THREE-TIMES-WITH-A-NONNULL-ASSERT
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/PaneTabs.tsx` → tab-body render branch
+- **Finding:** `mediaKind(tab.path)` runs twice in the render branch (then `!`-asserted) and a third time in the registration filter.
+- **Why it matters:** Cosmetic; the `!` would disappear if the result were bound once per tab.
+- **Suggested action:** Bind `const kind = tab.path ? mediaKind(tab.path) : null` once per tab.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-29-QUALITY-OVER-MEDIA-LIMIT-COPY-SAYS-LARGER-THAN-WHILE-RULE-IS-AT-LEAST
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/mediaDisplay.ts` → `CARD_REASON_TEXT["over-media-limit"]`
+- **Finding:** The card says "larger than 4 GiB" but `displayFor` uses `>=` (WP1 ruled "4 GiB or more").
+- **Why it matters:** A trivial copy/rule mismatch.
+- **Suggested action:** Reword to "4 GiB or larger".
+- **Priority:** low
+- **Status:** pending
+
 # m16-wp1-media-probe — 2026-09-29
 
 *(feature-review-quality on ship commit `3bb81c5`, window `c1d68f5^..3bb81c5`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged. The MAJOR and 3 doc MINORs were resolved at finalize; 3 MINOR remain.)*

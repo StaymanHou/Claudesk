@@ -568,11 +568,11 @@ the outcome that makes them.
     - Full gate `pnpm verify:auto` → EXIT=0 (66 s), 3344 vitest.
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality (ship baseline: 3bb81c5..e883091)
+- **Path:** Feature > finalize
+- **Active scope:** finalize (review-quality done: 0 CRITICAL / 1 MAJOR / 5 MINOR auto-backlogged)
 - **Ship notes:** final gate EXIT=0 at the HEAD code (3344 vitest); verification fixtures removed from `scratch-a/media/` and the scratchpad-pointing `escape-out.png` symlink removed (WP1 fixtures kept for WP3); no TODO/console.log/debugger in the diff; **NOT pushed** — `main` is 15 ahead of `origin` (push only on operator request).
 - **Blocked:** none
-- **Unvisited:** review-quality → finalize
+- **Unvisited:** finalize
 - **Open discoveries:** none
 - **Build notes (Phase 1):**
   - The shared error prefixes live in `src/components/workspace/editor/readErrorPrefixes.json`; Rust
@@ -583,6 +583,37 @@ the outcome that makes them.
     size cap disabled, `pdf_magic` weakened to a 3-byte prefix. Each landed and was killed.
     ⚠️ The cap mutant is killed because the sparse fixture's zero bytes then hit the NUL sniff
     first (the variant identity catches it), not by the bounded-read backstop — both still refuse.
+
+## Code-Quality Review — m16-wp2-media-in-editor-tab
+
+*(feature-review-quality, 2026-09-29, ship `5ea1aeb`, window `4455cf9^..5ea1aeb`, drive_mode=autopilot → MAJOR + MINOR auto-backlogged to `backlog-quality-findings.md` → `# m16-wp2-media-in-editor-tab — 2026-09-29`.)*
+
+### Strengths
+- One classifier really decides: `mediaKind()` is the only extension table, and a guard with positive controls for both literal and object-key forms (and stated exclusions for `opus` / `svg` / `pdf`) enforces it.
+- The security boundary is in one place: `stat_media` / `open_in_default_app` reuse `validate_frontend_root` + `resolve_within`; the asset URL comes only from the canonical `MediaStat.path`; the PDF `<iframe>` is gated on a content sniff and a rendered guard pins it.
+- The stringly-typed Rust↔TS error routing is held by one JSON both sides read (Rust `include_str!`), including a no-prefix-overlap check.
+- Clean logic/render split: `mediaDisplay.ts` is pure; the same-stat short-circuit avoids re-fetching.
+- Honest guard widening (`invoker(` in `invokedCommandsAreRegistered`) and a complete WP1 probe deletion.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`mediaDisplay.ts` → `mediaReducer`] The `missing` card sticks when a file returns with the same mtime/size/path (the same-stat short-circuit ignores that the display is the failure card); the only restore test changes the mtime, so right and wrong look identical. — *A false "no longer on disk" after `mv` out-and-back, `cp -p`, Time Machine or a transient stat failure. One-condition fix + a same-mtime restore test.* → `SURFACE-2026-09-29-QUALITY-MEDIA-MISSING-CARD-STICKS-WHEN-FILE-RETURNS-UNCHANGED`
+
+**MINOR**
+- [`MediaCard.tsx` → `ReadErrorCard`] Stats via the scope-admitting `stat_media` just to get a size; `stat_file` has no side effect.
+- [`editor_fs/mod.rs` → `stat_media_core`] Resolves and stats twice.
+- [`MediaView.tsx` → `PdfView`] The iframe `sandbox` question was left open (defense-in-depth only).
+- [`PaneTabs.tsx`] `mediaKind(tab.path)` called three times, with a `!`.
+- [`mediaDisplay.ts`] "larger than 4 GiB" copy vs a `>=` rule.
+
+### Assessment
+A well-built, carefully guarded feature that improves the codebase: it reuses the root-confinement and `fs-change` seams, keeps pure logic testable behind a lazy boundary, deleted the WP1 probe completely, and applied the source-text-guards catalogue (positive controls, stated blind spots, derived populations). The one real defect is a latent, recoverable reducer short-circuit that makes `missing` sticky when a file returns unchanged — a one-line fix, not a design flaw. The rest is polish.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Discoveries
 - [SURFACED-2026-09-29] Phase 2 verify-human (operator) — a verify-human pause with the agent's dev shell still running shows the PURPLE BackgroundWork dot instead of blue AwaitingInput → `SURFACE-2026-09-29-VERIFY-HUMAN-PAUSE-WITH-A-BACKGROUND-SHELL-SHOWS-PURPLE-NOT-BLUE` (not in this feature's scope).

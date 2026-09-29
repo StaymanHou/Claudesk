@@ -39,6 +39,13 @@
 - **Priority:** medium (decisions are already deduplicated; what remains is a leak plus missing `⚙` in the affected workspace)
 - **Status:** pending
 
+## Code-quality findings — m16-wp2-media-in-editor-tab (2026-09-29)
+
+- **Pointer:** **1 MAJOR + 5 MINOR** from the review of `5ea1aeb`. The MAJOR: the media viewer's `missing` card sticks when a file returns with the SAME mtime/size (`mv` out and back, `cp -p`, Time Machine), because the reducer's same-stat short-circuit ignores that the display is the failure card; the only restore test changes the mtime. The MINORs: `ReadErrorCard` stats through the scope-admitting `stat_media`, `stat_media_core` resolves/stats twice, the PDF iframe `sandbox` question was left open, `mediaKind` called 3× with a `!` in PaneTabs, and "larger than 4 GiB" copy vs a `>=` rule. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-wp2-media-in-editor-tab — 2026-09-29`.
+- **Priority:** medium (the MAJOR) / low (the rest)
+- **Status:** pending
+- **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
+
 ## Code-quality findings — analytics-week-export (2026-09-29)
 
 - **Pointer:** **2 MAJOR + 4 MINOR** from the review of `c7042af`. The MAJORs:
