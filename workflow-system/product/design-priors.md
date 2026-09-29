@@ -1,7 +1,7 @@
 ---
 stage: design-priors
 state: active
-updated: 2026-09-22
+updated: 2026-09-29
 ---
 
 # Design Priors — Claudesk
@@ -200,3 +200,20 @@ There is a second, sharper reason for the destructive half specifically: a user 
 **Why (⚠️ INFERRED — pending operator sharpening; captured propose-never-auto-write, directional + overridable):** The operator's rejection was *"blue is for 'awaiting input' which need my immediate attention. background task don't need my attention."* The first attempt (teal) was chosen on distinguishability and **passed that test** — measurably different from orange, blue and grey at 9px — yet still failed, because teal reads as blue-*adjacent* and therefore inherits blue's urgency at a glance. The deeper cost is not that one dot is misread: it is that a "sort of blue" state which turns out to be ignorable teaches the operator that blue-ish means "probably nothing", which erodes the alarm itself. That is the one failure an attention surface cannot afford, and it is why this trades under a stricter rule than ordinary colour choice. Consistent with the menu-bar decision made in the same work package (background work leaves the tray glyph dark, because a lit glyph that does not need you trains you to ignore a lit glyph) — the same thesis on a different surface: **an attention signal's value is destroyed by false positives, not by being subtle.** *(Operator: sharpen the why if this generalizes past status colour — the inferred cut is "opposed meanings need different families, not just different values"; the untested edge is a NEUTRAL new state that is neither alarm nor calm, which may only need ordinary distinguishability.)*
 
 **Origin:** M13.5 WP2 Phase 3 verify-human (2026-08-22). The `BackgroundWork` dot shipped as teal `#2aa198` and was rejected on sight — *"Don't use teal/blue. Use some other color. something distinct."* Rebuilt as purple `#a371f7`, chosen because it is absent from the whole stylesheet (`#6ea8ff` blue is the UI accent at 40 uses, `#e2c08d` gold already means git-modified, and orange/blue/grey are the other three dot states), then re-demoed side-by-side against a live blue alarm. Related: [[new-surface-must-earn-its-place-against-existing-ones]] (that prior governs *whether* a new state earns a slot — this one governs *how it must look* once it has one), [[operator-helpful-friend-misfiring-as-offswitchable-setting]] (considered and NOT applied: a status colour is either honest or not, so no setting is warranted — the over-infer guard).
+
+---
+
+## escape-hatch-to-the-os-over-in-app-infrastructure
+
+**Axis:** scope / build-vs-delegate (edge-case coverage)
+
+**Lean:** When an **edge case** falls outside what the in-app surface can handle cleanly, prefer a **one-click hand-off to an external app that already does it well** over building new in-app infrastructure to cover it. The in-app surface covers the common case well. The edge case gets a clear refusal plus a button that opens the file or project in the right external tool.
+
+**Decision rule:** ask **"is this the common case, or an edge the in-app surface can hand off?"**
+- **Edge case, and a capable external app exists** (default app, Sublime Text/Merge, Finder) → a refusal card or tab-row button that hands off. Do not build a server, codec path, renderer or protocol to absorb it.
+- **Common case** → build it in-app. This prior does not justify pushing the primary workflow out to other apps. [[primary-surface-is-zero-ceremony-not-a-mode]] still holds for the everyday path.
+- **Tie-breaker:** count the permanent surface the infrastructure adds (a listener, a port, a security boundary, a guard to maintain). If that surface exists only for the edge case, hand off.
+
+**Why (⚠️ INFERRED; approved as proposed by the operator 2026-09-29, why not yet sharpened; directional + overridable):** The external app already does the edge case well. Any new in-app infrastructure is a permanent surface: code, security boundary and verification debt, paid forever for a case that is rare by definition. A one-click hand-off costs one button and cannot drift out of date the way a half-built in-app version can.
+
+**Origin:** M16 WP1 probe (2026-09-29). WebKit will not load `<video>`/`<audio>` of 4 GiB or more over any custom URL scheme, and the real `scripture-reading` render is 4.86 GB. A loopback HTTP server would have covered it, but the operator **declined** it in favour of a 4 GiB cap plus an **"Open in default app"** tab-row button (R-4a/R-4b). The same lean was already visible in keeping both **Sublime launchers** as permanent one-click escape hatches next to the in-app editor (WP8, 2026-06-20). Related: [[new-surface-must-earn-its-place-against-existing-ones]] (that prior governs whether a new in-app surface earns its slot; this one governs the build-vs-hand-off choice once an edge case shows up).

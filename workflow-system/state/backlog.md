@@ -329,7 +329,7 @@ should be re-read at spec time:
   resolution; CHANGELOG 2026-09-28).
 - **Target level:** product:wbs
 - **Type:** gap (verification debt). The bug half is fixed on `main`.
-- **Summary:** ✅ **The silence is fixed on `main` (`778fe72`), but NOT yet in a release.** Since
+- **Summary:** ✅ **The silence is fixed (`778fe72`) and SHIPPED in `v0.7.1` (2026-09-29, installed).** Since
   v0.5.1 the supervisor had missed every AUTO-edge break. Feature `silent-supervisor` found and
   fixed three causes, each pinned by regression tests:
   - the transcript read raced CC's post-`Stop` flush (74–109 ms), and the verdict was not scoped to
@@ -342,7 +342,17 @@ should be re-read at spec time:
   trail, hypotheses and mechanism are in the archived WIP
   (`workflow-system/state/archive/silent-supervisor.md`) and in this entry's git history.
   ⚠️ **Do not resolve this on silence.** A positive observable from an **installed** build is what
-  closes it. The field build lacks the fix until the next release.
+  closes it.
+  **Installed `v0.7.1`, first day (read 2026-09-29, `supervisor-activity.log`):** 75 decisions.
+  - ✅ **One context-pressure recycle worked end-to-end** (check 5): `recycle-started` on
+    `ops-data-hub` at `F10` → `/feature-verify-self` with 508,028 tokens (11:27). A fresh session
+    ran `/session-restore` 32 s later, and `feature-verify-self` followed.
+  - ⚠️ **Zero plain `fired` outcomes.** The other 74 are withholds: mostly `no-verdict`, plus
+    `no-stored-mode` (`yitang-copy`), one `policy-not-auto` (`F11`) and one `unmapped` (`S17`).
+    ⚠️ **Zero fires is EXPECTED (operator, 2026-09-29):** a recent mccc-side change now handles
+    the agent failing to auto-chain, and limited testing shows breaks are much rarer. So there are
+    far fewer breaks for the supervisor to catch, and a quiet log is NOT evidence of a regression.
+    The same fact makes check 1 slow to observe; expect it to take a while.
 
 ### What still closes this item (checks deferred by the operator to the next release + dogfooding)
 1. **Installed build, AUTO-edge break → `fired` record + `⚙`** on the turn it started (was AC-6;
@@ -351,8 +361,8 @@ should be re-read at spec time:
 3. ⚠️ **Esc interrupts an injected turn** (AC-9). R-1's accepted cost rests on it, and it is
    still unconfirmed.
 4. **Negative arms not yet seen live:** ESCALATE → no fire; a project with no stored mode → no
-   fire. (Gate OFF and PAUSE were seen live in the dev build.)
-5. **A context-pressure recycle** at a non-final phase boundary above 400,000 tokens.
+   fire. (Gate OFF and PAUSE were seen live in the dev build.) ✅ **No-stored-mode → withheld was SEEN on installed `v0.7.1`** (`yitang-copy`, 4×); ESCALATE is still unseen.
+5. **A context-pressure recycle** at a non-final phase boundary above 400,000 tokens. ✅ **SEEN on installed `v0.7.1`** 2026-09-29 (see Summary).
 6. **Installed-`.app` GUI-PATH smoke** for the supervisor's spawns (`claude -p` adjudicator).
 - **How to check:** `jq 'select(.projectPath=="<proj>")' <app-data>/supervisor-activity.log` on the
   installed app (`com.claudesk.app`), or scan CC transcripts for commands arriving ~4 s after
@@ -361,9 +371,9 @@ should be re-read at spec time:
   `SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR`,
   `SURFACE-2026-09-28-QUALITY-TRANSCRIPT-COMPLETION-WAIT-HAS-NO-ALARM-FOR-A-CC-FORMAT-CHANGE`
   (a CC transcript-format change would silently bring this bug back).
-- **Priority:** high until a release containing `778fe72` is installed (the field build is still
+- **Priority:** medium (a release containing `778fe72` — `v0.7.1` — is installed as of 2026-09-29; per this entry's own rule it drops from high). Was: high until a release containing `778fe72` is installed (the field build is still
   silent); medium after that.
-- **Status:** pending — fix shipped on `main` 2026-09-28; live checks deferred to the next release
+- **Status:** pending — fix shipped in `v0.7.1` (2026-09-29); the recycle has been observed live, but a plain fire has not. Checks 1–4 and 6 were deferred to dogfooding on the installed release (now `v0.7.1`).
 - **Also in that release (2026-09-28, task `f-b-quality-cleanup`):** the supervisor's transcript read
   now names CC's session id (it had passed the PTY id, so every read took the newest-modified file)
   and follows the LIVE profile's config root. When reading a fire's `transcriptPath` in the activity
