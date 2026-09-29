@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16 WP2 — Media in the editor tab (transport, glance viewer, unsupported card)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-09-29 (finalized)
 **Created:** 2026-09-29
 **Entry:** spec (complex feature)
 **Source:** `workflow-system/product/wbs.md` → WP2 (tasks 2.1–2.11). The grill rulings Q1–Q3, R-4a/b/c
@@ -568,11 +568,11 @@ the outcome that makes them.
     - Full gate `pnpm verify:auto` → EXIT=0 (66 s), 3344 vitest.
 
 ## Current Node
-- **Path:** Feature > finalize
-- **Active scope:** finalize (review-quality done: 0 CRITICAL / 1 MAJOR / 5 MINOR auto-backlogged)
+- **Path:** Feature > done (finalized 2026-09-29)
+- **Active scope:** none
 - **Ship notes:** final gate EXIT=0 at the HEAD code (3344 vitest); verification fixtures removed from `scratch-a/media/` and the scratchpad-pointing `escape-out.png` symlink removed (WP1 fixtures kept for WP3); no TODO/console.log/debugger in the diff; **NOT pushed** — `main` is 15 ahead of `origin` (push only on operator request).
 - **Blocked:** none
-- **Unvisited:** finalize
+- **Unvisited:** none
 - **Open discoveries:** none
 - **Build notes (Phase 1):**
   - The shared error prefixes live in `src/components/workspace/editor/readErrorPrefixes.json`; Rust
@@ -583,6 +583,47 @@ the outcome that makes them.
     size cap disabled, `pdf_magic` weakened to a 3-byte prefix. Each landed and was killed.
     ⚠️ The cap mutant is killed because the sparse fixture's zero bytes then hit the NUL sniff
     first (the variant identity catches it), not by the bounded-read backstop — both still refuse.
+
+## Retrospect
+- **What changed in our understanding:**
+  - The PDF gate is load-bearing, not a formality. Tauri's asset handler sniffs content, then falls
+    back to the extension, and serves an unknown one as `text/html`. A live positive control showed
+    an HTML file named `evil.pdf` running its script in an ungated iframe. The spec caught this by
+    reading `tauri-utils` `mime_type.rs` before any UI existed.
+  - Dot-path media is a common case, not an edge (209 of 1,963 project media files; about 65
+    `.playwright-mcp` screenshots). That reversed the WBS's provisional default.
+  - Real text files reach 45 MB, so a "small" `read_file` cap would have broken today's usage. The
+    NUL sniff, not the cap, is what keeps binaries out of memory.
+  - One gate (`PaneTabs` `prevPaths`) turned off the whole text-editor lifecycle for media tabs.
+    The 40-site consumer sweep confirmed the other sites were already inert or kind-agnostic.
+  - `invokedCommandsAreRegistered` never saw the injectable `invoker("name")` form, so five shipped
+    commands (`finder_open` among them) had been outside the guard.
+- **Assumptions that held:** the asset protocol transport; no new `TabKind`; file-tab consumers
+  mostly inert; the `?v=<mtime>` cache-bust tolerated by the asset handler; the bundled
+  `tauri://localhost` origin behaving exactly like dev.
+- **Assumptions that were wrong:**
+  - WP1's `escape-link.png` fixture escapes the fixtures dir but NOT the claudesk root, so it read
+    as "allowed" once the root changed. A new out-of-every-root symlink replaced it.
+  - A separate `mediaZoomChord.ts`: the registry's (label, host) uniqueness rule and the
+    one-predicate principle made reusing `terminalZoomForChord` the right shape.
+  - `mediaView.ts` beside `MediaView.tsx`: macOS case-insensitivity (TS1149), renamed `mediaDisplay.ts`.
+  - The review found the `missing` card sticks when a file returns with an unchanged mtime (the
+    restore test changed the mtime, so it could not see it). Backlogged as MAJOR.
+  - A real keystroke cannot be sent from the agent: `CGEvent.postToPid` does not reach a non-key
+    window, and macOS refuses `activate()` from the agent's process. Positive controls exposed both;
+    ⌘R went to the operator.
+- **Approach delta:** zoom reuses the terminal predicate; the SVG text view is inline (lazy
+  `SyntheticView`), not a separate synthetic tab; the launcher's enable rule was extracted to
+  `defaultAppTargetFor` at codify so both `disabled` and `onClick` read one function; fixtures moved
+  into the `scratch-a` workspace because opening a workspace spawns a real CC session.
+
+## Closure
+> **Feature complete:** M16 WP2 has shipped. Images, SVG and PDFs now open in an ordinary editor
+> tab (with fit/zoom, a readout and live reload on disk change), and anything Claudesk can't show,
+> including audio/video until WP3, gets an info card with **Open in default app**. To see it, click
+> any image or PDF in the file tree.
+
+Requester = operator — closure notice for self-record.
 
 ## Code-Quality Review — m16-wp2-media-in-editor-tab
 

@@ -11,6 +11,12 @@
 - **Backlog resolved:** SURFACE-2026-09-29-QUALITY-WBS-2-3-REPEATS-THE-COMMAND-NAME — the duplicated command name in `wbs.md` task 2.3 was merged.
 - **Backlog resolved:** SURFACE-2026-09-29-QUALITY-RUNTIMES-MISSES-TWO-VERIFY-AUTO-OBSERVATIONS — the 46 s and 98 s `pnpm verify:auto` runs were added to the runtime registry.
 - **Milestone:** M16 WP1: Probe — media in the real WKWebView (GO with a 4 GiB cap).
+- **Feature shipped:** M16 WP2: images, SVG and PDFs open in an ordinary editor tab with fit/zoom, a readout and reload on disk change, and anything Claudesk can't show (binaries, mkv, audio/video over 4 GiB, a fake PDF) gets an info card with a new "Open in default app" launcher; `read_file` is capped at 64 MiB with a NUL sniff.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-MPROBE-RANGE-START-PAST-EOF-UNDERFLOWS — the WP1 `mprobe://` handler it lived in was deleted with the probe.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-PROTOCOL-ASSET-COMMENT-READS-AS-PROBE-MARKER — the `protocol-asset` Cargo comment now names the M16 media transport.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-MEDIAPROBE-DEFAULT-ROOT-SHIPS-A-HOME-PATH — the probe harness carrying the hardcoded home path was deleted.
+- **Backlog resolved:** SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER — partly: images, SVG and PDF now display in the editor tab; the audio/video review player (WP3) remains open.
+- **Milestone:** M16 WP2: Media in the editor tab — transport, glance viewer, unsupported card.
 
 ## 2026-09-28
 

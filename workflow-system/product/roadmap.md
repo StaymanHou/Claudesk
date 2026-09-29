@@ -115,6 +115,8 @@ single feature. The grill ran on 2026-09-29, and its rulings are recorded there:
 - media opens in the **existing editor file tab**, with no new tab kind
 - a codec and transport probe comes before any UI work
 
+**Progress (2026-09-29):** ✅ WP1 probe (GO, 4 GiB cap) · ✅ WP2 media in the editor tab (images, SVG, gated PDF, the info card, Open in default app, reload on disk change) · WP3 review player next.
+
 **Exit Criteria:** see `wbs.md` → "Exit criteria (M16)".
 
 ### Then, in order

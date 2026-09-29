@@ -62,37 +62,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-# m16-wp1-media-probe — 2026-09-29
-
-*(feature-review-quality on ship commit `3bb81c5`, window `c1d68f5^..3bb81c5`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged. The MAJOR and 3 doc MINORs were resolved at finalize; 3 MINOR remain.)*
-
-## SURFACE-2026-09-29-QUALITY-MPROBE-RANGE-START-PAST-EOF-UNDERFLOWS
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/media_probe/mod.rs` → `mprobe_response` (buffer sizing)
-- **Finding:** `vec![0u8; (end - start + 1) as usize]` underflows when a Range start is at or past EOF, because `end` is clamped and `start` is not. `start + CHUNK - 1` can also overflow.
-- **Why it matters:** A debug-only panic path in a protocol handler. It disappears with the probe deletion above.
-- **Suggested action:** Resolved by deleting the probe at WP2. If kept, return 416 when `start >= len`.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-29-QUALITY-PROTOCOL-ASSET-COMMENT-READS-AS-PROBE-MARKER
-- **Severity:** MINOR
-- **Location:** `src-tauri/Cargo.toml` → the `tauri` features comment
-- **Finding:** The durable `protocol-asset` feature is labeled "M16 WP1 probe", worded almost like the `PROBE (throwaway)` markers.
-- **Why it matters:** A cleanup sweep grepping for probe markers could remove a feature that ships. `tauri-build` would catch it, but only as a confusing build error.
-- **Suggested action:** Relabel it as the M16 media transport when WP2 touches the manifest.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-29-QUALITY-MEDIAPROBE-DEFAULT-ROOT-SHIPS-A-HOME-PATH
-- **Severity:** MINOR
-- **Location:** `src/probe/media/MediaProbeApp.tsx` → `DEFAULT_ROOT`; `src/main.tsx` → the `?mediaprobe` flag
-- **Finding:** Hardcodes `/Users/stayman/...` into a module bundled into the release frontend; `?mediaprobe` is not gated to dev.
-- **Why it matters:** Harmless in effect (the empty scope refuses it), but it puts an operator home path into shipped JS in an open-source repo.
-- **Suggested action:** Resolved by the WP2 probe deletion.
-- **Priority:** low
-- **Status:** pending
-
 # analytics-week-export — 2026-09-29
 
 *(feature-review-quality on ship commit `c7042af`, window `c7042af^..c7042af`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 4 MINOR, all auto-backlogged.)*

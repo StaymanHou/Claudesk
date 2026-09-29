@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-09-29  # WP1 probe shipped (GO with a 4 GiB cap)
+updated: 2026-09-29  # WP2 shipped (media in the editor tab)
 cycle: milestone-16-right-panel-media-viewer
 ---
 
@@ -179,18 +179,33 @@ assumption the standing probe-first lesson forbids.
 piece whose failure would change the design rather than the code. It costs a day to learn now; a
 WP2 built on an assumed transport would be re-planned wholesale.
 
-### WP2: Media in the editor tab — transport, glance viewer, unsupported card
+### WP2: Media in the editor tab — transport, glance viewer, unsupported card ✅ SHIPPED 2026-09-29 (commit e883091)
 
 **Milestone:** M16
 **Dependencies:** WP1 (GO)
 **Size:** L
+
+**As built (2026-09-29; full record in `workflow-system/state/archive/m16-wp2-media-in-editor-tab.md`):**
+- **Spec-time numbers and reversals:** the `read_file` cap is **64 MiB** plus an 8 KiB NUL sniff
+  (A-1; real text files reach 45 MB). ⚠️ **Dot-path media LOADS** (A-2, `requireLiteralLeadingDot:
+  false`): this reverses the "accept the refusal" default under Probe outcomes below, because about 65
+  `.playwright-mcp` screenshots across 9 projects are the main dot-path case. ⌘= / ⌘- / ⌘0 zoom the
+  image, not the editor font (A-3).
+- ⚠️ **The PDF `<iframe>` is gated on the backend's `%PDF-` sniff, not the name.** Tauri's asset
+  handler serves an unknown extension as `text/html`. A live positive control showed that an HTML
+  file named `evil.pdf` RUNS its script in an ungated iframe.
+- WP3 plugs into: `displayFor` (the `player-pending` card arm for audio/video under 4 GiB), the
+  `MediaView` epoch reload (`refreshMedia` from `EditorSplit.checkDiskForPaths`), and
+  `assetUrlFor` (canonical path + `?v=<mtime>`).
+- The installed-origin tier passed on a debug bundle (`tauri://localhost`). ⚠️ **Hardened runtime
+  is DEFERRED to `/release`, not passed.**
 
 **Description:** The end-to-end path. Clicking an image, SVG or (if WP1 allows) a PDF in the file
 tree, Cmd+P or search opens it in an ordinary editor **file tab** and shows it. Clicking anything
 unplayable or binary shows the info card. This WP carries all the plumbing WP3 reuses.
 
 **Tasks:**
-- [ ] 2.1 **Backend transport:**
+- [x] 2.1 **Backend transport:**
   - The `protocol-asset` feature + `assetProtocol {enable: true, scope: []}` config **already landed
     at WP1 (`c1d68f5`). Keep them.** They are pinned by `src-tauri/tests/asset_protocol_scope.rs`.
     Relabel the `Cargo.toml` comment from "M16 WP1 probe" to the M16 media transport, so a probe
@@ -211,17 +226,17 @@ unplayable or binary shows the info card. This WP carries all the plumbing WP3 r
     **inside `editor_fs`**, the same reason `docs` reuses `read_file_core`). It returns the
     canonical absolute path, size and mtime. **The frontend converts only a path this command
     returned.** Its tests use `TempDir` and include the escaping-leaf-symlink case.
-- [ ] 2.2 **`read_file` size cap:** stat before read, with a new typed `EditorFsError` variant. It
+- [x] 2.2 **`read_file` size cap:** stat before read, with a new typed `EditorFsError` variant. It
       routes to the info card, not to `editor-error`. The number is set at spec time.
-- [ ] 2.3 *(R-4b)* **`open_in_default_app(root, path)`, plus its tab-row ICON BUTTON** in the launcher cluster (`sublime/sublimeLaunch.ts` is the precedent). It acts on the active file tab and is enabled for any file tab. The command is root-confined through the same guard and spawns
+- [x] 2.3 *(R-4b)* **`open_in_default_app(root, path)`, plus its tab-row ICON BUTTON** in the launcher cluster (`sublime/sublimeLaunch.ts` is the precedent). It acts on the active file tab and is enabled for any file tab. The command is root-confined through the same guard and spawns
       `/usr/bin/open <file>`. `finder`'s spawn is the precedent. ⚠️ It is an external-process spawn,
       so it gets the installed-build smoke check (it rides `env_path`'s captured PATH).
-- [ ] 2.4 **One pure classifier `mediaKind(path)`** → `image | svg | pdf | video | audio | null`,
+- [x] 2.4 **One pure classifier `mediaKind(path)`** → `image | svg | pdf | video | audio | null`,
       by extension, with the table taken from WP1's matrix. ⚠️ **Every consumer calls this one
       function.** No site re-derives "is this media" from an extension list of its own. That is
       the "funnel shared-state reads through ONE function" rule, and the
       `[[derived-state-is-not-a-proxy-for-its-event]]` sweep below depends on it.
-- [ ] 2.5 **The file-tab branch, with no new `TabKind`:**
+- [x] 2.5 **The file-tab branch, with no new `TabKind`:**
   - For a `"file"` tab whose `mediaKind` is non-null, `EditorSplit` **skips the load-once
     `read_file`/`stat_file` effect and the disk-conflict check**, and registers **no** `editorDocs`
     entry.
@@ -235,29 +250,29 @@ unplayable or binary shows the info card. This WP carries all the plumbing WP3 r
     wrap). None may throw or show a stale CM6 buffer.
   - Enumerate the sites by grep **before** planning (`[[doc-correction-scope-list-is-a-floor]]`
     applies to code sweeps too).
-- [ ] 2.6 **Glance viewer (images):**
+- [x] 2.6 **Glance viewer (images):**
   - Fit-to-pane by default, with zoom in/out and 1:1.
   - A readout of pixel dimensions, file size and format.
   - The dark theme, copying hex values from existing surfaces (`[[no-css-custom-property-layer]]`).
   - Decide whether ⌘+/⌘− drive image zoom or stay font-zoom-only as part of the 2.5 sweep, not ad
     hoc.
-- [ ] 2.7 **SVG:** rendered through `<img>` **only**, with a **view-as-text** toggle that shows the
+- [x] 2.7 **SVG:** rendered through `<img>` **only**, with a **view-as-text** toggle that shows the
       source in CodeMirror (the read-only synthetic seam, or a normal load, whichever 2.5's sweep
       makes cheaper). ⚠️ A guard pins that no SVG path reaches `<iframe>`/`<object>`/`<embed>`, and
       it is mutation-proven.
-- [ ] 2.8 **PDF (only if WP1 said GO for PDF):** native render over the asset URL. Otherwise PDF
+- [x] 2.8 **PDF (only if WP1 said GO for PDF):** native render over the asset URL. Otherwise PDF
       maps to the unsupported card and a backlog SURFACE is filed.
-- [ ] 2.9 *(R-4a)* **Unsupported / unplayable card**, which also covers **audio/video of 4 GiB or more**, decided from `stat_media`'s size before any `<video>` is built:
+- [x] 2.9 *(R-4a)* **Unsupported / unplayable card**, which also covers **audio/video of 4 GiB or more**, decided from `stat_media`'s size before any `<video>` is built:
   - Shows the filename, size and type, with **Open in default app** (2.3).
   - Used for a `mediaKind` that fails to render (keyed on WP1's measured failure signal), for
     non-UTF-8 non-media files (replacing the bare "Could not open"), and for the size-cap refusal.
-- [ ] 2.10 **Reload on disk change:**
+- [x] 2.10 **Reload on disk change:**
   - Subscribe to the existing `fs-change` stream (`src/state/fsChange.ts`) and re-`stat_media` on
     a matching path.
   - Cache-bust the asset URL with the mtime so WebKit does not serve the stale bytes.
   - ⚠️ Classify by re-statting, **not** by `FsChange.kind`, because the backend folds mixed batches
     to `Other` (the Docs-panel lesson).
-- [ ] 2.11 **Verification:**
+- [x] 2.11 **Verification:**
   - A live check through the MCP bridge in dev.
   - An **installed-build** check of 2.1's scope, 2.3's spawn and one image. It runs on a local
     `.app`, or is deferred to the `/release` gate per
@@ -386,7 +401,7 @@ unsupported card keys on the `error` event / `MediaError.code`, with no timeout 
   - the in-root positive control loads in the same run
 - ⚠️ **Dot-paths are refused by default**: `.hidden/hidden.png`, inside the scope root, does not load.
   WP2 decides whether media under a dot-directory matters (default: accept the refusal and show the
-  card).
+  card). **→ WP2 reversed it (A-2): `requireLiteralLeadingDot: false`, dot-path media loads.**
 - SVG in `<img>` **does not run its script**. The same SVG in `<object>` **does** (the positive
   control), which is why R-SVG's `<img>`-only rule is load-bearing.
 - **CSP statement:** with `"csp": null`, a root-scoped asset scope admits webview reads **only**
