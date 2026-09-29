@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16 WP2 — Media in the editor tab (transport, glance viewer, unsupported card)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** ship (complete)
 **Created:** 2026-09-29
 **Entry:** spec (complex feature)
 **Source:** `workflow-system/product/wbs.md` → WP2 (tasks 2.1–2.11). The grill rulings Q1–Q3, R-4a/b/c
@@ -568,8 +568,9 @@ the outcome that makes them.
     - Full gate `pnpm verify:auto` → EXIT=0 (66 s), 3344 vitest.
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship
+- **Path:** Feature > review-quality
+- **Active scope:** review-quality (ship baseline: 3bb81c5..e883091)
+- **Ship notes:** final gate EXIT=0 at the HEAD code (3344 vitest); verification fixtures removed from `scratch-a/media/` and the scratchpad-pointing `escape-out.png` symlink removed (WP1 fixtures kept for WP3); no TODO/console.log/debugger in the diff; **NOT pushed** — `main` is 15 ahead of `origin` (push only on operator request).
 - **Blocked:** none
 - **Unvisited:** review-quality → finalize
 - **Open discoveries:** none
