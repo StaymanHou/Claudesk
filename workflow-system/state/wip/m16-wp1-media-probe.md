@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16 WP1 — Probe: media in the real WKWebView
 
 **Workflow:** feature
-**State:** verify-codify (phase 1 complete)
+**State:** ship (complete)
 **Created:** 2026-09-29
 **WBS:** `workflow-system/product/wbs.md` → WP1 (tasks 1.1–1.9). The rulings are settled there.
 
@@ -119,7 +119,13 @@ it is not worked around with base64 IPC. Output is knowledge, and the probe code
     - **Durable invariant codified:** `src-tauri/tests/asset_protocol_scope.rs` (2 tests). `tauri.conf.json` must have `assetProtocol.enable: true` with `scope: []`, and `tauri.dev.json` must not carry an `assetProtocol` block. **Mutation-proven individually:** `scope: ["**"]` → the base test fails; an injected dev-overlay block → the overlay test fails. Both configs were restored and their shasums matched.
     - Full gate: `pnpm verify:auto` EXIT=0 in 46 s (vitest 3221, cargo 1007 lib + all integration targets incl. the new one). The first run failed only on `cargo fmt --check` of the probe handler; fixed with `cargo fmt`.
 
-- [ ] Phase 2: Bundled-origin parity + GO/NO-GO recorded  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [x] Phase 2: Bundled-origin parity + GO/NO-GO recorded
+  **Relevance check (before Phase 2):**
+  - Requester still needs this: yes. The dev origin differs from `tauri://localhost`, and WP2 must not assume dev parity.
+  - Requirements unchanged: yes, with one addition from P1.verify-human.1: the parity rows now also include `synth-over-4g.mp4`, to confirm the 4 GiB cap holds on the bundled origin too.
+  - Solution still feasible: yes. A debug bundle carries the MCP bridge and serves from the bundled origin.
+  - No superior alternative discovered: yes.
+  **Verdict:** proceed
   **Observable outcomes:**
   - CLI: `pnpm tauri build --debug --config src-tauri/tauri.dev.json` exits 0, and
     `codesign -dv --verbose=4 <bundle>` output is captured (it records whether the runtime flag is
@@ -136,18 +142,28 @@ it is not worked around with base64 IPC. Output is knowledge, and the probe code
   **Alignment questions:**
   - GO / NO-GO: does the recorded matrix support WP2 as ruled (especially PDF in or out, and
     frame-step measured or fixed at 1/30 s)? The operator owns the go decision for WP2's scope.
-  - [ ] P2.1 Build the debug bundle, launch it via `open`, drive `?mediaprobe` through the bridge,
-        and capture the rows.  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 Write "Probe outcomes" in `wbs.md` and update any ruling premises. Write the CSP
-        paragraph from measured values only.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P2.1 Build the debug bundle, launch it via `open`, drive `?mediaprobe` through the bridge,
+        and capture the rows.  <!-- status: done -->
+  - [x] P2.2 Write "Probe outcomes" in `wbs.md` and update any ruling premises. Write the CSP
+        paragraph from measured values only.  <!-- status: done -->
+  - [x] verify-auto  <!-- status: done -->
+    - This phase changed docs only: `git diff --stat -- src src-tauri` is empty; only `wbs.md` and this WIP changed. The Phase 1 gate (`pnpm verify:auto` EXIT=0, `c1d68f5`) still covers all code.
+    - `wbs.md` scoped checks: code fences balanced; the matrix table has 5 rows; both cited paths resolve (`src-tauri/tests/asset_protocol_scope.rs` exists; the WIP archive path becomes true at finalize).
+  - [x] verify-self  <!-- status: done -->
+    Driven from the orchestrator through the MCP bridge against the **bundle** (same deviation as Phase 1: the bridge is orchestrator-only). No integration boundary: this phase changed docs only.
+    - [x] O1 `pnpm tauri build --debug --bundles app --config src-tauri/tauri.dev.json --config '{"bundle":{"createUpdaterArtifacts":false}}'` → EXIT 0 in 40 s, bundle `target/debug/bundle/macos/Claudesk Dev.app` (`CFBundleIdentifier` `com.claudesk.app.dev`). `codesign -dv --verbose=4` → `flags=0x20002(adhoc,linker-signed)`, `Signature=adhoc`, **no runtime flag**, so hardened runtime was NOT exercised → deferred to `/release`. (`--bundles app` + `createUpdaterArtifacts:false`: the updater artifacts need the signing key, and a debug parity check has no use for them.)
+    - [x] O2 launched with `open "Claudesk Dev.app"` → PID 75490, `ps -o command=` = `…/Claudesk Dev.app/Contents/MacOS/claudesk`. Torn down with `kill 75490` only; `kill -0` confirmed it gone. The dev `tauri:dev` chain (PIDs 17441/17445/17606/55875, all mine) was stopped first, because both share port 9223 and the identifier.
+    - [x] O3 `location.origin === "tauri://localhost"` asserted before the run (`href` `tauri://localhost?mediaprobe`). The full matrix re-ran: **all 24 rows plus the ABS row are identical to Phase 1** (same loaded/error/w/h/duration/seek values, incl. `large.mp4` 400 → 400 and the pilot at MEDIA_ERR 4). Range 206 `bytes 0-99/336561210`, rVFC 30.000 fps, SVG `imgRan:false` / `objectControlRan:true`, `errors:[]` with `tapWorks:true`. Extra bundled rows: `synth-under-4g` → meta 7920 s, `synth-over-4g` → **MEDIA_ERR 4** (the cap holds on the bundled origin), `inner-link.png` → load 640. PDF: both frames render (`scratchpad/pdf-bundled.jpg`). — evidence: bridge reads `__mediaProbe`, `__b`.
+    - [x] O4 `wbs.md` → "Probe outcomes" carries the matrix, the **GO** line (with the 4 GiB cap), the measured CSP paragraph, and the rVFC, fullscreen and PDF findings. The ruling lines were updated in the same edit (PDF ✅ IN, fps measured, R-4a/b/c). — evidence: `grep -n "Probe outcomes\|GO / NO-GO\|CSP statement" wbs.md`.
+    - [x] align: GO / NO-GO for WP2's scope — evidence: the matrix favors WP2 as ruled. PDF is IN (native render in both builds), frame-step uses measured fps, and the only reduction is the 4 GiB cap the operator already ruled at P1.verify-human.1.
+  - [x] verify-human  <!-- status: done -->
+    - Zero admissible leaves (autopilot → F11). The GO decision was already taken at P1.verify-human.1 (4 GiB cap + button); the matrix only confirmed rulings. The hardened-runtime gap is deferred to `/release` per standing practice. Dot-path refusal goes to the WP2 spec.
+  - [x] verify-codify  <!-- status: done -->
+    - Nothing new to codify: docs-only, no integration boundary. The durable invariant (the empty static asset scope) was codified at Phase 1. Full gate `pnpm verify:auto` EXIT=0 in 98 s (vitest 3221, cargo 1007 lib + all integration targets).
 
 ## Current Node
-- **Path:** Feature > Phase 2 > P2.1
-- **Active scope:** P2.1
+- **Path:** Feature > review-quality
+- **Active scope:** review-quality
 - **Blocked:** none
 - **Unvisited:** none (Phase 2 is the last phase)
 - **Open discoveries:** SURFACE-2026-09-29-MEDIA-OVER-CUSTOM-SCHEME-CAPS-AT-4GIB — DECIDED (a) at P1.verify-human.1; closes with WP1
@@ -157,6 +173,8 @@ it is not worked around with base64 IPC. Output is knowledge, and the probe code
 
 [SURFACED-2026-09-29] Phase 1 — media ≥ 4 GiB will not load over any custom URL scheme (asset:// or a hand-rolled one) in WKWebView; HTTP works. The real media-workspace render is 4.86 GB. Logged as SURFACE-2026-09-29-MEDIA-OVER-CUSTOM-SCHEME-CAPS-AT-4GIB.
 [DEVIATION-2026-09-29] Phase 1 verify-self — no `feature-verify-self-runner` spawn: the MCP bridge is orchestrator-only, and a runner would have silently measured bare Vite.
+
+[SHIP-2026-09-29] Cleanup: the 4 GiB discriminators and the pilot trim were deleted (~8.8 GB, regen commands kept in `make-fixtures.sh`). The probe code (`src/probe/media/`, `src-tauri/src/media_probe/`, the `mprobe://` registration, the `?mediaprobe` flag) is kept deliberately until WP2 replaces it; WP2 task 2.1 deletes `media_probe`. Not pushed: `main` runs ahead of `origin` by design (pushes ride `/release`).
 
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->

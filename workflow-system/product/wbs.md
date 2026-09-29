@@ -65,7 +65,7 @@ projects mostly *glance*; media projects (a video-production pipeline) *review*.
 - **SVG** renders **only** through `<img>`, which does not run script. It is never put in `<iframe>`,
   `<object>` or `<embed>`, which would run script under a null CSP. A **view-as-text** toggle opens
   the source in CodeMirror.
-- **PDF** is included **only if** WKWebView renders it natively over the same transport with no
+- **PDF** ✅ **IN** (the probe measured a native render in both builds). It was included **only if** WKWebView renders it natively over the same transport with no
   bundled renderer (no pdf.js). If it doesn't, it is deferred and logged, and PDFs get the
   unsupported card.
 - ⚠️ **Probe verify-human rulings (2026-09-29), which supersede the lines below where they differ:**
@@ -78,8 +78,7 @@ projects mostly *glance*; media projects (a video-production pipeline) *review*.
 - **A size cap on `read_file`**, added regardless, so a large binary is never read into memory
   before it is rejected. The number is picked at spec time.
 - **Confinement to the workspace root.** No media from `~/Movies` or other outside paths.
-- **Frame rate** comes from `requestVideoFrameCallback`, measured in the probe, falling back to a
-  1/30 s step.
+- **Frame rate** comes from `requestVideoFrameCallback`. ✅ The probe measured it present, at an exact 30.000 fps; 1/30 s is only a guard.
 - **Tier: lite-IDE core.** Not behind `workflow_features_enabled`, and the same in every profile. The
   OFF-invariant guard gains **no** arm.
 
@@ -103,7 +102,7 @@ projects mostly *glance*; media projects (a video-production pipeline) *review*.
 
 ## Work Packages
 
-### WP1: Probe — media in the real WKWebView
+### WP1: Probe — media in the real WKWebView ✅ CLOSED 2026-09-29 (GO with a 4 GiB cap — see "Probe outcomes")
 
 **Type:** probe
 **Milestone:** M16. It **gates WP2 and WP3**: nothing in either is built before its outcome is
@@ -136,11 +135,11 @@ assumption the standing probe-first lesson forbids.
   video.
 
 **Tasks:**
-- [ ] 1.1 Throwaway probe entry (the existing `?cm6probe`-style dev-only pattern under
+- [x] 1.1 Throwaway probe entry (the existing `?cm6probe`-style dev-only pattern under
       `src/probe/`), lazy-mounted, dies with the probe. Enable `protocol-asset` +
       `assetProtocol` **on the probe branch only**, and add the scope at runtime for one scratch
       root (`tmp/scratch/`).
-- [ ] 1.2 **Fixture set, representative** (`[[measurement-input-must-be-representative]]`):
+- [x] 1.2 **Fixture set, representative** (`[[measurement-input-must-be-representative]]`):
   - **Images:** png, jpg, gif, webp, heic, **svg** (one of them carrying a `<script>`, to prove
     `<img>` does not run it).
   - **Video:** H.264 mp4, HEVC mp4, mov (ProRes if one is at hand), webm, mkv.
@@ -149,30 +148,30 @@ assumption the standing probe-first lesson forbids.
   - **Size:** at least one video **long and large enough that a seek cannot be satisfied from a
     first buffered chunk** (hundreds of MB). A 2-second clip measures nothing.
   - Include the real `scripture-reading` outputs if any exist; otherwise use generated ones.
-- [ ] 1.3 **Per format, record:** does it render or play; does seeking work (set `currentTime` far
+- [x] 1.3 **Per format, record:** does it render or play; does seeking work (set `currentTime` far
       ahead and confirm `seeked` fires with a frame shown); what `videoWidth` / `videoHeight` /
       `duration` report; what an unplayable file does (`error` event? `MediaError.code`? a silent
       hang?). ⚠️ The unsupported card is keyed on whatever signal this finds, so a **hang with no
       event** must be recorded as such.
-- [ ] 1.4 **Confinement + CSP:**
+- [x] 1.4 **Confinement + CSP:**
   - Confirm an out-of-root path and an escaping symlink are refused **by the asset scope itself**.
   - Record whether the scope check canonicalizes, and whether dotfiles and dot-directories match.
   - Confirm SVG-in-`<img>` runs no script.
   - Write the one-paragraph CSP-exposure statement for `arch/security-posture.md` from what was
     **measured**.
-- [ ] 1.5 **`requestVideoFrameCallback`:** is it present in this WKWebView? Can a stable fps be
+- [x] 1.5 **`requestVideoFrameCallback`:** is it present in this WKWebView? Can a stable fps be
       derived from successive `mediaTime` deltas? If not, record that frame-step falls back to
       1/30 s.
-- [ ] 1.6 **Fullscreen:** does the native `<video>` fullscreen button work inside the Tauri window?
+- [x] 1.6 **Fullscreen:** does the native `<video>` fullscreen button work inside the Tauri window?
       If it is dead, record it. The player then relies on the existing right-panel collapse/ratio
       presets, and no fullscreen work is added.
-- [ ] 1.7 **PDF:** does an asset-URL PDF render natively in an `<iframe>`/`<embed>` with no bundled
+- [x] 1.7 **PDF:** does an asset-URL PDF render natively in an `<iframe>`/`<embed>` with no bundled
       renderer? This decides the Assumed PDF line either way.
-- [ ] 1.8 **Installed-style parity:** repeat 1.3–1.7 for **mp4 seek, png, svg, PDF and one
+- [x] 1.8 **Installed-style parity:** repeat 1.3–1.7 for **mp4 seek, png, svg, PDF and one
       unplayable file** on a locally built `.app` (`pnpm tauri build`) launched **from Finder**.
       ⚠️ This is a local build, **not** a release. **Do not `brew upgrade`**
       (`[[never-propose-brew-upgrade-to-verify-a-release]]`). Tear down only the PID you launched.
-- [ ] 1.9 Record the matrix, the GO/NO-GO and the measured CSP paragraph under "Probe outcomes". If
+- [x] 1.9 Record the matrix, the GO/NO-GO and the measured CSP paragraph under "Probe outcomes". If
       the matrix changes a ruling's premise (for example PDF is out, or frame-step is fixed-step),
       update the ruling line in this file.
 
@@ -325,4 +324,76 @@ WP1 (probe, GO/NO-GO) ──► WP2 (transport + editor branch + glance + card) 
 
 ## Probe outcomes
 
-*(Empty until WP1 records them. Read the status of each line here, not the WP1 checkboxes.)*
+### WP1 — media in the real WKWebView (2026-09-29) — **GO, with a 4 GiB cap**
+
+Measured with the throwaway `?mediaprobe` harness (`src/probe/media/`), first in `pnpm tauri:dev`
+(origin `http://localhost:1420`), then in a **debug `.app` bundle** built with the dev identity and
+launched through LaunchServices (`open`; origin **`tauri://localhost`**, MCP bridge present). **Every
+row matched between the two origins.** Full evidence: `workflow-system/state/archive/m16-wp1-media-probe.md`
+(the WIP file until archive).
+
+**GO / NO-GO: GO.**
+- The asset protocol serves root-scoped files in both builds.
+- A 336 MB, 660 s H.264 file seeks to 400 s exactly. `fetch` Range reads return **206** with a
+  correct `content-range`.
+- An escaping symlink and an absolute out-of-root path are both refused.
+
+**Format × build matrix (dev = bundled on every row):**
+
+| Kind | Plays / renders | Does not |
+|---|---|---|
+| Image | png, jpg, gif, webp, **heic**, svg (in `<img>`) | — |
+| Video | H.264 mp4, **HEVC** mp4, **ProRes** mov, **VP9 webm** | **mkv** (MEDIA_ERR 4, `canPlayType` "") |
+| Audio | mp3, m4a/aac, wav, flac, **ogg vorbis**, **ogg opus** | — |
+| PDF | **native render in `<iframe>` and `<embed>`** over the asset URL, no bundled renderer | — |
+| Other | — | a non-UTF-8 binary shows as an `<img>` error |
+
+⚠️ **Every failure is a FAST `error` event, never a hang** (`hang:false` on all rows). WP2's
+unsupported card keys on the `error` event / `MediaError.code`, with no timeout path needed.
+
+**⚠️ The 4 GiB finding (ruled R-4a): media of 4 GiB or more will not load over ANY custom URL scheme.**
+- The real `scripture-reading` render (4.86 GB, 2 h 15 m, 1080p24 High@4.0, faststart) fails with
+  MEDIA_ERR 4 within about 60 ms.
+- Discriminators:
+  - A **stream-copied** 10-min cut of it plays, so the codec is not the cause.
+  - A 4.04 GB synthetic plays and seeks to 7000 s, while a **5.05 GB** one built from the same
+    stream fails.
+  - The same 5.05 GB file **plays over plain HTTP** in the same WebKit.
+  - A hand-written, u64-correct `mprobe://` handler **fails identically**. WebKit reads 8-byte atom
+    headers and gives up, while every 206 carried the right total.
+- So the limit is WebKit's **media loading over a custom scheme**, not Tauri's asset handler, and it
+  is not fixable in our handler. Operator ruled **the cap + an "Open in default app" tab-row
+  button** (R-4a/R-4b). A loopback HTTP transport was considered and declined.
+
+**Confinement + CSP (measured; the paragraph for `arch/security-posture.md`):**
+- The asset scope **resolves symlinks before matching**:
+  - an in-root symlink to an in-root file loads (640 px)
+  - an in-root symlink escaping the root is refused
+  - an absolute out-of-root path is refused
+  - the in-root positive control loads in the same run
+- ⚠️ **Dot-paths are refused by default**: `.hidden/hidden.png`, inside the scope root, does not load.
+  WP2 decides whether media under a dot-directory matters (default: accept the refusal and show the
+  card).
+- SVG in `<img>` **does not run its script**. The same SVG in `<object>` **does** (the positive
+  control), which is why R-SVG's `<img>`-only rule is load-bearing.
+- **CSP statement:** with `"csp": null`, a root-scoped asset scope admits webview reads **only**
+  inside roots that `editor_fs` already exposes for **read and write**. The asset protocol serves
+  GET only. So it adds **no new reach**, provided the static scope stays `[]` (pinned by
+  `src-tauri/tests/asset_protocol_scope.rs`, mutation-proven).
+
+**`requestVideoFrameCallback`: present in both builds.** `h264.mp4` gave 40 frames with a median
+Δ of 0.03333 s, i.e. **30.000 fps**, matching ffprobe's 30/1. **Frame-step uses the measured fps;
+the 1/30 s fallback stays only as a guard.**
+
+**Fullscreen (ruled R-4c):** `fullscreenEnabled` is true. A scripted `requestFullscreen` is rejected
+without transient activation (expected), and **the native control works on a real click**
+(operator-verified). The player keeps it.
+
+**Observed for WP3:** after a **paused** seek with `preload="metadata"`, tiles report
+`readyState ≥ 2` but **paint no frame**. WP3 must check `preload="auto"` (or a play/pause nudge)
+before promising a visible frame after frame-step or seek.
+
+**Deferred to `/release` (NOT passed):** a **release-profile** build with **hardened runtime** and
+notarization. The debug bundle is `adhoc, linker-signed` with no runtime flag (`codesign -dv`), so
+hardened-runtime media behavior is unmeasured. Low risk (WebKit media is in-process AppKit, not a
+subprocess spawn), but recorded as a deferral.
