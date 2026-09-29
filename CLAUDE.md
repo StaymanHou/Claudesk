@@ -53,7 +53,6 @@ claudesk/
 ├── CHANGELOG.md               # append-only narrative log
 ├── README.md                  # + docs/demo/*.gif embeds (M8)
 ├── runtimes.md                # per-project runtime registry (long-command timeouts)
-├── HANDOFF-from-mccc-*.md     # cross-repo handoff notes (companion workflow-system repo)
 ├── _ref/                      # gitignored — symlinks to companion repos for read-only reference
 ├── docs/
 │   ├── lessons/               # extracted topic docs — verify-self tiers, MCP-bridge caveats,
@@ -64,6 +63,8 @@ claudesk/
 │   ├── product/               # vision, roadmap, arch, wbs, design-priors, context
 │   │   ├── m11-wbs-parked.md  # M11's decomposition, parked while M10.9 runs
 │   │   └── archive/           # <cycle-name>/ per closed milestone (11 so far)
+│   ├── outbox/                # HANDOFF-to-mccc-*.md — Claudesk-side copies of messages SENT to
+│   │                          #   other workspaces (mirror of their inbox/); cited by bare filename
 │   └── state/
 │       ├── wip/               # active feature/task/incident items
 │       ├── backlog.md         # SURFACE discoveries (+ backlog-quality-findings.md)
