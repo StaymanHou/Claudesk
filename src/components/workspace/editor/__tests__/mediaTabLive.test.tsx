@@ -31,7 +31,10 @@ const SIZES: Record<string, number> = {
   "render.mp4": 4_865_095_788,
   "doc.pdf": 38362,
   "fake.pdf": 30,
+  "diagram.svg": 120,
 };
+const MTIMES: Record<string, number> = {};
+const GONE = new Set<string>();
 const calls: { cmd: string; args: Record<string, unknown> }[] = [];
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
@@ -53,17 +56,20 @@ async function mount() {
       calls.push({ cmd, args });
       const path = String(args.path ?? "");
       if (cmd === "stat_media") {
-        if (!(path in SIZES)) throw `file I/O error: ${path}: No such file`;
+        if (!(path in SIZES) || GONE.has(path))
+          throw `file I/O error: ${path}: No such file`;
         return {
           path: `${ROOT}/${path}`,
           size: SIZES[path],
-          mtime_ms: 1790000000000.4,
+          mtime_ms: MTIMES[path] ?? 1790000000000.4,
           pdf_magic: path === "doc.pdf",
         };
       }
       if (cmd === "stat_file") return { mtime_ms: 1, size: 1 };
       if (cmd === "read_file") {
         if (path === "main.ts") return "const x = 1;\n";
+        if (path === "diagram.svg")
+          return '<svg xmlns="http://www.w3.org/2000/svg"/>\n';
         if (path === "bin.dat")
           throw `${prefixes.notUtf8} ${ROOT}/bin.dat (binary: NUL byte in the first 8192 bytes)`;
         if (path === "huge.log")
@@ -110,6 +116,8 @@ function activeBody(): HTMLElement {
 const readFileCalls = () => calls.filter((c) => c.cmd === "read_file");
 
 afterEach(() => {
+  for (const k of Object.keys(MTIMES)) delete MTIMES[k];
+  GONE.clear();
   act(() => root?.unmount());
   host?.remove();
   root = null;
@@ -269,5 +277,90 @@ describe("image zoom chords (the viewer's own handler)", () => {
     // A key that is not a zoom chord is left for the rest of the app.
     expect(await press("r")).toBe(false);
     expect(localStorage.getItem("claudesk.editor.fontSize")).toBe("11");
+  });
+});
+
+describe("PDF, SVG and reload (Phase 3)", () => {
+  it("a real PDF renders in exactly ONE iframe on the canonical asset URL", async () => {
+    await mount();
+    await open("doc.pdf");
+    const body = activeBody();
+    expect(body.querySelector('[data-testid="media-pdf"]')).not.toBeNull();
+    const frames = host!.querySelectorAll("iframe");
+    expect(frames).toHaveLength(1);
+    expect(frames[0].getAttribute("src")).toBe(
+      `asset://localhost/${encodeURIComponent(`${ROOT}/doc.pdf`)}?v=1790000000000`,
+    );
+    expect(host!.querySelector("object, embed")).toBeNull();
+    expect(readFileCalls()).toEqual([]);
+  });
+
+  it("an SVG renders via <img>, and the Text toggle shows its source read-only and back", async () => {
+    await mount();
+    await open("diagram.svg");
+    let body = activeBody();
+    expect(
+      body.querySelector('[data-testid="media-svg"] img.media-img'),
+    ).not.toBeNull();
+    expect(readFileCalls()).toEqual([]);
+    const toggle = () =>
+      activeBody().querySelector<HTMLButtonElement>(
+        '[data-testid="media-svg-text-toggle"]',
+      )!;
+    await act(async () => toggle().click());
+    await settle();
+    await settle();
+    body = activeBody();
+    expect(readFileCalls().map((c) => c.args)).toEqual([
+      { root: ROOT, path: "diagram.svg" },
+    ]);
+    expect(body.querySelector('[data-testid="media-svg-text"]')).not.toBeNull();
+    expect(body.querySelector("img")).toBeNull();
+    expect(toggle().getAttribute("aria-pressed")).toBe("true");
+    await act(async () => toggle().click());
+    expect(
+      activeBody().querySelector('[data-testid="media-svg"] img.media-img'),
+    ).not.toBeNull();
+  });
+
+  it("a disk change re-stats an open image and cache-busts its URL with the new mtime", async () => {
+    await mount();
+    await open("shots/a.png");
+    const stats = () => calls.filter((c) => c.cmd === "stat_media").length;
+    const before = stats();
+    // A change to a path NOT open as media re-stats nothing.
+    await act(async () => split.current!.checkDiskForPaths(["README.md"]));
+    await settle();
+    expect(stats()).toBe(before);
+    MTIMES["shots/a.png"] = 1790000009999;
+    await act(async () => split.current!.checkDiskForPaths(["shots/a.png"]));
+    await settle();
+    expect(stats()).toBe(before + 1);
+    expect(
+      activeBody().querySelector("img.media-img")!.getAttribute("src"),
+    ).toBe(
+      `asset://localhost/${encodeURIComponent(`${ROOT}/shots/a.png`)}?v=1790000009999`,
+    );
+  });
+
+  it("a media file deleted on disk keeps its tab and shows the missing card (A-8)", async () => {
+    await mount();
+    await open("shots/a.png");
+    GONE.add("shots/a.png");
+    await act(async () => split.current!.checkDiskForPaths(["shots/a.png"]));
+    await settle();
+    expect(host!.querySelectorAll('[data-testid="editor-tab"]')).toHaveLength(
+      1,
+    );
+    const card = activeBody().querySelector<HTMLElement>(
+      '[data-testid="media-card"]',
+    );
+    expect(card?.dataset.reason).toBe("missing");
+    // It comes back when the file does.
+    GONE.delete("shots/a.png");
+    MTIMES["shots/a.png"] = 1790000020000;
+    await act(async () => split.current!.checkDiskForPaths(["shots/a.png"]));
+    await settle();
+    expect(activeBody().querySelector("img.media-img")).not.toBeNull();
   });
 });

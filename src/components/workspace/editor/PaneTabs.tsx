@@ -88,6 +88,12 @@ export interface PaneTabsHandle {
    * No-op if the pane holds no tab under `dir`.
    */
   closeTabsUnderPath: (dir: string) => void;
+  /**
+   * M16 WP2 — these (project-relative) paths changed on disk: re-stat any open MEDIA tab among
+   * them. Media tabs are outside the doc store, so the text editor's disk check never sees them;
+   * EditorSplit fans the same `fs-change` paths here.
+   */
+  refreshMedia: (paths: string[]) => void;
 }
 
 interface PaneTabsProps {
@@ -286,6 +292,28 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
       [],
     );
 
+    // M16 WP2 — a per-path reload counter for media tabs. A bump re-runs that viewer's
+    // `stat_media`; paths not open as media here are ignored (so no state change, no render).
+    const [mediaEpochs, setMediaEpochs] = useState<Record<string, number>>({});
+    const tabsRef = useRef(state.tabs);
+    tabsRef.current = state.tabs;
+    const refreshMedia = useCallback((paths: string[]) => {
+      const open = new Set(
+        tabsRef.current
+          .filter(
+            (t) => t.kind === "file" && t.path && mediaKind(t.path) !== null,
+          )
+          .map((t) => t.path!),
+      );
+      const hit = paths.filter((p) => open.has(p));
+      if (hit.length === 0) return;
+      setMediaEpochs((cur) => {
+        const next = { ...cur };
+        for (const p of hit) next[p] = (next[p] ?? 0) + 1;
+        return next;
+      });
+    }, []);
+
     useImperativeHandle(
       ref,
       () => ({
@@ -295,6 +323,7 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
         closeActiveTab: () => closeActiveTabRef.current(),
         closeTabsForPath,
         closeTabsUnderPath,
+        refreshMedia,
       }),
       [
         openFile,
@@ -302,6 +331,7 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
         addSynthetic,
         closeTabsForPath,
         closeTabsUnderPath,
+        refreshMedia,
       ],
     );
 
@@ -478,6 +508,7 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
                         root={projectPath}
                         path={tab.path}
                         kind={mediaKind(tab.path)!}
+                        epoch={mediaEpochs[tab.path] ?? 0}
                       />
                     ) : tab.kind === "file" && tab.path ? (
                       <EditorPanel

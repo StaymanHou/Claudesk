@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16 WP2 — Media in the editor tab (transport, glance viewer, unsupported card)
 
 **Workflow:** feature
-**State:** verify-codify (phase 2 complete)
+**State:** verify-codify (all phases complete)
 **Created:** 2026-09-29
 **Entry:** spec (complex feature)
 **Source:** `workflow-system/product/wbs.md` → WP2 (tasks 2.1–2.11). The grill rulings Q1–Q3, R-4a/b/c
@@ -303,9 +303,9 @@ the outcome that makes them.
           spawn; `fixtures/image.png` → Ok in 2 ms (non-blocking) and `pgrep -x Preview` found PID 93962
           within 0.5 s (Preview was not running before). That PID was then closed.
     - [x] grep for the probe → 0; `check:link` clean; scope-guard mutants killed (build + verify-auto records).
-    - [ ] Cosmetic: a directory target reports `"… is a directory; recursive directory delete is not
+    - [x] (resolved at P2.3: `EditorFsError::NotAFile`) Cosmetic: a directory target reports `"… is a directory; recursive directory delete is not
           supported"` from `stat_media` / `open_in_default_app` (the `IsDirectory` Display is delete-specific).
-          Not user-visible yet; folded into P2.3.  <!-- status: FAILED-cosmetic -->
+          Not user-visible yet; folded into P2.3.  <!-- was FAILED-cosmetic; fixed 2026-09-29 -->
     - Bridge note: `webview_execute_js` reports "Script execution timeout" for every async script
       even though the script runs (a documented caveat in `docs/lessons/mcp-tauri-bridge-caveats.md`);
       every reading above used fire-then-poll. `ipc_execute_command` only runs built-in commands.
@@ -460,7 +460,7 @@ the outcome that makes them.
       Mutation: `onClick` back to its own `activePath` condition → FAILS.
     - Full gate `pnpm verify:auto` → EXIT=0 (55 s), 3293 vitest.
 
-- [ ] Phase 3: SVG, PDF (gated), reload on disk change, installed-build tier  <!-- status: NOT-STARTED; depends on Phase 2 -->
+- [x] Phase 3: SVG, PDF (gated), reload on disk change, installed-build tier  <!-- done 2026-09-29 -->
   **Observable outcomes:**
   - CLI: `pnpm verify:auto` exits 0, including a mutation-proven guard: no media component renders
     `<iframe>`/`<object>`/`<embed>` except `PdfView`, and `PdfView` renders its `<iframe>` only when
@@ -488,27 +488,90 @@ the outcome that makes them.
   - A-6 in action: SVG view-as-text is read-only. Enough, or do you want to edit an SVG from that toggle?
   - A-8 in action: a deleted media file keeps its tab and shows the card. Still what you want?
   - PDF in the native WebKit viewer inside the tab: usable at the right-panel width?
-  - [ ] P3.1 `SvgView`: `<img>` only + view-as-text toggle (read-only; synthetic seam or CM6
-        read-only, whichever the code read shows is cheaper — record the choice).  <!-- status: NOT-STARTED -->
-  - [ ] P3.2 `PdfView`: `<iframe>` over the asset URL, gated on `pdf_magic`; `false` → card with a
-        "not a PDF" reason.  <!-- status: NOT-STARTED -->
-  - [ ] P3.3 The rendered no-script-element guard (jsdom, mutation-proven, two mutants run
-        individually).  <!-- status: NOT-STARTED -->
-  - [ ] P3.4 Reload: `RightPanelHost`'s existing `fs-change` listener fans matching paths to open
+  - [x] P3.1 `SvgView`: `<img>` only + view-as-text toggle (read-only; synthetic seam or CM6
+        read-only, whichever the code read shows is cheaper — record the choice).  <!-- done 2026-09-29 -->
+  - [x] P3.2 `PdfView`: `<iframe>` over the asset URL, gated on `pdf_magic`; `false` → card with a
+        "not a PDF" reason.  <!-- done 2026-09-29 -->
+  - [x] P3.3 The rendered no-script-element guard (jsdom, mutation-proven, two mutants run
+        individually).  <!-- done 2026-09-29 -->
+  - [x] P3.4 Reload: `RightPanelHost`'s existing `fs-change` listener fans matching paths to open
         media views (a small per-host registry or event, not a second `listen`); the view re-`statMedia`s,
         cache-busts `?v=<mtime_ms>` on change, and shows the card on a stat failure. Classify by
-        re-stat only.  <!-- status: NOT-STARTED -->
-  - [ ] P3.5 Installed-origin tier on a debug bundle, or record the deferral.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+        re-stat only.  <!-- done 2026-09-29 -->
+  **Relevance check (before Phase 3):** requester still needs it — yes (operator approved Phase 2);
+  requirements unchanged — yes; still feasible — yes (the `?v=` query already proven in Phase 2);
+  no superior alternative — yes. **Verdict:** proceed.
+  **Build notes (Phase 3):**
+  - **A-6 resolved:** SVG view-as-text lazy-loads the existing read-only `SyntheticView` INLINE in
+    the media tab (one `read_file` on toggle, re-read on mtime change), not a separate synthetic
+    tab. Cheaper, and the tab keeps its identity.
+  - PDF: `displayFor` returns `{kind:"pdf"}` only when `pdf_magic`; `PdfView` is the ONLY
+    `<iframe>` in the media modules. No `sandbox` attribute yet — whether WebKit's PDF viewer
+    still renders under `sandbox` is a live question for verify-self (defense-in-depth only;
+    the magic gate is the control).
+  - Reload: `EditorSplit.checkDiskForPaths` (fed by RightPanelHost's ONE `fs-change` listener)
+    now also calls each pane's `refreshMedia(paths)`, which bumps a per-path epoch → `MediaView`
+    re-stats. Same stat → the reducer returns the SAME state object (no re-render); changed →
+    new `?v=<mtime>`; a failed re-stat → `missing` card, tab kept (A-8); the file coming back
+    restores the view. The `pdf-pending` card reason was removed (PDF now renders).
+  - Tests: `mediaDisplay` (PDF arm, identity, missing), `mediaTabLive` (+PDF iframe, SVG toggle,
+    reload cache-bust, delete→missing→restore, non-open path re-stats nothing), and the new
+    rendered guard `mediaNoScriptElements.test.tsx` (every classified extension × pdf_magic,
+    population derived from `MEDIA_EXTENSIONS`; plus a comment-stripped source check).
+  - Mutation-proven individually: `displayFor` ignoring `pdf_magic` → 1 fails; SVG via `<object>`
+    → 4 fail (rendered + source).
+  - [x] P3.5 Installed-origin tier on a debug bundle, or record the deferral.  <!-- done 2026-09-29 in verify-self (bundle PASS; hardened runtime DEFERRED-to-release) -->
+  - [x] verify-auto  <!-- done 2026-09-29 -->
+    - `pnpm verify:auto` → EXIT=0 (42 s): eslint 0 errors (pre-existing `XtermPane.tsx:932` warning
+      only); prettier clean; `tsc` clean; `check:link` clean; vitest 251 files / 3342 tests
+      (incl. the new rendered guard, 41 cases); cargo fmt / clippy `-D warnings` / test pass.
+      Formatter touched only this phase's files.
+  - [x] verify-self  <!-- done 2026-09-29; orchestrator-driven over the MCP bridge: fresh `pnpm tauri:dev` (http://localhost:1420) THEN a debug bundle (tauri://localhost); workspace scratch-a -->
+    - Fixtures (state change, dev scratch only, declared): `scratch-a/media/evil.pdf` (HTML whose script
+      `parent.postMessage`s — detectable across origins) and `reload.png` (a copy of image.png, later
+      overwritten with image.gif's bytes, removed, and restored from a scratchpad backup).
+    - [x] SVG: `image.svg` and `script.svg` render as `[data-testid=media-svg] img` at 200×120; `script.svg`'s
+          script (it `postMessage`s the top window and sets `top.__svgScriptRan`) did NOT run: no message,
+          `__svgScriptRan` undefined. Text toggle → `media-svg-text`, `.cm-content` begins `<svg xmlns=…`,
+          `contenteditable="false"` (read-only); toggling back restores the image.
+    - [x] PDF: `doc.pdf` → `media-pdf`, exactly ONE iframe in the document (583×793), its asset URL fetches
+          200 `application/pdf`; screenshot `/private/tmp/claude-501/-Users-stayman-Personal-projects-claudesk/132563a1-8bce-425e-9467-c4bab101004b/scratchpad/p3-pdf-crop.png` shows WebKit's native render.
+    - [x] `evil.pdf` → the `not-a-pdf` card, 0 iframes/objects/embeds, no message. **Positive control:** the
+          SAME file loaded into a hand-made hidden iframe (root already admitted) is served `text/html` and
+          its script RAN (`evil-ran:asset://…` arrived). So the `%PDF-` gate is what stops it, not luck.
+    - [x] Reload: `reload.png` open at 640 px, `?v=1790694168170`; overwritten on disk with a GIF's bytes →
+          within 3 s `?v=1790706773372`, 320×240, readout `320 × 240 · 119.3 KB · PNG`.
+    - [x] Delete: `rm` → the `missing` card "This file is no longer on disk." with the last size, tab kept
+          (1 tab); restore → the image is back (320 px).
+    - [x] Error tap: 2 captured `listeners[eventId].handlerId` rejections were ALREADY present before any
+          Phase 3 action (tap installed before the workspace opened) and the count did not grow across
+          SVG / PDF / reload / delete; the bundle run captured 0. Not from this feature.
+    - [x] P3.5 installed-origin tier — debug bundle (`tauri build --debug --bundles app` + dev config, 42 s),
+          launched via `open` (LaunchServices), `location.origin === "tauri://localhost"`, `#root` children 1:
+          png / heic 640×480, image.svg / script.svg 200×120 (no script ran), doc.pdf 1 iframe, evil.pdf
+          card with 0 frames, render.mp4 over-limit card; errors 0. `open_in_default_app` from the bundle →
+          Preview (PID 85832) opened `image.png`. Bundle PID 79938 closed after.
+    - [x] Hardened runtime / notarized build — NOT passed  <!-- status: DEFERRED-to-release: the debug bundle is `flags=0x20002(adhoc,linker-signed)`, no runtime flag, so hardened-runtime behaviour of the asset protocol and the `/usr/bin/open` spawn is unmeasured (`[[installed-build-verify-deferred-to-release]]`). Recorded as a deferral, not a pass. -->
+    - [x] align: evidence — PDF `/private/tmp/claude-501/-Users-stayman-Personal-projects-claudesk/132563a1-8bce-425e-9467-c4bab101004b/scratchpad/p3-pdf-crop.png`; SVG text view read-only (above); delete → card (above).
+  - [x] verify-human  <!-- done 2026-09-29: operator "all good" -->
+    - [x] P3.verify-human.1 Happy path (dev app, scratch-a → media/): an SVG + its Text toggle, doc.pdf in the tab, evil.pdf's card — is this what you meant? (incl. PDF usable at the panel width)  <!-- operator: pass 2026-09-29 -->
+    - [x] P3.verify-human.2 A-6 in action: SVG view-as-text is READ-ONLY — enough, or do you want to edit an SVG from that toggle?  <!-- operator: pass 2026-09-29 -->
+    - [x] P3.verify-human.3 A-8 in action: a media file deleted on disk keeps its tab and shows "no longer on disk" — still what you want?  <!-- operator: pass 2026-09-29 -->
+  - [x] verify-codify  <!-- done 2026-09-29 -->
+    - Kept (already catch a regression): the rendered no-script guard (every extension × pdf_magic),
+      `mediaTabLive` (PDF iframe, SVG toggle + read_file, reload cache-bust, delete → missing →
+      restore), `mediaDisplay` (identity, missing, PDF gate).
+    - **New:** `mediaReloadWiring.test.ts` pins the ONE hop no live test reaches — RightPanelHost's
+      single `fs-change` listener passes its paths to `checkDiskForPaths` (anchors `grep -c` = 1).
+      Mutation: the listener drops the call → FAILS. The next hop is behavioural: EditorSplit no
+      longer fanning to `refreshMedia` → 2 live tests FAIL.
+    - Full gate `pnpm verify:auto` → EXIT=0 (66 s), 3344 vitest.
 
 ## Current Node
-- **Path:** Feature > Phase 3 > P3.1
-- **Active scope:** P3.1 (SvgView)
+- **Path:** Feature > ship
+- **Active scope:** ship
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
+- **Unvisited:** review-quality → finalize
 - **Open discoveries:** none
 - **Build notes (Phase 1):**
   - The shared error prefixes live in `src/components/workspace/editor/readErrorPrefixes.json`; Rust

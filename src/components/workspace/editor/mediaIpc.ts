@@ -34,6 +34,16 @@ export function statMedia(
   return invoker("stat_media", { root, path }) as Promise<MediaStat>;
 }
 
+/** Read a UTF-8 text file under `root` (the editor's own `read_file`), for the SVG
+ *  view-as-text toggle. */
+export function readTextFile(
+  root: string,
+  path: string,
+  invoker: Invoker = invoke,
+): Promise<string> {
+  return invoker("read_file", { root, path }) as Promise<string>;
+}
+
 /** Open a file inside `root` in its default macOS app. Surfaces a rejection (console.error)
  *  rather than dead-clicking, like the other launchers. */
 export function openInDefaultApp(

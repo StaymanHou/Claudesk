@@ -27,8 +27,8 @@ export type CardReason =
   | "player-pending"
   /** A `.pdf` whose bytes do not start with `%PDF-`. */
   | "not-a-pdf"
-  /** A real PDF: the in-tab PDF view arrives in this feature's Phase 3. */
-  | "pdf-pending";
+  /** The file was showing, then a re-stat after a disk change failed (deleted / moved). */
+  | "missing";
 
 /** The one-line explanation the card shows for each reason. */
 export const CARD_REASON_TEXT: Readonly<Record<CardReason, string>> = {
@@ -39,13 +39,15 @@ export const CARD_REASON_TEXT: Readonly<Record<CardReason, string>> = {
     "This file is larger than 4 GiB, the most the built-in player can load.",
   "player-pending": "The built-in player for audio and video is coming soon.",
   "not-a-pdf": "This file has a .pdf name but isn't a PDF.",
-  "pdf-pending": "The built-in PDF view is coming soon.",
+  missing: "This file is no longer on disk.",
 };
 
 /** What a stat'ed media file shows. */
 export type MediaDisplay =
   | { kind: "image" }
   | { kind: "svg" }
+  /** Only ever produced for a stat whose bytes start with `%PDF-` (see displayFor). */
+  | { kind: "pdf" }
   | { kind: "card"; reason: CardReason };
 
 /** Decide the display for a classified file from its stat. Pure; the ONE place the 4 GiB cap
@@ -57,10 +59,12 @@ export function displayFor(kind: MediaKind, stat: MediaStat): MediaDisplay {
     case "svg":
       return { kind: "svg" };
     case "pdf":
-      return {
-        kind: "card",
-        reason: stat.pdf_magic ? "pdf-pending" : "not-a-pdf",
-      };
+      // ⚠️ The PDF <iframe> is the ONE script-capable element the viewer builds, and Tauri's
+      // asset handler serves an unrecognized extension as text/html. So the iframe is gated on
+      // the backend's content sniff, never on the name: an HTML file called x.pdf gets the card.
+      return stat.pdf_magic
+        ? { kind: "pdf" }
+        : { kind: "card", reason: "not-a-pdf" };
     case "video":
     case "audio":
       return {
@@ -76,7 +80,7 @@ export function displayFor(kind: MediaKind, stat: MediaStat): MediaDisplay {
 export type MediaState =
   | { status: "loading" }
   | { status: "ready"; stat: MediaStat; display: MediaDisplay }
-  /** `stat_media` itself failed (outside the root, missing, a directory). */
+  /** The FIRST `stat_media` failed (outside the root, missing, a directory). */
   | { status: "failed"; message: string };
 
 export type MediaEvent =
@@ -90,13 +94,27 @@ export const initialMediaState: MediaState = { status: "loading" };
 export function mediaReducer(state: MediaState, event: MediaEvent): MediaState {
   switch (event.type) {
     case "stat-ok":
+      // A re-stat after a disk change that finds the SAME file (mtime + size) keeps the state
+      // object as-is, so nothing re-renders and the image is not re-fetched. A changed file
+      // recomputes the display, which also retries a file that had failed to render.
+      if (
+        state.status === "ready" &&
+        state.stat.mtime_ms === event.stat.mtime_ms &&
+        state.stat.size === event.stat.size &&
+        state.stat.path === event.stat.path
+      )
+        return state;
       return {
         status: "ready",
         stat: event.stat,
         display: displayFor(event.kind, event.stat),
       };
     case "stat-fail":
-      return { status: "failed", message: event.message };
+      // A re-stat failing on a file that WAS showing means it left the disk: keep the tab and
+      // its last stat, show the card (spec A-8). A first stat failing is an open error.
+      return state.status === "ready"
+        ? { ...state, display: { kind: "card", reason: "missing" } }
+        : { status: "failed", message: event.message };
     case "render-error":
       // Only a live viewer can fail to render; a card or a failed stat has no element.
       return state.status === "ready" && state.display.kind !== "card"

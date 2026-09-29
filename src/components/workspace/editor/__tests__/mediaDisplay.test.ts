@@ -57,9 +57,14 @@ describe("displayFor", () => {
       reason: "not-a-pdf",
     });
     expect(displayFor("pdf", stat({ pdf_magic: true }))).toEqual({
-      kind: "card",
-      reason: "pdf-pending",
+      kind: "pdf",
     });
+  });
+
+  it("pdf_magic never promotes a non-PDF kind to the PDF view", () => {
+    for (const kind of ["image", "svg", "video", "audio"] as const) {
+      expect(displayFor(kind, stat({ pdf_magic: true })).kind).not.toBe("pdf");
+    }
   });
 
   it("every card reason has user-facing text", () => {
@@ -99,6 +104,39 @@ describe("mediaReducer", () => {
       stat: stat({ size: 7 }),
       display: { kind: "card", reason: "unrenderable" },
     });
+  });
+
+  it("a re-stat that finds the SAME file keeps the state object (no re-render, no re-fetch)", () => {
+    const again = mediaReducer(ready, {
+      type: "stat-ok",
+      kind: "image",
+      stat: stat({ size: 7 }),
+    });
+    expect(again).toBe(ready);
+  });
+
+  it("a re-stat that finds a CHANGED file replaces the stat and retries a failed render", () => {
+    const failed = mediaReducer(ready, { type: "render-error" });
+    const changed = mediaReducer(failed, {
+      type: "stat-ok",
+      kind: "image",
+      stat: stat({ size: 7, mtime_ms: 2 }),
+    });
+    expect(changed).toEqual({
+      status: "ready",
+      stat: stat({ size: 7, mtime_ms: 2 }),
+      display: { kind: "image" },
+    });
+  });
+
+  it("a re-stat FAILING on a showing file → the missing card, keeping the last stat (A-8)", () => {
+    expect(mediaReducer(ready, { type: "stat-fail", message: "gone" })).toEqual(
+      {
+        status: "ready",
+        stat: stat({ size: 7 }),
+        display: { kind: "card", reason: "missing" },
+      },
+    );
   });
 
   it("render-error is a no-op for a card, a failure or a load in flight", () => {

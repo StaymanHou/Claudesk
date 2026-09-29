@@ -78,6 +78,8 @@ export interface EditorSplitHandle {
    * check (`checkDisk` → stat + `diskDecision` → reload-when-clean / conflict-when-dirty),
    * WITHOUT requiring a tab activation. Paths not open here are ignored. Reuses the
    * WP12 synchronous-check machinery verbatim — the only new thing is the event source.
+   * M16 WP2: also fans the paths to every pane's `refreshMedia`, which re-stats any open
+   * MEDIA tab among them (media tabs are outside the doc store this check reads).
    */
   checkDiskForPaths: (paths: string[]) => void;
   /**
@@ -257,6 +259,11 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
         const byPath = docsRef.current.byPath;
         for (const path of paths) {
           if (byPath[path]) void checkDisk(path);
+        }
+        // M16 WP2 — media tabs are outside the doc store, so each pane re-stats its own open
+        // media among `paths` (reload on disk change; classified by re-stat, never FsChange.kind).
+        for (const handle of paneHandles.current.values()) {
+          handle?.refreshMedia(paths);
         }
       },
       [checkDisk],

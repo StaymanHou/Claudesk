@@ -10,15 +10,23 @@
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useReducer,
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 import { MediaCard } from "./MediaCard";
-import { statMedia, type Invoker, type MediaStat } from "./mediaIpc";
+import {
+  readTextFile,
+  statMedia,
+  type Invoker,
+  type MediaStat,
+} from "./mediaIpc";
 import { extensionOf, type MediaKind } from "./mediaKind";
 import {
   formatBytes,
@@ -32,10 +40,22 @@ import {
 // keeps the key set in one place (chordRegistry's `terminal-font-zoom` row lists this outcome).
 import { terminalZoomForChord } from "../terminalFontZoom";
 
+// The SVG view-as-text pane reuses the read-only synthetic buffer (CM6), lazily, so a media tab
+// only pulls CodeMirror in when the operator actually asks for the source.
+const SyntheticView = lazy(() =>
+  import("./SyntheticView").then((m) => ({ default: m.SyntheticView })),
+);
+
 interface MediaViewProps {
   root: string;
   path: string;
   kind: MediaKind;
+  /**
+   * Bumped by PaneTabs when an `fs-change` names this path (the SAME per-workspace listener the
+   * text editor's disk check uses, via `EditorSplit.checkDiskForPaths`). Each bump re-stats;
+   * a changed mtime/size re-fetches, a failure shows the "no longer on disk" card.
+   */
+  epoch?: number;
   /** Injectable for tests; defaults to the real `invoke`. */
   invoker?: Invoker;
 }
@@ -45,7 +65,13 @@ export function assetUrlFor(stat: MediaStat): string {
   return `${convertFileSrc(stat.path)}?v=${Math.round(stat.mtime_ms)}`;
 }
 
-export function MediaView({ root, path, kind, invoker }: MediaViewProps) {
+export function MediaView({
+  root,
+  path,
+  kind,
+  epoch = 0,
+  invoker,
+}: MediaViewProps) {
   const [state, dispatch] = useReducer(mediaReducer, initialMediaState);
 
   useEffect(() => {
@@ -61,7 +87,8 @@ export function MediaView({ root, path, kind, invoker }: MediaViewProps) {
     return () => {
       live = false;
     };
-  }, [root, path, kind, invoker]);
+    // `epoch` is a dependency on purpose: it is the reload trigger, not a value read here.
+  }, [root, path, kind, invoker, epoch]);
 
   const onRenderError = useCallback(
     () => dispatch({ type: "render-error" }),
@@ -91,13 +118,136 @@ export function MediaView({ root, path, kind, invoker }: MediaViewProps) {
       />
     );
   }
+  if (display.kind === "pdf") {
+    return <PdfView stat={stat} path={path} />;
+  }
+  if (display.kind === "svg") {
+    return (
+      <SvgView
+        root={root}
+        stat={stat}
+        path={path}
+        invoker={invoker}
+        onRenderError={onRenderError}
+      />
+    );
+  }
   return (
     <ImageView
       stat={stat}
       path={path}
-      testId={display.kind === "svg" ? "media-svg" : "media-image"}
+      testId="media-image"
       onRenderError={onRenderError}
     />
+  );
+}
+
+/**
+ * A PDF in WebKit's native viewer, over the asset URL. ⚠️ The ONLY `<iframe>` any media view
+ * builds, and only reachable for a `display.kind === "pdf"`, which `displayFor` produces only
+ * when the backend saw `%PDF-` at byte 0. A rendered guard (mediaNoScriptElements.test.tsx) pins
+ * both halves.
+ */
+function PdfView({ stat, path }: { stat: MediaStat; path: string }) {
+  return (
+    <div className="media-view" data-testid="media-pdf">
+      <div className="media-toolbar">
+        <span className="media-readout" data-testid="media-readout">
+          {[formatBytes(stat.size), "PDF", path].join(" · ")}
+        </span>
+      </div>
+      <iframe
+        className="media-pdf-frame"
+        src={assetUrlFor(stat)}
+        title={path}
+      />
+    </div>
+  );
+}
+
+interface SvgViewProps {
+  root: string;
+  stat: MediaStat;
+  path: string;
+  invoker?: Invoker;
+  onRenderError: () => void;
+}
+
+/**
+ * An SVG: rendered through `<img>` ONLY (which never runs the file's script — WP1 measured the
+ * same file running its script inside `<object>`), with a view-as-text toggle that shows the
+ * source read-only. Editing the SVG as text stays the job of a normal text tab (spec A-6).
+ */
+function SvgView({ root, stat, path, invoker, onRenderError }: SvgViewProps) {
+  const [asText, setAsText] = useState(false);
+  const [text, setText] = useState<string | null>(null);
+  const [textError, setTextError] = useState<string | null>(null);
+
+  // (Re)read the source when the toggle is on, and again when the file changes on disk.
+  useEffect(() => {
+    if (!asText) return;
+    let live = true;
+    readTextFile(root, path, invoker).then(
+      (t) => {
+        if (live) {
+          setText(t);
+          setTextError(null);
+        }
+      },
+      (err) => {
+        if (live) setTextError(String(err));
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [asText, root, path, invoker, stat.mtime_ms]);
+
+  const toggle = (
+    <button
+      type="button"
+      className={`media-zoom-btn${asText ? " is-active" : ""}`}
+      data-testid="media-svg-text-toggle"
+      aria-pressed={asText}
+      onClick={() => setAsText((v) => !v)}
+      title={asText ? "Show the image" : "Show the SVG source (read-only)"}
+    >
+      Text
+    </button>
+  );
+
+  if (!asText) {
+    return (
+      <ImageView
+        stat={stat}
+        path={path}
+        testId="media-svg"
+        onRenderError={onRenderError}
+        extraControls={toggle}
+      />
+    );
+  }
+  return (
+    <div className="media-view" data-testid="media-svg-text">
+      <div className="media-toolbar">
+        <span className="media-readout" data-testid="media-readout">
+          {[formatBytes(stat.size), "SVG source (read-only)", path].join(" · ")}
+        </span>
+        <span className="media-zoom-controls">{toggle}</span>
+      </div>
+      {textError ? (
+        <div className="editor-error" data-testid="editor-error">
+          <p className="editor-error-title">Could not read {path}</p>
+          <p className="editor-error-detail">{textError}</p>
+        </div>
+      ) : text === null ? (
+        <div className="media-loading" />
+      ) : (
+        <Suspense fallback={<div className="media-loading" />}>
+          <SyntheticView content={text} />
+        </Suspense>
+      )}
+    </div>
   );
 }
 
@@ -106,11 +256,19 @@ interface ImageViewProps {
   path: string;
   testId: string;
   onRenderError: () => void;
+  /** Extra toolbar controls, before the zoom buttons (the SVG text toggle). */
+  extraControls?: ReactNode;
 }
 
 /** The glance viewer: fit by default, zoom in/out, 1:1, and a one-line readout. An SVG is
  *  shown through `<img>` ONLY, which never runs the file's script. */
-function ImageView({ stat, path, testId, onRenderError }: ImageViewProps) {
+function ImageView({
+  stat,
+  path,
+  testId,
+  onRenderError,
+  extraControls,
+}: ImageViewProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [zoom, setZoom] = useState<ZoomState>({ mode: "fit" });
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
@@ -159,6 +317,7 @@ function ImageView({ stat, path, testId, onRenderError }: ImageViewProps) {
             .join(" · ")}
         </span>
         <span className="media-zoom-controls">
+          {extraControls}
           <button
             type="button"
             className="media-zoom-btn"
