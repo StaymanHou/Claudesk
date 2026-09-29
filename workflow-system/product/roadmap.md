@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-09-28
+updated: 2026-09-29
 ---
 
 # Roadmap
@@ -637,6 +637,15 @@ mechanism that changed at v0.5.1. That is still a hypothesis. The discriminating
    then the right-panel media viewer (`SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER`, filed today).
    ⚠️ Their position relative to items 1–2 was not re-ruled. The operator had queued them after
    "the dogfeedback close-out", which is now done, so reorder freely.
+4. ✅ **SHIPPED 2026-09-29 (`c7042af`, feature `analytics-week-export`). Inserted, operator ask,
+   ahead of the media viewer.** Four time-analytics fixes:
+   - The Day view's 14-day build is 5.7× faster (557 → ~100 ms release, output identical).
+   - Resumed sessions are split into lives, so work after the first `SessionEnd` is no longer
+     dropped (104 sessions / 17,206 tool calls across the DB).
+   - Analytics opens on Week with no false "tracking is off" flash.
+   - `time_analytics_query` is now `async`, and a project's `path` comes from its modal cwd.
+   It also added `claudesk export-week`, read-only weekly JSON for Neo. ⚠️ It reaches Neo only
+   after the next `/release`.
 
 ⚠️ **The dogfeedback's six deferred checks and WP0's seven are NOT passed and NOT waived.** They are
 **void until firing is restored**, because a no-fire check passes vacuously while nothing fires.

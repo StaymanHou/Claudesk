@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-29
+
+- **Feature shipped:** Time analytics: the Day view builds 5.7× faster, and work after a resumed session's first exit is no longer dropped. Analytics now opens on Week with no false "tracking is off" flash, queries no longer freeze the app, a project's path is its sessions' real working directory, and a new read-only `claudesk export-week` CLI emits the week as JSON for Neo's weekly report.
+- **Backlog resolved:** SURFACE-2026-09-28-ANALYTICS-PROJECT-PATH-FROM-STRAY-CWDS — a project's `path` now comes from its sessions' modal cwd (the heaviest by row count), so stray rows from a reused `cc-N` id no longer give it another project's directory.
+
 ## 2026-09-28
 
 - **Feature shipped:** Supervisor activity record: every workflow-supervisor turn-end decision is now written as one JSONL line to `supervisor-activity.log` in the app-data dir, the `⚙ supervised` badge shows the last decision with a `▾` popover of recent ones, and the turn readout marks supervisor-started turns with `⚙`, so "working", "declining" and "doing nothing" are finally distinguishable.
