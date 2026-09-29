@@ -340,6 +340,14 @@ export const CHORD_REGISTRY: readonly ChordEntry[] = [
         description: "Grow / shrink / reset the right-panel terminal font",
         whenFocused: "a right-panel terminal",
       },
+      // M16 WP2 — the editor tab's image viewer calls the SAME predicate
+      // (`terminalZoomForChord`) from its own focused-element handler, so the key set stays in
+      // one module. ⌘0 returns to fit. A media tab has no CM6 keymap, so the `cm6-font-zoom`
+      // row does not apply there, and the editor font size is left alone.
+      {
+        description: "Zoom in / out / back to fit",
+        whenFocused: "an image in the editor tab",
+      },
     ],
     matcher: "components/workspace/terminalFontZoom.ts",
     claudeskOwned: true,

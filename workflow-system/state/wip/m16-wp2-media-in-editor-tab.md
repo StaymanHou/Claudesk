@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16 WP2 — Media in the editor tab (transport, glance viewer, unsupported card)
 
 **Workflow:** feature
-**State:** verify-codify (phase 1 complete)
+**State:** verify-codify (phase 2 complete)
 **Created:** 2026-09-29
 **Entry:** spec (complex feature)
 **Source:** `workflow-system/product/wbs.md` → WP2 (tasks 2.1–2.11). The grill rulings Q1–Q3, R-4a/b/c
@@ -328,7 +328,7 @@ the outcome that makes them.
       in verify-self. Phase 2's render tests will exercise the frontend side.
     - Full gate `pnpm verify:auto` → EXIT=0 (48 s), 3226 vitest.
 
-- [ ] Phase 2: Media branch in the file tab — image glance viewer, info card, default-app button  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [x] Phase 2: Media branch in the file tab — image glance viewer, info card, default-app button  <!-- done 2026-09-29 -->
   **Observable outcomes:**
   - CLI: `pnpm verify:auto` exits 0, including: `mediaKind` table tests (every WP1 extension,
     upper-case variants, `null` for `.ts`/`.mkv`→`video`, no-extension); a guard that no second
@@ -362,31 +362,103 @@ the outcome that makes them.
   - A-3 in action: ⌘= / ⌘− / ⌘0 zoom the image, not the editor font. Still what you want?
   - A-7 in action: the default-app button is greyed (not hidden) with no file tab. Placement and icon look right?
   - The glance viewer's look (fit, readout position, zoom controls) against the rest of the dark UI.
-  - [ ] P2.1 `src/components/workspace/editor/mediaKind.ts` — pure classifier + the one extension
+  - [x] P2.1 `src/components/workspace/editor/mediaKind.ts` — pure classifier + the one extension
         table (WP1 measured set; A-9 extras only if P2's live check renders them). The
-        second-list guard.  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 `PaneTabs`: gate the `prevPaths` `onTabOpen`/`onTabClose` diff on `mediaKind(path) === null`;
+        second-list guard.  <!-- done 2026-09-29 -->
+  - [x] P2.2 `PaneTabs`: gate the `prevPaths` `onTabOpen`/`onTabClose` diff on `mediaKind(path) === null`;
         render a lazy `MediaView` before the `EditorPanel` branch (keep the SyntheticView
-        fall-through); update `lazyBundleWiring.test.ts` for the new lazy import.  <!-- status: NOT-STARTED -->
-  - [ ] P2.3 (also: give `stat_media`/`open_in_default_app` a directory error that does not mention delete — Phase 1 verify-self cosmetic) `MediaView` shell: `statMedia` on mount → state machine
+        fall-through); update `lazyBundleWiring.test.ts` for the new lazy import.  <!-- done 2026-09-29 -->
+  - [x] P2.3 (also: give `stat_media`/`open_in_default_app` a directory error that does not mention delete — Phase 1 verify-self cosmetic) `MediaView` shell: `statMedia` on mount → state machine
         `loading | ready(stat) | card(reason) | error(msg)` as a pure reducer (tested), then dispatch by
-        kind. Video/audio and ≥4 GiB → card (WP2 arm, AC-10).  <!-- status: NOT-STARTED -->
-  - [ ] P2.4 `ImageView`: fit / zoom in / zoom out / 1:1; readout (dimensions from `naturalWidth/Height`,
-        size, format, repo-relative path); `error` event → card. Hex copied from existing surfaces.  <!-- status: NOT-STARTED -->
-  - [ ] P2.5 Zoom chords: a `mediaZoomChord.ts` predicate on `chordEvent.ts`, handled only while the
+        kind. Video/audio and ≥4 GiB → card (WP2 arm, AC-10).  <!-- done 2026-09-29 -->
+  - [x] P2.4 `ImageView`: fit / zoom in / zoom out / 1:1; readout (dimensions from `naturalWidth/Height`,
+        size, format, repo-relative path); `error` event → card. Hex copied from existing surfaces.  <!-- done 2026-09-29 -->
+  - [x] P2.5 Zoom chords: a `mediaZoomChord.ts` predicate on `chordEvent.ts`, handled only while the
         viewer has focus; add the entries to `chordRegistry.ts`; confirm no collision with the
-        reserved chords.  <!-- status: NOT-STARTED -->
-  - [ ] P2.6 `MediaCard`: filename, size, type, reason line, "Open in default app" (calls P1.6's
+        reserved chords.  <!-- done 2026-09-29 -->
+  - [x] P2.6 `MediaCard`: filename, size, type, reason line, "Open in default app" (calls P1.6's
         wrapper). Route `EditorPanel`'s load-error branch through `classifyReadError`: `not-utf8` /
-        `too-large` → `MediaCard`, `other` → the existing `editor-error`.  <!-- status: NOT-STARTED -->
-  - [ ] P2.7 Tab-row `open-default-app` icon button in `RightPanelHost`'s launcher cluster, acting on
+        `too-large` → `MediaCard`, `other` → the existing `editor-error`.  <!-- done 2026-09-29 -->
+  - [x] P2.7 Tab-row `open-default-app` icon button in `RightPanelHost`'s launcher cluster, acting on
         the editor's reported active path; disabled + titled when there is none or a non-Editor
-        surface is showing.  <!-- status: NOT-STARTED -->
-  - [ ] P2.8 (conditional) `preventDefault` ⌘R in the media viewer if the live check shows a reload.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+        surface is showing.  <!-- done 2026-09-29 -->
+  **Build notes (Phase 2):**
+  - **Plan deviation, P2.5:** no `mediaZoomChord.ts`. The viewer calls the existing
+    `terminalZoomForChord` (same ⌘= / ⌘- / ⌘0 set) from its own focused-element `onKeyDown`, and
+    the registry's `terminal-font-zoom` row gains a third focus-scoped outcome ("an image in the
+    editor tab"). A second module would have duplicated the key set, and the registry's
+    (label, host) uniqueness rule forbids a second row with the same label.
+  - **Naming:** the pure module is `mediaDisplay.ts`, not `mediaView.ts` — `tsc` TS1149 on macOS's
+    case-insensitive FS against `MediaView.tsx` (`[[macos-case-collision-module-naming]]`).
+  - **SVG in Phase 2** renders through the same `<img>` viewer (`data-testid="media-svg"`); Phase 3
+    adds the view-as-text toggle. **PDF in Phase 2** is the card (`pdf-pending` / `not-a-pdf`);
+    Phase 3 swaps the `pdf-pending` arm for the iframe. Both arms live in `displayFor` only.
+  - `projectPath` is threaded EditorSplit → PaneTabs → MediaView / EditorPanel (required prop;
+    PaneTabs is EditorPanel's only renderer).
+  - Asset URL = `convertFileSrc(stat.path) + "?v=<mtime>"`: the query is added now so Phase 2's
+    live check proves the asset handler tolerates it before Phase 3 relies on it for reload.
+  - P2.3's cosmetic: new `EditorFsError::NotAFile` ("is a directory, not a file") for
+    `stat_media` / `open_in_default_app`; `IsDirectory` keeps its delete wording for delete.
+  - Tests: `mediaKind.test.ts` (table), `mediaDisplay.test.ts` (4 GiB boundary, PDF gate, reducer,
+    zoom), `mediaKindIsTheOnlyExtensionList.test.ts`, `mediaTabLive.test.tsx` (live EditorSplit
+    mount: zero `read_file` for an image + positive control, card arms, routing), and
+    `lazyBundleWiring` (MediaView lazy, media modules CM6-free).
+  - Mutation-proven, each landed and run individually: PaneTabs gate removed → 3 live tests fail;
+    EditorPanel routing disabled → 2 fail; a pasted `[".png", ".jpg"]` in `openFiles.ts` → the
+    one-list guard fails.
+  - [x] P2.8 (conditional) `preventDefault` ⌘R in the media viewer if the live check shows a reload.  <!-- not needed: operator confirmed ⌘R does not reload, 2026-09-29 -->
+  - [x] verify-auto  <!-- done 2026-09-29 -->
+    - `pnpm verify:auto` → EXIT=0 (40 s): eslint 0 errors (the pre-existing `XtermPane.tsx:932`
+      warning only); prettier clean; `tsc --noEmit` clean; `check:link` clean; vitest 250 files /
+      3290 tests; `cargo fmt --check`, `clippy --all-targets -D warnings`, `cargo test` all pass
+      (editor_fs 54 incl. the new `NotAFile` assertions).
+    - Formatter touched only this change's files (`git status` checked).
+  - [x] verify-self  <!-- done 2026-09-29; orchestrator-driven over the MCP bridge, fresh `pnpm tauri:dev` relaunch (binary rebuilt 14:15), workspace `scratch-a` -->
+    - Fixture relocation (state change, dev scratch only): the WP1 files were APFS-cloned into
+      `tmp/scratch/scratch-a/media/` (+ `.hidden/shot.png`, and `render.mp4` = the 4.86 GB pilot),
+      because opening a workspace spawns a real CC session and scratch workspaces are mandatory for that.
+    - [x] Boot check on the fresh process: `#root.children` = 1, picker rendered; `window` error tap
+          installed and self-checked empty (`__errs: []`) at the end of every batch.
+    - [x] Consuming surface (file tree → editor tab): clicking `media/image.png` → `media-image`,
+          `img.naturalWidth×Height` = 640×480 = `sips`; readout `640 × 480 · 33.9 KB · PNG · media/image.png`;
+          `src` = `asset://localhost/<canonical scratch-a path>?v=1790694168170` (the `?v=` query is tolerated).
+    - [x] heic / webp / jpg 640×480, gif 320×240 — all equal to `sips`; `media/.hidden/shot.png` renders
+          640×480 (dot-path, A-2).
+    - [x] Fit geometry: img 583×437 in a 583-wide stage (exact 4:3, no overflow).
+    - [x] Zoom: ⌘= (synthetic keydown on the focused viewer, `defaultPrevented`) → 583 → 728.75 px (×1.25),
+          level "114%"; ⌘0 → fit (583); 1:1 → 640 = naturalWidth; `claudesk.editor.fontSize` "11" before,
+          after and at the end.
+    - [x] Cards, and **no `<video>`/`<audio>` in the DOM** for any: `h264.mp4` "8.0 MB · MP4" player-pending;
+          `audio.mp3` player-pending; `h264.mkv` player-pending; `not-media.bin` not-utf8 "4.1 KB · BIN" (the
+          `read_file` NUL-sniff route); `render.mp4` over-media-limit "4.9 GB · MP4".
+    - [x] Tabs: 11 tabs, 0 dirty dots; tree highlight tracks the active tab; ⌘W (prevented) closed the
+          media tab with no confirm modal; ⌘2 activated the 2nd tab (`image.webp`) and the tree followed.
+    - [x] Launcher: disabled with no tab ("…open a file in the editor first") and with Diff showing;
+          enabled on the Editor with a file tab; click with `image.webp` active → Preview PID 84749 opened
+          a window named `image.webp` (the second window, `image.png`, is Preview's own state restoration
+          from Phase 1). PID closed after.
+    - [x] ⌘R in a media tab does not reload the webview (operator-verified at P2.verify-human.5, 2026-09-29)  <!-- was UNVERIFIED: a REAL keystroke cannot be delivered — `CGEvent.postToPid` does not reach a non-key window (positive control ⌘= also did nothing) and `NSRunningApplication.activate()` from the agent's process is refused by macOS (front app stayed the operator's installed Claudesk). A synthetic keydown cannot trigger a native default action. Static evidence: no app-menu item and no frontend listener binds ⌘R (CM6's `Mod-r` is not mounted on a media tab), and WKWebView has no built-in reload key. P2.8 not applied. -->
+    - [x] align: evidence captured — fit screenshot `/private/tmp/claude-501/-Users-stayman-Personal-projects-claudesk/132563a1-8bce-425e-9467-c4bab101004b/scratchpad/p2-image-fit.png`; card `/private/tmp/claude-501/-Users-stayman-Personal-projects-claudesk/132563a1-8bce-425e-9467-c4bab101004b/scratchpad/p2-card-crop.png`
+          (shows the launcher icon in the tab row).
+  - [x] verify-human  <!-- done 2026-09-29: operator "all good"; ⌘R does not reload (P2.8 not needed) -->
+    - [x] P2.verify-human.1 Happy path in the running dev app (scratch-a → media/): open images, glance, zoom, open a card — is this what you meant? (look & feel incl.)  <!-- operator: pass 2026-09-29 -->
+    - [x] P2.verify-human.2 A-3 in action: ⌘= / ⌘− / ⌘0 zoom the image, not the editor font — still what you want?  <!-- operator: pass 2026-09-29 -->
+    - [x] P2.verify-human.3 A-2 in action: dot-directory screenshots (media/.hidden/shot.png) open as images — still what you want?  <!-- operator: pass 2026-09-29 -->
+    - [x] P2.verify-human.4 A-7 in action: the default-app launcher is greyed, not hidden, with no file tab; placement + icon right?  <!-- operator: pass 2026-09-29 -->
+    - [x] P2.verify-human.5 Needs you to run: ⌘R with an image tab focused does not reload the window  <!-- operator: pass 2026-09-29 -->
+  - [x] verify-codify  <!-- done 2026-09-29 -->
+    - Kept (already catch a regression): `mediaTabLive.test.tsx` (zero `read_file` for an image +
+      positive control, every card arm, `read_file` routing — the consuming surface EditorSplit →
+      PaneTabs → EditorPanel), `mediaKind` / `mediaDisplay` / one-list / lazy-wiring tests.
+    - **New:** live zoom test on the real viewer — ⌘= → 125%, ⌘- → 100%, ⌘0 → fit, all
+      `defaultPrevented`; a plain ⌘R is NOT prevented; the editor font setting unchanged.
+      Mutation: the handler stops calling `apply` → FAILS.
+    - **New (extract-for-import):** the launcher rule moved out of RightPanelHost into
+      `defaultAppTargetFor(panel, activePath)` (mediaIpc.ts), unit-tested across all five surfaces
+      and the null/empty path; a comment-stripped guard pins that the button's `disabled` AND
+      `onClick` both read `defaultAppTarget` and the button no longer mentions `activePath`.
+      Mutation: `onClick` back to its own `activePath` condition → FAILS.
+    - Full gate `pnpm verify:auto` → EXIT=0 (55 s), 3293 vitest.
 
 - [ ] Phase 3: SVG, PDF (gated), reload on disk change, installed-build tier  <!-- status: NOT-STARTED; depends on Phase 2 -->
   **Observable outcomes:**
@@ -433,10 +505,10 @@ the outcome that makes them.
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 2 > P2.1
-- **Active scope:** P2.1 (mediaKind classifier)
+- **Path:** Feature > Phase 3 > P3.1
+- **Active scope:** P3.1 (SvgView)
 - **Blocked:** none
-- **Unvisited:** Phase 3 → ship → review-quality → finalize
+- **Unvisited:** ship → review-quality → finalize
 - **Open discoveries:** none
 - **Build notes (Phase 1):**
   - The shared error prefixes live in `src/components/workspace/editor/readErrorPrefixes.json`; Rust
@@ -449,4 +521,5 @@ the outcome that makes them.
     first (the variant identity catches it), not by the bounded-read backstop — both still refuse.
 
 ## Discoveries
+- [SURFACED-2026-09-29] Phase 2 verify-human (operator) — a verify-human pause with the agent's dev shell still running shows the PURPLE BackgroundWork dot instead of blue AwaitingInput → `SURFACE-2026-09-29-VERIFY-HUMAN-PAUSE-WITH-A-BACKGROUND-SHELL-SHOWS-PURPLE-NOT-BLUE` (not in this feature's scope).
 - [NOTE-2026-09-29] Phase 1 verify-self — ran in the orchestrator, not the `feature-verify-self-runner` subagent: `mcp__tauri__*` tools do not reach subagents, which silently fall back to bare Vite (`[[mcp-bridge-tools-not-exposed-to-subagents]]`). Deliberate deviation from the skill's unconditional spawn.

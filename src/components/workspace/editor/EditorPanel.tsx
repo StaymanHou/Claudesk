@@ -33,8 +33,12 @@ import { CommandPalette } from "./CommandPalette";
 import { isPaletteChord, type PaletteCommand } from "./paletteCommands";
 import { SYNTAX_MODES } from "./language";
 import { EditorEmpty } from "./EditorEmpty";
+import { classifyReadError } from "./mediaIpc";
+import { ReadErrorCard } from "./MediaCard";
 
 interface EditorPanelProps {
+  /** M16 WP2 — the workspace root, for the info card a binary / oversized file routes to. */
+  projectPath: string;
   /** File to open, relative to projectPath (or absolute inside it). Null = no file. */
   openPath: string | null;
   /**
@@ -70,6 +74,7 @@ interface EditorPanelProps {
 }
 
 export function EditorPanel({
+  projectPath,
   openPath,
   active,
   highlightTarget = null,
@@ -255,6 +260,15 @@ export function EditorPanel({
   }
 
   if (load.kind === "error") {
+    // M16 WP2 — a binary or an oversized file is not an error to the user, it is a file the
+    // editor can't show: route those two to the same info card media gets ("Open in default
+    // app"). Everything else (outside the root, missing, I/O) keeps the error state.
+    const readError = classifyReadError(load.message);
+    if (readError !== "other") {
+      return (
+        <ReadErrorCard root={projectPath} path={load.path} reason={readError} />
+      );
+    }
     return (
       <div className="editor-error" data-testid="editor-error">
         <p className="editor-error-title">Could not open {load.path}</p>

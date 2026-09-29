@@ -8,6 +8,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import prefixes from "./readErrorPrefixes.json";
+import type { RightPanel } from "../panelHost";
 
 /** The subset of Tauri's `invoke` these helpers use; injectable for tests. */
 export type Invoker = (
@@ -58,4 +59,18 @@ export function classifyReadError(err: unknown): ReadErrorClass {
   if (message.startsWith(prefixes.notUtf8)) return "not-utf8";
   if (message.startsWith(prefixes.tooLarge)) return "too-large";
   return "other";
+}
+
+/**
+ * The file the tab-row "Open in default app" button acts on, or `null` when it is disabled.
+ * It targets the focused editor pane's ACTIVE FILE tab, and only while the Editor surface is the
+ * one showing: with Diff, Prompt, Terminal or Docs in front, "the active file" is not what the
+ * operator is looking at, so the button greys out rather than opening something off-screen.
+ * `activePath` is null for a synthetic tab or an empty pane.
+ */
+export function defaultAppTargetFor(
+  panel: RightPanel,
+  activePath: string | null,
+): string | null {
+  return panel === "editor" && activePath ? activePath : null;
 }

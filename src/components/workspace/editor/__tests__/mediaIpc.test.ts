@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import prefixes from "../readErrorPrefixes.json";
+import rightPanelHost from "../../RightPanelHost.tsx?raw";
 import {
   classifyReadError,
+  defaultAppTargetFor,
   openInDefaultApp,
   statMedia,
   type Invoker,
@@ -63,5 +65,30 @@ describe("media IPC wrappers", () => {
     });
     expect(err).toHaveBeenCalled();
     err.mockRestore();
+  });
+});
+
+describe("defaultAppTargetFor — the tab-row launcher's target", () => {
+  it("is the active file only while the Editor surface is showing", () => {
+    expect(defaultAppTargetFor("editor", "media/a.png")).toBe("media/a.png");
+    for (const panel of ["diff", "prompt", "terminal", "docs"] as const) {
+      expect(defaultAppTargetFor(panel, "media/a.png")).toBeNull();
+    }
+    // A synthetic tab or an empty pane reports no active path.
+    expect(defaultAppTargetFor("editor", null)).toBeNull();
+    expect(defaultAppTargetFor("editor", "")).toBeNull();
+  });
+
+  // The button's disabled state AND its click must both go through the rule above; a click
+  // handler with its own condition could open a file the greyed-out button says it won't.
+  it("RightPanelHost's button reads the rule for BOTH disabled and onClick", () => {
+    const code = rightPanelHost.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+    expect(code).toContain("defaultAppTargetFor(panel, activePath)");
+    const start = code.indexOf('data-testid="open-default-app"');
+    expect(start).toBeGreaterThan(0);
+    const button = code.slice(start, code.indexOf("</button>", start));
+    expect(button).toContain("disabled={defaultAppTarget === null}");
+    expect(button).toContain("openInDefaultApp(projectPath, defaultAppTarget)");
+    expect(button).not.toMatch(/activePath/);
   });
 });

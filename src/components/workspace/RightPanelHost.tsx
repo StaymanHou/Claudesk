@@ -130,6 +130,8 @@ import { openFinder } from "../../finder/finderLaunch";
 import { SublimeTextIcon } from "../../sublime/icons/SublimeTextIcon";
 import { SublimeMergeIcon } from "../../sublime/icons/SublimeMergeIcon";
 import { FinderIcon } from "../../finder/icons/FinderIcon";
+import { OpenExternalIcon } from "./editor/OpenExternalIcon";
+import { defaultAppTargetFor, openInDefaultApp } from "./editor/mediaIpc";
 import { PipIcon } from "../../pip/icons/PipIcon";
 
 interface RightPanelHostProps {
@@ -482,6 +484,8 @@ export function RightPanelHost({
     storedPanel ?? defaultPanel(workflowFeaturesEnabled),
     workflowFeaturesEnabled,
   );
+  // M16 WP2 — what the tab-row "Open in default app" button acts on (null = disabled).
+  const defaultAppTarget = defaultAppTargetFor(panel, activePath);
 
   // M9 WP2.5 — report the ACTIVE CONTEXT (workspace + right-panel surface) to the
   // backend so native-signal rows (focus/blur, keystrokes) attribute correctly. This
@@ -1169,6 +1173,28 @@ export function RightPanelHost({
             title="Reveal in Finder"
           >
             <FinderIcon />
+          </button>
+          {/* M16 WP2 (R-4b) — open the ACTIVE editor file tab in its default macOS app. Works
+                for any file, not just media; the media info card points here. Disabled (not
+                hidden, so the cluster does not shift) when the Editor surface is not showing
+                or its focused pane has no file tab. */}
+          <button
+            type="button"
+            className="panel-launch"
+            data-testid="open-default-app"
+            disabled={defaultAppTarget === null}
+            onClick={() => {
+              if (defaultAppTarget !== null)
+                void openInDefaultApp(projectPath, defaultAppTarget);
+            }}
+            aria-label="Open in default app"
+            title={
+              defaultAppTarget !== null
+                ? "Open in default app"
+                : "Open in default app (open a file in the editor first)"
+            }
+          >
+            <OpenExternalIcon />
           </button>
           {/* M5 WP5 (rework) — the tri-state PiP MODE control. Cycles Off→On→Auto→Off; the
                 label shows the current mode so the state is legible (the dead-end fix: the

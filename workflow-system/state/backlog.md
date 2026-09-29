@@ -1,5 +1,24 @@
 # Backlog
 
+## SURFACE-2026-09-29-VERIFY-HUMAN-PAUSE-WITH-A-BACKGROUND-SHELL-SHOWS-PURPLE-NOT-BLUE
+- **Source:** operator (feature:verify-human, `m16-wp2-media-in-editor-tab` Phase 2, 2026-09-29)
+- **Target level:** product:wbs
+- **Type:** gap
+- **Summary:** When a turn ends at a human-verification pause while a background shell is still running (the agent-launched `pnpm tauri:dev` waiting for the check), the workspace's status dot is **purple** (BackgroundWork), not **blue** (AwaitingInput). The operator is being asked to act, but the dot says "nothing needs you".
+- **Context:** Observed on the claudesk workspace's filmstrip tile. The turn ended with the Phase 2 verify-human checklist and CC's footer showed `1 shell · 1 agent` still running. `status_broadcaster::event_to_state` maps `Stop` + `background_task_count > 0` to `BackgroundWork` by design (the four-state vocabulary, M13.5 WP2). It sees a **count** of background tasks, never what the turn asked for. A dev server kept alive *for* the verification is exactly the case where "background work" and "waiting on you" are both true, and the dot picks the one that hides the ask. This is the false-negative direction the `semantic-distance-not-just-visual-distance-for-status-colour` prior warns about: purple exists to mean *ignorable*.
+- **Operator ask:** make Claudesk workflow-aware here, so a turn that ends at a verify-human pause reads like the blue blinking AwaitingInput dot, even with a background task running.
+- **Constraints any fix must respect (do not re-derive):**
+  - ⚠️ **Never from PTY output.** State comes from the hook channel and workflow files, not from parsing CC's text on screen (CLAUDE.md → "PTY byte-injection for input; hook channel for state").
+  - It is workflow knowledge, so it belongs to the **default-OFF workflow layer** (`workflow_features_enabled`, M10.9). With the gate off, the dot must behave exactly as today.
+  - A pause turn often emits **no** `TRANSITION:` token (verify-human waits instead of transitioning), so a token-only detector would miss it.
+- **Candidate signals (unmeasured):**
+  1. The supervisor's turn-end transcript read (M15, TypeScript) already knows which skill ran last in the turn and which policy cell applies. "The last `Skill` of the turn was `feature-verify-human` and the turn ended without a transition" means the turn stopped inside a PAUSE state. The supervisor could publish that alongside its decision, and the dot could promote BackgroundWork → AwaitingInput for that turn.
+  2. The WIP's `## Current Node` (`Path: … > verify-human`). ⚠️ No WIP-content parsing exists today, and adding one is a new coupling to the workflow's file format.
+  3. Upstream (mccc): have verify-human (and any PAUSE-at-entry skill) end its turn in a way the hook channel can see, for example a `Notification` whose `notification_type` Claudesk already classifies as input-needed.
+- **Suggested action:** a small feature. Measure first: how often a PAUSE-state turn end coincides with `background_task_count > 0` in the corpus, and which of the three signals is present on those turns. Then pick one, behind the gate. Check the four-state guard and the `derived-state-is-not-a-proxy-for-its-event` sweep (every consumer of `BackgroundWork` / `AwaitingInput`) when the mapping changes.
+- **Priority:** medium (an attention false negative on the one moment the workflow deliberately asks for the operator, but a scan of the filmstrip still finds it)
+- **Status:** pending
+
 ## SURFACE-2026-09-28-SUPERVISOR-FIRES-ON-A-TRANSITION-TOKEN-QUOTED-IN-PROSE
 - **Source:** feature:verify-self (`silent-supervisor` Phase 3)
 - **Target level:** feature:spec

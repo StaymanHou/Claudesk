@@ -510,6 +510,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
               data-pane-id={pane.id}
             >
               <PaneTabs
+                projectPath={projectPath}
                 ref={(h) => {
                   paneHandles.current.set(pane.id, h);
                 }}

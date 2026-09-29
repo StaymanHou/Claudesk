@@ -41,6 +41,11 @@ const EditorPanel = lazy(() =>
 const SyntheticView = lazy(() =>
   import("./SyntheticView").then((m) => ({ default: m.SyntheticView })),
 );
+// M16 WP2 — the media viewer for a file tab whose path `mediaKind` classifies (no CM6 in it,
+// but lazy for the same reason: a workspace that never opens media never loads it).
+const MediaView = lazy(() =>
+  import("./MediaView").then((m) => ({ default: m.MediaView })),
+);
 import { ConfirmModal } from "./ConfirmModal";
 import { closeDirtySpec, type CloseChoice } from "./confirmDialog";
 import {
@@ -50,6 +55,7 @@ import {
 } from "./openFiles";
 import { isDirty, type DocsState } from "./editorDocs";
 import type { HighlightTarget } from "../search/searchModel";
+import { mediaKind } from "./mediaKind";
 
 /** Basename of a project-relative (POSIX) or absolute path — the tab label. */
 export function labelForPath(path: string): string {
@@ -85,6 +91,8 @@ export interface PaneTabsHandle {
 }
 
 interface PaneTabsProps {
+  /** M16 WP2 — the workspace root, for the media viewer's `stat_media` and the info card. */
+  projectPath: string;
   /**
    * True when the whole workspace+editor panel is front AND this pane is the focused
    * pane — gates the active EditorPanel's palette chord so only the one live editor
@@ -146,6 +154,7 @@ interface PaneTabsProps {
 export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
   function PaneTabs(
     {
+      projectPath,
       active,
       highlightTarget,
       onFocusPane,
@@ -211,10 +220,18 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
     // for the delta — robust against the reducer's add-or-activate nuance (a re-open of an
     // already-open path doesn't add a tab, so it must not double-count). Synthetic tabs
     // (no path) don't touch the store.
+    // ⚠️ M16 WP2: MEDIA file tabs don't touch it either. A store entry is what triggers
+    // EditorSplit's load-once `read_file` (a whole-file read of a multi-GB video, then a
+    // UTF-8 failure), its disk-conflict check and the save path. Skipping registration HERE is
+    // the one gate that turns all of those off for a media tab; the viewer does its own stat.
     const prevPaths = useRef<Set<string>>(new Set());
     useEffect(() => {
       const cur = new Set(
-        tabs.filter((t) => t.kind === "file" && t.path).map((t) => t.path!),
+        tabs
+          .filter(
+            (t) => t.kind === "file" && t.path && mediaKind(t.path) === null,
+          )
+          .map((t) => t.path!),
       );
       for (const p of cur) if (!prevPaths.current.has(p)) onTabOpen(p);
       for (const p of prevPaths.current) if (!cur.has(p)) onTabClose(p);
@@ -454,8 +471,17 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
                     aria-labelledby={`editortab-${tab.id}`}
                     style={{ display: isActive ? "flex" : "none" }}
                   >
-                    {tab.kind === "file" && tab.path ? (
+                    {tab.kind === "file" &&
+                    tab.path &&
+                    mediaKind(tab.path) !== null ? (
+                      <MediaView
+                        root={projectPath}
+                        path={tab.path}
+                        kind={mediaKind(tab.path)!}
+                      />
+                    ) : tab.kind === "file" && tab.path ? (
                       <EditorPanel
+                        projectPath={projectPath}
                         openPath={tab.path}
                         active={active && isActive}
                         highlightTarget={isActive ? highlightTarget : null}

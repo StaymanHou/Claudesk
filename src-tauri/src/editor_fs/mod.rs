@@ -85,6 +85,10 @@ pub enum EditorFsError {
     UnknownRoot(String),
     #[error("path {0} is a directory; recursive directory delete is not supported")]
     IsDirectory(String),
+    /// M16 WP2 — a file-only command (`stat_media`, `open_in_default_app`) was given a directory.
+    /// Distinct from [`Self::IsDirectory`], whose message is about delete.
+    #[error("path {0} is a directory, not a file")]
+    NotAFile(String),
     #[error("could not move {path} to Trash: {source}")]
     Trash { path: String, source: trash::Error },
 }
@@ -381,7 +385,7 @@ pub fn stat_media_core(root: &Path, requested: &Path) -> Result<MediaStat, Edito
     let target = resolve_within(root, requested)?;
     let meta = std::fs::metadata(&target)?;
     if meta.is_dir() {
-        return Err(EditorFsError::IsDirectory(target.display().to_string()));
+        return Err(EditorFsError::NotAFile(target.display().to_string()));
     }
     let marker = stat_file_core(root, requested)?;
     let mut head = Vec::with_capacity(PDF_MAGIC.len());
@@ -412,7 +416,7 @@ pub fn default_app_target_core(root: &Path, requested: &Path) -> Result<PathBuf,
     let target = resolve_within(root, requested)?;
     let meta = std::fs::metadata(&target)?;
     if meta.is_dir() {
-        return Err(EditorFsError::IsDirectory(target.display().to_string()));
+        return Err(EditorFsError::NotAFile(target.display().to_string()));
     }
     Ok(target)
 }
@@ -1226,10 +1230,12 @@ mod tests {
     fn stat_media_on_a_directory_or_missing_file_is_an_error() {
         let dir = TempDir::new().unwrap();
         std::fs::create_dir(dir.path().join("sub")).unwrap();
-        assert!(matches!(
-            stat_media_core(dir.path(), Path::new("sub")),
-            Err(EditorFsError::IsDirectory(_))
-        ));
+        match stat_media_core(dir.path(), Path::new("sub")) {
+            Err(e @ EditorFsError::NotAFile(_)) => {
+                assert!(!e.to_string().contains("delete"), "{e}")
+            }
+            other => panic!("expected NotAFile, got {other:?}"),
+        }
         assert!(matches!(
             stat_media_core(dir.path(), Path::new("gone.png")),
             Err(EditorFsError::Io(_))
@@ -1267,7 +1273,7 @@ mod tests {
         ));
         assert!(matches!(
             default_app_target_core(&ws, Path::new("d")),
-            Err(EditorFsError::IsDirectory(_))
+            Err(EditorFsError::NotAFile(_))
         ));
     }
 }

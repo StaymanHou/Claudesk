@@ -11,6 +11,10 @@ import { describe, expect, it } from "vitest";
 import paneTabs from "../PaneTabs.tsx?raw";
 import editorEmpty from "../EditorEmpty.tsx?raw";
 import rightPanelHost from "../../RightPanelHost.tsx?raw";
+import mediaView from "../MediaView.tsx?raw";
+import mediaCard from "../MediaCard.tsx?raw";
+import mediaDisplay from "../mediaDisplay.ts?raw";
+import mediaIpc from "../mediaIpc.ts?raw";
 
 describe("M9 WP6a P4 — CM6-bearing surfaces are lazy() (kept out of the initial bundle)", () => {
   it("PaneTabs lazy-loads EditorPanel + SyntheticView (NOT static imports)", () => {
@@ -43,6 +47,31 @@ describe("M9 WP6a P4 — CM6-bearing surfaces are lazy() (kept out of the initia
 });
 
 describe("M9 WP6a P4 — the empty pane renders a no-CM6 placeholder (so a fresh workspace doesn't pull CM6)", () => {
+  // M16 WP2 — the media viewer is lazy like the CM6 leaves, and the media modules carry no
+  // CodeMirror import, so opening only images never loads the editor chunk. mediaIpc is also
+  // imported statically by RightPanelHost (the launcher button), so it must stay CM6-free too.
+  it("PaneTabs lazy-loads MediaView (NOT a static import)", () => {
+    expect(paneTabs).toMatch(/const MediaView = lazy\(/);
+    expect(paneTabs).toMatch(/import\("\.\/MediaView"\)/);
+    expect(paneTabs).not.toMatch(
+      /import\s*\{[^}]*\bMediaView\b[^}]*\}\s*from\s*"\.\/MediaView"/,
+    );
+  });
+
+  it("the media modules carry NO CodeMirror import", () => {
+    for (const [name, src] of [
+      ["MediaView", mediaView],
+      ["MediaCard", mediaCard],
+      ["mediaDisplay", mediaDisplay],
+      ["mediaIpc", mediaIpc],
+    ] as const) {
+      expect(src.length, `${name} read`).toBeGreaterThan(200);
+      expect(src, name).not.toMatch(
+        /@codemirror|@uiw|from "codemirror"|\.\/EditorPanel"/,
+      );
+    }
+  });
+
   it("EditorEmpty carries NO CodeMirror import", () => {
     expect(editorEmpty).not.toMatch(/@codemirror|@uiw|from "codemirror"/);
   });
