@@ -11,6 +11,8 @@ mod config_store;
 // roots are deliberately NOT supported — operator decision 2026-08-01).
 mod docs;
 mod editor_fs;
+// M16 WP1 PROBE (throwaway): runtime asset-protocol scope allow for `?mediaprobe`.
+mod media_probe;
 // Process-wide PATH fix: a Finder/Dock-launched macOS app inherits the minimal
 // launchd PATH, not the user's shell PATH, so user-installed CLIs (claude, subl,
 // …) aren't found. Capture the login-shell PATH at startup and set it process-wide.
@@ -247,6 +249,14 @@ pub fn run() {
     // release binaries (the SURFACE-2026-06-23 hard requirement). `localhost_only()`
     // keeps the default 0.0.0.0:9223 bind on the loopback so the dev bridge never
     // exposes the webview on the LAN.
+    // M16 WP1 PROBE (throwaway): `mprobe://` discriminator for the ≥4 GiB asset-protocol failure.
+    #[cfg(debug_assertions)]
+    {
+        builder = builder.register_uri_scheme_protocol("mprobe", |_ctx, request| {
+            media_probe::mprobe_response(&request)
+        });
+    }
+
     #[cfg(debug_assertions)]
     {
         // `localhost_only()` is the constructor for a loopback-bound Config (the
@@ -476,6 +486,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            // M16 WP1 PROBE (throwaway): runtime asset-scope allow; errors in release.
+            media_probe::media_probe_allow,
             config_store::commands::list_projects,
             config_store::commands::add_project,
             config_store::commands::record_open,

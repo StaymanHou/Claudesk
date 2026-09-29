@@ -68,6 +68,10 @@ projects mostly *glance*; media projects (a video-production pipeline) *review*.
 - **PDF** is included **only if** WKWebView renders it natively over the same transport with no
   bundled renderer (no pdf.js). If it doesn't, it is deferred and logged, and PDFs get the
   unsupported card.
+- ⚠️ **Probe verify-human rulings (2026-09-29), which supersede the lines below where they differ:**
+  - **(R-4a) A 4 GiB CAP on audio and video.** WebKit will not load media of 4 GiB or more over *any* custom URL scheme; the WP1 matrix has the evidence. Such files get the info card. There is **no loopback HTTP transport**; it was considered and declined.
+  - **(R-4b) An "Open in default app" ICON BUTTON in the right-panel tab-row launcher cluster**, beside Sublime Text / Sublime Merge / Finder. It acts on the **active editor file tab** (`/usr/bin/open`, root-confined) and works for **any** file. The info card points to it; this is the button's permanent home, not the card.
+  - **(R-4c) Native `<video>` fullscreen WORKS** (operator-verified). The player keeps it. Quitting the app while a video is fullscreen is **out of scope**.
 - **An unplayable or unsupported file** shows an **info card with "Open in default app"**
   (`/usr/bin/open <file>`, root-confined). There is **no transcoding**, because bundling ffmpeg would
   break "lite". **Non-UTF-8 non-media files** (today's bare "Could not open") get the same card.
@@ -197,7 +201,7 @@ unplayable or binary shows the info card. This WP carries all the plumbing WP3 r
     returned.** Its tests use `TempDir` and include the escaping-leaf-symlink case.
 - [ ] 2.2 **`read_file` size cap:** stat before read, with a new typed `EditorFsError` variant. It
       routes to the info card, not to `editor-error`. The number is set at spec time.
-- [ ] 2.3 **`open_in_default_app(root, path)`:** root-confined through the same guard, spawning
+- [ ] 2.3 *(R-4b)* **`open_in_default_app(root, path)`, plus its tab-row ICON BUTTON** in the launcher cluster (`sublime/sublimeLaunch.ts` is the precedent). It acts on the active file tab and is enabled for any file tab. **`open_in_default_app(root, path)`:** root-confined through the same guard, spawning
       `/usr/bin/open <file>`. `finder`'s spawn is the precedent. ⚠️ It is an external-process spawn,
       so it gets the installed-build smoke check (it rides `env_path`'s captured PATH).
 - [ ] 2.4 **One pure classifier `mediaKind(path)`** → `image | svg | pdf | video | audio | null`,
@@ -231,7 +235,7 @@ unplayable or binary shows the info card. This WP carries all the plumbing WP3 r
       it is mutation-proven.
 - [ ] 2.8 **PDF (only if WP1 said GO for PDF):** native render over the asset URL. Otherwise PDF
       maps to the unsupported card and a backlog SURFACE is filed.
-- [ ] 2.9 **Unsupported / unplayable card:**
+- [ ] 2.9 *(R-4a)* **Unsupported / unplayable card**, which also covers **audio/video of 4 GiB or more**, decided from `stat_media`'s size before any `<video>` is built:
   - Shows the filename, size and type, with **Open in default app** (2.3).
   - Used for a `mediaKind` that fails to render (keyed on WP1's measured failure signal), for
     non-UTF-8 non-media files (replacing the bare "Could not open"), and for the size-cap refusal.

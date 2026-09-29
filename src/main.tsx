@@ -10,16 +10,26 @@ import App from "./App";
 //   ?cm6probe   → CodeMirror 6 probes (&mode=hotkey|nmount = M2 WP1;
 //                 &mode=dictation = F-a WP1 macOS-dictation/wrap probe)
 //   ?nwsprobe   → M4 WP1 N-workspace mount-cost probe (&n=8&visible=1&term=cc|shell)
+//   ?mediaprobe → M16 WP1 media/asset-protocol probe (&root=<abs fixtures dir>)
 const probeParams = new URLSearchParams(window.location.search);
 const isProbe = probeParams.has("probe");
 const isCm6Probe = probeParams.has("cm6probe");
 const isNwsProbe = probeParams.has("nwsprobe");
+const isMediaProbe = probeParams.has("mediaprobe");
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement,
 );
 
-if (isNwsProbe) {
+if (isMediaProbe) {
+  import("./probe/media/MediaProbeApp").then(({ default: MediaProbeApp }) => {
+    root.render(
+      <React.StrictMode>
+        <MediaProbeApp />
+      </React.StrictMode>,
+    );
+  });
+} else if (isNwsProbe) {
   import("./probe/nworkspaces/NWorkspacesProbe").then(
     ({ default: NWorkspacesProbe }) => {
       root.render(
