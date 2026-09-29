@@ -30,6 +30,21 @@
 - **Priority:** medium (decisions are already deduplicated; what remains is a leak plus missing `⚙` in the affected workspace)
 - **Status:** pending
 
+## Code-quality findings — analytics-week-export (2026-09-29)
+
+- **Pointer:** **2 MAJOR + 4 MINOR** from the review of `c7042af`. The MAJORs:
+  - The `query.rs` week sort key's doc claims it is the `WEEK TOTAL` badge figure, but it sums 2 kinds and the badge sums 3.
+  - The export's view-matching figures are unguarded Rust copies of `weekMath.ts`, checked by a circular test, while the arch doc says they "cannot drift".
+  The MINORs:
+  - `WeekProjectMs.path` is the first day's winner, not the heaviest.
+  - The `{sid}~{N}` life key is a stringly-typed round trip.
+  - `ExportError::Db` also carries build and serde failures.
+  - `dashboardState.ts` has a stale "three modes" header.
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# analytics-week-export — 2026-09-29`.
+- **Priority:** medium (the MAJORs) / low (the rest)
+- **Status:** pending
+- **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
+
 ## Code-quality findings — silent-supervisor (2026-09-28)
 
 - **Pointer:** **1 MAJOR + 5 MINOR** from the review of `778fe72`. The MAJOR: the new transcript completion wait keys on undocumented CC transcript fields, so a CC format change would silently withhold every turn as `transcript-incomplete` with no alarm. The MINORs: a "stripped once" claim with two strip sites, a "user prose" floor that also counts `isMeta` skill bodies, a stale "read at the last possible moment" comment + reason list, a dedupe store only one test file resets, and an ad-hoc widened `onTurnEnd` param. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# silent-supervisor — 2026-09-28`.

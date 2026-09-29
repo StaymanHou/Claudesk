@@ -4,6 +4,38 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# analytics-week-export — 2026-09-29
+
+*(feature-review-quality on ship commit `c7042af`, window `c7042af^..c7042af`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 4 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-09-29-QUALITY-WEEK-SORT-KEY-DOC-CLAIMS-IT-IS-THE-WEEK-TOTAL
+- **Severity:** MAJOR
+- **Location:** `src-tauri/src/time_store/query.rs` (`week_ai_minutes` and its doc; `WeekMs.projects` ordering)
+- **Finding:** The doc says the sort figure (`ai_doing + subagent`) is "the `WEEK TOTAL` badge's figure — so the export and the view agree on order". The badge is `projectWeekActive` = `AI_KINDS`, which is THREE kinds including `ai_reasoning`, and the export's `week_total_min` correctly uses three. So "AI family" means two kinds in `query.rs` and three in `export.rs`. The three-kind correction (WIP: "corrected at build") never reached this comment.
+- **Why it matters:** A maintainer who trusts the comment "fixes" either the sort to match the badge or the badge figure to match the sort. Either change silently alters a contract Neo consumes.
+- **Suggested action:** Rename to something like `week_exec_minutes`, and correct the doc to say it is the view's ROW ORDER key, not `WEEK TOTAL`.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-29-QUALITY-EXPORT-VIEW-FIGURES-ARE-UNGUARDED-RUST-COPIES-OF-WEEKMATH
+- **Severity:** MAJOR
+- **Location:** `src-tauri/src/time_store/export.rs` (`week_total_min`, `painted_min`, `ai_family_ms`, `painted_non_away_ms`); `workflow-system/product/arch/time-analytics.md` (the export bullet's "cannot drift" claim)
+- **Finding:** The view-matching figures re-implement `weekMath.ts`'s `projectWeekActive` / `cellTotal` (`AI_KINDS` / `RENDER_ORDER` minus `away`) inline in Rust, twice each (minutes and ms). The export test asserts `week_total_min` against a third inline copy of the same three-kind sum, which is circular and never reads `AI_KINDS`. Only the ms core is shared.
+- **Why it matters:** If `AI_KINDS` or `RENDER_ORDER` changes, the export quietly disagrees with the screen while every test stays green, and the arch doc says this cannot happen. (verify-self's 17/17 badge match was a one-time live check, not a guard.)
+- **Suggested action:** Put the two family sums on `RollupCellMs` / `RollupCell` so each is written once, and anchor a test to the TS kind lists (a `?raw`/`node:fs` read of the kinds module, or a shared fixture). At minimum, soften the arch claim to "shares the ms core; the family sums mirror `weekMath.ts`".
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-29-QUALITY-ANALYTICS-WEEK-EXPORT-MINOR-BATCH
+- **Severity:** MINOR ×4
+- **Findings:**
+  1. `query.rs` `WeekProjectMs.path`: the doc says "its sessions' heaviest modal cwd", but `build_range` keeps the first non-empty per-day `path` (`if bucket.path.is_empty()`). Over a week that is the earliest day's winner, not the week's heaviest. Weight across days, or document the first-day rule. (The export publishes this field.)
+  2. `query.rs` life key: the life index is encoded as `{sid}~{N}` and `session_display_id` re-parses it with `rsplit_once` plus a numeric check. This is a stringly-typed round trip, and a raw sid already ending in `~<digits>` truncates differently. Carry `(sid, life)` in the key.
+  3. `export.rs` `ExportError::Db`: it also carries `build_week_ms` and serde failures, but is documented as "the DB is missing or unreadable". Add an `Internal` variant so the stderr category (and any future exit-code split) stays honest.
+  4. `dashboardState.ts` header: it still says "three mutually-exclusive display modes"; there are four (`pending`). The paragraph around line 24 was not rewrapped.
+- **Priority:** low
+- **Status:** pending
+
 # silent-supervisor — 2026-09-28
 
 *(feature-review-quality on ship commit `778fe72`, window `778fe72^..778fe72`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged.)*
