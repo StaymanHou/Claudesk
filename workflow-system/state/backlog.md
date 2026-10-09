@@ -1,5 +1,20 @@
 # Backlog
 
+## SURFACE-2026-10-09-ARTIFACT-WATCH-LIGHTS-THE-DOT-PURPLE-WITH-NOTHING-RUNNING
+- **Source:** operator (dogfooding, 2026-10-09)
+- **Target level:** feature:spec
+- **Type:** bug
+- **Summary:** After the agent creates, edits, or shows an artifact (the `Artifact` tool), the workspace's status dot goes **purple** (BackgroundWork) even though no job, task, or process is running. Purple should mean background jobs / tasks / running processes only. An opened or published artifact is not one.
+- **Context:** `status_broadcaster::event_to_state` maps `Stop` + `background_task_count > 0` to `BackgroundWork` (M13.5 WP2). Claudesk sees only the **count**, never what the tasks are. **Hypothesis (unconfirmed):** an `Artifact` publish or open starts a watch on that artifact (for republishes and comments), and CC counts the watch as a background task in `background_task_count`. If so, the dot stays purple for as long as the watch is alive, which can be the rest of the session. `status-channel.log` does not record the count today, so this has not been measured.
+- **Related:** `SURFACE-2026-09-29-VERIFY-HUMAN-PAUSE-WITH-A-BACKGROUND-SHELL-SHOWS-PURPLE-NOT-BLUE` has the same root (an opaque count drives the colour) but the other symptom (a real shell hides an ask). Any fix should consider both.
+- **Constraints any fix must respect (do not re-derive):**
+  - ⚠️ **Never from PTY output.** CC's footer text (`1 shell · 1 agent`) must not be parsed for state.
+  - ⚠️ The hook gives a **count, never the tasks**. Telling a watch apart from a shell may need another source (the hook payload, if a later CC version carries task kinds; the transcript's tool calls; or an upstream CC request).
+  - Sweep every consumer of `BackgroundWork` / `AwaitingInput` / `Idle` if the mapping changes (`derived-state-is-not-a-proxy-for-its-event`).
+- **Suggested action:** measure first. Log `background_task_count` on `Stop` in `status-channel.log`, then compare a turn that publishes an artifact with one that does not. Also capture the raw `Stop` payload to see whether it says what the tasks are. If the watch is what is counted, decide whether Claudesk can discount it (transcript read of `Artifact` calls) or whether it needs an upstream ask.
+- **Priority:** medium (a false "busy" on an idle workspace; scanning the filmstrip for purple stops meaning anything)
+- **Status:** pending
+
 ## SURFACE-2026-09-29-VERIFY-HUMAN-PAUSE-WITH-A-BACKGROUND-SHELL-SHOWS-PURPLE-NOT-BLUE
 - **Source:** operator (feature:verify-human, `m16-wp2-media-in-editor-tab` Phase 2, 2026-09-29)
 - **Target level:** product:wbs
