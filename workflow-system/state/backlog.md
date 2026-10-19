@@ -1,5 +1,16 @@
 # Backlog
 
+## SURFACE-2026-10-19-PICKER-FILTER-AUTOCORRECT-HIJACKS-THE-ROW-CLICK
+- **Source:** operator (dogfooding, 2026-10-19, screenshot)
+- **Target level:** task
+- **Type:** bug
+- **Summary:** Typing `eos` into the project picker's filter box brings up the macOS autocorrect bubble (`Eon ×`) under the input. Clicking the matching `eos` row does not open it. On mousedown the row disappears and the box now reads `Eon`, the correction. The operator wants two things: (1) **no autocorrect at all** on this box, because project names are not dictionary words, and (2) a click on a row must open that row, never accept a correction.
+- **Context:** The filter is the `picker-filter` `<input type="search">` in `ProjectPicker.tsx`. It sets none of `spellCheck` / `autoCorrect` / `autoCapitalize` / `autoComplete`, so WKWebView's native text checking runs on it. **Mechanism (inferred, not measured):** the mousedown on the row blurs the input, WebKit commits the pending correction on blur, and that fires `onChange` → `setFilter("Eon")`. `matchesFilter` then no longer matches `eos`, so the row unmounts before `click` fires on it (the row opens on `onClick`, which needs mousedown and mouseup on the same element). So (2) follows from (1): with no correction pending, nothing can rewrite the filter between mousedown and click.
+- **Precedent:** `FileFinder.tsx` sets `spellCheck={false}`, and `ProjectModelCell.tsx` sets `spellCheck={false}` + `autoComplete="off"`. ⚠️ Whether `spellCheck={false}` alone turns off the macOS **autocorrect** bubble in WKWebView is unverified. WebKit has a separate `autocorrect="off"` attribute (`autoCorrect` in React). Set both, plus `autoCapitalize="off"`, and check live that the bubble no longer appears.
+- **Suggested action:** add the attributes to `picker-filter`, then verify in the dev app: type `eos`, confirm no bubble, click the row, confirm the workspace opens. Also sweep the app's other free-text filter/search inputs for the same gap (`ProjectSearch`, `CommandPalette`, the settings wizards, the Prompt panel if it is an `<input>`/`<textarea>`) and decide per site. A prompt box may want spellcheck on, but a filter never does.
+- **Priority:** medium (the picker is the entry point to every workspace, and the failure looks like a lost click)
+- **Status:** pending
+
 ## SURFACE-2026-10-09-ARTIFACT-WATCH-LIGHTS-THE-DOT-PURPLE-WITH-NOTHING-RUNNING
 - **Source:** operator (dogfooding, 2026-10-09)
 - **Target level:** feature:spec
