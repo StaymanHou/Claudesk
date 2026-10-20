@@ -4,6 +4,64 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m16-wp3-review-player — 2026-10-20
+
+*(feature-review-quality on ship commit `cd0f204` (feature `b450287`), window `b450287^..cd0f204`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 6 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-10-20-QUALITY-PLAYER-ELREF-INTERSECTION-TYPE
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/MediaPlayer.tsx` → `elRef`
+- **Finding:** `elRef` is typed `HTMLVideoElement & HTMLAudioElement` so one `elementProps` spreads onto both tags. That claims an `<audio>` has `videoWidth` / `requestVideoFrameCallback`, and the code still needs `as unknown as TrackSource` / `as HTMLVideoElement` casts.
+- **Why it matters:** the type checker can no longer catch a video-only access on the audio path.
+- **Suggested action:** type it `HTMLMediaElement`, and narrow to video where needed.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-20-QUALITY-PLAYER-TWO-SUBSCRIPTION-PATHS-FOR-TIMEUPDATE
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/MediaPlayer.tsx` → the time-follow effect + `elementProps`
+- **Finding:** For audio (and video without rVFC), the effect adds `timeupdate` / `seeked` listeners with `addEventListener`, while `elementProps` also binds `onTimeUpdate` / `onSeeked` for `record` / `pauseIfHidden`.
+- **Why it matters:** there are two subscription mechanisms on the same events of one element, so a change to one is easy to miss in the other.
+- **Suggested action:** fold the `setTime` / `pendingFrameRef` clearing into the prop handlers, with a media branch.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-20-QUALITY-PLAYER-PER-FRAME-RERENDER-OF-WHOLE-PLAYER
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/MediaPlayer.tsx` → the rVFC loop's `setTime`
+- **Finding:** `setTime` on every presented frame re-renders the whole `MediaPlayer` (readout, rate buttons…) at up to 60 Hz during playback.
+- **Why it matters:** only the timecode span needs per-frame updates. This is cheap to fix now and grows as the strip gains controls.
+- **Suggested action:** a small `<Timecode>` child that owns the per-frame state.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-20-QUALITY-RESOLVEFPS-IS-A-PASSTHROUGH
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/mediaClock.ts` → `resolveFps`
+- **Finding:** After the seek probe was dropped, `resolveFps` just calls `snapFps(raw, TRACK_FPS_TOLERANCE)`, which is the default.
+- **Why it matters:** it is a leftover indirection from the rejected design.
+- **Suggested action:** inline it into `mediaInfoOf`. Move the "why there is no seek probe" comment onto `snapFps` or the call site.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-20-QUALITY-PLAYER-COMMENTS-CITE-WIP-PHASE-IDS
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/MediaPlayer.tsx` (decision A / P1.verify-human.3, "measured, P3 verify-self", "WIP → Research OQ-1/OQ-2")
+- **Finding:** Comments cite WIP-local phase and leaf IDs.
+- **Why it matters:** under the comment-budget rule this is provenance. The WIP gets archived, so these become pointers to labels a reader cannot resolve.
+- **Suggested action:** keep the measured fact at the code and drop the phase labels (this pairs with the comment-convention pass).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-20-QUALITY-PLAYER-STRIP-REUSES-ZOOM-BUTTON-CLASSES
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/MediaPlayer.tsx` strip → `.media-zoom-btn` / `.media-zoom-controls`
+- **Finding:** The frame-step, speed and loop controls reuse the image viewer's zoom classes.
+- **Why it matters:** most `.media-zoom-btn` uses are no longer zoom buttons, so a restyle or a class-based zoom-button query would silently include the player strip.
+- **Suggested action:** a neutral `.media-tool-btn` / `.media-tool-group` shared by both.
+- **Priority:** low
+- **Status:** pending
+
 # m16-wp2-media-in-editor-tab — 2026-09-29
 
 *(feature-review-quality on ship commit `5ea1aeb`, window `4455cf9^..5ea1aeb`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged.)*

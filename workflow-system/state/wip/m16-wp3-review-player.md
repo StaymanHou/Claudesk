@@ -900,6 +900,34 @@ All four OQs are resolved below.
     - Full gate: `pnpm verify:auto` → EXIT=0 in 61 s, 254 files / 3413 tests, `check:link`
       clean, cargo green.
 
+## Code-Quality Review
+
+*(2026-10-20 · reviewer subagent on ship commit `cd0f204`, window `b450287^..cd0f204` · 0 CRITICAL / 0 MAJOR / 6 MINOR · all MINORs auto-backlogged per drive_mode=autopilot → `backlog-quality-findings.md` → `# m16-wp3-review-player — 2026-10-20`)*
+
+### Strengths
+- All the time and frame arithmetic lives in one pure, heavily tested module (`mediaClock.ts`), so the frame-step and the timecode cannot disagree.
+- Reload-keeps-the-playhead: the playhead is held in `MediaView` (it survives unmounts), the `armedRef` stops a new element's early events from overwriting it, and the element is keyed on its asset URL.
+- The comments explain why, and record measured WebKit behaviour (midpoint seek, `preload="metadata"`, the late IntersectionObserver, the rejected seek probe).
+- The guards moved with the change in the same commit: the registry rows, `HOSTS`, both symbol maps and the off-invariant count, with the selector widening documented as a strict superset.
+- The WP2 MAJOR is fixed narrowly with tests on both sides. The `assetUrlFor` move left no importer behind.
+
+### Issues
+**CRITICAL** — none.
+**MAJOR** — none.
+**MINOR**
+- [MediaPlayer.tsx `elRef`] `HTMLVideoElement & HTMLAudioElement` intersection plus casts — use `HTMLMediaElement`, and narrow to video.
+- [MediaPlayer.tsx] two subscription paths (`addEventListener` in an effect + `onTimeUpdate`/`onSeeked` props) for the same events.
+- [MediaPlayer.tsx rVFC loop] the whole player re-renders per frame; a `<Timecode>` child would contain it.
+- [mediaClock.ts `resolveFps`] a pass-through left over from the dropped seek probe.
+- [MediaPlayer.tsx comments] cite WIP phase/leaf IDs (provenance under the comment-budget rule).
+- [MediaPlayer.tsx strip] reuses `.media-zoom-btn` / `.media-zoom-controls` for non-zoom controls.
+
+### Assessment
+Well built, and the codebase is better for it. The WebKit-specific behaviour is isolated in a pure, tested module, and the component stays a thin driver with one named mechanism per stateful hazard. The tests are behavioural with exact-value assertions, and the guards were extended in step. The remaining debt is small and local, and none of it affects correctness.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives this file.
+
 ## Ship
 - Commit `b450287` `feat(m16-wp3): review player for audio and video in the editor tab`, on
   `main`, **not pushed** (per the handoff note: push only on the operator's request).
@@ -912,10 +940,10 @@ All four OQs are resolved below.
   tauri:dev`, started for the operator's P3 look) is still running.
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality against ship commit `b450287` (feature window: everything since `9bc63e9`)
+- **Path:** Feature > finalize
+- **Active scope:** finalize (review-quality done: 0/0/6, MINORs auto-backlogged)
 - **Blocked:** none
-- **Unvisited:** review-quality → finalize
+- **Unvisited:** finalize
 - **Open discoveries:** the two-seek fps probe was dropped at build (see Discoveries)
 
 ## Discoveries
