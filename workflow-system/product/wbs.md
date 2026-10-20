@@ -347,3 +347,6 @@ background agent) and `monitor` (an artifact watch).
 - A task notification that arrives while idle is a REAL new turn (`UserPromptSubmit` → `Stop`).
   It has `origin.kind: "task-notification"` in the transcript and the same keys on the hook.
 - `prompt_id` is on both events, but it was not needed.
+
+## Session Handoff — 2026-10-20 15:45
+Handed off. See `workflow-system/state/.session.md` to restore.
