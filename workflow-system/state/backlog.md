@@ -27,6 +27,7 @@
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## SURFACE-2026-09-29-VERIFY-HUMAN-PAUSE-WITH-A-BACKGROUND-SHELL-SHOWS-PURPLE-NOT-BLUE
+- **⚠️ SCOPE WIDENED (2026-10-20, operator, M16.5 WP1 verify-human):** EVERY verify-human pause should read **blue**, with or without a background task. Measured: of 106 verify-human turn ends since 2026-09-25, ~69 read grey `idle` and ~37 purple, so both are wrong. Signal chosen at WP1: the supervisor's turn-end read. Scheduled as M16.5 WP4 task 4.2. The title below describes only the original purple symptom.
 - **Source:** operator (feature:verify-human, `m16-wp2-media-in-editor-tab` Phase 2, 2026-09-29)
 - **Target level:** product:wbs
 - **Type:** gap

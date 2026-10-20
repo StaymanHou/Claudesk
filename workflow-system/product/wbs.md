@@ -156,8 +156,10 @@ the 29 scorable records the +1 margin rested on?
 **Tasks:**
 - [ ] 4.1 **Artifact watch → no false purple**, by the mechanism WP1 found. If the count cannot be
       told apart, record an upstream CC ask and stop. Do not guess from text.
-- [ ] 4.2 **Verify-human pause reads blue** (AwaitingInput), behind `workflow_features_enabled`,
-      byte-identical when off.
+- [ ] 4.2 **EVERY verify-human pause reads blue** (AwaitingInput), whether or not a background task
+      is running (operator ruling, WP1 verify-human, 2026-10-20: today ~2/3 read grey, ~1/3 purple).
+      Signal: the supervisor's turn-end read (last `Skill` was `feature-verify-human` and no fire
+      followed). Behind `workflow_features_enabled`, byte-identical when off.
   - ⚠️ **Decide at spec whether this owns a SEVENTH guard arm.** `arch/workflow-supervisor.md` §G
     records the supervisor as owning NO arm, because every supervisor-visible surface derives from
     `workspaceSupervisorReadout` (arm 6). A supervisor-sourced dot promotion is a new shape. Check
@@ -276,9 +278,9 @@ WP6 (per-result replace) ──────────────────�
 
 - No supervisor fire on a quoted token. A CC transcript-format change trips an alarm, and a test
   pins it. One activity record per `Stop` in a multi-workspace session.
-- An idle workspace with an artifact watch does not read purple, or an upstream ask is filed with
-  WP1's evidence. With the gate ON, a verify-human pause with a background shell reads blue. With
-  it OFF, nothing changes.
+- An idle workspace with an artifact watch (`monitor` task) does not read purple. With the gate ON,
+  EVERY verify-human pause reads blue, with or without background work. With it OFF, nothing
+  changes.
 - The adjudicator bar is measured, not chosen.
 - The picker click opens the row it is on. A failed delete says so. The three CM6 bindings have
   Settings rows. Per-result and per-file replace work.
@@ -288,4 +290,60 @@ WP6 (per-result replace) ──────────────────�
 
 ## Probe outcomes
 
-*(none yet)*
+### WP1 — what the hook channel carries (2026-10-20)
+
+**Method.** `claudesk-hook.pl` now forwards each background task's `type`, and the dev build
+forwards payload key **names**. Both shipped in `d9f13ab`. A stripped-env dev build drove real
+turns in `scratch-c`. Because the dev hook is registered machine-wide, the operator's own sessions
+were captured passively too.
+
+**Key sets (CC 2.x, live):**
+- `Stop`: `background_tasks, cwd, effort, hook_event_name, last_assistant_message,
+  permission_mode, prompt_id, scratchpad_dir, session_crons, session_id, stop_hook_active,
+  transcript_path`
+- `UserPromptSubmit`: `cwd, hook_event_name, permission_mode, prompt, prompt_id, scratchpad_dir,
+  session_id, transcript_path`
+- A typed prompt, a queued prompt and a task-notification prompt carry the **same** key set.
+
+**Background-task `type` values seen:** `shell` (a `run_in_background` Bash), `subagent` (a
+background agent) and `monitor` (an artifact watch).
+
+**Q1 (artifact watch → purple): ANSWERED from the hook payload.**
+- Publishing one private artifact gave `Stop` `bg=1 bg_types=monitor` → `background_work`, with
+  nothing running.
+- So the purple comes from a `monitor`-type task, and the `type` field tells it apart from
+  `shell` / `subagent` with no transcript read.
+- ⚠️ For WP4: the `Monitor` tool's own watches are presumably the same type (not measured).
+  Decide at spec whether any `monitor` task should count as BackgroundWork, and what an unknown
+  type (`?`) should mean.
+- The probe artifact (`YJZRwYuaa7YqkPVmYVg4jr`) is left for the operator to delete. The delete
+  needs their confirmation.
+
+**Q2 (verify-human pause with a live shell reads purple): SIZED; the signal is the transcript.**
+- In the installed app's own `status-channel.log` (since 2026-09-25), **36 of 105** verify-human
+  turn ends recorded `mapped=background_work` (as of about 19:30Z on 2026-10-20; an independent
+  re-derivation by verify-self an hour later read **37 of 106**, the log having gained a turn). That
+  is about a third of verify-human pauses showing *ignorable* while asking the operator to act.
+- Transcript-only estimate over 45 days: 57 of 204. It is an upper bound, because 93 of 138
+  background shells never log a completion.
+- The hook carries no structured pause marker. `last_assistant_message` is free text, so
+  inferring state from it is the PTY-text anti-pattern by another route.
+- **Verdict: signal 1** (the supervisor's turn-end transcript read, which already knows the
+  turn's last `Skill`), behind the gate. Signals 2 (WIP parse) and 3 (upstream) are not needed.
+- ⚠️ **SCOPE WIDENED by the operator at WP1 verify-human (2026-10-20): EVERY verify-human pause
+  reads BLUE (AwaitingInput), whether or not any background task is running.** So the fix also
+  covers the ~two-thirds of pauses that read grey `idle` today, not just the purple third. The
+  background count is NOT part of the rule. The size is all verify-human pauses (106 since
+  2026-09-25), not 37.
+
+**Q3 (`is_turn_start` on a mid-turn prompt): ANSWERED by event order; no payload field needed.**
+- A prompt typed while a turn runs fires `UserPromptSubmit` **at enqueue**: mid-turn, between a
+  `PreToolUse` and its `PostToolUse`, with no `Stop` in between.
+- The transcript confirms it: `queue-operation: enqueue` at submit, `remove` 17 s later, then the
+  prompt is folded into the running turn. ⚠️ The backlog entry's word "dequeue" is inexact: the
+  hook fires at enqueue.
+- **Discriminator:** a `UserPromptSubmit` for a session with no `Stop` since its previous
+  `UserPromptSubmit` is not a turn start. The broadcaster already sees that order.
+- A task notification that arrives while idle is a REAL new turn (`UserPromptSubmit` → `Stop`).
+  It has `origin.kind: "task-notification"` in the transcript and the same keys on the hook.
+- `prompt_id` is on both events, but it was not needed.

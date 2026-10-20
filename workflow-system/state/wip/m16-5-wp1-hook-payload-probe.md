@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16.5 WP1 — Probe: what the hook channel carries for background work and dequeued prompts
 
 **Workflow:** feature
-**State:** verify-codify (phase 1 complete)
+**State:** ship (complete)
 **Created:** 2026-10-20
 **WBS:** `workflow-system/product/wbs.md` → WP1 (type: probe, timebox half a day). It gates WP4.
 
@@ -101,7 +101,8 @@ changes here; that is WP4.
     - New: `status_broadcaster::commands::tests::event_detail_threads_each_wire_field_into_its_own_slot` — the drain-loop helper, built from wire JSON (the consuming-surface seam reachable without a live app; the live drive is in verify-self). Mutation: swapping the types/keys arguments → FAILS. Restored by checksum.
     - Full suite: `pnpm verify:auto` → exit 0 (45s), vitest 3413, cargo lib 1023.
 
-- [ ] Phase 2: Capture and verdicts  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [x] Phase 2: Capture and verdicts
+  **Relevance check (before Phase 2):** requester still needs it: yes · requirements unchanged: yes · still feasible: yes · no superior alternative: yes. **Verdict:** proceed.
   **Observable outcomes:**
   - CLI (state-changing: dev build + scratch workspaces under `tmp/scratch/`): launch
     `pnpm tauri:dev` with the Claude-marker env strip
@@ -125,23 +126,38 @@ changes here; that is WP4.
     alternative is to wait for one to occur naturally on a build with Phase 1 in it.
   - Do the recorded verdicts match what you see day to day (purple after artifacts; purple at
     verify-human with a dev server up)?
-  - [ ] P2.1 Live captures (a)–(d) on the dev build in scratch workspaces.  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 Artifact capture, only on your OK (see the Alignment question).  <!-- status: NOT-STARTED -->
-  - [ ] P2.3 Corpus count for Q2.  <!-- status: NOT-STARTED -->
-  - [ ] P2.4 Write "Probe outcomes" in `wbs.md` with the per-question verdicts and what WP4
-        should build.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P2.1 Live captures (a)–(d) on the dev build in scratch workspaces.  <!-- status: done -->
+  - [x] P2.2 Artifact capture, only on your OK (see the Alignment question).  <!-- status: done -->
+  - [x] P2.3 Corpus count for Q2.  <!-- status: done -->
+  - [x] P2.4 Write "Probe outcomes" in `wbs.md` with the per-question verdicts and what WP4
+        should build.  <!-- status: done -->
+  - [x] verify-auto  <!-- status: done -->
+    - Docs-only phase: `git diff --name-only d9f13ab -- src src-tauri` → 0 files; changed = `wbs.md` + this WIP.
+    - `grep` of `wbs.md` → Q1 ANSWERED, Q2 SIZED, Q3 ANSWERED headers present.
+    - `python3 -I q2_corpus.py 45` (scratchpad) → exit 0, reproduces 204 verify-human turn ends / 57 with a bg shell / 1 with a later recorded completion (turns 1808→1809: this session's own new turn).
+  - [x] verify-self  <!-- status: done -->
+    - [x] Real CC Stop lines with bg=/keys= in the dev log — evidence: 7 scratch-c `Stop` lines, `resolved=ws-1`, 12-key set (e.g. ts 1792524120764)
+    - [x] Cases (a)–(d) + artifact — evidence: (a) `bg=1 bg_types=shell` @1792524120764; (b) `bg=0` ×4; (c) UPS 1792524435631 → PreToolUse → UPS 1792524445621 → PostToolUse → Stop, identical keys, transcript enqueue 19:27:25.627Z / remove 19:27:42.829Z; (d) task-notification UPS @1792524194958 with `origin.kind` task-notification; artifact `bg=1 bg_types=monitor` @1792524697134
+    - [x] Corpus + installed-log join — evidence: `q2_corpus.py 45` → 204 / 57 / 1 reproduced; independent `vh_join.py 15000` → 37 of 106 background_work (recorded 36/105 an hour earlier; drift from a new turn, now noted in wbs.md)
+    - [x] Probe-outcomes write-up — evidence: wbs.md key sets equal the dev log's real-CC `keys=` sets (Stop 12, UPS 8); `subagent` occurs 4× in `bg_types`; each verdict names its source
+    - [x] align: artifact publish (operator-approved) — evidence: one publish, URL `YJZRwYuaa7YqkPVmYVg4jr` (transcript idx 462), followed ~1.4 s later by the `bg_types=monitor` Stop
+    - [x] align: do the verdicts match daily experience — evidence: Q1/Q2 verdict lines verbatim in wbs.md; 37 of 106 re-derived
+  - [x] verify-human  <!-- status: done -->
+    - [x] P2.verify-human.1: do the verdicts match what you see day to day? → Q1 yes ("the issue I'd like to address"); Q2 yes, with a correction: the verify-human treatment applies with or without a dev server/container  <!-- status: done -->
+    - [x] P2.verify-human.2: (decision) accept the three verdicts as WP4's design basis → accepted with Q2 REVISED: EVERY verify-human pause reads BLUE regardless of background work (operator chose blue over purple/leave-as-is); Q1 and Q3 unchanged. Recorded in wbs.md (Q2 verdict + WP4 4.2 + exit criteria) and the backlog SURFACE.  <!-- status: done -->
+  - [x] verify-codify  <!-- status: done -->
+    - No integration boundary — phase records measurements only (no code changed). No new tests: the hook's generic `type` forwarding (incl. `subagent`/`monitor`) is already pinned by Phase 1's `stop_forwards_task_types_and_nothing_else_from_the_tasks`; the classification built on these verdicts is WP4's to codify.
+    - Full suite: `pnpm verify:auto` → exit 0 (39s), vitest 3413, cargo lib 1023.
 
 ## Current Node
-- **Path:** Feature > Phase 2 > P2.1
-- **Active scope:** P2.1 (live captures on the dev build)
-- **Blocked:** P2.2 awaits the operator's OK to publish one private throwaway artifact
+- **Path:** Feature > ship
+- **Active scope:** ship (both phases complete)
+- **Blocked:** none (the probe artifact awaits the operator's own delete; nothing depends on it)
 - **Unvisited:** none after Phase 2
 - **Open discoveries:** none
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
+- [NOTE-2026-10-20] P2.1 — `cc_input` of a long message with a trailing `\r` in ONE write is taken as a paste (the `\r` becomes a newline); submit with a separate `\r` write. Also `await`ing `cc_input` through `webview_execute_js` timed out; fire-and-forget worked.
+- [NOTE-2026-10-20] P2.2 — the artifact was published from the scratch-c session (only a `Stop` carries the task list, and this session's `Stop` would not fire until its turn ended). Deleting it needs the operator's confirmation, which a session can't present; left for the operator (`/artifacts` → d).
