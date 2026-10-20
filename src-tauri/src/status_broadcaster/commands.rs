@@ -28,12 +28,23 @@ use super::{
     canonical_key, event_to_state, state_label, to_update, SharedRegistry, WorkspaceRegistry,
 };
 use crate::hook_socket::HookEvent;
-use crate::status_log::{format_event_line, StatusLog};
+use crate::status_log::{format_event_detail, format_event_line, StatusLog};
 
 /// The Tauri event name every status surface (M4 filmstrip, M5 PiP, M6 menu-bar)
 /// subscribes to. The single broadcast channel — defined here, mirrored verbatim by
 /// WP6's frontend `listen("workspace-status", …)`.
 pub const STATUS_EVENT: &str = "workspace-status";
+
+/// The telemetry tail for one event (M16.5 WP1): background-task count and types on `Stop`,
+/// plus the dev-only payload key names. Empty for every other event.
+fn event_detail(event: &HookEvent) -> String {
+    format_event_detail(
+        &event.hook_event_name,
+        event.background_task_count,
+        event.background_task_types.as_deref(),
+        event.payload_keys.as_deref(),
+    )
+}
 
 /// Start the broadcaster: own the `HookEvent` receiver and spawn the drain thread
 /// that maps each event through the [`WorkspaceRegistry`] and emits the resulting
@@ -95,13 +106,15 @@ fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>, status_log: Option<
                         "[claudesk] status-broadcaster: registry not in state; dropping event"
                     );
                     if let Some(log) = &status_log {
-                        log.write_line(&format_event_line(
-                            event.timestamp,
-                            &event.hook_event_name,
-                            &event.cwd,
-                            event_to_state(&event).map(state_label),
-                            None,
-                        ));
+                        log.write_line(
+                            &(format_event_line(
+                                event.timestamp,
+                                &event.hook_event_name,
+                                &event.cwd,
+                                event_to_state(&event).map(state_label),
+                                None,
+                            ) + &event_detail(&event)),
+                        );
                     }
                     continue;
                 }
@@ -118,13 +131,15 @@ fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>, status_log: Option<
 
         // M6 WP1: one telemetry line per drained event (best-effort; never blocks).
         if let Some(log) = &status_log {
-            log.write_line(&format_event_line(
-                event.timestamp,
-                &event.hook_event_name,
-                &event.cwd,
-                mapped.map(state_label),
-                resolved.as_deref(),
-            ));
+            log.write_line(
+                &(format_event_line(
+                    event.timestamp,
+                    &event.hook_event_name,
+                    &event.cwd,
+                    mapped.map(state_label),
+                    resolved.as_deref(),
+                ) + &event_detail(&event)),
+            );
         }
 
         if let Some(update) = update {
@@ -419,6 +434,35 @@ mod tests {
     /// the only thing that ever clears it is a later `Stop` with a zero count. If that
     /// stopped working the dot would stick purple forever — the same stuck-state class as
     /// the stale-blue defect Phase 1 fixed.
+    #[test]
+    fn event_detail_threads_each_wire_field_into_its_own_slot() {
+        // M16.5 WP1. Both drain-loop log sites append `event_detail`, and the drain loop
+        // needs a live app, so this pins the field threading at the helper: each value
+        // must land in its own slot (types after `bg_types=`, key names after `keys=`).
+        // Built from wire JSON, the shape the drain loop actually receives.
+        let stop: HookEvent = serde_json::from_str(
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_task_count":2,"background_task_types":["shell","monitor"],"payload_keys":["cwd","session_id"]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            event_detail(&stop),
+            " bg=2 bg_types=shell,monitor keys=cwd,session_id"
+        );
+
+        let submit: HookEvent = serde_json::from_str(
+            r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hi","payload_keys":["prompt"]}"#,
+        )
+        .unwrap();
+        assert_eq!(event_detail(&submit), " keys=prompt");
+
+        // A pre-M16.5 wire line (prod build, no new fields) keeps its old tail exactly.
+        let old_stop: HookEvent = serde_json::from_str(
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_task_count":0}"#,
+        )
+        .unwrap();
+        assert_eq!(event_detail(&old_stop), " bg=0 bg_types=-");
+    }
+
     #[test]
     fn end_to_end_socket_background_work_emits_then_clears_on_a_clean_stop() {
         let dir = tempfile::TempDir::new().unwrap();

@@ -146,6 +146,16 @@ pub struct HookEvent {
     /// the dot.
     #[serde(default)]
     pub background_task_count: Option<u64>,
+    /// `Stop` only (M16.5 WP1): the `type` of each outstanding background task, in the
+    /// payload's order (`"shell"`, …; `"?"` where CC sent no scalar type). A type is an
+    /// enum-ish tag, so it is forwarded where `command`/`description` are not. Telemetry
+    /// only for now: `event_to_state` does not read it.
+    #[serde(default)]
+    pub background_task_types: Option<Vec<String>>,
+    /// `Stop` / `UserPromptSubmit`, **dev build only** (M16.5 WP1 probe): the payload's
+    /// top-level key names, never values. Telemetry only.
+    #[serde(default)]
+    pub payload_keys: Option<Vec<String>>,
 }
 
 /// Errors from the socket listener's IO/lifecycle (bind, remove-stale, accept).

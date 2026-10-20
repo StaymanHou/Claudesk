@@ -553,6 +553,8 @@ mod tests {
             source: None,
             reason: None,
             background_task_count: None,
+            background_task_types: None,
+            payload_keys: None,
         }
     }
 
@@ -573,6 +575,8 @@ mod tests {
             source: None,
             reason: None,
             background_task_count: None,
+            background_task_types: None,
+            payload_keys: None,
         }
     }
 
@@ -641,6 +645,8 @@ mod tests {
     fn stop_with_bg(count: Option<u64>, cwd: &str) -> HookEvent {
         HookEvent {
             background_task_count: count,
+            background_task_types: None,
+            payload_keys: None,
             ..ev("Stop", cwd)
         }
     }
@@ -694,6 +700,8 @@ mod tests {
         for name in ["UserPromptSubmit", "PostToolUse", "Notification"] {
             let ev = HookEvent {
                 background_task_count: Some(3),
+                background_task_types: None,
+                payload_keys: None,
                 ..ev(name, "/p")
             };
             assert_ne!(
@@ -1509,6 +1517,8 @@ mod tests {
             let event = HookEvent {
                 session_id: "sess-live".to_string(),
                 background_task_count: Some(bg),
+                background_task_types: None,
+                payload_keys: None,
                 ..ev("Stop", "/proj")
             };
 

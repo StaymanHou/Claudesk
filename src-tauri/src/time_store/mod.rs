@@ -370,6 +370,8 @@ mod tests {
             source: None,
             reason: None,
             background_task_count: None,
+            background_task_types: None,
+            payload_keys: None,
         }
     }
 

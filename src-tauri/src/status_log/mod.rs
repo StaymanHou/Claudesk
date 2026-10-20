@@ -197,6 +197,32 @@ pub fn format_event_line(
     )
 }
 
+/// The optional tail appended to a [`format_event_line`] line (M16.5 WP1). Pure.
+///
+/// - On `Stop`: ` bg=<count> bg_types=<t1,t2|->` (the outstanding background tasks, types
+///   only; a missing count reads as 0).
+/// - On any event carrying `payload_keys` (dev build only): ` keys=<k1,k2>`.
+/// - Otherwise the empty string, so every other line stays byte-identical to before.
+pub fn format_event_detail(
+    event_name: &str,
+    bg_count: Option<u64>,
+    bg_types: Option<&[String]>,
+    payload_keys: Option<&[String]>,
+) -> String {
+    let mut tail = String::new();
+    if event_name == "Stop" {
+        let types = match bg_types {
+            Some(t) if !t.is_empty() => t.join(","),
+            _ => "-".to_string(),
+        };
+        tail.push_str(&format!(" bg={} bg_types={types}", bg_count.unwrap_or(0)));
+    }
+    if let Some(keys) = payload_keys {
+        tail.push_str(&format!(" keys={}", keys.join(",")));
+    }
+    tail
+}
+
 /// Format one registry-mutation telemetry line (register / deregister). Pure.
 ///
 /// Shape: `<ts:-> REGISTRY op=<register|deregister> id=<workspace_id|-> raw=<path> key=<canonical_key>`
@@ -219,6 +245,50 @@ pub fn format_registry_line(
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn format_event_detail_on_stop_carries_count_and_types() {
+        let types = vec!["shell".to_string(), "monitor".to_string()];
+        assert_eq!(
+            format_event_detail("Stop", Some(2), Some(&types), None),
+            " bg=2 bg_types=shell,monitor"
+        );
+        // Nothing outstanding, or a degraded payload with no count: `bg=0 bg_types=-`.
+        assert_eq!(
+            format_event_detail("Stop", Some(0), Some(&[]), None),
+            " bg=0 bg_types=-"
+        );
+        assert_eq!(
+            format_event_detail("Stop", None, None, None),
+            " bg=0 bg_types=-"
+        );
+    }
+
+    #[test]
+    fn format_event_detail_is_empty_off_stop_without_keys() {
+        // Every non-Stop line must stay byte-identical to the pre-M16.5 format.
+        for name in [
+            "UserPromptSubmit",
+            "Notification",
+            "PostToolUse",
+            "PreToolUse",
+        ] {
+            assert_eq!(format_event_detail(name, Some(3), None, None), "", "{name}");
+        }
+    }
+
+    #[test]
+    fn format_event_detail_appends_dev_payload_keys() {
+        let keys = vec!["cwd".to_string(), "prompt".to_string()];
+        assert_eq!(
+            format_event_detail("UserPromptSubmit", None, None, Some(&keys)),
+            " keys=cwd,prompt"
+        );
+        assert_eq!(
+            format_event_detail("Stop", Some(0), Some(&[]), Some(&keys)),
+            " bg=0 bg_types=- keys=cwd,prompt"
+        );
+    }
 
     #[test]
     fn format_event_line_emitted_when_mapped_and_resolved() {

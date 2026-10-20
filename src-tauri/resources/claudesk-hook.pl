@@ -13,6 +13,8 @@
 #   agent_type                    (SubagentStart/Stop; from CC's subagent_type)
 #   source                        (SessionStart)
 #   reason                        (SessionEnd; e.g. prompt_input_exit / other — WP6.5)
+#   background_task_count, background_task_types   (Stop; types only — M16.5 WP1)
+#   payload_keys                  (Stop / UserPromptSubmit; DEV build only — M16.5 WP1)
 # `notification_type` (QoL-WP2) lets the broadcaster gate AwaitingInput on genuine
 # input-needed types (permission_prompt / elicitation_dialog) vs informational ones
 # (idle_prompt / auth_success) — so an idle nudge doesn't flip a busy dot blue. The
@@ -220,13 +222,35 @@ if ($event eq 'SessionEnd') {
 # a boolean, so a count is strictly sufficient and leaks nothing. Same reasoning as
 # forwarding length($prompt) instead of $prompt for time-analytics.
 #
+# M16.5 WP1 — each entry's `type` is forwarded too, as `background_task_types`. A `type`
+# is an enum-ish tag (`"shell"` was the captured value), the same privacy class as
+# SessionStart's `source`, never user content. It is what lets a consumer tell a shell
+# apart from any other kind of outstanding task. `command`, `description` and `id` stay
+# off the wire. A non-scalar or missing `type` is forwarded as "?" so the list always
+# lines up with the count.
+#
 # WARNING: `background_tasks` is UNDOCUMENTED (it does not appear in CC's public hooks
 # doc, which the M13.5 WP2 research pass checked directly). Treat it as a stale-able
 # seam: a missing or non-array value must read as "no outstanding work", never as an
 # error, so a CC change degrades to today's behaviour instead of breaking the dot.
 if ($event eq 'Stop') {
     my $bg = $payload->{background_tasks};
-    $out{background_task_count} = (ref $bg eq 'ARRAY') ? scalar(@$bg) + 0 : 0;
+    my @tasks = (ref $bg eq 'ARRAY') ? @$bg : ();
+    $out{background_task_count} = scalar(@tasks) + 0;
+    $out{background_task_types} = [
+        map {
+            my $t = (ref $_ eq 'HASH') ? $_->{type} : undef;
+            (defined $t && !ref $t) ? "$t" : '?';
+        } @tasks
+    ];
+}
+
+# M16.5 WP1 probe — the payload's top-level KEY NAMES (never values), on Stop and
+# UserPromptSubmit, for discovering which fields CC sends. DEV BUILD ONLY: gated on this
+# script's own basename (`claudesk-hook-dev.pl`, the dev identity's deployed copy), so a
+# production install never emits it. Key names are schema, not content.
+if (($event eq 'Stop' || $event eq 'UserPromptSubmit') && $0 =~ /-dev\.pl\z/) {
+    $out{payload_keys} = [ sort keys %$payload ];
 }
 
 my $line = encode_json(\%out) . "\n";

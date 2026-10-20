@@ -52,6 +52,16 @@ fn run_hook_capture_line(payload: &str) -> Option<String> {
 /// inside a Claudesk workspace would otherwise inherit it and assert against a different
 /// arm than the one it names.
 fn run_hook_capture_line_with_mode(payload: &str, drive_mode: Option<&str>) -> Option<String> {
+    run_hook_script_capture_line(&hook_path(), payload, drive_mode)
+}
+
+/// [`run_hook_capture_line_with_mode`] for a hook script at `script` (M16.5 WP1), so a test
+/// can run a copy installed under the dev identity's basename (`claudesk-hook-dev.pl`).
+fn run_hook_script_capture_line(
+    script: &std::path::Path,
+    payload: &str,
+    drive_mode: Option<&str>,
+) -> Option<String> {
     let dir = tempfile::TempDir::new().unwrap();
     let sock_path = dir.path().join("hook.sock");
     let listener = UnixListener::bind(&sock_path).unwrap();
@@ -73,7 +83,7 @@ fn run_hook_capture_line_with_mode(payload: &str, drive_mode: Option<&str>) -> O
     });
 
     let mut cmd = Command::new("perl");
-    cmd.arg(hook_path())
+    cmd.arg(script)
         .env("CLAUDESK_HOOK_SOCK", &sock_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -444,6 +454,169 @@ fn background_task_count_is_emitted_only_on_stop() {
         v.get("background_task_count").is_none(),
         "background_task_count must appear only on Stop"
     );
+    assert!(
+        v.get("background_task_types").is_none(),
+        "background_task_types must appear only on Stop"
+    );
+}
+
+#[test]
+fn stop_forwards_task_types_and_nothing_else_from_the_tasks() {
+    // M16.5 WP1 — the types are forwarded so a consumer can tell a shell from another kind
+    // of task. ⚠️ The redaction is checked by WHAT REMAINS, not by naming the fields that
+    // must be absent: the emitted line's whole key set is pinned, so any new field leaking
+    // through fails here even if nobody thought to name it.
+    if !perl_available() {
+        return;
+    }
+    let payload = r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","transcript_path":"/t/TRANSCRIPT_VALUE.jsonl","background_tasks":[{"id":"ID_VALUE","type":"shell","status":"running","description":"SECRET_DESC","command":"SECRET_CMD"},{"id":"b","type":"monitor"},{"id":"c","type":{"nested":"NESTED_VALUE"}},{"id":"d"},"not-a-task"]}"#;
+    let line = run_hook_capture_line(payload).expect("line");
+    for secret in [
+        "SECRET_DESC",
+        "SECRET_CMD",
+        "ID_VALUE",
+        "NESTED_VALUE",
+        "TRANSCRIPT_VALUE",
+        "not-a-task",
+    ] {
+        assert!(
+            !line.contains(secret),
+            "{secret} must not reach the wire; got: {line}"
+        );
+    }
+    let v = as_json(&line);
+    let mut keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        [
+            "background_task_count",
+            "background_task_types",
+            "cwd",
+            "hook_event_name",
+            "session_id",
+            "timestamp",
+        ],
+        "a prod-basename Stop line carries exactly these keys"
+    );
+    assert_eq!(v["background_task_count"].as_u64(), Some(5));
+    // Order follows the payload; a non-scalar or missing type, or a non-object entry,
+    // reads as "?" so the list always lines up with the count.
+    assert_eq!(
+        v["background_task_types"],
+        serde_json::json!(["shell", "monitor", "?", "?", "?"])
+    );
+}
+
+#[test]
+fn stop_task_types_degrade_to_empty_on_every_bad_shape() {
+    // The same stale-seam shapes as the count test: each must give an EMPTY list, never
+    // an error and never a missing field.
+    if !perl_available() {
+        return;
+    }
+    for (name, payload) in [
+        (
+            "empty array",
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_tasks":[]}"#,
+        ),
+        (
+            "field absent",
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p"}"#,
+        ),
+        (
+            "wrong type (string)",
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_tasks":"nope"}"#,
+        ),
+        (
+            "wrong type (object)",
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_tasks":{"id":"x"}}"#,
+        ),
+    ] {
+        let v = as_json(&run_hook_capture_line(payload).expect("line"));
+        assert_eq!(
+            v["background_task_types"],
+            serde_json::json!([]),
+            "{name} must degrade to no types"
+        );
+    }
+}
+
+/// Install a copy of the hook under the dev identity's deployed basename.
+fn dev_hook_copy(dir: &tempfile::TempDir) -> PathBuf {
+    let dev = dir.path().join("claudesk-hook-dev.pl");
+    std::fs::copy(hook_path(), &dev).expect("copy hook");
+    dev
+}
+
+#[test]
+fn dev_basename_forwards_payload_key_names_never_values() {
+    // M16.5 WP1 probe. Under the dev basename, Stop and UserPromptSubmit carry the
+    // payload's top-level key NAMES (sorted), so a capture shows which fields CC sends.
+    // A value of a field the hook does not otherwise forward must still never appear.
+    if !perl_available() {
+        return;
+    }
+    let dir = tempfile::TempDir::new().unwrap();
+    let dev = dev_hook_copy(&dir);
+
+    let stop = r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","zeta_field":"ZETA_VALUE","background_tasks":[]}"#;
+    let line = run_hook_script_capture_line(&dev, stop, None).expect("line");
+    assert!(
+        !line.contains("ZETA_VALUE"),
+        "values never ride along: {line}"
+    );
+    assert_eq!(
+        as_json(&line)["payload_keys"],
+        serde_json::json!([
+            "background_tasks",
+            "cwd",
+            "hook_event_name",
+            "session_id",
+            "zeta_field"
+        ])
+    );
+
+    let submit = r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hi","alpha_field":"ALPHA_VALUE"}"#;
+    let line = run_hook_script_capture_line(&dev, submit, None).expect("line");
+    assert!(
+        !line.contains("ALPHA_VALUE"),
+        "values never ride along: {line}"
+    );
+    assert_eq!(
+        as_json(&line)["payload_keys"],
+        serde_json::json!([
+            "alpha_field",
+            "cwd",
+            "hook_event_name",
+            "prompt",
+            "session_id"
+        ])
+    );
+
+    // Other events stay as they were, even on the dev build.
+    let notif = r#"{"hook_event_name":"Notification","session_id":"s","cwd":"/p","message":"m"}"#;
+    let line = run_hook_script_capture_line(&dev, notif, None).expect("line");
+    assert!(as_json(&line).get("payload_keys").is_none());
+}
+
+#[test]
+fn prod_basename_never_forwards_payload_keys() {
+    // The positive control above runs the SAME script under the dev name; this one runs
+    // the repo copy, whose basename is the production `claudesk-hook.pl`.
+    if !perl_available() {
+        return;
+    }
+    for payload in [
+        r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_tasks":[]}"#,
+        r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hi"}"#,
+    ] {
+        let v = as_json(&run_hook_capture_line(payload).expect("line"));
+        assert!(
+            v.get("payload_keys").is_none(),
+            "a production install must never emit payload_keys: {v}"
+        );
+    }
 }
 
 #[test]
