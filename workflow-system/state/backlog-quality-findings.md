@@ -4,6 +4,55 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m16-5-wp1-hook-payload-probe — 2026-10-20
+
+*(feature-review-quality on ship commit `e63831b` (feature `d9f13ab`), window `d9f13ab^..e63831b`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-10-20-QUALITY-WP1-DOC-COMMENT-DETACHED-FROM-ITS-TEST
+- **Severity:** MAJOR
+- **Location:** `src-tauri/src/status_broadcaster/commands.rs` → `event_detail_threads_each_wire_field_into_its_own_slot` / `end_to_end_socket_background_work_emits_then_clears_on_a_clean_stop`
+- **Finding:** The new test was inserted between the end-to-end BackgroundWork test and its 12-line rustdoc, so that rustdoc now attaches to the string-format helper test. It carries the warning that the clearing edge is the only guard against a dot stuck purple forever.
+- **Why it matters:** a maintainer of the BackgroundWork clearing path reads the wrong rationale against the wrong test, and the real invariant test is undocumented.
+- **Suggested action:** move the new test (with its own comment) above the M13.5 rustdoc block, so the rustdoc sits directly on `end_to_end_socket_background_work_emits_then_clears_on_a_clean_stop` again. Natural fit: M16.5 WP4 (it edits this file).
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-10-20-QUALITY-WP1-TELEMETRY-TAIL-CONCATENATED-AT-TWO-SITES
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/status_broadcaster/commands.rs` → both drain-loop `log.write_line(&(format_event_line(...) + &event_detail(&event)))` sites
+- **Finding:** The tail is concatenated at two call sites; the codify test pins only the helper, so deleting `+ &event_detail(&event)` at either site passes every test.
+- **Why it matters:** the "could this pass if the code it names were deleted?" class (`docs/lessons/source-text-guards.md`); the `bg=`/`bg_types=` tail is permanent.
+- **Suggested action:** one `format_hook_event_line(&HookEvent, mapped, resolved)` used by both sites, so the threading is structural.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-20-QUALITY-WP1-REDUNDANT-NONE-FIELDS-IN-SPREAD-LITERALS
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/status_broadcaster/mod.rs` tests → the three `..ev(...)` / `..stop_with_bg(...)` struct-update literals
+- **Finding:** They set `background_task_types: None, payload_keys: None` explicitly although the spread already supplies them.
+- **Why it matters:** noise, and three extra sites WP4 4.4 must touch to remove `payload_keys`.
+- **Suggested action:** drop the explicit fields from the spread literals; keep them only in full literals.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-20-QUALITY-WP1-PAYLOAD-KEYS-REMOVAL-NOT-MARKED
+- **Severity:** MINOR
+- **Location:** `claudesk-hook.pl` (dev-only block + header line), `HookEvent::payload_keys`, `format_event_detail`'s `keys=` branch, the test literals, four tests; `wbs.md` WP4 4.4
+- **Finding:** The dev-only `payload_keys` capture is spread over five places with no removal marker, and WP4 4.4's wording ("raw-payload capture … keep the count line") does not name `payload_keys` or say that `background_task_types` stays.
+- **Why it matters:** the cleanup is not grep-able and could take the permanent type forwarding with it.
+- **Suggested action:** reword WP4 4.4 to "remove `payload_keys` everywhere; KEEP `background_task_count` and `background_task_types`", and optionally mark each site.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-20-QUALITY-WP1-DEV-BASENAME-DUPLICATED-IN-THE-HOOK
+- **Severity:** MINOR
+- **Location:** `claudesk-hook.pl` → `$0 =~ /-dev\.pl\z/`; `tests/hook_pl_output.rs` → `dev_hook_copy`
+- **Finding:** The dev gate re-derives the dev basename that `hook_install::commands::script_basename` owns; the test hardcodes its own copy.
+- **Why it matters:** renaming the dev basename would silently disable the probe while both tests stay green. Low impact: the code is temporary (WP4 4.4).
+- **Suggested action:** none beyond removing it at WP4 4.4; if it outlives WP4, derive from the single source.
+- **Priority:** low
+- **Status:** pending
+
 # m16-wp3-review-player — 2026-10-20
 
 *(feature-review-quality on ship commit `cd0f204` (feature `b450287`), window `b450287^..cd0f204`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 6 MINOR, all auto-backlogged.)*

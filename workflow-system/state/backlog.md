@@ -66,6 +66,15 @@
 - **Priority:** medium (decisions are already deduplicated; what remains is a leak plus missing `⚙` in the affected workspace)
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
+## Code-quality findings — m16-5-wp1-hook-payload-probe (2026-10-20)
+
+- **Pointer:** **1 MAJOR + 4 MINOR** from the review of `e63831b`. The MAJOR: a new test was inserted between the end-to-end BackgroundWork test and its rustdoc, so the "clearing edge" warning now sits on the wrong test. The MINORs: the telemetry tail concatenated at two unguarded sites, redundant `None` fields in spread literals, `payload_keys` removal not marked (and WP4 4.4's wording), and the dev basename duplicated in the hook. All five touch files M16.5 WP4 edits anyway.
+
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp1-hook-payload-probe — 2026-10-20`.
+- **Priority:** medium (the MAJOR) / low (the rest)
+- **Status:** pending
+- **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor` (or fold into M16.5 WP4). To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
+
 ## Code-quality findings — m16-wp3-review-player (2026-10-20)
 
 - **Pointer:** **6 MINOR** from the review of `cd0f204`, all in the review player:

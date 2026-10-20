@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16.5 WP1 — Probe: what the hook channel carries for background work and dequeued prompts
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete)
 **Created:** 2026-10-20
 **WBS:** `workflow-system/product/wbs.md` → WP1 (type: probe, timebox half a day). It gates WP4.
 
@@ -149,9 +149,49 @@ changes here; that is WP4.
     - No integration boundary — phase records measurements only (no code changed). No new tests: the hook's generic `type` forwarding (incl. `subagent`/`monitor`) is already pinned by Phase 1's `stop_forwards_task_types_and_nothing_else_from_the_tasks`; the classification built on these verdicts is WP4's to codify.
     - Full suite: `pnpm verify:auto` → exit 0 (39s), vitest 3413, cargo lib 1023.
 
+## Code-Quality Review
+
+*(feature-review-quality on ship `e63831b`, window `d9f13ab^..e63831b`, drive_mode=autopilot: 0 CRITICAL / 1 MAJOR / 4 MINOR — all auto-backlogged to `backlog-quality-findings.md` → `# m16-5-wp1-hook-payload-probe — 2026-10-20`.)*
+
+### Strengths
+- Redaction is checked by what remains: the emitted line's whole key set is pinned plus six planted sentinels, so an unnamed new field leaking onto the wire fails.
+- The dev-only gate is tested from both sides (dev-basename copy vs prod-named repo copy), each the other's control; four individually mutation-proven mutants recorded.
+- Stale-seam degradation: non-object / non-scalar `type` → `"?"` (list always aligns with the count); absent/malformed `background_tasks` → `[]`; each bad shape tested.
+- `format_event_detail` keeps every non-Stop line byte-identical; existing format tests untouched.
+- The `wbs.md` probe outcomes name each verdict's evidence source and flag their own open assumptions.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`status_broadcaster/commands.rs` tests] The new `event_detail_threads_each_wire_field_into_its_own_slot` was inserted between `end_to_end_socket_background_work_emits_then_clears_on_a_clean_stop` and its 12-line rustdoc, so the "clearing edge" warning now documents the wrong test. — backlogged (`SURFACE-2026-10-20-QUALITY-WP1-DOC-COMMENT-DETACHED-FROM-ITS-TEST`).
+
+**MINOR**
+- [`status_broadcaster/commands.rs`] Telemetry tail concatenated at two unguarded call sites; deleting either `+ &event_detail(&event)` passes every test.
+- [`status_broadcaster/mod.rs` tests] Redundant `background_task_types: None, payload_keys: None` in three spread literals.
+- [hook + `HookEvent` + `format_event_detail` + tests; `wbs.md` WP4 4.4] `payload_keys` removal is unmarked and 4.4's wording does not name it or say `background_task_types` stays.
+- [`claudesk-hook.pl`] The dev gate re-derives the dev basename owned by `hook_install::commands::script_basename`.
+
+### Assessment
+A well-built probe: the privacy-sensitive redaction and gating are the strongest part, Rust changes are small and additive, `event_to_state` is untouched, and pre-existing log lines are byte-identical. The debt is in how the telemetry tail is threaded, the redundant `None` fields that widen WP4's cleanup, and one real readability regression (the detached rustdoc). All four are cheap and fit WP4 task 4.4's pass.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives this file.
+
+## Retrospect
+- **What changed in our understanding:** "The hook gives a count, never the tasks" was OUR hook's redaction, not a CC limit — CC sends the full `background_tasks` array, and its `type` is safe to forward. That turned Q1 from "maybe an upstream ask" into a hook-payload answer (`monitor`). `UserPromptSubmit` fires at ENQUEUE, not dequeue. And `Stop` carries `last_assistant_message` (deliberately not used — free-text state inference).
+- **Assumptions that held:** a live capture beats reasoning about undocumented payloads; type-only forwarding is enough (operator approved, no non-`running` status seen); the corpus could size Q2.
+- **Assumptions that were wrong:** the scope of Q2. The plan treated it as "purple only when a shell is outstanding"; the operator ruled EVERY verify-human pause should read blue, so ~2/3 of pauses (grey `idle`) are in scope too. Also my first corpus estimate (57/204) over-counted: 93 of 138 background shells never log a completion, so the installed app's own recorded dot state (37/106) had to be the authoritative measure.
+- **Approach delta:** the dev hook is registered machine-wide, so passive capture of the operator's real sessions supplemented the scratch captures (that is where `subagent` was first seen). Driving input needed a separate `\r` write (a long one-chunk message is taken as a paste) and fire-and-forget `cc_input`. The artifact was published from the scratch-c session (only a `Stop` carries the task list), and could not be deleted from here (the delete confirmation can't be presented in-session) — left for the operator. One verify-self outcome (the drain-loop call site) was added at verify-self because no test reaches it.
+
+**Completed:** 2026-10-20.
+
+**Feature complete:** M16.5 WP1, the hook-payload probe, has shipped. The hook now forwards each background task's type, and the three status-channel questions are answered in `wbs.md` → "Probe outcomes" (artifact watch = `monitor`; every verify-human pause → blue; mid-turn prompts discriminated by event order). Requester = operator — closure notice for self-record.
+
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship (both phases complete)
+- **Path:** Feature > complete (archived)
+- **Active scope:** none
 - **Blocked:** none (the probe artifact awaits the operator's own delete; nothing depends on it)
 - **Unvisited:** none after Phase 2
 - **Open discoveries:** none

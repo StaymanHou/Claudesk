@@ -18,8 +18,17 @@ env -u CLAUDE_CODE_CHILD_SESSION -u CLAUDECODE -u CLAUDE_CODE_SESSION_ID -u CLAU
 The app-spawned CC then **writes a transcript** (verified 2026-09-28: scratch-c's newest `.jsonl` held the
 agent-injected prompt) and **emits real hook events** (`UserPromptSubmit`/`Stop` in `status-channel.log`,
 first seen 2026-09-25). An agent can drive REAL turns with
-`__TAURI_INTERNALS__.invoke('cc_input', {sessionId, data: btoa("…\r")})` via `webview_execute_js`
-(fire-and-forget; the PTY session id is the fiber prop `ccSessionId`, e.g. `cc-5`). So the
+`__TAURI_INTERNALS__.invoke('cc_input', {sessionId, data: btoa("…")})` via `webview_execute_js`
+(fire-and-forget; the PTY session id is the fiber prop `ccSessionId`, e.g. `cc-5`).
+⚠️ **CORRECTED 2026-10-20 (M16.5 WP1):** send the text and the submitting `\r` as **two separate
+writes** (e.g. `\r` ~700 ms later). A long message with its `\r` in the SAME write arrives as one
+burst, CC treats it as a paste, and the `\r` becomes a **newline in the input box** — the prompt sits
+unsubmitted. Short slash commands survive a single write, which is why `slashCommandPayload` works.
+Also **never `await`** the invoke inside `webview_execute_js`: the bridge reported "Script execution
+timeout" while the bytes had in fact landed; call it fire-and-forget and record `.then` into a
+`window.__…` var if you need the result. ⚠️ The pane's DOM/screenshot can lag the real state — the
+workspace header's status text ("Working in background") or the dev `status-channel.log` is the
+reliable tell that a turn actually started. So the
 "operator-only" limit below applied to a launch that stripped only `CLAUDE_CODE_CHILD_SESSION`, or
 stripped at a child call. ⚠️ **Still unverified:** that `--continue` now resumes the intended
 conversation from such a build. It probably can, but assert transcript saving is ON first. The history

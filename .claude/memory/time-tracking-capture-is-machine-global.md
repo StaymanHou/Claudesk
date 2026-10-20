@@ -21,4 +21,10 @@ How Claudesk's M9 time-analytics **capture** actually works (verified 2026-07-13
 - Killing the tracking-on instance mid-work destroys capture for that window — see [[verify-self-dev-vs-prod-process-name-collision]] (the teardown-PID-scoping lesson; a blanket `pkill`/port-kill did exactly this on 2026-07-13, 11:19→18:48).
 - Two tracking-on instances would double-write the same events to two DBs.
 
+**Use it as a probe lever (2026-10-20, M16.5 WP1):** because the dev hook fires for every CC session,
+a running dev build's `status-channel.log` records the operator's **real** sessions too, not just the
+scratch workspace you are driving. Instrumenting the dev hook and leaving the dev build up captured
+payload facts no scratch run produced (the `subagent` background-task type came from a real
+`bluecg-maps` session). Corollary: when reading that log, filter by `cwd` — most lines are NOT yours.
+
 **If the operator wants continuous capture independent of a dev session:** turn tracking ON in the installed prod app's picker → prod creates its own DB and captures continuously. (Whether prod-tracking-on-by-default / a single-writer guard / an untracked-vs-away indicator should ship is an M9 design call the operator has, for now, decided is NOT a concern — do not re-raise it as a defect.)

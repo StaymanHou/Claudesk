@@ -7,6 +7,8 @@
 - **Milestone:** WP3: Review player — audio and video (M16, the last of its three work packages).
 - **Backlog resolved:** SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER — M16 shipped the ask in full: images, SVG, PDF, audio and video open in the editor tab with a glance viewer and a review player (its body is archived with the M16 cycle docs).
 - **Product cycle complete:** Milestone 16, the right-panel media viewer: images, SVG, sniff-gated PDF, audio and video now open in an ordinary editor tab over a root-confined asset protocol, with a glance viewer, a review-grade player and a 4 GiB cap backed by Open in default app; hardened-runtime and the operator dogfood pass are deferred, not passed.
+- **Feature shipped:** M16.5 WP1 hook-payload probe: the hook now forwards each background task's type (`shell` / `subagent` / `monitor`, never its command), and live captures answered the three status-channel questions — an artifact watch is a `monitor` task, every verify-human pause should read blue (about two-thirds read grey and a third purple today), and a prompt typed mid-turn is told apart by event order.
+- **Milestone:** M16.5 WP1: Probe — what the hook channel carries for background work and dequeued prompts.
 
 ## 2026-09-29
 

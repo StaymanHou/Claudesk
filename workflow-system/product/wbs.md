@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-10-20  # decomposed from the 2026-10-20 /util-grill-me pass
+updated: 2026-10-20  # WP1 shipped (hook-payload probe); Q2 widened: every verify-human pause reads blue
 cycle: milestone-16-5-supervisor-hardening-qol-and-paydown
 ---
 
@@ -58,7 +58,7 @@ file does not repeat it**; every task cites its `SURFACE-*` id.
 
 ## Work Packages
 
-### WP1: Probe — what the hook channel carries for background work and dequeued prompts
+### WP1: Probe — what the hook channel carries for background work and dequeued prompts ✅ SHIPPED 2026-10-20 (commit d9f13ab)
 
 **Type:** probe
 **Milestone:** M16.5. It **gates WP4**: no status-dot or turn-start change is designed before this.
@@ -82,16 +82,16 @@ verdict:
 - needs an upstream CC ask.
 
 **Tasks:**
-- [ ] 1.1 Add `background_task_count` (and, behind a dev flag, the raw `Stop` / `UserPromptSubmit`
+- [x] 1.1 Add `background_task_count` (and, behind a dev flag, the raw `Stop` / `UserPromptSubmit`
       payload) to `status-channel.log`. The count line stays as a permanent observable; the
       raw-payload capture is removed at WP4.
-- [ ] 1.2 Capture in scratch workspaces:
+- [x] 1.2 Capture in scratch workspaces:
   - a turn that publishes an artifact vs one that does not
   - a verify-human pause with a dev server alive
   - a prompt typed while a turn runs
   - a background-task notification
-- [ ] 1.3 Corpus count: how often a PAUSE-state turn end coincides with `background_task_count > 0`.
-- [ ] 1.4 Record the verdicts. ⚠️ **Never from PTY output.** CC's footer text is not a candidate
+- [x] 1.3 Corpus count: how often a PAUSE-state turn end coincides with `background_task_count > 0`.
+- [x] 1.4 Record the verdicts. ⚠️ **Never from PTY output.** CC's footer text is not a candidate
       signal.
 
 ### WP2: Probe — re-measure the adjudicator on a larger labelled set
