@@ -11,7 +11,7 @@ cycle: milestone-16-right-panel-media-viewer
 bucket and the `/product-vision` revisit that follow it stay tracked in `roadmap.md` and are **not**
 decomposed here.
 
-**Source of the ask:** `SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER` (backlog). It holds the
+**Source of the ask:** `SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER` (resolved at the M16 close; its body is archived beside this file as `source-surface.md`). It holds the
 measured current state and the media census across all 24 projects, and **this file does not
 repeat them**.
 
@@ -449,6 +449,3 @@ before promising a visible frame after frame-step or seek.
 notarization. The debug bundle is `adhoc, linker-signed` with no runtime flag (`codesign -dv`), so
 hardened-runtime media behavior is unmeasured. Low risk (WebKit media is in-process AppKit, not a
 subprocess spawn), but recorded as a deferral.
-
-## Session Handoff — 2026-10-20 13:39
-Handed off. See `workflow-system/state/.session.md` to restore.

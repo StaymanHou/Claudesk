@@ -1,13 +1,13 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-09-29
+updated: 2026-10-20  # M16 closed
 ---
 
 # Roadmap
 
 Claudesk grows in increments you can dogfood, and each one is usable on its own. **Every milestone
-planned so far has shipped** (M1–M15, both Group F asks, and the features inserted after them). This
+planned so far has shipped** (M1–M16, both Group F asks, and the features inserted after them). This
 file now holds three things: a one-line index of what shipped, the rulings that still bind future
 work, and what comes next.
 
@@ -52,6 +52,7 @@ record is `arch/<subsystem>.md`** (indexed by `arch.md`). Where the two disagree
 | — | Supervisor activity record | 2026-09-28 | `supervisor-activity.log` JSONL, badge hint, `▾` popover, turn `⚙` |
 | — | Silent-supervisor fix | 2026-09-28 | Three causes fixed (`778fe72`); shipped in `v0.7.1` |
 | — | Analytics week export | 2026-09-29 | Day view 5.7× faster, resumed-session lives, Week default, `claudesk export-week` (`v0.7.1`) |
+| M16 | Right-panel media viewer | 2026-10-20 | Images, SVG, sniff-gated PDF, audio and video open in the editor file tab: glance viewer, review player (midpoint frame-step, frame-accurate timecode, reload keeps the playhead), a 4 GiB cap with Open in default app (`arch/right-panel-surfaces.md`) |
 
 **Carried forward from shipped work. These are not complete, so read them before reading any `[x]` as "done":**
 - ⚠️ **M15's live half has not yet been observed on an installed build.** The fix (`778fe72`) is in
@@ -62,6 +63,7 @@ record is `arch/<subsystem>.md`** (indexed by `arch.md`). Where the two disagree
   services do not engage under `pnpm tauri:dev`, so it needs an installed build.
 - ⚠️ **F-b has two checks deferred to the release gate:** an installed-`.app` profile spawn with its
   status dot, and whether `trash::delete` needs a Finder Automation grant.
+- ⚠️ **M16 has two checks deferred, NOT passed:** hardened runtime for the media transport and player (a notarized release build; deferred to `/release`), and the operator's `scripture-reading` dogfood review pass (AC-21, deferred 2026-10-20). The installed-origin tier passed on a debug bundle only.
 - ⚠️ **M13's dynamic skill registry was NEVER BUILT, and that was deliberate.** The fixed five shipped
   instead. A registry would need an enumerator plus a YAML parser, which reverses the §4c decision
   (the command name is the only stable cross-repo coupling). M15 R-7 declined it. It re-enters only
@@ -94,30 +96,7 @@ Each ruling is one line here. Its full text is in the archive, under the heading
 
 ## Next
 
-**Order set by the operator on 2026-09-29.** M16 is decomposed in `wbs.md` (2026-09-29).
-
-### Milestone 16: Right-panel media viewer — ✅ all 3 WPs shipped (WP3 2026-10-20, `b450287`); cycle close pending `/product-finalize`
-
-**Goal:** The right-panel editor shows images and plays audio and video, so the files that matter in
-a non-coding (media-production) workspace can be opened in-app. F-b's isolated profiles triggered
-this. It belongs to the lite-IDE core (tier 1), so it is **not** behind `workflow_features_enabled`.
-Full measured state and open questions: `SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER`.
-
-⚠️ **Operator ruling (2026-09-29, early grill): the viewer's depth follows the workspace.**
-Software projects mostly *glance*; media projects (a video-production pipeline) *review*. So a
-review-grade player is in scope for media workspaces, and the viewer is not uniform across
-workspaces. The spec settles what selects the depth and what "review" includes. See the backlog entry.
-
-**Shape (revised at decomposition, 2026-09-29):** one probe and two build WPs in `wbs.md`, not a
-single feature. The grill ran on 2026-09-29, and its rulings are recorded there:
-- depth is chosen by **file type**
-- the review scope is set
-- media opens in the **existing editor file tab**, with no new tab kind
-- a codec and transport probe comes before any UI work
-
-**Progress (2026-09-29):** ✅ WP1 probe (GO, 4 GiB cap) · ✅ WP2 media in the editor tab (images, SVG, gated PDF, the info card, Open in default app, reload on disk change) · WP3 review player next.
-
-**Exit Criteria:** see `wbs.md` → "Exit criteria (M16)".
+**Order set by the operator on 2026-09-29.** ✅ **M16 closed 2026-10-20**; its roadmap entry is archived verbatim at `archive/milestone-16-right-panel-media-viewer/roadmap-entry.md`, with its WBS beside it.
 
 ### Then, in order
 
@@ -148,6 +127,7 @@ single feature. The grill ran on 2026-09-29, and its rulings are recorded there:
 
 ## Revisions
 
+- **2026-10-20** — M16 (right-panel media viewer) closed at `/product-finalize`: moved to Shipped, its two deferred checks added to "Carried forward", and its Next entry archived verbatim with the cycle docs. Next in order: the supervisor-hardening bucket (still gated on a live fire), then the `/product-vision` revisit.
 - **2026-09-29** — Condensed. All closed milestone and revision text moved verbatim to
   `archive/revision-log/roadmap-2026-06-to-09.md`; the file went from 1,202 lines to about 110.
   Execution order set by the operator: **M16 media viewer** → a supervisor-hardening bucket (gated

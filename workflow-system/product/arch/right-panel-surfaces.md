@@ -1,7 +1,7 @@
 <!-- Part of the Claudesk architecture set. Index + load-bearing constraints: ../arch.md -->
 # Right-panel surfaces
 
-The per-workspace right half: **Docs (gated) · Prompt · Editor · Diff · Terminal**.
+The per-workspace right half: **Docs (gated) · Prompt · Editor · Diff · Terminal**. Media (M16) opens **inside the Editor** — see "Media in the editor tab" below.
 
 > ⚠️ **FIVE panels, and the order is not incidental** (updated at the F-a close, 2026-09-22).
 > F-a added a **Prompt** panel — a Claudesk-owned prose buffer that composes a message and sends
@@ -163,3 +163,109 @@ Panel state is `useState<RightPanel | null>(null)` (`:404`) — `null` means *"t
 ### Read-only is a property of the PANEL, not of the webview
 
 Rust registers exactly `docs_list` + `docs_read`, both reads; the panel has 0 `textarea`, 0 `[contenteditable]`, 0 non-checkbox `input`. **But under `csp: null` the webview still reaches `editor_fs::write_file` and friends** — do not let the M11 exit verdict's "read-only PASS" be read as a webview-level guarantee. That gap is `SURFACE-2026-08-02-SET-A-CSP-AS-SECOND-LINE-OF-DEFENSE` (medium, app-wide, open).
+
+## Media in the editor tab (M16, as-built)
+
+> **Status: SHIPPED + cycle closed 2026-10-20.** WP1 probe (`3bb81c5`, GO with a 4 GiB cap) →
+> WP2 transport, glance viewer and info card (`e883091`) → WP3 review player (`b450287`). The WBS,
+> the format × build matrix and the probe evidence are archived at
+> `../archive/milestone-16-right-panel-media-viewer/wbs.md` → "Probe outcomes"; per-WP records are
+> `workflow-system/state/archive/m16-wp{1,2,3}-*.md`. The trust side (asset scope, SVG, PDF sniff,
+> the CSP statement) is in [security-posture](security-posture.md) → "Media transport".
+
+Images, SVG, PDF, audio and video open from the file tree, Cmd+P or search into an **ordinary
+editor `"file"` tab** and render there instead of CodeMirror. ⚠️ **There is NO new `TabKind` and NO
+new right-panel tab** (operator correction at the grill) — the panel count stays at five. ⚠️ **Depth
+is chosen by FILE TYPE, never by a per-project setting or the profile:** images/SVG/PDF get the
+glance viewer, audio/video always get the review player.
+
+### The one classifier, and the branch
+
+- ⚠️ **`mediaKind(path)` (`editor/mediaKind.ts`) is the ONLY media-extension list** →
+  `image | svg | pdf | video | audio | null`. Every consumer calls it; no site re-derives "is this
+  media" from its own list. Pinned by `mediaKindIsTheOnlyExtensionList.test.ts`.
+- ⚠️ **Media tabs SKIP the doc store.** `PaneTabs`'s `prevPaths` gate registers only tabs whose
+  `mediaKind` is `null`, so a media tab has no `editorDocs` entry and therefore never reaches
+  `read_file`, the disk-conflict check, save, dirty, find or wrap. Split, reveal, teardown and close
+  work unchanged. A new "file tab ⇒ has a CM6 doc" consumer must decide its media behavior
+  explicitly.
+- `MediaView` owns one tab's media: `statMedia` → `displayFor(kind, stat)` (`mediaDisplay.ts`, the
+  ONE place the 4 GiB cap is applied, `MEDIA_ELEMENT_LIMIT_BYTES`) → viewer, player or `MediaCard`.
+  State is the pure `mediaReducer`.
+- **The asset URL** comes only from `assetUrlFor(stat)` (`mediaIpc.ts`): the backend's **canonical**
+  path plus `?v=<mtime>` so WebKit cannot serve stale bytes after a regenerate. The frontend never
+  converts a path the backend did not return.
+
+### Glance viewer, SVG, PDF, card
+
+- **Images:** fit-to-pane by default, zoom in/out and 1:1 (`nextZoom`); ⌘= / ⌘- / ⌘0 zoom the
+  **image**, not the editor font, on a media tab (spec A-3). Readout of pixels, size and format.
+- **SVG:** `<img>` **only**, plus a view-as-text toggle. Pinned by `mediaNoScriptElements.test.tsx`.
+- **PDF:** WebKit's native render in an `<iframe>` over the asset URL, no bundled renderer —
+  ⚠️ gated on the backend `%PDF-` sniff (see security-posture).
+- **`MediaCard`:** one card for every non-render case — unplayable media (keyed on the fast `error`
+  event; WP1 measured no hangs, so there is no timeout path), non-UTF-8 binaries (replacing the bare
+  "Could not open"), audio/video ≥ 4 GiB, and `read_file`'s size refusal. It shows name, size, type
+  and **Open in default app**.
+- ⚠️ **`read_file` is capped at `READ_FILE_MAX_BYTES` = 64 MiB** plus an 8 KiB NUL sniff, refused
+  as the typed `EditorFsError::TooLarge` before reading. The leading text of that error is a
+  **contract** the frontend's `classifyReadError` routes on.
+- **Open in default app** (`open_in_default_app`): an icon button in the tab-row launcher cluster
+  beside the Sublime/Finder launchers, enabled on any file tab. Root-confined by the same two guard
+  layers; spawns `/usr/bin/open <file>` fire-and-forget (the `finder_open` precedent, so it rides
+  `env_path`'s captured PATH and obeys `sync_commands_do_not_block`).
+
+### The 4 GiB cap — a platform limit, not ours
+
+⚠️ **WebKit will not load `<video>`/`<audio>` of 4 GiB or more over ANY custom URL scheme**
+(`asset://` or a hand-written u64-correct one; the same file plays over plain HTTP). It reads 8-byte
+atom headers and gives up while every 206 carried the right total, so it **cannot be fixed in a
+scheme handler**. The operator ruled **the cap + Open in default app** and **declined a loopback
+HTTP server** (R-4a/R-4b). ⚠️ **Do not reinstate a base64-over-IPC fallback for video** — WP1's
+NO-GO rule forbade it, and the cap is the accepted cost.
+
+### Reload on disk change
+
+`EditorSplit.checkDiskForPaths` calls `refreshMedia` on a matching path; `MediaView` re-stats and
+bumps an epoch, and the new mtime busts the asset URL. ⚠️ **Classify by re-statting, never by
+`FsChange.kind`** (the same mixed-batch fold as the Docs panel). The WP2 "missing card sticks when
+the file comes back with an unchanged mtime" defect is fixed in `mediaReducer`.
+
+### The review player (`MediaPlayer.tsx` + the pure `mediaClock.ts`)
+
+Native `<video>`/`<audio>` controls plus a Claudesk strip: frame-step `,` / `.` (±1 s for audio),
+Space play/pause, speed presets 0.5–2×, whole-file loop, `hh:mm:ss.ff` timecode, file info, and a
+reload that keeps the playhead. A/B compare, ranges, markers, waveform and thumbnail scrub are
+**out of scope** (grill Q2). ⚠️ Four as-built facts, each measured — **do not re-derive them:**
+
+1. ⚠️ **Frame-step seeks to the frame MIDPOINT `(n+0.5)/fps`** (`seekTargetFor`). A frame-start
+   seek lands on the previous frame in WebKit (measured 0/30 forward). The current frame is read
+   from rVFC `mediaTime`.
+2. ⚠️ **fps comes from `videoTracks[0].configuration.framerate`, read at `loadeddata`** — mp4 track
+   lists are EMPTY at `loadedmetadata` — then snapped to `COMMON_FPS` (`resolveFps`). **There is NO
+   seek probe:** on VP9 it reads 24 fps as 23.81. No rate → `fps unknown`, a clock timecode and a
+   1/30 s step (`FALLBACK_FPS`). ⚠️ `preload="auto"` is required: with `"metadata"` WebKit paints
+   black after a paused seek and never fills the mp4 track lists.
+3. ⚠️ **Pause-when-hidden is a GEOMETRY check on `timeupdate`** (`isHiddenInApp`: zero rect or
+   wholly off-viewport → pause; measured 93–232 ms across all four hiding paths). **Not an
+   `IntersectionObserver`** — built first, it FAILED live: WebKit delivers IO callbacks on
+   throttled rendering updates, 97 ms–3.4 s late or never on a quick round trip. **Never
+   `visibilitychange`** — a covered window keeps playing by design (operator-verified). It does not
+   resume on return.
+4. ⚠️ **The reload playhead lives in `MediaView`, not the player**, so it survives the
+   missing/unrenderable card in between. `restoreTime(oldTime, newDuration)` keeps the old time if
+   the new file is long enough, else 0; rate and loop are kept too.
+
+All fps/frame/timecode math lives in **one** pure module (`mediaClock.ts`) so frame-step and the
+timecode cannot disagree. The chords are `*Chord.ts` predicates on the shared `chordEvent.ts`
+(`frameStepChord.ts`, `playPauseChord.ts`; registry rows `media-frame-step` / `media-play-pause`),
+registered on the player's own focused wrapper so they cannot fire while CodeMirror or the CC pane
+has focus. Variable-frame-rate frame-step is an open item
+(`SURFACE-2026-10-20-REVIEW-PLAYER-VFR-FRAME-STEP`).
+
+### Deferred, NOT passed
+
+- **Hardened runtime** for the media transport and player — a release-profile notarized build is
+  unmeasured (the debug bundle was ad-hoc, linker-signed, no runtime flag). Deferred to `/release`.
+  Low risk: WebKit media is in-process, not a subprocess spawn.
+- **The `scripture-reading` dogfood review pass (AC-21)** — deferred by the operator 2026-10-20.

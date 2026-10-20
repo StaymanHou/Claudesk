@@ -1,7 +1,7 @@
 ---
 stage: arch
 state: complete
-updated: 2026-09-24  # F-b shipped: new arch/profiles.md (Claude Code profiles as named CLAUDE_CONFIG_DIRs).
+updated: 2026-10-20  # M16 closed: media in the editor tab (right-panel-surfaces) + the asset-protocol transport (security-posture).
 shape: index
 archive-root: workflow-system/product/archive/
 ---
@@ -20,10 +20,10 @@ subsystem you need.
 | [Process, PTY & session lifecycle](arch/process-and-pty.md) | spawn, the prompt-flush invariant, `slash_command_bytes`, shutdown |
 | [Status channel & surfaces](arch/status-channel-and-surfaces.md) | the CC hook channel, `status_broadcaster`, filmstrip, PiP NSPanel, menu-bar tray |
 | [Session resumption & drive mode](arch/session-resumption.md) | the two signals, the unclean-exit flag, the announcement, the drive-mode signal, the picker cell |
-| [Right-panel surfaces](arch/right-panel-surfaces.md) | editor, diff, terminal, the gated docs panel, `fs_index`, `editor_fs` |
+| [Right-panel surfaces](arch/right-panel-surfaces.md) | editor, diff, terminal, the gated docs panel, `fs_index`, `editor_fs`, media in the editor tab (glance viewer, review player, 4 GiB cap) |
 | [Workflow-features gate](arch/workflow-gate.md) | the `useWorkflowFeaturesEnabled` seam, the OFF-invariant guard, Settings, the invite |
 | [The `~/.claude/` substrate](arch/claude-substrate.md) | install/uninstall wizards, provenance, the compiler-enforced refuse-guard |
-| [Security & trust posture](arch/security-posture.md) | raw HTML blocked, CSP status |
+| [Security & trust posture](arch/security-posture.md) | raw HTML blocked, CSP status, the M16 asset-protocol transport |
 | [Build, update & release](arch/build-update-release.md) | artifacts, self-update, signing, the release pipeline |
 | [Native app menu](arch/app-menu.md) | the menu bar, and why it carries no accelerators |
 | [Time analytics](arch/time-analytics.md) | the SQLite exception and its load-bearing rules |
@@ -74,6 +74,7 @@ Each line is a *pointer*; the full reasoning stays at the anchor.
 - **Provenance, not abstinence,** for anything touching `~/.claude/`: only remove what Claudesk **recorded** installing; every degraded read fails toward `developer`. Compiler-enforced. → [substrate](arch/claude-substrate.md)
 - **Raw HTML is BLOCKED**, and the two controls are **redundant, not layered** — `rehype-raw` alone measured **6 live vectors**. Never reason about one without the other. → [security](arch/security-posture.md)
 - **Read-only is a property of the PANEL, not the webview** — under `csp: null` the webview still reaches `editor_fs::write_file`. → [security](arch/security-posture.md)
+- **The asset scope stays `allow: []` statically; roots enter ONLY via `stat_media` after both `editor_fs` guards.** A static entry would break the "adds no new reach" statement. SVG is `<img>`-only, and the PDF `<iframe>` is gated on the `%PDF-` sniff, never the name. → [security](arch/security-posture.md)
 - **All injection goes through `slash_command_bytes`**; PTY prompt-flush needs both halves of its invariant. → [process-and-pty](arch/process-and-pty.md)
 - **Every read/write of the unclean-exit flag goes through `key_for()`** — a reader that skips it silently matches nothing. → [session-resumption](arch/session-resumption.md)
 

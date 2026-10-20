@@ -9,7 +9,7 @@
 - **Precedent:** `FileFinder.tsx` sets `spellCheck={false}`, and `ProjectModelCell.tsx` sets `spellCheck={false}` + `autoComplete="off"`. ⚠️ Whether `spellCheck={false}` alone turns off the macOS **autocorrect** bubble in WKWebView is unverified. WebKit has a separate `autocorrect="off"` attribute (`autoCorrect` in React). Set both, plus `autoCapitalize="off"`, and check live that the bubble no longer appears.
 - **Suggested action:** add the attributes to `picker-filter`, then verify in the dev app: type `eos`, confirm no bubble, click the row, confirm the workspace opens. Also sweep the app's other free-text filter/search inputs for the same gap (`ProjectSearch`, `CommandPalette`, the settings wizards, the Prompt panel if it is an `<input>`/`<textarea>`) and decide per site. A prompt box may want spellcheck on, but a filter never does.
 - **Priority:** medium (the picker is the entry point to every workspace, and the failure looks like a lost click)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## SURFACE-2026-10-09-ARTIFACT-WATCH-LIGHTS-THE-DOT-PURPLE-WITH-NOTHING-RUNNING
 - **Source:** operator (dogfooding, 2026-10-09)
@@ -24,7 +24,7 @@
   - Sweep every consumer of `BackgroundWork` / `AwaitingInput` / `Idle` if the mapping changes (`derived-state-is-not-a-proxy-for-its-event`).
 - **Suggested action:** measure first. Log `background_task_count` on `Stop` in `status-channel.log`, then compare a turn that publishes an artifact with one that does not. Also capture the raw `Stop` payload to see whether it says what the tasks are. If the watch is what is counted, decide whether Claudesk can discount it (transcript read of `Artifact` calls) or whether it needs an upstream ask.
 - **Priority:** medium (a false "busy" on an idle workspace; scanning the filmstrip for purple stops meaning anything)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## SURFACE-2026-09-29-VERIFY-HUMAN-PAUSE-WITH-A-BACKGROUND-SHELL-SHOWS-PURPLE-NOT-BLUE
 - **Source:** operator (feature:verify-human, `m16-wp2-media-in-editor-tab` Phase 2, 2026-09-29)
@@ -43,7 +43,7 @@
   3. Upstream (mccc): have verify-human (and any PAUSE-at-entry skill) end its turn in a way the hook channel can see, for example a `Notification` whose `notification_type` Claudesk already classifies as input-needed.
 - **Suggested action:** a small feature. Measure first: how often a PAUSE-state turn end coincides with `background_task_count > 0` in the corpus, and which of the three signals is present on those turns. Then pick one, behind the gate. Check the four-state guard and the `derived-state-is-not-a-proxy-for-its-event` sweep (every consumer of `BackgroundWork` / `AwaitingInput`) when the mapping changes.
 - **Priority:** medium (an attention false negative on the one moment the workflow deliberately asks for the operator, but a scan of the filmstrip still finds it)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## SURFACE-2026-09-28-SUPERVISOR-FIRES-ON-A-TRANSITION-TOKEN-QUOTED-IN-PROSE
 - **Source:** feature:verify-self (`silent-supervisor` Phase 3)
@@ -53,7 +53,7 @@
 - **Context:** Observed live 2026-09-28 in the dev build. A `/feature-verify-auto` turn in scratch-c emitted no token of its own, but its final message said *The "Built / TRANSITION: F8" reply was the literal text you asked for*, and the supervisor fired `/feature-verify-auto` again. This is now reachable because the supervisor fires at all: before `silent-supervisor` it read the previous turn's tail. Corpus (21 days, 138 turn-ending messages with a token): **119** at line start (67 on the last line, 52 followed by more text), **19 mid-line**. The mid-line cases mix REAL verdicts (`… (TRANSITION: P10).`, `→ **TRANSITION: F13**`, `` `TRANSITION: P13` ``) with QUOTES (``I'd stopped on `TRANSITION: F8` again``), so neither "must start a line" nor "must be the last line" separates them cleanly.
 - **Suggested action:** a design decision about the token contract (`transitionToken.ts` / upstream mccc's Phase 3d regex contract). Options: (a) require line start, trading ~14% of today's verdicts for withholds (the safe direction under R-6); (b) have mccc emit the token in one canonical form (last line, bare) and require exactly that; (c) have the adjudicator judge quoted-vs-emitted. Recovery today is Esc.
 - **Priority:** medium-high (a wrong fire re-runs a skill; it is recoverable, but the supervisor is about to ship firing)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR
 - **Source:** feature:verify-self (`silent-supervisor` Phase 3)
@@ -63,7 +63,7 @@
 - **Context:** Dev build, 2026-09-28. `ws-1` (scratch-c) was the first workspace opened in that app run, then a second (scratch-b, `ws-3`) was opened beside it. Each of `ws-1`'s `Stop`s is one `outcome=emitted` line in `status-channel.log`, yet two activity records were written (`fired` + `duplicate-turn-end`; the dedupe from `silent-supervisor` AC-4 contained it). `ws-3` never duplicated, not even after a third workspace was opened. The live React tree held exactly ONE `Workspace` fiber for `ws-1` and one root, and `ws-1`'s turn total was correct (the pane's turn-start tap is not duplicated). The same symptom was seen on 2026-09-25 (one emitted `Stop`, two records). **Candidate explanation (unconfirmed):** a leftover, still-subscribed earlier instance of `ws-1`'s subtree. Its `useSupervisor` would make the duplicate call, and its pane would consume the pending `⚙` origin (claim is consume-once) before the live pane.
 - **Suggested action:** reproduce from a fresh dev launch (open A, open B, run a turn in A, and count records per `Stop`), then find which subscription survives unmount (`useTauriListen`'s cleanup; the XtermPane turn-start tap; any remount of the first workspace when the layout gains a second). A `duplicate-turn-end` line in `supervisor-activity.log` is the detector.
 - **Priority:** medium (decisions are already deduplicated; what remains is a leak plus missing `⚙` in the affected workspace)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## Code-quality findings — m16-wp3-review-player (2026-10-20)
 
@@ -77,7 +77,7 @@
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-wp3-review-player — 2026-10-20`.
 - **Priority:** low (all)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
 ## Code-quality findings — m16-wp2-media-in-editor-tab (2026-09-29)
@@ -91,7 +91,7 @@
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-wp2-media-in-editor-tab — 2026-09-29`.
 - **Priority:** low (all)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
 ## Code-quality findings — analytics-week-export (2026-09-29)
@@ -106,21 +106,21 @@
   - `dashboardState.ts` has a stale "three modes" header.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# analytics-week-export — 2026-09-29`.
 - **Priority:** medium (the MAJORs) / low (the rest)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
 ## Code-quality findings — silent-supervisor (2026-09-28)
 
 - **Pointer:** **1 MAJOR + 5 MINOR** from the review of `778fe72`. The MAJOR: the new transcript completion wait keys on undocumented CC transcript fields, so a CC format change would silently withhold every turn as `transcript-incomplete` with no alarm. The MINORs: a "stripped once" claim with two strip sites, a "user prose" floor that also counts `isMeta` skill bodies, a stale "read at the last possible moment" comment + reason list, a dedupe store only one test file resets, and an ad-hoc widened `onTurnEnd` param. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# silent-supervisor — 2026-09-28`.
 - **Priority:** medium (the MAJOR) / low (the rest)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
 ## Code-quality findings — supervisor-activity-record (2026-09-28)
 
 - **Pointer:** **1 MAJOR + 8 MINOR remain** from the review of `dece979` (rewritten 2026-09-28: the torn-append MAJOR was resolved by task `activity-log-append-tear`). The MAJOR that remains: the §B arch-doc enumeration guard scans a hand-kept file list. The MINORs: two stale comments, an ambiguous `sweep-threw` reason, a layering import, a 6-positional-param readout, a thrice-duplicated `2000` read limit, a `Workspace.tsx` extraction, and a popover Esc that may reach CC. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-activity-record — 2026-09-28`.
 - **Priority:** medium (the MAJOR) / low (the rest)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
 ## Code-quality findings — paydown-wp3-boot-smoke-test (2026-09-23)
@@ -140,7 +140,7 @@
   [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) →
   `# fa-wp4-send-and-stage — 2026-09-22`.
 - **Priority:** low (the comment-duplication item)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** the MINOR is a canonical-home-plus-pointers comment collapse spanning files
   WP4 did not author. ⚠️ It is not a shipped defect.
 - **Reviewer's root cause, worth carrying:** *"guards whose STATED coverage exceeds their ACTUAL
@@ -155,7 +155,7 @@
 ## Code-quality findings — m15-wp3-break-detection-and-auto-fire (2026-09-13)
 - **Pointer:** ⚠️ **ALL 3 MAJORs + the `assertPinnedModel` live-guard gap were RESOLVED 2026-09-14** (`/feature-refactor`; see CHANGELOG 2026-09-14). **1 MINOR remains open** (the Rust timeout test that re-implemented the wait/kill loop was resolved at paydown-2026-09-23 WP7, and the discarded adjudicator stderr at WP8). What landed: the fan-out's `TurnReading` is now threaded into the verdict (one read, so the ledger key and the fire decision cannot describe different turns); `FanOutDeps.inject` requires a `label` and `fireOne` passes `SUPERVISOR_INJECT_LABEL` itself; the unsupervised-project refusal has its own `not-supervised` reason; and `assertPinnedModel` is called inside `adjudicate` **before the spawn**, so R-6 condition 1 is live rather than awaiting WP4's wiring. ⚠️ **The label's source-text guard was REPLACED, not supplemented** — it asserted the requirement was *stated* and survived a mutant that dropped the argument; the behavioral test kills that mutant. ⚠️ **The "still zero production callers" note is now STALE — WP4 supplied the caller** (`useSupervisor`, shipped 2026-09-14, `79c67e5` — hash rewritten by the 2026-09-14 rebase; was `75ad76d`), so these MINORs now sit behind live code rather than an unwired module. Remaining MINOR bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp3-break-detection-and-auto-fire — 2026-09-13`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** comment-duplication across the supervisor modules (fold into the standing comment-convention item, do NOT trim per-WP — that is measured as not converging).
 
 ## Code-quality findings — m15-wp1-supervisor-probe (2026-09-12)
@@ -166,18 +166,18 @@
 ## Code-quality findings — drive-mode-on-the-workspace-surface (2026-08-26)
 - **Pointer:** **2 findings remain** (rewritten 2026-09-23, paydown WP8). The borrowed-credibility MAJOR and MINOR-polish (a)/(b) were resolved at paydown-2026-09-23 WP4, and the source guards (H4) at WP7 by a live `Workspace` mount. At WP8 the re-entrancy defect was resolved by R1 Option A (the readout is disabled while an apply is queued), and the duplicated CSS rule (c) was merged. Remaining: the `RESPAWN_INTENT_HOLD_MS` scheduler-timing sleep (H2) and MINOR-polish (d). Both are the `useDriveModeApply` hook extraction that R1 DEFERS to the next drive-mode touch. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# drive-mode-on-the-workspace-surface — 2026-08-26`.
 - **Priority:** medium (the scheduler-timing sleep); low for (d)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## Code-quality findings — turn-output-reorientation (2026-08-25)
 - **Pointer:** **1 MINOR remains** (rewritten 2026-09-23). The export-guard MAJOR was resolved at paydown WP3; the push-not-poll contract-drift MAJOR and the dead `TURN_MARKER_COLOR` comment at paydown WP4 (prose narrowed at every layer; the returned `nav` is now documented as unused by the shipped caller, not threaded through); and the `?raw`-on-a-DOM-question MAJOR at paydown WP7 (`turnNavControls.test.tsx` now drives a live `Workspace` mount). Remaining: (2) the 58% comment-density MINOR, an instance of `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED` (⚠️ the retraction blocks are load-bearing and must NOT be swept). The conditionally-mounted `aria-live` span was resolved at paydown WP8. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# turn-output-reorientation — 2026-08-25`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## Code-quality findings — window-geometry-persistence (2026-08-21)
 - **Pointer:** **2 MAJOR remain; all 4 MINORs are resolved** (the vacuity-guard doc's mutant-E history at paydown-2026-09-23 WP1–WP4; the bare `"main"` literal → a shared `MAIN_WINDOW_LABEL`, the over-broad `!code.contains('"')` guard → an exactly-one `.with_denylist(denylist())` assertion, and the fixed-size `denylist()` array → a slice, at WP6). ⚠️ **Both MAJORs are about PROSE, not code** — the review found 0 CRITICAL and explicitly states "nothing here needs a refactor pass to be safe." (1) `window_state/mod.rs` carries **117 comment lines for 14 lines of executable code**, with a clean keep/move split — the four plugin-source properties and two flag-omission rationales stay; the provenance (display size, "verified live at P1.3", the `1280×800` history, the mutant-E narrative) is **already verbatim in commit `25a68bc`**, so it is deletion not relocation. (2) The **PiP-denylist rationale is stated at four sites** (`mod.rs` ×2, `lib.rs` ×2 regions, `Cargo.toml`) — the asymmetric-drift shape this repo has measured before. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# window-geometry-persistence — 2026-08-21`.
 - **⚠️ Both MAJORs are instances of an already-open standing finding, not new work:** `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, whose own resolution shape is **"one authority per rule + a pointer at every other site + a GUARD"** and which records that **per-WP trimming was measured as NOT converging** (four consecutive reviews of one file). **Fold these into it rather than paying them down separately** — a fifth per-file trim is the thing that finding exists to stop.
 - **Priority:** medium (2 MAJOR — documentary/drift risk, no correctness impact)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** read the three entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
 ## SURFACE-2026-09-28-IS-TURN-START-FIRES-ON-MID-TURN-DEQUEUES
@@ -198,94 +198,7 @@
   `UserPromptSubmit` with no `Stop` since the previous one). Capture a live payload first
   (`[[cc-hook-capture-beats-docs]]`).
 - **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER
-
-- **Priority:** medium
-- **Surfaced by:** operator request (2026-09-25, at session restore after v0.7.0)
-- **Target:** product:roadmap (a new feature ask, not a defect in shipped code)
-- **Type:** new-work
-- **Status:** pending — **decomposed as Milestone 16** (`wbs.md`, 2026-09-29). **WP1 (probe) shipped 2026-09-29: GO with a 4 GiB cap.** ✅ **WP2 shipped 2026-09-29 (`e883091`): images, SVG and PDF display in the editor tab, with the info card and "Open in default app".** ✅ **WP3 shipped 2026-10-20 (`b450287`): the audio/video review player.** All three WPs are done; this entry closes at M16's `/product-finalize`. The grill and probe rulings in `wbs.md` supersede the open questions below.
-
-**The ask:** the right-panel editor should **show images and play audio and video.** The trigger is
-F-b. Now that isolated profiles exist, some workspaces are **non-coding** (media production), and
-for those the editor pane is useless on the files that matter. This is **lite-IDE core**, not a
-workflow-gated feature (M10.9 tier 1).
-
-**Current state, measured 2026-09-25 (cited by symbol):**
-
-- **Binary files are refused outright.** `editor_fs::read_file_core` does a `std::fs::read` and then
-  `String::from_utf8`. Anything that fails that check becomes `EditorFsError::NotUtf8`, which
-  `EditorPanel` renders as `editor-error` ("Could not open {path}"). There is no other binary
-  detection.
-- ⚠️ **`read_file` has NO SIZE CAP.** Today, opening a multi-GB video reads the whole file into
-  memory *before* it gets rejected. A media branch has to route around `read_file`, and a size cap
-  may be worth adding regardless.
-- **SVG and other files that happen to be valid UTF-8 open as TEXT.** Decide whether SVG should
-  open as an image, as text, or offer both.
-- **No media preview exists anywhere.** There is no `convertFileSrc`, `asset://` or `<img>` in
-  `src/`. `DocMarkdown` does not resolve relative images either.
-- **Tab seam:** `openFiles.ts` has `TabKind = "file" | "synthetic"`, and `PaneTabs` switches on
-  `kind`. A new path-bearing `"media"` kind, chosen by extension inside `EditorSplit.openFile`, fits
-  the existing seam. That branch must **skip the per-path `read_file`/`stat_file` load effect**,
-  which currently runs for every tab.
-
-**Design questions the pickup must settle (not decided here):**
-
-1. **Transport.** One option is the asset protocol: add the `protocol-asset` Cargo feature, set
-   `assetProtocol.scope`, and use `convertFileSrc`. It streams and supports HTTP range requests,
-   which **video and audio seeking need**. The other option is a bytes/base64 IPC command, which is
-   fine for small images and wrong for video. ⚠️ Scope interacts with `[[app-ships-with-no-csp]]`
-   (`"csp": null`): a broad asset scope makes any project file readable by webview JS. The webview
-   already has the full `__TAURI_INTERNALS__` surface, so this probably adds no new exposure, but
-   **state it explicitly** rather than assume it.
-2. **Codec reality: it must be a PROBE, not an assumption.** WKWebView plays what Safari plays. That
-   likely covers mp4/H.264/HEVC, mov, mp3/aac/wav and common images including HEIC, while
-   webm/ogg/mkv support is partial or absent. Per the standing probe-first lesson, **run each format
-   in the real webview** before promising it, and decide what an unplayable file shows.
-3. **Scope boundary.** Viewer/player only, or also light operations (zoom/fit, a scrubber, file
-   info)? No editing is implied by the ask.
-4. **Profile-aware or universal?** The motivation is non-coding profiles, but a viewer helps every
-   workspace. The default reading is **universal**, unless a design prior says otherwise.
-
-**Pickup shape:** probably a small feature (`/feature-spec`). Following the Group F convention, a
-`/util-grill-me` pass on Q1–Q3 is the natural entry step, and a codec probe comes before any UI work.
-
-**Early grill, 2026-09-29 (PARTIAL; stopped by the operator: "we will discuss the spec when we get
-to the milestone").** One question was put:
-
-- **Is the viewer's job a *glance* or a *review*?** → **Both, depending on the project or profile.**
-  *"For software project, it's mostly glance. For media project, like a video production pipeline,
-  it's review."* ⚠️ **This overturns the recommendation that was offered** (glance-only, with an
-  "Open in default app" escape for review work, per `new-surface-must-earn-its-place-against-existing-ones`).
-  So a review-grade player is **in scope** for media workspaces, and this also answers design
-  question 4 above: the viewer is **NOT universal-and-uniform**; its depth follows the workspace's
-  kind. ⚠️ **Open for the spec:**
-  - What selects glance vs review: the profile, a per-project setting, or the file type?
-  - What does "review" include: frame-step, speed, loop, A/B compare?
-
-**Facts measured for that grill, so they are not re-derived:**
-- **The media census across all 24 projects.** Images dominate (about 1,300 png/jpg/svg), PDFs come
-  second (97 in `ops-data-hub`), there are 20 mp3s in `light-bot-remastered`, and there is nearly no
-  video yet. No webm, mkv or HEIC was found.
-- **The media workspace** is `youtube-channel/scripture-reading` (profile `original`), which is still
-  at the pilot/pipeline stage.
-- **No `protocol-asset` Cargo feature exists yet.** `finder`'s `/usr/bin/open` spawn is the reusable
-  "open in default app" path.
-
-**Defaults noted but NOT yet taken.** They were cheap to reverse, so they were not asked, but they
-should be re-read at spec time:
-- **Transport** is the asset protocol, with its scope added at **runtime per open workspace root**,
-  not a static `**` glob. That keeps the webview's reach equal to `editor_fs`'s existing root
-  confinement.
-- **SVG** renders via `<img>` only (never `<iframe>`/`<object>`, which run script under
-  `"csp": null`), with a way to open the source as text.
-- **An unplayable format** shows a card with "Open in default app", and no transcoding (bundling
-  ffmpeg would break "lite").
-- **PDF** is included in the codec probe as a candidate, because it rides the same transport.
-- The pane **reloads when the file changes on disk** (pipelines regenerate outputs).
-- A **size cap** is added to `read_file` regardless.
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## SURFACE-2026-09-17-F10B-STOPPED-BEFORE-VERIFY-HUMAN-INSTEAD-OF-CHAINING-INTO-IT
 - **Source:** operator correction (M14 WP0, observed twice in one session)
@@ -525,7 +438,7 @@ does not start from zero.
 **Suggested action:** re-mine and label a larger set, re-score `sonnet` against it, and either
 confirm the 0.80/0.80 bar or move it to a measured value. ⚠️ **Do this BEFORE any tuning that
 leans on the current margin** — that is the trigger R-6 named, and it has not fired yet.
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## SURFACE-2026-09-15-WIP-FILES-USE-PROSE-HEADERS-NOT-YAML-FRONTMATTER
 
@@ -642,7 +555,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context kept:** `agent_completed` is NOT emitted by the in-turn `Agent` tool: a real backgrounded `Agent` task produced only `idle_prompt` (verify-human 2026-08-21). The likely emitter is a **background CC session** (`~/.claude/jobs`). Do not read "a background agent finished and the dot stayed gray" as exercising this path, because `idle_prompt` gives the identical signature. The four `elicitation_*` types have never been observed in either corpus.
 - **Suggested action:** a cheap periodic check, e.g. a `/release`-time checklist item: `SELECT DISTINCT json_extract(meta,'$.notification_type') FROM events` over `time-analytics.sqlite`, then classify anything outside the documented 9. Measured vocabulary as of 2026-08-21: `idle_prompt` 1723 · `permission_prompt` 392 · `agent_completed` 3 · `auth_success` 2 · `agent_needs_input` 1. A test reading the live DB is probably wrong (environment-dependent).
 - **Priority:** low (no live defect)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED
 - **Source:** backlog-paydown sweep 2026-08-19 (carried out of `backlog-paydown-wbs.md` at sweep
@@ -1036,7 +949,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 ## Code-quality findings — paydown-wp7-render-instead-of-raw (2026-09-23)
 - **Pointer:** **1 MAJOR + 4 MINOR** from review of ship commit `a26b514` (the pipe-draining MINOR was resolved at paydown WP9). MAJOR: the WP7 live-mount harness's lifecycle is forked by `closeWiring`, and its `pane` stub is single-instance while two `Workspace`s mount. MINORs: dead harness options; the Submit button not driven; a warn spy that leaks on failure; the gate-OFF proof lacks a positive control. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# paydown-wp7-render-instead-of-raw — 2026-09-23`.
 - **Priority:** medium (MAJOR) / low (MINORs)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** one small test-only task. Consolidate the harness (the MAJOR plus the dead options), then add the three one-assertion tests.
 
 ## Code-quality findings — paydown-wp9-sync-command-blocking-guard (2026-09-23)
@@ -1049,14 +962,14 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
   - MINORs: a duplicated rationale in the lesson doc; nested fns in impls are not registered; the spawn cut is wider than closures; the command test forks the real `claude`; a Display comment is looser than the TS regex.
   - Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# paydown-wp9-sync-command-blocking-guard — 2026-09-23`.
 - **Priority:** medium-high (MAJOR 1, a real defect that can leave the single-run lock stuck) / medium (MAJORs 2–3) / low (the rest)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** one small task. Do `spawn_blocking` for the dry run, keeping the lock-guard anchor, together with the guard's async-exemption rule and the `cfg` predicate fix, each with a fixture test and a mutant. The provenance labels go to the T1/T2 comment pass.
 
 ## Code-quality findings — f-b-isolated-cc-profiles (2026-09-24)
 - **Pointer:** **1 MINOR remainder** from review of ship commit `409f458`. Both MAJORs and the rest of the MINOR batch were resolved 2026-09-28 (task `f-b-quality-cleanup`). What remains: `profile_create::create` / `delete_created` still return `Result<_, String>`.
   - Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# f-b-isolated-cc-profiles — 2026-09-24`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## SURFACE-2026-09-18-DOC-COUNT-NEEDS-A-GENERATOR-NOT-A-DETECTOR
 - **Source:** feature:verify-codify (M14 WP4 Phase 4)
@@ -1066,7 +979,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** ⚠️ **Measured, not speculated.** The detector needs to separate "this doc ASSERTS the count is N" from "this doc RECORDS that the count WAS N", and the docs deliberately contain both — often adjacent, because every correction leaves a retraction note beside the corrected claim (`source-text-guards.md` entry 14). Its exempt list needs a milestone-reference token to skip historical records; that token exempts **21 of 117** candidate lines (**17%**), including the line carrying a live stale claim. Narrowing it re-admits the historical records that must not be flagged. The discriminator is authorial intent, which a source-text predicate cannot express (`extract-for-import-when-a-raw-guard-cant-express-the-property`). The full mutation table and root-cause analysis are in the WP4 WIP's `## Codify Decision — Phase 4`.
 - **Suggested action:** If this drifts again, invert the mechanism: make the count a **generated artifact** rather than something to detect. Options: (a) a single source-of-truth line emitted by a script that docs `include`, (b) an HTML-comment marker (`<!-- guard-count -->…<!-- /guard-count -->`) whose content a test REGENERATES from `armSubjects` and fails on diff — a generator's output is unambiguous where prose intent is not. ⚠️ **Do not re-attempt the detector shape** without reading why it failed first.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## SURFACE-2026-09-23-CM6-GO-TO-LINE-HAS-NO-SETTINGS-HOTKEY-ROW
 - **Source:** task:act (paydown-2026-09-23 fold-back; carried out of the paydown WBS, WP5's closure note)
@@ -1109,4 +1022,4 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** Every M16 WP3 fixture is constant-rate; no VFR file was measured. `snapFps` keeps an unusual rate raw rather than claim a standard one.
 - **Suggested action:** If VFR review matters in dogfooding, step by presented frames instead (seek just past the current rVFC `mediaTime`, then confirm a new frame presented). Measure on a real screen recording first.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*

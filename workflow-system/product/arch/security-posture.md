@@ -59,3 +59,49 @@ WP**, and that is a sequencing call rather than a rejection:
 the surface list. Until it lands, the rule above is the *only* line of defense — which is exactly
 why it is pinned three ways rather than asserted in a comment.
 
+
+### Media transport (M16) — the asset protocol adds no new reach
+
+M16 turned on Tauri's **asset protocol** so the webview can load project media by URL
+(`protocol-asset` feature; `tauri.conf.json` → `assetProtocol {enable: true, scope: {allow: [],
+requireLiteralLeadingDot: false}}`). The measured statement, from the M16 WP1 probe (both the dev
+origin and a bundled `tauri://localhost` build):
+
+- **The CSP statement:** with `"csp": null`, a root-scoped asset scope admits webview reads **only
+  inside roots that `editor_fs` already exposes for read AND write**. The asset protocol serves GET
+  only. So it adds **no new reach** — **provided the static scope stays `[]`**. ⚠️ Pinned by
+  `src-tauri/tests/asset_protocol_scope.rs` (mutation-proven). A non-empty static `allow` would
+  break this statement.
+- **Roots enter the scope only through `stat_media`.** It runs both `editor_fs` guard layers
+  (`validate_root`, then `resolve_within`) and only then calls `allow_directory(<validated canonical
+  root>, true)`. A root stays allowed until quit, which adds no reach because `editor_fs` already
+  reads and writes it (spec A-5). The frontend builds an asset URL only from the canonical path
+  `stat_media` returned (`assetUrlFor`).
+- **Symlinks resolve before matching.** An in-root symlink escaping the root and an absolute
+  out-of-root path are both refused; an in-root→in-root symlink loads. Pinned on our side by
+  `stat_media_refuses_every_escape` (`editor_fs`, `TempDir`, including the escaping-leaf-symlink
+  case).
+- ⚠️ **Dot-paths LOAD** (`requireLiteralLeadingDot: false`, M16 WP2 A-2). This **reverses** the
+  default the probe measured: about 65 `.playwright-mcp` screenshots across 9 projects were the
+  main dot-path case. It widens nothing beyond roots `editor_fs` already reaches, since `fs_index`
+  already lists those files.
+
+**Two element rules the transport depends on — both are load-bearing under `csp: null`:**
+
+1. ⚠️ **SVG renders through `<img>` ONLY.** Measured: SVG in `<img>` does not run its script; the
+   same SVG in `<object>` does. A view-as-text toggle shows the source in CodeMirror.
+2. ⚠️ **The PDF `<iframe>` is gated on the backend `%PDF-` sniff (`MediaStat.pdf_magic`), not on the
+   file name.** Tauri's asset handler serves an unknown extension as `text/html`, and a live
+   positive control showed an HTML file named `evil.pdf` **running its script** in an ungated
+   iframe. A `.pdf` without the magic gets the info card.
+
+Both are pinned by `mediaNoScriptElements.test.tsx`: a rendered check over every `mediaKind`
+extension (the population is derived, not listed) that SVG is never `<object>`/`<embed>` even with
+`pdf_magic` set, plus a source check that `<object>`/`<embed>` appear nowhere in the media modules
+and `<iframe>` exactly once, inside `PdfView`.
+
+**Open in default app** (`open_in_default_app`) is an external spawn of `/usr/bin/open` on a path
+that passed the same two guard layers, so it can only open a file inside a known project.
+
+⚠️ **Hardened runtime is unmeasured for this transport** — deferred to `/release`, not passed (the
+probe's bundle was ad-hoc, linker-signed).

@@ -5,6 +5,8 @@
 - **Feature shipped:** M16 WP3 review player: audio and video under 4 GiB now open in the editor tab's review player, with native controls, frame-step on `,` / `.` (seeking to frame midpoints), Space play/pause, 0.5–2× speed presets, a loop toggle, a frame-accurate `hh:mm:ss.ff` timecode, file info (resolution, duration, size, codec, fps, audio format), a reload that keeps the playhead, speed and loop when a render is rewritten on disk, and a pause when the player is hidden inside the app.
 - **Backlog resolved:** SURFACE-2026-09-29-QUALITY-MEDIA-MISSING-CARD-STICKS-WHEN-FILE-RETURNS-UNCHANGED — `mediaReducer` no longer short-circuits a same-stat re-stat while the "no longer on disk" card is up, so a file that comes back unchanged (`mv` back, `cp -p`) returns to its viewer or player.
 - **Milestone:** WP3: Review player — audio and video (M16, the last of its three work packages).
+- **Backlog resolved:** SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER — M16 shipped the ask in full: images, SVG, PDF, audio and video open in the editor tab with a glance viewer and a review player (its body is archived with the M16 cycle docs).
+- **Product cycle complete:** Milestone 16, the right-panel media viewer: images, SVG, sniff-gated PDF, audio and video now open in an ordinary editor tab over a root-confined asset protocol, with a glance viewer, a review-grade player and a 4 GiB cap backed by Open in default app; hardened-runtime and the operator dogfood pass are deferred, not passed.
 
 ## 2026-09-29
 
