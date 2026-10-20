@@ -1,7 +1,7 @@
 ---
 stage: design-priors
 state: active
-updated: 2026-09-29
+updated: 2026-10-20
 ---
 
 # Design Priors — Claudesk
@@ -217,3 +217,20 @@ There is a second, sharper reason for the destructive half specifically: a user 
 **Why (⚠️ INFERRED; approved as proposed by the operator 2026-09-29, why not yet sharpened; directional + overridable):** The external app already does the edge case well. Any new in-app infrastructure is a permanent surface: code, security boundary and verification debt, paid forever for a case that is rare by definition. A one-click hand-off costs one button and cannot drift out of date the way a half-built in-app version can.
 
 **Origin:** M16 WP1 probe (2026-09-29). WebKit will not load `<video>`/`<audio>` of 4 GiB or more over any custom URL scheme, and the real `scripture-reading` render is 4.86 GB. A loopback HTTP server would have covered it, but the operator **declined** it in favour of a 4 GiB cap plus an **"Open in default app"** tab-row button (R-4a/R-4b). The same lean was already visible in keeping both **Sublime launchers** as permanent one-click escape hatches next to the in-app editor (WP8, 2026-06-20). Related: [[new-surface-must-earn-its-place-against-existing-ones]] (that prior governs whether a new in-app surface earns its slot; this one governs the build-vs-hand-off choice once an edge case shows up).
+
+---
+
+## needs-you-outranks-busy
+
+**Axis:** ambient-attention design (state precedence when two states are true at once)
+
+**Lean:** When a workspace is in a state that asks the operator to act (a verify-human pause, a permission prompt) and **also** has background work outstanding, the status signal shows the **asking** state. "Something is running" must never hide "you're needed."
+
+**Decision rule:** ask **"is anything asking for the operator right now?"**
+- **Yes** → show the needs-you state (blue AwaitingInput), whatever background work is also outstanding.
+- **No** → background work may show (purple BackgroundWork); otherwise idle.
+- A new "asking" state (a future notification type, a new pause) inherits this precedence by default. A new "busy" state never outranks an ask.
+
+**Why (⚠️ INFERRED; approved as proposed by the operator 2026-10-20, why not yet sharpened; directional + overridable):** The dot exists to answer one glance-question: *does this workspace need me?* A dev server kept running **for** the operator's check is exactly where both states are true, and the old mapping picked the one that hid the ask. The costs are asymmetric: a missed "needs you" stalls a workspace (and, in autopilot, misses the one deliberate stop), while a missed "busy" costs nothing.
+
+**Origin:** M16.5 WP1 verify-human (2026-10-20). The probe measured that 37 of 106 verify-human pauses read purple because a background shell was alive. The operator ruled that **every** verify-human pause should read blue, with or without background work (the other ~69 read grey `idle`), which is the precedence this prior generalizes. Related: [[semantic-distance-not-just-visual-distance-for-status-colour]] governs how opposed states must **look**; this prior governs which state **wins** when both hold. [[reuse-the-established-status-palette-before-inventing-a-hue]] supplies the colour (blue = needs you).
