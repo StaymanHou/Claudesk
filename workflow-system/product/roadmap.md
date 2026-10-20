@@ -133,3 +133,6 @@ Each ruling is one line here. Its full text is in the archive, under the heading
   Execution order set by the operator: **M16 media viewer** → a supervisor-hardening bucket (gated
   on a live fire) → a `/product-vision` revisit before M17. The mccc asks went to its inbox.
 - *Earlier revisions, 2026-06-15 → 2026-09-25, are in the archive under their original headings.*
+
+## Session Handoff — 2026-10-20 14:06
+Handed off. See `workflow-system/state/.session.md` to restore.
