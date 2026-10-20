@@ -55,10 +55,10 @@ record is `arch/<subsystem>.md`** (indexed by `arch.md`). Where the two disagree
 | M16 | Right-panel media viewer | 2026-10-20 | Images, SVG, sniff-gated PDF, audio and video open in the editor file tab: glance viewer, review player (midpoint frame-step, frame-accurate timecode, reload keeps the playhead), a 4 GiB cap with Open in default app (`arch/right-panel-surfaces.md`) |
 
 **Carried forward from shipped work. These are not complete, so read them before reading any `[x]` as "done":**
-- ⚠️ **M15's live half has not yet been observed on an installed build.** The fix (`778fe72`) is in
-  `v0.7.1`. The live checks (a fire with its `⚙`, a fire while another app is focused, Esc recovery)
-  are tracked at `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (high).
-  The deferred checks from dogfeedback and WP0 are **void until a fire is observed, not passed.**
+- ⚠️ **M15's live half: firing IS observed on an installed build** (`v0.7.1`, four fires on
+  2026-10-12 in `bluecg-maps`), but the on-screen checks (a fire with its `⚙`, a fire while another
+  app is focused, Esc recovery) are still unconfirmed. Tracked at
+  `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`; closes in M16.5.
 - ⚠️ **F-a's motivating case, voice dictation, is ASSUMED WORKING, NOT VERIFIED.** macOS text-input
   services do not engage under `pnpm tauri:dev`, so it needs an installed build.
 - ⚠️ **F-b has two checks deferred to the release gate:** an installed-`.app` profile spawn with its
@@ -104,16 +104,28 @@ Each ruling is one line here. Its full text is in the archive, under the heading
    messages: M15 WP2 (delete Phase 9), M15 WP4 (Work Tree schema pin), and the 2026-09-23 paydown's
    13 asks. No Claudesk milestone is needed. The Claudesk backlog entries close as each ask lands
    upstream.
-2. **A supervisor-hardening bucket** (numbered at the time; likely `16.5`). ⚠️ **It is gated on
-   observing a real fire on an installed `v0.7.1`**, which is wall-clock, not work. As of
-   2026-09-29 the installed 0.7.1 logs decisions correctly, but no AUTO-edge break has occurred yet.
-   Seeds:
-   - a fire on a transition token quoted in prose
-   - a leaked workspace subscription
-   - `is_turn_start` firing on mid-turn dequeues
-   - the adjudicator margin
-   - the missing alarm for a transcript-format change
-   - closing `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` itself
+2. **Milestone 16.5: supervisor hardening + QoL + paydown bucket** — scoped at a `/util-grill-me`
+   pass on 2026-10-20 (rulings below are SETTLED). ✅ **Its gate is MET:** the installed `v0.7.1`
+   fired four times on 2026-10-12 (`bluecg-maps`, autopilot, P3→P5→P7→P9 in
+   `supervisor-activity.log`). Decomposition: `wbs.md`.
+   - ⚠️ **Operator ruling: ONE bucket holds everything** (the picker fix included; nothing ships
+     ahead of the WBS), and the **adjudicator re-measurement is IN** (it needs an operator labelling
+     pass). Both reversed the agent's recommendation.
+   - **Supervisor:** a fire on a transition token quoted in prose; a leaked workspace subscription
+     (the duplicate *decision* is already contained; the leak and the lost `⚙` remain);
+     `is_turn_start` firing on mid-turn dequeues; an alarm for a transcript-format change; the
+     adjudicator re-measurement (`SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET`);
+     and closing `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` with its
+     three on-screen checks (`⚙`, a fire with another app focused, Esc recovery) as acceptance.
+   - **Status dot (measure first):** the artifact-watch purple dot, and a verify-human pause with a
+     background shell reading purple, not blue (workflow-gated, default OFF).
+   - **QoL:** picker filter autocorrect; per-result / per-file replace (⚠️ needs a UX decision: the
+     Find Results tab is read-only); a failed delete/trash surfaces an error (the create-collision
+     half already shows inline); a go-to-line (⌘⌥G) Settings hotkey row; derived model-alias hints;
+     keyboard pan/zoom in the Day view; variable-frame-rate frame-step in the review player.
+   - **Last WP: a code-quality paydown** over the carried findings (`/util-backlog-paydown` shape).
+   - ⛔ **The stale minimap is EXCLUDED** — feature-sized (upstream issue #1, a `drawLine` rewrite),
+     pulled from M11.5 for that reason; soft-wrap off is the workaround.
 3. **A short `/product-vision` revisit BEFORE numbering anything past M16.** All six vision success
    metrics are met, and every milestone since M14 has been an operator ask. The open question is
    whether **non-coding workspaces** (the direction F-b opened, which M16 serves) is a product
@@ -121,18 +133,15 @@ Each ruling is one line here. Its full text is in the archive, under the heading
    visual view of workflow state) are weighed there too.
 
 **Held open, not scheduled:**
-- A fifth QoL bucket, which collects papercuts. Seeds so far: the stale minimap, per-result replace,
-  a go-to-line hotkey row, the file-op error surface, and dynamic model-alias hints.
-- A `/util-backlog-paydown` pass over the ~26 open code-quality findings.
+- The stale minimap (feature-sized; revive as its own feature when the `drawLine` rewrite is worth
+  funding). The other QoL seeds and the paydown were absorbed into M16.5.
 
 ## Revisions
 
+- **2026-10-20 (b)** — M16.5 scoped at a `/util-grill-me` pass: one bucket of supervisor hardening + the status-dot items + the QoL seeds (minimap excluded) + a closing code-quality paydown; the supervisor gate recorded as met by the 2026-10-12 fires.
 - **2026-10-20** — M16 (right-panel media viewer) closed at `/product-finalize`: moved to Shipped, its two deferred checks added to "Carried forward", and its Next entry archived verbatim with the cycle docs. Next in order: the supervisor-hardening bucket (still gated on a live fire), then the `/product-vision` revisit.
 - **2026-09-29** — Condensed. All closed milestone and revision text moved verbatim to
   `archive/revision-log/roadmap-2026-06-to-09.md`; the file went from 1,202 lines to about 110.
   Execution order set by the operator: **M16 media viewer** → a supervisor-hardening bucket (gated
   on a live fire) → a `/product-vision` revisit before M17. The mccc asks went to its inbox.
 - *Earlier revisions, 2026-06-15 → 2026-09-25, are in the archive under their original headings.*
-
-## Session Handoff — 2026-10-20 14:06
-Handed off. See `workflow-system/state/.session.md` to restore.

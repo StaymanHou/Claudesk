@@ -360,7 +360,7 @@
   (a CC transcript-format change would silently bring this bug back).
 - **Priority:** medium (a release containing `778fe72` — `v0.7.1` — is installed as of 2026-09-29; per this entry's own rule it drops from high). Was: high until a release containing `778fe72` is installed (the field build is still
   silent); medium after that.
-- **Status:** pending — fix shipped in `v0.7.1` (2026-09-29); the recycle has been observed live, but a plain fire has not. Checks 1–4 and 6 were deferred to dogfooding on the installed release (now `v0.7.1`).
+- **Status:** pending — **a plain fire IS now observed on the installed build:** `v0.7.1` fired four times on 2026-10-12 (`bluecg-maps`, autopilot, P3→P5→P7→P9 in `supervisor-activity.log`), on top of the 2026-09-29 recycle. What remains is the on-screen half (a fire with its `⚙`, a fire with another app focused, Esc recovery); scheduled to close in **M16.5** (roadmap, 2026-10-20). Earlier: fix shipped in `v0.7.1` (2026-09-29). Checks 1–4 and 6 were deferred to dogfooding on the installed release (now `v0.7.1`).
 - **Also in that release (2026-09-28, task `f-b-quality-cleanup`):** the supervisor's transcript read
   now names CC's session id (it had passed the PTY id, so every read took the newest-modified file)
   and follows the LIVE profile's config root. When reading a fire's `transcriptPath` in the activity
