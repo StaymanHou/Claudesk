@@ -449,3 +449,6 @@ before promising a visible frame after frame-step or seek.
 notarization. The debug bundle is `adhoc, linker-signed` with no runtime flag (`codesign -dv`), so
 hardened-runtime media behavior is unmeasured. Low risk (WebKit media is in-process AppKit, not a
 subprocess spawn), but recorded as a deferral.
+
+## Session Handoff — 2026-10-20 13:39
+Handed off. See `workflow-system/state/.session.md` to restore.
