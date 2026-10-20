@@ -6,7 +6,7 @@
 // path), never from a path the frontend assembled. The `invoke` is injectable, as in
 // finder/finderLaunch.ts, so the wrappers are unit-testable without mocking the module.
 
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import prefixes from "./readErrorPrefixes.json";
 import type { RightPanel } from "../panelHost";
 
@@ -22,6 +22,12 @@ export interface MediaStat {
   size: number;
   mtime_ms: number;
   pdf_magic: boolean;
+}
+
+/** The asset URL for a stat: canonical path, cache-busted by mtime. Shared by every view and
+ *  the player, so a regenerated file gets a new URL everywhere at once. */
+export function assetUrlFor(stat: MediaStat): string {
+  return `${convertFileSrc(stat.path)}?v=${Math.round(stat.mtime_ms)}`;
 }
 
 /** Stat a media file under `root` (and admit `root` to the asset scope). Rejects with the

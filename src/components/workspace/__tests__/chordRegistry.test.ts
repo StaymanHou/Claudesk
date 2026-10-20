@@ -54,6 +54,8 @@ const HOSTS = [
   "components/workspace/RightPanelHost.tsx",
   "components/workspace/editor/EditorPanel.tsx",
   "components/workspace/Workspace.tsx",
+  // M16 WP3 — the review player registers its bare keys on its own focused wrapper.
+  "components/workspace/editor/MediaPlayer.tsx",
 ] as const;
 
 /**
@@ -211,6 +213,8 @@ describe("chord registry — reachability (the load-bearing guard)", () => {
       closeTabChord: "isCloseTabChord",
       newTerminalChord: "newTerminalChord",
       terminalFontZoom: "terminalZoomForChord",
+      frameStepChord: "frameStepForChord",
+      playPauseChord: "isPlayPauseChord",
       paletteCommands: "isPaletteChord",
       // ⚠️ THE MATCHER IS THE ROUTER, NOT THE PREDICATES. At verify-codify the two send
       // predicates were wrapped in `promptSendRouting.sendModeForChord` so the FOUR-input
@@ -332,6 +336,8 @@ describe("chord registry — COMPLETENESS (the other direction)", () => {
     isCloseTabChord: "close-w",
     newTerminalChord: "new-terminal",
     terminalZoomForChord: "terminal-font-zoom",
+    frameStepForChord: "media-frame-step",
+    isPlayPauseChord: "media-play-pause",
     // F-a WP4 — ONE router symbol, TWO registry entries (`prompt-send-submit` /
     // `prompt-send-stage`). `sendModeForChord` returns WHICH of the two modes fired, so a single
     // call site legitimately backs both. This map is called-symbol → *an* entry id and never
@@ -389,7 +395,10 @@ describe("chord registry — COMPLETENESS (the other direction)", () => {
             .filter(
               (p) =>
                 ts.isIdentifier(p.name) &&
-                (p.type?.getText(sf) === "KeyboardEvent" ||
+                // DOM `KeyboardEvent` or React's generic `KeyboardEvent<HTMLDivElement>` (a
+                // focused element's `onKeyDown`, the MediaPlayer host). A strict SUPERSET of the
+                // old exact-match: every name it found, it still finds.
+                (/^KeyboardEvent(<[^>]*>)?$/.test(p.type?.getText(sf) ?? "") ||
                   isKeydownListenerArg(node)),
             )
             .map((p) => (p.name as ts.Identifier).text);

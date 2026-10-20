@@ -292,30 +292,48 @@ in every software workspace.
 **Dependencies:** WP2
 **Size:** M
 
+**As built (2026-10-20, in progress; full record in `workflow-system/state/wip/m16-wp3-review-player.md`):**
+- `displayFor` → `{ kind: "player" }` replaces the `player-pending` card. `MediaPlayer.tsx` uses
+  `preload="auto"` (with `"metadata"` WebKit paints black and never fills the mp4 track lists).
+- ⚠️ **The frame rate comes from `videoTracks[0].configuration.framerate`, read at `loadeddata`**
+  (mp4 tracks are EMPTY at `loadedmetadata`), and is snapped. There is **no seek probe**: on VP9 it
+  reads 24 fps as 23.81. No rate → `fps unknown` + clock timecode + a 1/30 s step (operator
+  decision A).
+- ⚠️ **Frame-step seeks to the frame MIDPOINT `(n+0.5)/fps`.** A frame-start seek is wrong in
+  WebKit (measured 0/30 forward). The current frame comes from rVFC `mediaTime`.
+  `mediaClock.ts` is the one module for fps/frame/timecode.
+- Keys `,` / `.` / Space are registered on the player's own focused wrapper (`frameStepChord.ts`,
+  `playPauseChord.ts`; registry rows `media-frame-step` / `media-play-pause`).
+- The reload playhead is held in **MediaView** (it survives the missing/unrenderable card).
+  `restoreTime` decides old-time-or-0. The WP2 MAJOR (missing card sticks on an unchanged mtime) is
+  FIXED in `mediaReducer`.
+- Pause-when-hidden uses an `IntersectionObserver` and **never `visibilitychange`**, so a covered
+  window keeps playing.
+
 **Description:** The review-grade player the grill ruled in, for every audio and video file in
 every workspace. The scope is exactly Q2's "In" list, and nothing from its "Out" list.
 
 **Tasks:**
-- [ ] 3.1 **Player shell:** native `<video>`/`<audio>` controls on the WP2 asset URL, plus a
+- [x] 3.1 **Player shell:** native `<video>`/`<audio>` controls on the WP2 asset URL, plus a
       Claudesk control strip below them. Audio gets the same strip without the frame-based controls.
-- [ ] 3.2 **Frame-step** on `,` / `.` while paused. The step is the fps measured in WP1 §1.5, or the
+- [x] 3.2 **Frame-step** on `,` / `.` while paused. The step is the fps measured in WP1 §1.5, or the
       1/30 s fallback. For audio it is ±1 s. ⚠️ **Chord registration follows the existing
       convention:** a `*Chord.ts` predicate module on the shared `chordEvent.ts`, scoped to the
       focused player, so it cannot fire while CodeMirror or the CC pane has focus. Check the key
       against the reserved chords first (`[[cmd-shift-digit-reserved-for-filmstrip]]`, the panel
       chords in `panelHost.ts`).
-- [ ] 3.3 **Speed** presets (0.5× / 1× / 1.5× / 2×) and a whole-file **loop** toggle. Both are
+- [x] 3.3 **Speed** presets (0.5× / 1× / 1.5× / 2×) and a whole-file **loop** toggle. Both are
       visible states, not hidden ones (`explicit-selectable-mode-over-inferred-mode`).
-- [ ] 3.4 **Timecode** readout, `hh:mm:ss.ff` current / total, with `.ff` derived from the same fps
+- [x] 3.4 **Timecode** readout, `hh:mm:ss.ff` current / total, with `.ff` derived from the same fps
       source as 3.2. ⚠️ The fps derivation lives in **one** pure module that both 3.2 and 3.4 read,
       so they cannot disagree.
-- [ ] 3.5 **File info:** resolution, duration, size, and codec where the webview exposes it. WP1
+- [x] 3.5 **File info:** resolution, duration, size, and codec where the webview exposes it. WP1
       records what it exposes; do not promise a field the platform does not give.
-- [ ] 3.6 **Reload keeps the playhead:** on WP2's reload path, restore `currentTime` when the new
+- [x] 3.6 **Reload keeps the playhead:** on WP2's reload path, restore `currentTime` when the new
       duration is at least the old playhead, otherwise go to 0, and keep the paused/playing state.
       ⚠️ Test this as an **identity** assertion on the restored time, not "it reloaded"
       (`docs/lessons/source-text-guards.md` entry 15).
-- [ ] 3.7 **Background workspaces:** a player in a workspace that is not on center stage, or in a
+- [x] 3.7 **Background workspaces:** a player in a workspace that is not on center stage, or in a
       non-front editor tab, **pauses** when hidden. All workspaces stay mounted, so an un-paused
       video keeps playing audio from an invisible workspace. Decide at spec whether it resumes on
       return (the default: no).
@@ -425,6 +443,3 @@ before promising a visible frame after frame-step or seek.
 notarization. The debug bundle is `adhoc, linker-signed` with no runtime flag (`codesign -dv`), so
 hardened-runtime media behavior is unmeasured. Low risk (WebKit media is in-process AppKit, not a
 subprocess spawn), but recorded as a deferral.
-
-## Session Handoff — 2026-09-29 14:51
-Handed off. See `workflow-system/state/.session.md` to restore.

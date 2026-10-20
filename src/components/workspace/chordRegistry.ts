@@ -36,9 +36,10 @@ import type { ChordEvent } from "./chordEvent";
  * chords that look similar behave differently.
  *
  * - `app` — a capture-phase document listener in App.tsx. Fires regardless of focus.
- * - `workspace` — registered by RightPanelHost.tsx, EditorPanel.tsx (⌘⇧P) or Workspace.tsx
- *   (terminal font zoom). Scoped to an open workspace. ⚠️ THREE host files, not one — a
- *   completeness guard that assumed a single file would miss two thirds of this set.
+ * - `workspace` — registered by RightPanelHost.tsx, EditorPanel.tsx (⌘⇧P), Workspace.tsx
+ *   (terminal font zoom) or MediaPlayer.tsx (the review player's bare `,` / `.` / Space, M16
+ *   WP3). Scoped to an open workspace. ⚠️ FOUR host files, not one — a completeness guard
+ *   that assumed a single file would miss most of this set.
  * - `editor` — CodeMirror's own keymap (editorExtensions.ts `coreKeymap`). ⚠️ NOT Claudesk's
  *   to rebind; listed so the surface does not lie by omission about why ⌘F behaves
  *   differently inside the editor than the ⌘⇧F project search.
@@ -350,6 +351,39 @@ export const CHORD_REGISTRY: readonly ChordEntry[] = [
       },
     ],
     matcher: "components/workspace/terminalFontZoom.ts",
+    claudeskOwned: true,
+    requiresWorkflowGate: false,
+  },
+
+  // M16 WP3 — the review player's keys. BARE keys (no ⌘), so they are registered by the
+  // player's own focused-wrapper `onKeyDown` (MediaPlayer.tsx), not a document listener: they
+  // reach it only while focus is inside the player, never from CodeMirror or a terminal.
+  {
+    id: "media-frame-step",
+    label: ", / .",
+    host: "workspace",
+    outcomes: [
+      {
+        description:
+          "Previous / next frame while paused (± 1 second for audio)",
+        whenFocused: "a video or audio file in the editor tab",
+      },
+    ],
+    matcher: "components/workspace/editor/frameStepChord.ts",
+    claudeskOwned: true,
+    requiresWorkflowGate: false,
+  },
+  {
+    id: "media-play-pause",
+    label: "Space",
+    host: "workspace",
+    outcomes: [
+      {
+        description: "Play / pause",
+        whenFocused: "a video or audio file in the editor tab",
+      },
+    ],
+    matcher: "components/workspace/editor/playPauseChord.ts",
     claudeskOwned: true,
     requiresWorkflowGate: false,
   },

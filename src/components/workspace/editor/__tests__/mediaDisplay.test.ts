@@ -32,10 +32,7 @@ describe("displayFor", () => {
     for (const kind of ["video", "audio"] as const) {
       expect(
         displayFor(kind, stat({ size: MEDIA_ELEMENT_LIMIT_BYTES - 1 })),
-      ).toEqual({
-        kind: "card",
-        reason: "player-pending",
-      });
+      ).toEqual({ kind: "player", media: kind });
       expect(
         displayFor(kind, stat({ size: MEDIA_ELEMENT_LIMIT_BYTES })),
       ).toEqual({
@@ -75,6 +72,23 @@ describe("displayFor", () => {
 });
 
 describe("mediaReducer", () => {
+  it("render-error on a live PLAYER → the unrenderable card (the mkv path)", () => {
+    const player = mediaReducer(initialMediaState, {
+      type: "stat-ok",
+      kind: "video",
+      stat: stat(),
+    });
+    expect(player.status === "ready" && player.display).toEqual({
+      kind: "player",
+      media: "video",
+    });
+    const failed = mediaReducer(player, { type: "render-error" });
+    expect(failed.status === "ready" && failed.display).toEqual({
+      kind: "card",
+      reason: "unrenderable",
+    });
+  });
+
   const ready = mediaReducer(initialMediaState, {
     type: "stat-ok",
     kind: "image",
@@ -115,6 +129,52 @@ describe("mediaReducer", () => {
     expect(again).toBe(ready);
   });
 
+  it("a file that RETURNS unchanged after the missing card clears it (mv out and back, cp -p)", () => {
+    // SURFACE-2026-09-29-QUALITY-MEDIA-MISSING-CARD-STICKS-WHEN-FILE-RETURNS-UNCHANGED: `mv`
+    // and `cp -p` keep the mtime, so the returning stat is IDENTICAL to the one the missing card
+    // kept. The same-stat short-circuit must not apply to a card a stat FAILURE set.
+    const gone = mediaReducer(ready, { type: "stat-fail", message: "gone" });
+    expect(gone.status === "ready" && gone.display).toEqual({
+      kind: "card",
+      reason: "missing",
+    });
+    const back = mediaReducer(gone, {
+      type: "stat-ok",
+      kind: "image",
+      stat: stat({ size: 7 }),
+    });
+    expect(back.status === "ready" && back.display).toEqual({ kind: "image" });
+  });
+
+  it("...and the same for a video: it comes back as the PLAYER, not the card", () => {
+    const player = mediaReducer(initialMediaState, {
+      type: "stat-ok",
+      kind: "video",
+      stat: stat(),
+    });
+    const gone = mediaReducer(player, { type: "stat-fail", message: "gone" });
+    const back = mediaReducer(gone, {
+      type: "stat-ok",
+      kind: "video",
+      stat: stat(),
+    });
+    expect(back.status === "ready" && back.display).toEqual({
+      kind: "player",
+      media: "video",
+    });
+  });
+
+  it("an UNRENDERABLE card is still kept on a same-stat re-stat (retrying identical bytes cannot help)", () => {
+    const failed = mediaReducer(ready, { type: "render-error" });
+    expect(
+      mediaReducer(failed, {
+        type: "stat-ok",
+        kind: "image",
+        stat: stat({ size: 7 }),
+      }),
+    ).toBe(failed);
+  });
+
   it("a re-stat that finds a CHANGED file replaces the stat and retries a failed render", () => {
     const failed = mediaReducer(ready, { type: "render-error" });
     const changed = mediaReducer(failed, {
@@ -143,8 +203,9 @@ describe("mediaReducer", () => {
     const card: MediaState = mediaReducer(initialMediaState, {
       type: "stat-ok",
       kind: "video",
-      stat: stat(),
+      stat: stat({ size: MEDIA_ELEMENT_LIMIT_BYTES }),
     });
+    expect(card.status === "ready" && card.display.kind).toBe("card");
     const failed: MediaState = { status: "failed", message: "x" };
     for (const s of [card, failed, initialMediaState]) {
       expect(mediaReducer(s, { type: "render-error" })).toBe(s);

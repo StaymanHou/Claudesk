@@ -23,8 +23,6 @@ export type CardReason =
   | "too-large"
   /** Audio/video at or over {@link MEDIA_ELEMENT_LIMIT_BYTES}. */
   | "over-media-limit"
-  /** Audio/video under the limit: the review player arrives in M16 WP3. */
-  | "player-pending"
   /** A `.pdf` whose bytes do not start with `%PDF-`. */
   | "not-a-pdf"
   /** The file was showing, then a re-stat after a disk change failed (deleted / moved). */
@@ -37,7 +35,6 @@ export const CARD_REASON_TEXT: Readonly<Record<CardReason, string>> = {
   "too-large": "This file is too large to open in the editor.",
   "over-media-limit":
     "This file is larger than 4 GiB, the most the built-in player can load.",
-  "player-pending": "The built-in player for audio and video is coming soon.",
   "not-a-pdf": "This file has a .pdf name but isn't a PDF.",
   missing: "This file is no longer on disk.",
 };
@@ -48,6 +45,8 @@ export type MediaDisplay =
   | { kind: "svg" }
   /** Only ever produced for a stat whose bytes start with `%PDF-` (see displayFor). */
   | { kind: "pdf" }
+  /** Audio/video under the 4 GiB cap: the review player (M16 WP3). */
+  | { kind: "player"; media: "video" | "audio" }
   | { kind: "card"; reason: CardReason };
 
 /** Decide the display for a classified file from its stat. Pure; the ONE place the 4 GiB cap
@@ -67,13 +66,9 @@ export function displayFor(kind: MediaKind, stat: MediaStat): MediaDisplay {
         : { kind: "card", reason: "not-a-pdf" };
     case "video":
     case "audio":
-      return {
-        kind: "card",
-        reason:
-          stat.size >= MEDIA_ELEMENT_LIMIT_BYTES
-            ? "over-media-limit"
-            : "player-pending",
-      };
+      return stat.size >= MEDIA_ELEMENT_LIMIT_BYTES
+        ? { kind: "card", reason: "over-media-limit" }
+        : { kind: "player", media: kind };
   }
 }
 
@@ -97,8 +92,14 @@ export function mediaReducer(state: MediaState, event: MediaEvent): MediaState {
       // A re-stat after a disk change that finds the SAME file (mtime + size) keeps the state
       // object as-is, so nothing re-renders and the image is not re-fetched. A changed file
       // recomputes the display, which also retries a file that had failed to render.
+      // ⚠️ EXCEPT a `missing` card: that card was set by a stat FAILURE, so a stat succeeding
+      // again means the file is back — even with an identical stat (`mv` out and back, `cp -p`
+      // and Time Machine all keep the mtime). Short-circuiting it left the card stuck.
       if (
         state.status === "ready" &&
+        !(
+          state.display.kind === "card" && state.display.reason === "missing"
+        ) &&
         state.stat.mtime_ms === event.stat.mtime_ms &&
         state.stat.size === event.stat.size &&
         state.stat.path === event.stat.path

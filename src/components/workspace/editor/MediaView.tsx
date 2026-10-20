@@ -8,7 +8,6 @@
 // picks the view → the asset URL is built from the CANONICAL path the backend returned, never
 // from the tab path, and cache-busted with the mtime so a regenerated file is not served stale.
 
-import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   lazy,
   Suspense,
@@ -21,7 +20,10 @@ import {
   type ReactNode,
 } from "react";
 import { MediaCard } from "./MediaCard";
+import { MediaPlayer } from "./MediaPlayer";
+import type { Playhead } from "./mediaClock";
 import {
+  assetUrlFor,
   readTextFile,
   statMedia,
   type Invoker,
@@ -60,11 +62,6 @@ interface MediaViewProps {
   invoker?: Invoker;
 }
 
-/** The asset URL for a stat: canonical path, cache-busted by mtime. */
-export function assetUrlFor(stat: MediaStat): string {
-  return `${convertFileSrc(stat.path)}?v=${Math.round(stat.mtime_ms)}`;
-}
-
 export function MediaView({
   root,
   path,
@@ -73,6 +70,10 @@ export function MediaView({
   invoker,
 }: MediaViewProps) {
   const [state, dispatch] = useReducer(mediaReducer, initialMediaState);
+  // The review player's last position. Held HERE, not in the player, because a regenerate can
+  // pass through a card (missing / unrenderable) that unmounts the player before the new file
+  // loads, and the player must come back where it was (M16 WP3 AC-15).
+  const playheadRef = useRef<Playhead | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -120,6 +121,17 @@ export function MediaView({
   }
   if (display.kind === "pdf") {
     return <PdfView stat={stat} path={path} />;
+  }
+  if (display.kind === "player") {
+    return (
+      <MediaPlayer
+        stat={stat}
+        path={path}
+        media={display.media}
+        onRenderError={onRenderError}
+        playheadRef={playheadRef}
+      />
+    );
   }
   if (display.kind === "svg") {
     return (

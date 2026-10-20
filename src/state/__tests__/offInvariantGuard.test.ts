@@ -1167,6 +1167,13 @@ describe("the guard is not vacuous", () => {
     //            branch so its four-input scoping property could be driven by a real test.
     //            Ungated for the same reason.
     //
+    //   18 → 20  M16 WP3 Phase 2 (2026-10-20) — `editor/frameStepChord.ts` (bare `,` / `.`) and
+    //            `editor/playPauseChord.ts` (bare Space), the review player's keys. Correctly IN
+    //            SCOPE and correctly UNGATED: media viewing depends on no `~/.claude/` substrate
+    //            (WBS M16 design-priors consult: the gate prior does NOT fire), so the keys are
+    //            live with the workflow gate off. Every substantive arm of this file ran green
+    //            against both modules in the same run that first reported 20.
+    //
     // ⚠️ For BOTH WP4 bumps the substantive arms of this guard were re-confirmed against the new
     // module BEFORE the count was touched; only the size assertion needed the edit.
     //
@@ -1180,7 +1187,7 @@ describe("the guard is not vacuous", () => {
       selected.length,
       "the chord-module set changed size — if a selector widening added a module this is " +
         "expected, but update the count deliberately; a SHRINK silently disarms this arm",
-    ).toBe(18);
+    ).toBe(20);
   });
 
   it("the chord arm's offender predicate FIRES on an ungated workflow chord", () => {

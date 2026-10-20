@@ -1078,3 +1078,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (the WP10 item alone is low-medium)
 - **Status:** pending — operator's call
 
+
+## SURFACE-2026-10-20-REVIEW-PLAYER-VFR-FRAME-STEP
+- **Source:** feature:build (M16 WP3 Phase 1)
+- **Target level:** product:wbs
+- **Type:** gap
+- **Summary:** The review player frame-steps by seeking to the midpoint of a fixed-rate frame grid built from the track's `configuration.framerate`. A variable-frame-rate video (macOS screen recordings, phone video) reports a nominal/average rate, so steps can skip or repeat frames, and the `.ff` timecode is approximate.
+- **Context:** Every M16 WP3 fixture is constant-rate; no VFR file was measured. `snapFps` keeps an unusual rate raw rather than claim a standard one.
+- **Suggested action:** If VFR review matters in dogfooding, step by presented frames instead (seek just past the current rVFC `mediaTime`, then confirm a new frame presented). Measure on a real screen recording first.
+- **Priority:** low
+- **Status:** pending
