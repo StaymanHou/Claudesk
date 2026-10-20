@@ -1,7 +1,7 @@
 ---
 stage: context
 state: complete
-updated: 2026-09-29
+updated: 2026-10-20
 ---
 
 # Context
@@ -9,30 +9,31 @@ updated: 2026-09-29
 The project CLAUDE.md is at `CLAUDE.md` (project root). It is hand-curated and was **merged, not
 regenerated**.
 
-**Active milestone:** **Milestone 16: right-panel media viewer.** It was decomposed 2026-09-29 into
-3 WPs in `workflow-system/product/wbs.md`, after a `/util-grill-me` pass whose rulings are recorded
-there:
-- Depth is chosen by file type.
-- The review scope is fixed.
-- Media opens in the existing editor file tab, with no new tab kind.
+**Active milestone:** **Milestone 16.5: supervisor hardening, QoL and paydown bucket.** It was
+decomposed on 2026-10-20 into 8 WPs in `workflow-system/product/wbs.md`, after a `/util-grill-me`
+pass. Its rulings are recorded there:
+- One bucket holds everything.
+- The adjudicator re-measurement is in.
+- The minimap is excluded.
+- The code-quality paydown is last.
 
-**First work package:** **WP1: Probe, media in the real WKWebView.** It checks asset-protocol
-transport and range seeking, confinement including symlinks, the codec matrix,
-`requestVideoFrameCallback`, fullscreen, native PDF, and parity between dev and an installed-style
-build. ⚠️ It is a **GO/NO-GO gate on WP2 and WP3**.
+**First work package:** **WP1: Probe, what the hook channel carries for background work and
+dequeued prompts.** It is on the critical path (WP1 → WP4 → `/release` → WP7 → WP8) and gates every
+status-dot and turn-start design.
+- Start WP2.1 (mining the labelling set) early. WP2 is calendar-bound by the operator labelling
+  pass.
+- WP3, WP5 and WP6 are parallel tracks.
 
-**Entry point:** `/feature-plan` for WP1. It is a timeboxed probe with its design already settled,
-so a spec pass would have nothing to decide. WP2 and WP3 each enter through `/feature-spec` when
-they come up (WP2 is size L, touches the file-tab consumer sweep, and adds trust surface).
+**Entry point:** `/feature-plan` for WP1. It is a timeboxed probe with its questions already
+settled. WP4 and WP6 enter through `/feature-spec` when their turn comes:
+- WP4 has a seventh-guard-arm decision and a consumer sweep.
+- WP6 has a UX decision first.
 
 ## What this pass changed
 
-- **`CLAUDE.md` → `## Current Milestone`:** gained an M16 lead block carrying the grill rulings.
-  The stale *"THE ACTIVE CYCLE IS M14's REMAINDER"* heading was relabeled **CLOSED**, and its
-  rulings were kept as reference. The "Execution order" paragraph's *"no live `wbs.md`"* line now
-  points at the M16 WBS.
-- **`roadmap.md` → M16:** the Shape line changed from "a single feature" to probe + 2 build WPs, and
-  the Exit Criteria now point at `wbs.md`.
-- **Backlog `SURFACE-2026-09-25-RIGHT-PANEL-MEDIA-VIEWER`:** its status now reads "decomposed as M16".
-- `.gitignore` already matched the canonical block (no diff), and the memory symlink was already in
-  place.
+- **`CLAUDE.md` → `## Current Milestone`:** gained an M16.5 lead block carrying the grill rulings.
+  The M16 line now points at it, and the "Execution order" paragraph names M16.5 as current.
+- **`roadmap.md` → Next → item 2:** scoped as M16.5 (commit `84eb1a9`). The supervisor gate is
+  recorded as met by the 2026-10-12 installed-build fires.
+- **`.gitignore`** already matched the canonical block (no diff), and the memory symlink was
+  already in place.
