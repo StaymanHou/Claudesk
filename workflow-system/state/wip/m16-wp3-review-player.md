@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16 WP3 — Review player (audio and video)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** ship (complete)
 **Created:** 2026-10-20
 **Entry:** spec (complex feature)
 **Source:** `workflow-system/product/wbs.md` → WP3 (tasks 3.1–3.8); rulings Q1–Q3 + R-4a/b/c in the same file are SETTLED.
@@ -900,11 +900,22 @@ All four OQs are resolved below.
     - Full gate: `pnpm verify:auto` → EXIT=0 in 61 s, 254 files / 3413 tests, `check:link`
       clean, cargo green.
 
+## Ship
+- Commit `b450287` `feat(m16-wp3): review player for audio and video in the editor tab`, on
+  `main`, **not pushed** (per the handoff note: push only on the operator's request).
+- The three `workflow-system/outbox/HANDOFF-to-mccc-*.md` files were deliberately left
+  uncommitted (operator instruction).
+- Final gate: `pnpm verify:auto` EXIT=0, 254 files / 3413 tests (P3 verify-codify). No code
+  changed after it.
+- Cleanup: no TODO / `console.log` / `debugger` in the new or changed modules. Scratch fixtures
+  stay in gitignored `tmp/scratch/scratch-a/media/` for future checks. The dev app (`pnpm
+  tauri:dev`, started for the operator's P3 look) is still running.
+
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship (all phases complete)
+- **Path:** Feature > review-quality
+- **Active scope:** review-quality against ship commit `b450287` (feature window: everything since `9bc63e9`)
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
+- **Unvisited:** review-quality → finalize
 - **Open discoveries:** the two-seek fps probe was dropped at build (see Discoveries)
 
 ## Discoveries
