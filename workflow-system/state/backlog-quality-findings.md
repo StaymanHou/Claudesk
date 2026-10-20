@@ -64,16 +64,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # m16-wp2-media-in-editor-tab — 2026-09-29
 
-*(feature-review-quality on ship commit `5ea1aeb`, window `4455cf9^..5ea1aeb`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-09-29-QUALITY-MEDIA-MISSING-CARD-STICKS-WHEN-FILE-RETURNS-UNCHANGED
-- **Severity:** MAJOR
-- **Location:** `src/components/workspace/editor/mediaDisplay.ts` → `mediaReducer` (`stat-ok` short-circuit + `stat-fail` arm)
-- **Finding:** Once a media tab shows the `missing` card, a file that comes back with the SAME mtime, size and path never clears it: `stat-fail` keeps the last stat and only swaps the display, and the `stat-ok` short-circuit then returns `state` unchanged because the stat is equal.
-- **Why it matters:** Real triggers: `mv` out and back (mv keeps mtime), `rsync -a` / `cp -p` restores, a Time Machine restore, or a transient stat failure during an fs-event burst. The tab sticks on a false "no longer on disk" until reopened. The only restore test (`mediaTabLive.test.tsx` → "a media file deleted on disk…") changes the mtime before the file returns, so right and wrong look identical (source-text-guards entry 15).
-- **Suggested action:** Do not short-circuit when `state.display` is the `missing` card (or recompute the display whenever the current one is a card set by a stat failure). Add a same-mtime restore test and mutation-prove it.
-- **Priority:** medium
-- **Status:** pending
+*(feature-review-quality on ship commit `5ea1aeb`, window `4455cf9^..5ea1aeb`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged. The MAJOR (missing card sticks on an unchanged mtime) was resolved by M16 WP3 `b450287`, 2026-10-20, and its entry deleted; see CHANGELOG.)*
 
 ## SURFACE-2026-09-29-QUALITY-READ-ERROR-CARD-STATS-VIA-THE-SCOPE-ADMITTING-COMMAND
 - **Severity:** MINOR

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-20
+
+- **Feature shipped:** M16 WP3 review player: audio and video under 4 GiB now open in the editor tab's review player, with native controls, frame-step on `,` / `.` (seeking to frame midpoints), Space play/pause, 0.5–2× speed presets, a loop toggle, a frame-accurate `hh:mm:ss.ff` timecode, file info (resolution, duration, size, codec, fps, audio format), a reload that keeps the playhead, speed and loop when a render is rewritten on disk, and a pause when the player is hidden inside the app.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-MEDIA-MISSING-CARD-STICKS-WHEN-FILE-RETURNS-UNCHANGED — `mediaReducer` no longer short-circuits a same-stat re-stat while the "no longer on disk" card is up, so a file that comes back unchanged (`mv` back, `cp -p`) returns to its viewer or player.
+- **Milestone:** WP3: Review player — audio and video (M16, the last of its three work packages).
+
 ## 2026-09-29
 
 - **Feature shipped:** Time analytics: the Day view builds 5.7× faster, and work after a resumed session's first exit is no longer dropped. Analytics now opens on Week with no false "tracking is off" flash, queries no longer freeze the app, a project's path is its sessions' real working directory, and a new read-only `claudesk export-week` CLI emits the week as JSON for Neo's weekly report.

@@ -82,8 +82,15 @@
 
 ## Code-quality findings — m16-wp2-media-in-editor-tab (2026-09-29)
 
-- **Pointer:** **1 MAJOR + 5 MINOR** from the review of `5ea1aeb`. The MAJOR: the media viewer's `missing` card sticks when a file returns with the SAME mtime/size (`mv` out and back, `cp -p`, Time Machine), because the reducer's same-stat short-circuit ignores that the display is the failure card; the only restore test changes the mtime. The MINORs: `ReadErrorCard` stats through the scope-admitting `stat_media`, `stat_media_core` resolves/stats twice, the PDF iframe `sandbox` question was left open, `mediaKind` called 3× with a `!` in PaneTabs, and "larger than 4 GiB" copy vs a `>=` rule. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-wp2-media-in-editor-tab — 2026-09-29`.
-- **Priority:** medium (the MAJOR) / low (the rest)
+- **Pointer:** **5 MINOR** remain from the review of `5ea1aeb`. The MAJOR (missing card sticks on an unchanged mtime) was resolved by M16 WP3 on 2026-10-20 (see CHANGELOG). The MINORs:
+  - `ReadErrorCard` stats through the scope-admitting `stat_media`
+  - `stat_media_core` resolves and stats twice
+  - the PDF iframe `sandbox` question was left open
+  - `mediaKind` is called 3× with a `!` in PaneTabs
+  - the "larger than 4 GiB" copy vs a `>=` rule
+
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-wp2-media-in-editor-tab — 2026-09-29`.
+- **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
@@ -199,7 +206,7 @@
 - **Surfaced by:** operator request (2026-09-25, at session restore after v0.7.0)
 - **Target:** product:roadmap (a new feature ask, not a defect in shipped code)
 - **Type:** new-work
-- **Status:** pending — **decomposed as Milestone 16** (`wbs.md`, 2026-09-29). **WP1 (probe) shipped 2026-09-29: GO with a 4 GiB cap.** ✅ **WP2 shipped 2026-09-29 (`e883091`): images, SVG and PDF display in the editor tab, with the info card and "Open in default app".** ⚠️ **What remains open: WP3, the audio/video review player.** The grill and probe rulings in `wbs.md` supersede the open questions below. This entry closes when M16 completes.
+- **Status:** pending — **decomposed as Milestone 16** (`wbs.md`, 2026-09-29). **WP1 (probe) shipped 2026-09-29: GO with a 4 GiB cap.** ✅ **WP2 shipped 2026-09-29 (`e883091`): images, SVG and PDF display in the editor tab, with the info card and "Open in default app".** ✅ **WP3 shipped 2026-10-20 (`b450287`): the audio/video review player.** All three WPs are done; this entry closes at M16's `/product-finalize`. The grill and probe rulings in `wbs.md` supersede the open questions below.
 
 **The ask:** the right-panel editor should **show images and play audio and video.** The trigger is
 F-b. Now that isolated profiles exist, some workspaces are **non-coding** (media production), and

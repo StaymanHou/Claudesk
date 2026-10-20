@@ -5,7 +5,8 @@ drive_mode: autopilot
 # Feature: M16 WP3 — Review player (audio and video)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete)
+**Completed:** 2026-10-20 (ship `b450287`, close commit follows)
 **Created:** 2026-10-20
 **Entry:** spec (complex feature)
 **Source:** `workflow-system/product/wbs.md` → WP3 (tasks 3.1–3.8); rulings Q1–Q3 + R-4a/b/c in the same file are SETTLED.
@@ -939,11 +940,52 @@ Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` arc
   stay in gitignored `tmp/scratch/scratch-a/media/` for future checks. The dev app (`pnpm
   tauri:dev`, started for the operator's P3 look) is still running.
 
+## Retrospect
+- **What changed in our understanding:**
+  - WebKit exposes `videoTracks[i].configuration` (codec, framerate, sample rate, channels)
+    with no playback, but for mp4/mov only from `loadeddata`.
+  - A frame-start seek is unreliable in WebKit (0/30 forward); a midpoint seek is exact (30/30
+    on every fixture).
+  - `IntersectionObserver` callbacks are tied to throttled rendering updates in WKWebView, so
+    they cannot drive a time-sensitive pause.
+  - An occluded window flips `visibilityState` to hidden and stops rVFC and timers, which
+    stalled the agent's own measurements twice.
+- **Assumptions that held:**
+  - File type alone selects the player.
+  - WP2's seams (`displayFor`, the `epoch` reload, `assetUrlFor`) were enough to plug into.
+  - `preload="auto"` (flagged by WP1) fixes the first-frame paint without buffering the whole
+    file (+3 MB RSS on a 336 MB file).
+  - The barcode fixtures gave a frame-identity instrument independent of the code under test.
+- **Assumptions that were wrong:**
+  - "fps must be measured during playback": the track config gives it up front.
+  - "the two-seek probe is a sound fallback": VP9's ms timestamps make it pick the wrong NTSC
+    rate. It was dropped.
+  - "an `IntersectionObserver` sees all four hiding paths": in WebKit it saw them only eventually,
+    or not at all. This was caught live at P3 verify-self and replaced with a geometry check on
+    `timeupdate`.
+  - The plan's live expected values computed with `seekTargetFor(...)` made the midpoint mutant
+    pass, because both sides mutated together. They were rewritten as literals.
+- **Approach delta:**
+  - No seek probe.
+  - A `pendingFrameRef` was added so rapid key presses compose.
+  - Two chord modules instead of one, because the registry maps one call symbol per module.
+  - The registry's structural selector was widened to React `KeyboardEvent<…>`.
+  - The off-invariant chord count went 18 → 20.
+  - Geometry-on-`timeupdate` replaced IO (one F9b back-loop).
+  - The playhead prop was renamed to `playheadRef` for the hooks lint.
+  - Hardened runtime and the operator dogfood pass are DEFERRED, not passed.
+
+## Closure
+**Feature complete:** M16 WP3, the review player, has shipped. Audio and video under 4 GiB now open
+in the editor tab with frame-step, speed, loop, a frame-accurate timecode and file info, and a
+regenerated render reloads where you were. To see it, open any `.mp4` / `.mov` / `.webm` /
+`.mp3` / `.m4a` from the file tree. (Requester = operator; closure notice for self-record.)
+
 ## Current Node
-- **Path:** Feature > finalize
-- **Active scope:** finalize (review-quality done: 0/0/6, MINORs auto-backlogged)
+- **Path:** Feature > COMPLETE (archived)
+- **Active scope:** none — next is `/product-finalize` (all M16 WPs `[x]`)
 - **Blocked:** none
-- **Unvisited:** finalize
+- **Unvisited:** none
 - **Open discoveries:** the two-seek fps probe was dropped at build (see Discoveries)
 
 ## Discoveries

@@ -96,7 +96,7 @@ Each ruling is one line here. Its full text is in the archive, under the heading
 
 **Order set by the operator on 2026-09-29.** M16 is decomposed in `wbs.md` (2026-09-29).
 
-### Milestone 16: Right-panel media viewer — **NEXT**
+### Milestone 16: Right-panel media viewer — ✅ all 3 WPs shipped (WP3 2026-10-20, `b450287`); cycle close pending `/product-finalize`
 
 **Goal:** The right-panel editor shows images and plays audio and video, so the files that matter in
 a non-coding (media-production) workspace can be opened in-app. F-b's isolated profiles triggered

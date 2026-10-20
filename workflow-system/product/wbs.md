@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-09-29  # WP2 shipped (media in the editor tab)
+updated: 2026-10-20  # WP3 shipped (review player) — all M16 WPs done
 cycle: milestone-16-right-panel-media-viewer
 ---
 
@@ -286,13 +286,13 @@ path WP2 builds. Building the player first would mean building those inside it a
 them. Images are also the dominant census format (about 1,300 files), so WP2 alone already pays off
 in every software workspace.
 
-### WP3: Review player — audio and video
+### WP3: Review player — audio and video ✅ SHIPPED 2026-10-20 (commit b450287)
 
 **Milestone:** M16
 **Dependencies:** WP2
 **Size:** M
 
-**As built (2026-10-20, in progress; full record in `workflow-system/state/wip/m16-wp3-review-player.md`):**
+**As built (2026-10-20; full record in `workflow-system/state/archive/m16-wp3-review-player.md`):**
 - `displayFor` → `{ kind: "player" }` replaces the `player-pending` card. `MediaPlayer.tsx` uses
   `preload="auto"` (with `"metadata"` WebKit paints black and never fills the mp4 track lists).
 - ⚠️ **The frame rate comes from `videoTracks[0].configuration.framerate`, read at `loadeddata`**
@@ -307,8 +307,14 @@ in every software workspace.
 - The reload playhead is held in **MediaView** (it survives the missing/unrenderable card).
   `restoreTime` decides old-time-or-0. The WP2 MAJOR (missing card sticks on an unchanged mtime) is
   FIXED in `mediaReducer`.
-- Pause-when-hidden uses an `IntersectionObserver` and **never `visibilitychange`**, so a covered
-  window keeps playing.
+- ⚠️ **Pause-when-hidden is a GEOMETRY check on `timeupdate`** (zero rect or wholly
+  off-viewport → pause), **not an `IntersectionObserver`**. IO was built first and failed live:
+  WebKit delivers its callbacks on throttled rendering updates (97 ms–3.4 s late, or never on a
+  quick round trip). It is also **never `visibilitychange`**, so a covered window keeps playing
+  (operator-verified). Measured 93–232 ms across all four hiding paths.
+- 3.8 verification: live dev pass and debug bundle (`tauri://localhost`) passed. ⚠️ **Hardened
+  runtime is DEFERRED to `/release`**, and ⚠️ **the `scripture-reading` dogfood pass is DEFERRED
+  by the operator (AC-21)**. Both are deferred, not passed.
 
 **Description:** The review-grade player the grill ruled in, for every audio and video file in
 every workspace. The scope is exactly Q2's "In" list, and nothing from its "Out" list.
@@ -337,7 +343,7 @@ every workspace. The scope is exactly Q2's "In" list, and nothing from its "Out"
       non-front editor tab, **pauses** when hidden. All workspaces stay mounted, so an un-paused
       video keeps playing audio from an invisible workspace. Decide at spec whether it resumes on
       return (the default: no).
-- [ ] 3.8 **Verification:**
+- [x] 3.8 **Verification:**
   - A live dev check on the WP1 fixture set, including the large seek fixture and a regenerate
     during playback (write a new file over it).
   - The installed-build tier as in 2.11.
