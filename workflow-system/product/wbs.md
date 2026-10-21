@@ -112,14 +112,14 @@ the 29 scorable records the +1 margin rested on?
 - A recorded verdict: confirm 0.80, or move the bar to a measured value.
 
 **Tasks:**
-- [ ] 2.1 Mine candidate turn ends past the M15 slice. Include turns ending after 2026-09-28, which
+- [x] 2.1 Mine candidate turn ends past the M15 slice. Include turns ending after 2026-09-28, which
       the transcript-read fix changed. Pre-label mechanically wherever the policy table decides.
-- [ ] 2.2 ⭐ **Operator labelling pass** on the residual (question-shaped vs not). Present it as a
+- [x] 2.2 ⭐ **Operator labelling pass** on the residual (question-shaped vs not). Present it as a
       batch with the agent's proposed label on each, so most rows are a one-word confirm.
-- [ ] 2.3 Score it. ⚠️ The score must come from an **independent** signal: scoring a detector
+- [x] 2.3 Score it. ⚠️ The score must come from an **independent** signal: scoring a detector
       against its own policy table returns 1.000 by identity
       (`[[detector-scored-against-its-own-table-is-circular]]`).
-- [ ] 2.4 Record the verdict. If the bar moves, change `adjudicator.ts` with its pinned-model test,
+- [x] 2.4 Record the verdict. If the bar moves, change `adjudicator.ts` with its pinned-model test,
       and note whether option (c) of WP3.1 is now viable.
 
 ### WP3: Supervisor correctness — quoted token, format alarm, leaked subscription
@@ -134,6 +134,11 @@ the 29 scorable records the +1 margin rested on?
   - Re-run the 138-message corpus split and record what moves to withheld.
   - ⚠️ `transitionToken.ts` carries the Phase 3d regex contract moved from mccc, so file an mccc
     inbox message asking for one canonical emitted form.
+  - ⛔ **Option (c), an adjudicator judgment, is NOT viable** (WP2, 2026-10-21). It needed "a
+    comfortable margin", and WP2 measured none: the adjudicator fires only 0.67 of real breaks,
+    so routing quoted-token turns through it would withhold a third of the real ones. (a)
+    stands. WP2's labels add one data point: R214 is a quoted `TRANSITION: F10b` inside an
+    analysis turn, which the operator labelled AWAITING.
 - [ ] 3.2 **A positive alarm for a CC transcript-format change**
       (`SURFACE-2026-09-28-QUALITY-TRANSCRIPT-COMPLETION-WAIT-HAS-NO-ALARM-FOR-A-CC-FORMAT-CHANGE`,
       the silent-supervisor MAJOR).
@@ -147,6 +152,26 @@ the 29 scorable records the +1 margin rested on?
   - Find the subscription that survives unmount and fix it there. The `duplicate-turn-end` dedupe
     stays as defense.
   - Done = one record per `Stop`, and the `⚙` lands in the right pane.
+- [ ] 3.4 **The supervisor must not auto-chain the product or incident workflows**
+      (`SURFACE-2026-10-21-SUPERVISOR-AUTO-CHAINS-PRODUCT-AND-INCIDENT-WORKFLOWS`; operator ruling at
+      WP2 2026-10-21, design prior `supervisor-chains-execution-workflows-only`).
+  - `decideVerdict` withholds on any product (`P*`) or incident (`I*`) edge with a named reason.
+  - A test per workflow; the 31 historical candidates WP2 mined are the fixture.
+- [ ] 3.5 **Revise the adjudicator's question so it lets an unneeded ask fire**
+      (`SURFACE-2026-10-21-ADJUDICATOR-FAILS-THE-BREAK-AXIS-ON-ASK-SHAPED-TURNS`; added by the
+      operator at WP2's verdict, 2026-10-21).
+  - The shipped question ("is this turn waiting for the human to reply?") fires 126/188 real breaks
+    (0.67) and FAILS 0.80/0.80. Ask instead whether the turn needs information or a decision that
+    only the operator can give, beyond permission to continue.
+  - Re-score both axes on WP2's frozen set (`tooling/adjudicator-probe/`, about $1.50 per run) with
+    a **held-out split**, so the prompt is not fitted to the set. ⚠️ Wrong-fire recall (0.92 today)
+    is the axis that must not drop.
+  - Replace `wp2-adjudicator-set.json`'s answers and `adjudicatorRemeasure.test.ts`'s pinned
+    verdict only with a new measurement, never by editing the numbers.
+- [ ] 3.6 **Make the alias pin loud** (`SURFACE-2026-10-21-ADJUDICATOR-PIN-IS-AN-ALIAS-THAT-MOVED-SILENTLY`).
+  - `sonnet` moved from `claude-sonnet-5` to `claude-sonnet-5-5` on 2026-09-29 unseen. Record the
+    resolved id per call (`--output-format json`) in the activity log and warn when it changes, or
+    pin a full id. Re-score on the WP2 set when it changes.
 
 ### WP4: Status-channel semantics — the purple dot and turn starts
 
@@ -348,5 +373,67 @@ background agent) and `monitor` (an artifact watch).
   It has `origin.kind: "task-notification"` in the transcript and the same keys on the hook.
 - `prompt_id` is on both events, but it was not needed.
 
-## Session Handoff — 2026-10-20 15:45
-Handed off. See `workflow-system/state/.session.md` to restore.
+### WP2 — the adjudicator re-measured (2026-10-21)
+
+**Method** (`tooling/adjudicator-probe/`; WIP `m16-5-wp2-adjudicator-remeasure.md`):
+- **Mine.** The real `readTurn` + `decideVerdict` (autopilot) run over every transcript in
+  `~/.claude/projects`, at each turn's Stop-time prefix. The M15 probe dir, `tmp/scratch`
+  workspaces and adjudicator sessions are excluded. That gives **361 fire candidates**, against
+  M15's 96 from one project.
+- **Label.** A content-free prod is a mechanical BREAK. The residual went to two blind readers,
+  then to operator card review: a 40-row sample of uncontested rows (gate ≥ 0.90, passed 35/37),
+  every uncontested BREAK, and every contested row. **The operator saw 105 cards.** Hidden
+  controls agreed with the mechanical rule 15/16. The labels were frozen (sha256 `da8b00ee…`)
+  before any answer existed.
+- **Score.** The shipped `adjudicationPrompt` + `parseAdjudication` + `claude -p --model sonnet`,
+  cwd `/`, 3 runs, on **291 scored turns (103 AWAITING / 188 BREAK)**, about 4× M15's 70.
+  Product and incident turns are excluded per the operator's policy ruling.
+
+**Result** (all 873 answers from `claude-sonnet-5-5`, 0 failed calls):
+
+| Axis | Run 1 | 95% Wilson | Runs 2 / 3 |
+|---|---|---|---|
+| Wrong-fire recall (held a real wait) | **95/103 = 0.922** | 0.854–0.960 | 0.913 / 0.903 |
+| Real breaks preserved (fired a real break) | **126/188 = 0.670** | 0.600–0.733 | 0.665 / 0.676 |
+
+Flip rate is 16/291 (5.5%).
+
+**Verdict (operator-approved 2026-10-21): neither "confirm 0.80" nor "move the bar".** The shipped adjudicator **FAILS
+0.80/0.80, and fails 0.75 and 0.85 too, on the break axis, in every run.** Moving the bar to
+fit 0.67 would be choosing the bar to pass the model. The failure is the SAFE direction: a
+missed break withholds, and the operator nudges (R-6 condition 2). But **it is a third of all
+real breaks**, which is a plausible share of the "supervisor is silent" reports.
+
+**Why** (the misses are not noise):
+- A break turn that **ends by asking or offering** fires **8/29** times; without an ask,
+  118/159. (*Ask-shaped* is an agent heuristic, approximate: the last 400 chars end in `?` or contain "say the word / let me know / want me to / shall I / should I / or would you / approve / your call"; a strict `?`-only check gives 8/21.)
+- The prompt asks *"is this turn waiting for the human to reply?"*, and an unnecessary "shall I
+  proceed?" IS literally waiting. So the misses are a property of **the question**, not the
+  threshold.
+- Worst edges: F10b 9/27, F7 7/20.
+
+**Also found:**
+- ⚠️ **M15 scored a different prompt** from the one that shipped ("…ENDED WAITING FOR THE
+  OPERATOR" against "…one thing about the end of an AI assistant's turn"). So R-6's
+  0.86/0.85 never described production.
+- ⚠️ **The pin is an alias that moved.** `sonnet` resolved to `claude-sonnet-5` through
+  2026-09-28 and to `claude-sonnet-5-5` from 09-29; M15's record holds only the alias.
+  `assertPinnedModel` compares strings and cannot see this. On M15's own subset and truth,
+  break-preserved is now 28/37 (0.76), against M15's 35/41 (0.85).
+- M15's 96 included F12 turns, which leave verify-human, and no shipped supervisor can fire on
+  those. One turn was counted twice.
+- **Operator policy rulings** captured from the labels:
+  - The product and incident workflows should not auto-chain → WP3 task 3.4 and design prior
+    `supervisor-chains-execution-workflows-only`.
+  - A pause at a WP boundary is legitimate, and the agent should hand off rather than offer to
+    continue.
+  - A turn that presents its own verification checklist for approval reads as genuinely waiting
+    (7 of 8 such rows were labelled AWAITING).
+
+**Follow-ups (operator, 2026-10-21):** WP3 gains tasks 3.5 (revise the question) and 3.6 (make
+the alias pin loud). R027 stays SKIP. No mccc note is sent.
+
+**Evidence:** `workflow-system/product/wp2-adjudicator-set.json` (361 records; text only on
+claudesk rows) and `src/state/supervisor/__tests__/adjudicatorRemeasure.test.ts`, a replay with
+no live calls that pins the verdict.
+

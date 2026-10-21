@@ -217,7 +217,7 @@ export interface FanOutOutcome {
  * the discriminating signal (a question, an instruction to reply) is at the END of the turn,
  * which is why this takes a suffix rather than a prefix.
  */
-const TAIL_CHARS = 1200;
+export const TAIL_CHARS = 1200;
 
 /**
  * The default re-read budget for a turn's close: about 2 s in all. The worst flush lag
@@ -395,8 +395,12 @@ export async function fireOne(
   return { ...known, workspaceId: workspace.workspaceId, fired: true, command };
 }
 
-/** The adjudicator's input: the tail of the verdict-bearing assistant message. */
-function tailTextOf(
+/** The adjudicator's input: the tail of the verdict-bearing assistant message.
+ *
+ * Exported for the M16.5 WP2 re-measurement probe (`tooling/adjudicator-probe/`), so the
+ * probe scores the adjudicator on exactly the slice production sends it.
+ */
+export function tailTextOf(
   lines: ReturnType<typeof parseTranscript>,
   verdictIndex: number,
 ): string {

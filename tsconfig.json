@@ -20,6 +20,10 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "tooling/link-check/linkCheck.test.ts"],
+  "include": [
+    "src",
+    "tooling/link-check/linkCheck.test.ts",
+    "tooling/adjudicator-probe"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

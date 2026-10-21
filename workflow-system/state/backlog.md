@@ -1,5 +1,42 @@
 # Backlog
 
+## SURFACE-2026-10-21-ADJUDICATOR-FAILS-THE-BREAK-AXIS-ON-ASK-SHAPED-TURNS
+
+- **Source:** feature:build (M16.5 WP2 Phase 4, the re-measurement verdict)
+- **Target level:** product:wbs → **M16.5 WP3 task 3.5** (operator, 2026-10-21)
+- **Type:** bug
+- **Summary:** The shipped adjudicator holds 95/103 real waits (0.92), but lets only **126/188 real breaks fire (0.67, CI 0.60–0.73; 0.665–0.676 over 3 runs)**, so it FAILS R-6's 0.80/0.80 bar on the break axis. The misses concentrate on break turns that end by asking or offering ("shall I proceed?", "say the word"): **8/29 fire**. Without an ask, 118/159 fire. (*Ask-shaped* is an agent heuristic, approximate: the last 400 chars end in `?` or contain "say the word / let me know / want me to / shall I / should I / or would you / approve / your call"; a strict `?`-only check gives 8/21; the direction is robust, the exact split is not.)
+- **Context:**
+  - The prompt asks *"is this turn waiting for the human to reply?"*, and an unnecessary ask IS literally waiting, so the cause is the QUESTION, not the threshold. The failure is the safe direction (it withholds), but it is a third of real breaks.
+  - Two further problems with the old baseline: the M15 numbers R-6 accepted came from a different prompt than the one that shipped, and on `claude-sonnet-5`, not today's `claude-sonnet-5-5`.
+  - Evidence is `workflow-system/product/wp2-adjudicator-set.json`, and `adjudicatorRemeasure.test.ts` pins the verdict.
+- **Suggested action:** Revise the adjudicator's one question to the supervisor's real need, e.g. *"does the turn need information or a decision that only the human can give, beyond permission to continue?"*. Re-score it on the frozen set with a held-out split, so the prompt is not fitted to the set. ⚠️ A prompt change is a behavior change: re-measure both axes, since wrong-fire recall is the axis that must not drop.
+- **Priority:** high
+- **Status:** pending
+
+## SURFACE-2026-10-21-ADJUDICATOR-PIN-IS-AN-ALIAS-THAT-MOVED-SILENTLY
+
+- **Source:** feature:build (M16.5 WP2 Phase 3)
+- **Target level:** product:arch (R-6 condition 1) → **M16.5 WP3 task 3.6** (operator, 2026-10-21)
+- **Type:** gap
+- **Summary:** `ADJUDICATOR_MODEL = "sonnet"` is an alias. It resolved to `claude-sonnet-5` through 2026-09-28 and to `claude-sonnet-5-5` from 09-29, with no code change and no signal. `assertPinnedModel` compares the alias string, so it cannot see the move, which is exactly the failure condition 1 exists to make loud.
+- **Context:** M15's record stores only the alias, so its model was inferred from transcripts. On M15's own subset and truth, break-preserved moved from 35/41 (0.85) to 28/37 (0.76).
+- **Suggested action:** Either pin a full model id, or have the Rust runner request `--output-format json` and surface the resolved id (activity log + a loud warning when it changes). Re-measure on the WP2 set whenever it changes.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-10-21-SUPERVISOR-AUTO-CHAINS-PRODUCT-AND-INCIDENT-WORKFLOWS
+
+- **Source:** feature:verify-human (M16.5 WP2 Phase 2, the operator's sample review)
+- **Target level:** product:wbs (WP3, task 3.4)
+- **Type:** bug
+- **Summary:** In autopilot the supervisor fires the next skill on **product** and **incident** workflow AUTO edges, for example `P3 → /product-research` and `I18 → /incident-resolve`. The operator's ruling (2026-10-21) is that neither workflow should auto-chain. Design prior: `supervisor-chains-execution-workflows-only`.
+- **Context:** The WP2 miner, driving the real `decideVerdict`, finds that 31 of 361 historical fire candidates are product (24) or incident (7). Each would fire into a strategic or high-stakes step unattended. ⚠️ This is the supervisor's TURN-BOUNDARY scope, Claudesk's half of the mccc ownership split; the pause-policy table (mccc's meaning) is not wrong for a bare-terminal agent, which only self-chains.
+- **Related, unresolved:** R002, a verify-human at the end of a WP ("close WP1 and open WP2"), was ruled "a legitimate pause because it's at the boundary between two WP's". Whether the supervisor should hold at a WP's last-phase boundary is not decided. It is recorded here, not built.
+- **Suggested action:** WP3 task 3.4. Gate `decideVerdict` on the edge's workflow, so product and incident edges withhold with a named reason (`workflow-not-supervised`), and pin it with a test per workflow. The WP2 adjudicator set already excludes these 31.
+- **Priority:** high
+- **Status:** pending
+
 ## SURFACE-2026-10-19-PICKER-FILTER-AUTOCORRECT-HIJACKS-THE-ROW-CLICK
 - **Source:** operator (dogfooding, 2026-10-19, screenshot)
 - **Target level:** task

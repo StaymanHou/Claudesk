@@ -24,6 +24,10 @@
 //      `haiku` is NOT_SEPARABLE on identical data (23/29 vs sonnet's 25/29 against a >=24
 //      bar). A silent downgrade would regress the supervisor **with no code change and no
 //      signal**. → `ADJUDICATOR_MODEL` + `assertPinnedModel`.
+//      ⚠️ The pin is an ALIAS, and the assertion compares strings, so it cannot see the alias
+//      moving. It moved: `sonnet` resolved to `claude-sonnet-5` through 2026-09-28 and to
+//      `claude-sonnet-5-5` from 09-29 (M16.5 WP2), with no code change and no signal — the
+//      exact failure this condition names.
 //
 //   2. ⚠️ BIAS EVERY FAILURE TOWARD WITHHOLDING.
 //      On error, timeout, unavailability, or an unparseable answer the supervisor must NOT
@@ -33,9 +37,15 @@
 //      → every failure path returns `AWAITING`, never `PROCEED`.
 //
 //   3. ⚠️ RE-MEASURE ON A LARGER LABELLED SET BEFORE RELYING ON THE MARGIN.
-//      Sonnet clears the bar by EXACTLY ONE RECORD, with only 70 of 96 scorable. That is a
-//      WP5 obligation, recorded in the WIP's "Deferred to WP5" — it is NOT discharged here,
-//      and nothing fails without it, which is why it is written down.
+//      Sonnet cleared the bar by EXACTLY ONE RECORD, with only 70 of 96 scorable.
+//      ✅ MEASURED at M16.5 WP2 (2026-10-21) — and the margin is GONE. On 291 operator-labelled
+//      turns the shipped prompt holds 95/103 waits (0.92) but fires only 126/188 real breaks
+//      (0.67, CI 0.60–0.73; stable 0.665–0.676 over 3 runs), so it FAILS 0.80/0.80 on the
+//      break axis. Breaks whose turn ends by asking ("shall I proceed?") fire ~8/29 (an
+//      approximate heuristic; strictly `?`-ended, 8/21): the model answers the literal
+//      question below, and an unneeded ask IS literally waiting. The failure is the SAFE
+//      direction (it withholds). Evidence + replay:
+//      `wp2-adjudicator-set.json`, `__tests__/adjudicatorRemeasure.test.ts`.
 //
 // ⚠️ ROUTE EVERY FIRE CANDIDATE, NOT JUST THE DENSE CLASS. The narrow edge-class router
 // (verify-human-adjacent only) sends 40 of 96 and MISSES 10 of 32 awaiting-turns, which would

@@ -1,7 +1,7 @@
 ---
 stage: design-priors
 state: active
-updated: 2026-10-20
+updated: 2026-10-21
 ---
 
 # Design Priors — Claudesk
@@ -234,3 +234,19 @@ There is a second, sharper reason for the destructive half specifically: a user 
 **Why (⚠️ INFERRED; approved as proposed by the operator 2026-10-20, why not yet sharpened; directional + overridable):** The dot exists to answer one glance-question: *does this workspace need me?* A dev server kept running **for** the operator's check is exactly where both states are true, and the old mapping picked the one that hid the ask. The costs are asymmetric: a missed "needs you" stalls a workspace (and, in autopilot, misses the one deliberate stop), while a missed "busy" costs nothing.
 
 **Origin:** M16.5 WP1 verify-human (2026-10-20). The probe measured that 37 of 106 verify-human pauses read purple because a background shell was alive. The operator ruled that **every** verify-human pause should read blue, with or without background work (the other ~69 read grey `idle`), which is the precedence this prior generalizes. Related: [[semantic-distance-not-just-visual-distance-for-status-colour]] governs how opposed states must **look**; this prior governs which state **wins** when both hold. [[reuse-the-established-status-palette-before-inventing-a-hue]] supplies the colour (blue = needs you).
+
+## supervisor-chains-execution-workflows-only
+
+**Axis:** automation scope (which workflows the supervisor may advance without the operator)
+
+**Lean:** The supervisor auto-chains only the **execution** workflows (feature, task, and the session-boundary chain). The **product** and **incident** workflows stay human-paced, even in autopilot, and even on an edge the pause-policy table marks AUTO.
+
+**Decision rule:** ask **"is the next step strategy or damage control, rather than executing an agreed plan?"**
+- **Yes** (product: vision / roadmap / research / arch / WBS; incident: triage → resolve) → never fire; the operator advances it.
+- **No** (feature / task phases, the session-boundary handoff chain) → the policy table decides as today.
+- A new workflow is human-paced by default until the operator says otherwise.
+
+**Why (⚠️ INFERRED; approved as proposed by the operator 2026-10-21, why not yet sharpened; directional + overridable):** Product steps are strategic decisions, where each output is the input the operator wants to weigh before the next step. Incidents are high-stakes, so an unattended chain into `incident-resolve` closes something the operator has not checked. In both, a wrong fire costs far more than a nudge, which is the asymmetry R-6 already biases the adjudicator toward.
+
+**Origin:** M16.5 WP2 Phase 2 verify-human (2026-10-21). The operator's sample review labelled R040 (I18 → `incident-resolve`) and R133 (P3 → `product-research`) AWAITING. Neither turn's text asked anything; the operator's reasons were "incident workflow shouldn't auto chain" and "product workflow shouldn't auto chain either". The shipped policy table fires both: 31 of 361 mined fire candidates are product (24) or incident (7). The fix is `SURFACE-2026-10-21-SUPERVISOR-AUTO-CHAINS-PRODUCT-AND-INCIDENT-WORKFLOWS` → WBS WP3 task 3.4. Related: [[explicit-selectable-mode-over-inferred-mode]] (the drive mode is still the operator's switch; this prior bounds what any mode may automate).
+
