@@ -437,3 +437,6 @@ the alias pin loud). R027 stays SKIP. No mccc note is sent.
 claudesk rows) and `src/state/supervisor/__tests__/adjudicatorRemeasure.test.ts`, a replay with
 no live calls that pins the verdict.
 
+
+## Session Handoff — 2026-10-21 11:24
+Handed off. See `workflow-system/state/.session.md` to restore.
