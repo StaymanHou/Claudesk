@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-21
+
+- **Feature shipped:** M16.5 WP2 adjudicator re-measurement. On 291 operator-labelled turns mined from every project, the supervisor's `claude -p` adjudicator holds 95/103 real waits (0.92) but lets only 126/188 real breaks fire (0.67, stable over three runs), so it fails the 0.80/0.80 bar on the break axis; the bar is kept, and the follow-ups (no auto-chaining of the product and incident workflows, a revised adjudicator question, a loud model pin) are WP3 tasks 3.4–3.6.
+- **Backlog resolved:** SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET — R-6 condition 3 is discharged: the margin was re-measured on a set four times M15's, and it is gone (break axis 0.67), with the new findings filed as their own backlog items.
+- **Milestone:** M16.5 WP2: Probe — re-measure the adjudicator on a larger labelled set.
+
 ## 2026-10-20
 
 - **Feature shipped:** M16 WP3 review player: audio and video under 4 GiB now open in the editor tab's review player, with native controls, frame-step on `,` / `.` (seeking to frame midpoints), Space play/pause, 0.5–2× speed presets, a loop toggle, a frame-accurate `hh:mm:ss.ff` timecode, file info (resolution, duration, size, codec, fps, audio format), a reload that keeps the playhead, speed and loop when a render is rewritten on disk, and a pause when the player is hidden inside the app.

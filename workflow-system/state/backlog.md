@@ -103,6 +103,22 @@
 - **Priority:** medium (decisions are already deduplicated; what remains is a leak plus missing `⚙` in the affected workspace)
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
+## Code-quality findings — m16-5-wp2-adjudicator-remeasure (2026-10-21)
+
+- **Pointer:** **3 MAJOR + 7 MINOR** from the review of `c5fc34f`.
+  - The MAJORs are all *durability* debt, and all bite when WP3 3.5 re-uses the probe:
+    - the replay test isn't bound to the prompt, model and tail length it measured;
+    - the freeze gate reads a WIP path that finalize moves;
+    - the full labelled set is a single copy in gitignored `tmp/`.
+  - The MINORs: resume never retries failed calls; run numbers sort as strings; the PRNG and
+    `LABELS` are duplicated; the policy rule is restated; claudesk tails are kept by prefix
+    match; the numbers are repeated in four places; `TAIL_CHARS` is exported but unused.
+
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp2-adjudicator-remeasure — 2026-10-21`.
+- **Priority:** medium (the MAJORs) / low (the rest)
+- **Status:** pending
+- **Pickup shape:** fold into WP3 task 3.5 (the three MAJORs plus the repeated-numbers and `TAIL_CHARS` MINORs) and WP3 3.4 (the policy-rule MINOR); the rest go to WP8's paydown.
+
 ## Code-quality findings — m16-5-wp1-hook-payload-probe (2026-10-20)
 
 - **Pointer:** **1 MAJOR + 4 MINOR** from the review of `e63831b`. The MAJOR: a new test was inserted between the end-to-end BackgroundWork test and its rustdoc, so the "clearing edge" warning now sits on the wrong test. The MINORs: the telemetry tail concatenated at two unguarded sites, redundant `None` fields in spread literals, `payload_keys` removal not marked (and WP4 4.4's wording), and the dev basename duplicated in the hook. All five touch files M16.5 WP4 edits anyway.
@@ -448,44 +464,6 @@ do not re-raise at planning time, and do not treat the shipped mechanism as clos
 
 **Delete this entry when** a released build has had dictation exercised into the Prompt panel and
 the durability half holds — that is what the pain point was about, not the WBS being ticked.
-
-## SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET
-
-- **Priority:** medium
-- **Surfaced by:** M15 WP5 Phase 2 / P2.4 (feature:verify-human — operator-approved as explicitly owed)
-- **Target:** M15 supervisor — the `claude -p` adjudicator (`src/state/supervisor/adjudicator.ts`)
-- **Type:** gap
-
-⚠️ **R-6's condition 3 is NOT discharged, and M15 closes without discharging it.** R-6 shipped WP3
-as GO-WITH-CONDITIONS with three binding conditions. Conditions 1 and 2 are shipped and tested —
-the adjudicator model is **pinned** and `assertPinnedModel` runs inside `adjudicate` before every
-spawn (so a silent downgrade fails loudly), and the failure direction is **withholding**, pinned by
-`verdict.test.ts:362` ("withholds when the adjudicator fails — the failure direction, end to end").
-**Condition 3 — re-measure on a larger labelled set BEFORE relying on the margin — is not.**
-
-⚠️ **Why it matters: the margin is thin and the bar is CHOSEN, not measured.** Q2 came back
-`SEPARABLE` on a **+1-record margin** (sonnet 25/29 against a ≥24 bar; haiku is NOT_SEPARABLE at
-23/29), with only **70 of 96** records scorable. The 0.80/0.80 threshold is *"accepted as-is but is
-a CHOSEN bar, not a measured constant"* (R-6, verbatim). So the adjudicator's accept/reject
-behavior rests on a number nobody has validated at scale — and R-5 made the adjudicator
-**load-bearing for correctness** on the Q2 slice, not merely a cleanup tail.
-
-⚠️ **This is the one thing a probe would still have bought.** WP5/P2.4 re-checked §4's exemption of
-the adjudicator from its own probe WP and concluded it HOLDS — but explicitly on the basis that
-conditions 1 and 2 discharge what the probe was for. Condition 3 is the residue. **It is recorded
-as owed rather than silently dropped**, per the operator's approval at WP5 Phase 2 verify-human
-(2026-09-15).
-
-**The one cheap mitigation already in place:** R-3 established the fixture is *rebuildable* from the
-corpus, and `wp1-break-fixture.json` (2,284 records) is checked in — so re-labelling a larger set
-does not start from zero.
-
-**Absorbed 2026-09-23 from the deleted `SURFACE-2026-09-11-Q2-SEPARABILITY-IS-MODEL-CONDITIONAL`** (conditions 1 and 2 of which shipped). Three facts that entry held and this one did not: (i) the verdict is **bar-sensitive both ways**: a 0.85 bar fails both arms and a 0.75 bar passes both, so "confirm the bar" means measure where it should sit, not re-check 0.80. (ii) The adjudicator costs **~3s per fire candidate on the critical path**. (iii) Routing must cover **every** fire candidate, because the narrow verify-human-adjacent router missed 10 of 32 awaiting-turns. The per-model table (haiku 23/29 NOT_SEPARABLE, sonnet 25/29 SEPARABLE) is in `workflow-system/product/archive/milestone-15-workflow-supervisor/wp1-probe-report.md`.
-
-**Suggested action:** re-mine and label a larger set, re-score `sonnet` against it, and either
-confirm the 0.80/0.80 bar or move it to a measured value. ⚠️ **Do this BEFORE any tuning that
-leans on the current margin** — that is the trigger R-6 named, and it has not fired yet.
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## SURFACE-2026-09-15-WIP-FILES-USE-PROSE-HEADERS-NOT-YAML-FRONTMATTER
 

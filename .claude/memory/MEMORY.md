@@ -1,5 +1,9 @@
 # Memory Index
 
+## Operator preferences
+
+- [feedback-operator-labelling-pass-shape.md](feedback-operator-labelling-pass-shape.md) — Labelling passes: never a big text sheet; a local keyboard card reviewer, two blind readers, sample-then-contested review, prior rulings applied first.
+
 ## Verification method & instrument traps
 
 - [detector-scored-against-its-own-table-is-circular.md](detector-scored-against-its-own-table-is-circular.md) — Scoring a detector against a fixture its own policy table produced gives 1.000 by identity. Treat a perfect score as a symptom; score against an independent signal.
@@ -68,6 +72,7 @@
 
 ## CC hooks, PTY & terminal
 
+- [production-shaped-claude-p-for-adjudicator-scoring.md](production-shaped-claude-p-for-adjudicator-scoring.md) — Scoring the adjudicator: cwd `/`, strip CLAUDE*/CLAUDESK* env, --no-session-persistence; first-call cost is cold-cache ($0.14 vs ~$0.005).
 - [cc-hook-capture-beats-docs.md](cc-hook-capture-beats-docs.md) — For hook-channel work a live capture beats the official docs, which can be confidently wrong about event existence.
 - [cc-hook-event-facts.md](cc-hook-event-facts.md) — Concrete CC v2.1.x hook-event facts for Claudesk's status channel (live-captured).
 - [raw-mode-cr-is-enter.md](raw-mode-cr-is-enter.md) — Raw mode disables CR→NL translation, so input lines must end in `\r`. Applies to ALL PTY-driven subprocesses, not just CC.

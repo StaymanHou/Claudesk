@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16.5 WP2 — Probe: re-measure the adjudicator on a larger labelled set
 
 **Workflow:** feature
-**State:** ship (complete) — `904dcc8` (feat). Not pushed: `main` is pushed only on the operator's request.
+**State:** finalize (complete) — **Completed 2026-10-21.** Feature `904dcc8`, ship `c5fc34f`. Not pushed: `main` is pushed only on the operator's request.
 **Created:** 2026-10-21
 **WBS:** `workflow-system/product/wbs.md` → WP2 (type: probe, timebox 1 day of agent work plus the
 operator labelling pass). It gates any adjudicator tuning and option (c) of WP3.1. It blocks no
@@ -322,7 +322,7 @@ must record how many final labels the operator saw rather than accepted unseen.
     - [x] No adjudicator output — evidence: `adjudicator` hits are 225 per-row template labels, 3 header lines and 3 quoted tail lines; `sonnet` hits are 14, all quoted tails. Neither word appears on any Proposed or Operator line. No score, answer or frozen file exists under `tmp/`.
     - [x] Freeze mechanism — evidence: the real freeze test, pointed at simulated copies. A typo copy exits 1 with `R001: operator cell "AWAITNG" is not blank, AWAITING, BREAK or SKIP` and writes nothing. A valid copy gives final = override ?? proposal on 225/225 rows, and the report's sha256 equals the file's hash.
     - [x] Control-agreement mechanism — evidence: 15/16 → 0.9375, trusted; 14/16 → 0.875, untrusted, both disagreements listed. A SKIP on a control counts as a disagreement. Re-routing the mechanical labels on `trusted:false` is manual, not automated.
-    - [ ] Freeze and agreement on REAL labels  <!-- status: UNVERIFIED: undrivable — awaits the operator's labelling pass (P2.2) -->
+    - [x] Freeze and agreement on REAL labels — resolved once the labelling pass ran: frozen at sha256 `da8b00ee…` (P2.3), controls 15/16 trusted. *(This leaf was stale until the code-quality review flagged it, 2026-10-21.)*
     - *(Re-run after the P2.verify-human.1 back-loop, 2026-10-21.)*
     - [x] Triage — evidence: recomputed independently, it matches `triage.json` exactly: noEvidence 30 (1 null, 16 task-notification, 13 `/exit` or `/clear`), uncontested 174, contested 21. The sets partition all 225 ids, and the 40-row sample is a subset of the uncontested rows. Reader agreement is 174/195 (0.892).
     - [x] Card reviewer, real keyboard in headless Chromium on file:// — evidence:
@@ -510,11 +510,107 @@ must record how many final labels the operator saw rather than accepted unseen.
     - `pnpm verify:auto` → EXIT=0 in 33s; 261 files / 3,479 tests.
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality against the ship baseline `904dcc8`
+- **Path:** Feature > finalize
+- **Active scope:** finalize (review-quality done: 0 CRITICAL / 3 MAJOR / 8 MINOR, auto-backlogged)
 - **Blocked:** none
-- **Unvisited:** review-quality → finalize
-- **Open discoveries:** SURFACE-2026-10-21-ADJUDICATOR-FAILS-THE-BREAK-AXIS-ON-ASK-SHAPED-TURNS (→ WP3 3.5), SURFACE-2026-10-21-ADJUDICATOR-PIN-IS-AN-ALIAS-THAT-MOVED-SILENTLY (→ WP3 3.6), SURFACE-2026-10-21-SUPERVISOR-AUTO-CHAINS-PRODUCT-AND-INCIDENT-WORKFLOWS (→ WP3 3.4); the margin SURFACE is resolved at finalize
+- **Unvisited:** finalize → (session-boundary chain)
+- **Open discoveries:** SURFACE-2026-10-21-ADJUDICATOR-FAILS-THE-BREAK-AXIS-ON-ASK-SHAPED-TURNS (→ WP3 3.5), SURFACE-2026-10-21-ADJUDICATOR-PIN-IS-AN-ALIAS-THAT-MOVED-SILENTLY (→ WP3 3.6), SURFACE-2026-10-21-SUPERVISOR-AUTO-CHAINS-PRODUCT-AND-INCIDENT-WORKFLOWS (→ WP3 3.4), code-quality pointer; the margin SURFACE is resolved at finalize
+
+## Code-Quality Review
+
+*(feature-review-quality, 2026-10-21, on ship `c5fc34f` (feature `904dcc8`), window
+`904dcc8^..c5fc34f`; drive_mode=autopilot. **0 CRITICAL, 3 MAJOR, 8 MINOR.** Ten were
+auto-backlogged to `backlog-quality-findings.md` → `# m16-5-wp2-adjudicator-remeasure —
+2026-10-21`, with a pointer in `backlog.md`. The stale-leaf MINOR was fixed in place.)*
+
+### Strengths
+- The probe reuses production code instead of copying it: the real `decideVerdict`/`readTurn` to
+  mine, the real `tailTextOf` to slice, and the real `adjudicationPrompt`/`parseAdjudication` to
+  score. So the M15 trap (scoring a prompt that did not ship) cannot happen again.
+- Pure logic (`corpus`, `triage`, `score`, `seedJoin`, `redact`, `reviewer`) is tested; the IO
+  and live calls sit in `*.probe.ts`, which are kept out of `verify:auto`.
+- The redaction check looks at what is left, not a list of fields, and the sha256 freeze runs
+  before any answer exists. Both make the evidence credible.
+- The reviewer HTML escapes properly (`textContent` only, `embedJson` for `<`, U+2028 and U+2029),
+  and both are tested with hostile input.
+- `effective()` maps every non-PROCEED answer to AWAITING, as production does. The replay header
+  says plainly that it pins a measured verdict, not a target.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`adjudicatorRemeasure.test.ts` + `_meta`] The replay is not bound to the prompt hash,
+  `TAIL_CHARS` or the model id it measured. It stays green after WP3 3.5 rewrites the prompt.
+- [`score.probe.ts` `WIP` constant] The freeze gate reads a WIP path that finalize moves to
+  `archive/`, so 3.5's re-score fails with ENOENT.
+- [`paths.ts` `OUT`] The full labelled set is a single, undocumented copy in gitignored `tmp/`,
+  and it can be rebuilt only while every source transcript survives.
+
+**MINOR**
+- Resume never retries failed calls, and there is no `child.on("error")`.
+- Run numbers are sorted as strings.
+- The PRNG, the shuffle and `LABELS` are duplicated.
+- The policy rule is restated in three places.
+- Claudesk tails are kept by a prefix match.
+- The measurement numbers are repeated in four places.
+- `TAIL_CHARS` is exported but unused.
+- A stale WIP leaf. *(fixed in place)*
+
+### Assessment
+This is careful, well-structured measurement tooling, and a good template for future probes. The
+debt is all in durability: replay binding, a gate path that moves, and a single-copy dataset. All
+three bite when WBS 3.5 re-uses the probe, so the pointer folds them into 3.5. The
+production-side change (one comment correction, two exports) is small and sound.
+
+### If you disagree
+Mark a finding `[DISMISSED]` here before `feature-finalize` archives this file.
+
+## Retrospect
+- **What changed in our understanding:**
+  - The adjudicator's problem is the QUESTION, not the bar. "Is this turn waiting for the human to
+    reply?" is literally true of every unnecessary "shall I proceed?". So it withholds a third of
+    real breaks (0.67), concentrated on ask-shaped turns.
+  - The 0.86/0.85 that R-6 accepted described neither the shipped prompt (M15 scored a different
+    one) nor the current model (the `sonnet` alias moved to `claude-sonnet-5-5` on 2026-09-29).
+  - The operator's "truth" carries POLICY judgments the adjudicator cannot see: the product and
+    incident workflows should not chain at all, a WP boundary is a legitimate pause, and a turn
+    that presents its own checklist for approval is a real ask. These separated into a policy
+    gate (WP3 3.4) and a design prior.
+- **Assumptions that held:**
+  - Driving the shipped `decideVerdict`/`readTurn`/`tailTextOf`/`adjudicationPrompt` gave a
+    population and an input that are exactly production's (verified: Stop-time missed 0 / extra 0).
+  - Freezing the labels before any answer kept the score non-circular.
+  - The corpus was big enough for 3× (291 scored, against 70).
+- **Assumptions that were wrong:**
+  - **The labelling form.** A 336 KB markdown sheet was rejected outright ("6000+ lines of plain
+    text"). The fix was a keyboard card reviewer plus two blind readers, reviewing only the sample,
+    the BREAKs and the contested rows. The operator saw 105 cards instead of 225.
+  - **Trusting uncontested BREAKs.** All 4 sample flips were reader-BREAK → operator-AWAITING, so
+    every uncontested BREAK went to review.
+  - **The cost:** $0.14 per call was a cold-cache trial; ~$0.005 is the real figure, which made
+    the 3 runs trivial.
+  - **The miner's first turn cut:** a `<local-command-caveat>` before `/exit` hid 13 fires, caught
+    by verify-self.
+  - The plan said verify-human was a divergence risk; there was none, because F12 never resolves
+    to `auto`.
+- **Approach delta:**
+  - Phase 2 grew three tasks at verify-human: the second reader, the card reviewer, and the
+    operator's sample gate. A `policy-excluded` class and an `operator-ruling` source were added
+    from the operator's rulings.
+  - Phase 3 ran all 3 runs after the cost correction.
+  - Phase 4 did NOT move the bar: the verdict is "fails". It filed 3 SURFACEs and grew WP3 by
+    3.4–3.6.
+  - The review-quality MAJORs (replay binding, archive-path gate, single-copy dataset) are
+    scheduled into WP3 3.5, where the probe is reused.
+
+**Closure:** Requester = operator — closure notice for self-record.
+> **Feature complete:** M16.5 WP2 has shipped. It re-measured the supervisor's adjudicator on
+> 291 operator-labelled turns: it holds real waits at 0.92 but fires only 0.67 of real breaks,
+> so it fails the 0.80 bar, and the follow-ups are WP3 3.4–3.6. The evidence and a no-live-call
+> replay are `wp2-adjudicator-set.json` and `adjudicatorRemeasure.test.ts`; the full write-up is
+> `wbs.md` → "Probe outcomes" → WP2.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

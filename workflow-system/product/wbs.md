@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-10-20  # WP1 shipped (hook-payload probe); Q2 widened: every verify-human pause reads blue
+updated: 2026-10-21  # WP2 shipped (adjudicator re-measure: FAILS the break axis); WP3 gains 3.4–3.6
 cycle: milestone-16-5-supervisor-hardening-qol-and-paydown
 ---
 
@@ -94,7 +94,7 @@ verdict:
 - [x] 1.4 Record the verdicts. ⚠️ **Never from PTY output.** CC's footer text is not a candidate
       signal.
 
-### WP2: Probe — re-measure the adjudicator on a larger labelled set
+### WP2: Probe — re-measure the adjudicator on a larger labelled set ✅ SHIPPED 2026-10-21 (commit 904dcc8)
 
 **Type:** probe
 **Milestone:** M16.5. It **gates any adjudicator tuning** and option (c) of the quoted-token fix.
