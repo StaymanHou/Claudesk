@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16.5 WP2 — Probe: re-measure the adjudicator on a larger labelled set
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** ship (complete) — `904dcc8` (feat). Not pushed: `main` is pushed only on the operator's request.
 **Created:** 2026-10-21
 **WBS:** `workflow-system/product/wbs.md` → WP2 (type: probe, timebox 1 day of agent work plus the
 operator labelling pass). It gates any adjudicator tuning and option (c) of WP3.1. It blocks no
@@ -510,10 +510,10 @@ must record how many final labels the operator saw rather than accepted unseen.
     - `pnpm verify:auto` → EXIT=0 in 33s; 261 files / 3,479 tests.
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship
+- **Path:** Feature > review-quality
+- **Active scope:** review-quality against the ship baseline `904dcc8`
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
+- **Unvisited:** review-quality → finalize
 - **Open discoveries:** SURFACE-2026-10-21-ADJUDICATOR-FAILS-THE-BREAK-AXIS-ON-ASK-SHAPED-TURNS (→ WP3 3.5), SURFACE-2026-10-21-ADJUDICATOR-PIN-IS-AN-ALIAS-THAT-MOVED-SILENTLY (→ WP3 3.6), SURFACE-2026-10-21-SUPERVISOR-AUTO-CHAINS-PRODUCT-AND-INCIDENT-WORKFLOWS (→ WP3 3.4); the margin SURFACE is resolved at finalize
 
 ## Discoveries
