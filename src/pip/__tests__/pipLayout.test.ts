@@ -165,3 +165,30 @@ describe("Phase 4 — orderForAttention (awaiting-input sorts first, stable)", (
     expect(orderForAttention([], {})).toEqual([]);
   });
 });
+
+describe("M16.5 WP4 — a verify-human overlay is a PiP 'needs me' cue", () => {
+  it("isAwaitingInput is true for an overlaid idle or background_work entry", () => {
+    expect(
+      isAwaitingInput({ a: { state: "idle", attention: "verify_human" } }, "a"),
+    ).toBe(true);
+    expect(
+      isAwaitingInput(
+        { a: { state: "background_work", attention: "verify_human" } },
+        "a",
+      ),
+    ).toBe(true);
+    expect(isAwaitingInput({ a: { state: "idle" } }, "a")).toBe(false);
+    expect(
+      isAwaitingInput({ a: { state: "idle", attention: null } }, "a"),
+    ).toBe(false);
+  });
+
+  it("orderForAttention pulls an overlaid workspace to the front", () => {
+    const tiles = [{ id: "x" }, { id: "y" }];
+    const map = {
+      x: { state: "running" },
+      y: { state: "idle", attention: "verify_human" },
+    };
+    expect(orderForAttention(tiles, map).map((t) => t.id)).toEqual(["y", "x"]);
+  });
+});

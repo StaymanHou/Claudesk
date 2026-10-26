@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-10-21
+updated: 2026-10-26
 ---
 
 # Runtime Registry
@@ -31,13 +31,19 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 34s (2026-10-21, m16-5-wp2 P1 verify-codify, EXIT=0)
+- **Last:** 42s (2026-10-26, m16-5-wp4 P4 verify-codify, EXIT=0)
 - **Use timeout:** 159000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 42s — 2026-10-26 (P4 verify-codify)
+  - 48s — 2026-10-26 (P4 verify-auto)
+  - 39s — 2026-10-26 (P3 verify-codify)
+  - 44s — 2026-10-26 (warm cache; timeout kept per the note above)
+  - 52s — 2026-10-21 (m16-5-wp4 P1 verify-codify)
+  - 44s — 2026-10-21 (m16-5-wp4 P1 verify-auto)
   - 34s — 2026-10-21
   - 35s — 2026-10-21
   - 49s — 2026-10-20 (m16-5-wp1 P1, warm cache)

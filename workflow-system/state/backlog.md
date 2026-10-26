@@ -246,22 +246,23 @@
 ## SURFACE-2026-09-28-IS-TURN-START-FIRES-ON-MID-TURN-DEQUEUES
 - **Source:** feature:build (`supervisor-activity-record`, P3.1 probe)
 - **Target level:** product:arch
-- **Type:** gap
+- **Type:** gap (upstream-blocked)
 - **Summary:** `event_is_turn_start` (`status_broadcaster`) treats EVERY `UserPromptSubmit` as a turn
-  start, but CC also fires `UserPromptSubmit` mid-turn when it dequeues a queued prompt: a
-  background task notification, or a message the operator typed while the model was running. Both
-  were seen in claudesk session `7a912f57` on 2026-09-15 (19:52:31 and 19:54:33Z, prod
-  `status-channel.log.1`), each while the turn was still running (no `Stop` between).
-- **Context:** The M13.5 turn prev/next markers are planted on these mid-turn points too, so the
-  walk can step onto a spot that is not the start of a turn. Turn attribution (the `⚙`) is
-  unaffected in practice: it claims only within ~2 s after a fire, and the supervisor fires after a
-  `Stop` (documented in `src/state/supervisor/turnOrigin.ts`).
-- **Suggested action:** Decide whether a dequeued prompt should count as a turn start for
-  navigation. If not, find a discriminator on the hook payload or in the event order (e.g. a
-  `UserPromptSubmit` with no `Stop` since the previous one). Capture a live payload first
-  (`[[cc-hook-capture-beats-docs]]`).
+  start. CC fires `UserPromptSubmit` **at enqueue** for a prompt typed while a turn runs (M16.5 WP1),
+  so the M13.5 turn prev/next markers are planted mid-turn. First seen in claudesk session `7a912f57`
+  on 2026-09-15.
+- **Context:** **Rewritten 2026-10-26 (M16.5 WP4). This was decided BY MEASUREMENT; do not re-derive.**
+  Neither local discriminator is acceptable: CC fires no `Stop` on an Esc interrupt (0 of 16), so
+  "no `Stop` since the last submit" (rule A) catches 30/34 queued prompts but drops the marker on 8/8
+  first prompts after an Esc, and the safe variant (rule B) catches only 6/34. `event_is_turn_start`
+  is therefore KEPT as is. Full record: `arch/status-channel-and-surfaces.md` §A.5 → "Queued prompts".
+  Turn attribution (the `⚙`) is unaffected.
+- **Suggested action:** Wait on the upstream ask, **anthropics/claude-code#105187** (filed
+  2026-10-26 at the operator's instruction): a `queued` flag on `UserPromptSubmit`, or an interrupt
+  hook. If either ships, capture a live payload (`[[cc-hook-capture-beats-docs]]`) and gate the
+  marker on it. Until then there is nothing to build here.
 - **Priority:** low
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
+- **Status:** blocked on upstream (anthropics/claude-code#105187)
 
 ## SURFACE-2026-09-17-F10B-STOPPED-BEFORE-VERIFY-HUMAN-INSTEAD-OF-CHAINING-INTO-IT
 - **Source:** operator correction (M14 WP0, observed twice in one session)

@@ -201,26 +201,20 @@ pub fn format_event_line(
 ///
 /// - On `Stop`: ` bg=<count> bg_types=<t1,t2|->` (the outstanding background tasks, types
 ///   only; a missing count reads as 0).
-/// - On any event carrying `payload_keys` (dev build only): ` keys=<k1,k2>`.
 /// - Otherwise the empty string, so every other line stays byte-identical to before.
 pub fn format_event_detail(
     event_name: &str,
     bg_count: Option<u64>,
     bg_types: Option<&[String]>,
-    payload_keys: Option<&[String]>,
 ) -> String {
-    let mut tail = String::new();
-    if event_name == "Stop" {
-        let types = match bg_types {
-            Some(t) if !t.is_empty() => t.join(","),
-            _ => "-".to_string(),
-        };
-        tail.push_str(&format!(" bg={} bg_types={types}", bg_count.unwrap_or(0)));
+    if event_name != "Stop" {
+        return String::new();
     }
-    if let Some(keys) = payload_keys {
-        tail.push_str(&format!(" keys={}", keys.join(",")));
-    }
-    tail
+    let types = match bg_types {
+        Some(t) if !t.is_empty() => t.join(","),
+        _ => "-".to_string(),
+    };
+    format!(" bg={} bg_types={types}", bg_count.unwrap_or(0))
 }
 
 /// Format one registry-mutation telemetry line (register / deregister). Pure.
@@ -250,18 +244,15 @@ mod tests {
     fn format_event_detail_on_stop_carries_count_and_types() {
         let types = vec!["shell".to_string(), "monitor".to_string()];
         assert_eq!(
-            format_event_detail("Stop", Some(2), Some(&types), None),
+            format_event_detail("Stop", Some(2), Some(&types)),
             " bg=2 bg_types=shell,monitor"
         );
         // Nothing outstanding, or a degraded payload with no count: `bg=0 bg_types=-`.
         assert_eq!(
-            format_event_detail("Stop", Some(0), Some(&[]), None),
+            format_event_detail("Stop", Some(0), Some(&[])),
             " bg=0 bg_types=-"
         );
-        assert_eq!(
-            format_event_detail("Stop", None, None, None),
-            " bg=0 bg_types=-"
-        );
+        assert_eq!(format_event_detail("Stop", None, None), " bg=0 bg_types=-");
     }
 
     #[test]
@@ -273,21 +264,8 @@ mod tests {
             "PostToolUse",
             "PreToolUse",
         ] {
-            assert_eq!(format_event_detail(name, Some(3), None, None), "", "{name}");
+            assert_eq!(format_event_detail(name, Some(3), None), "", "{name}");
         }
-    }
-
-    #[test]
-    fn format_event_detail_appends_dev_payload_keys() {
-        let keys = vec!["cwd".to_string(), "prompt".to_string()];
-        assert_eq!(
-            format_event_detail("UserPromptSubmit", None, None, Some(&keys)),
-            " keys=cwd,prompt"
-        );
-        assert_eq!(
-            format_event_detail("Stop", Some(0), Some(&[]), Some(&keys)),
-            " bg=0 bg_types=- keys=cwd,prompt"
-        );
     }
 
     #[test]

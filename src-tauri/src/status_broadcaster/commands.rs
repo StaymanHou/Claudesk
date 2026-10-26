@@ -25,7 +25,8 @@ use std::thread;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use super::{
-    canonical_key, event_to_state, state_label, to_update, SharedRegistry, WorkspaceRegistry,
+    canonical_key, event_to_state, state_label, to_update, Attention, SharedRegistry,
+    WorkspaceRegistry,
 };
 use crate::hook_socket::HookEvent;
 use crate::status_log::{format_event_detail, format_event_line, StatusLog};
@@ -35,14 +36,20 @@ use crate::status_log::{format_event_detail, format_event_line, StatusLog};
 /// WP6's frontend `listen("workspace-status", …)`.
 pub const STATUS_EVENT: &str = "workspace-status";
 
-/// The telemetry tail for one event (M16.5 WP1): background-task count and types on `Stop`,
-/// plus the dev-only payload key names. Empty for every other event.
-fn event_detail(event: &HookEvent) -> String {
-    format_event_detail(
+/// One `status-channel.log` line for a drained hook event: the base line plus the
+/// background-task tail on `Stop` (M16.5 WP1). Both drain-loop log sites call this, so the
+/// tail cannot be dropped at one of them while every test stays green (M16.5 WP4).
+fn hook_event_line(event: &HookEvent, mapped: Option<&str>, resolved: Option<&str>) -> String {
+    format_event_line(
+        event.timestamp,
+        &event.hook_event_name,
+        &event.cwd,
+        mapped,
+        resolved,
+    ) + &format_event_detail(
         &event.hook_event_name,
         event.background_task_count,
         event.background_task_types.as_deref(),
-        event.payload_keys.as_deref(),
     )
 }
 
@@ -106,40 +113,37 @@ fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>, status_log: Option<
                         "[claudesk] status-broadcaster: registry not in state; dropping event"
                     );
                     if let Some(log) = &status_log {
-                        log.write_line(
-                            &(format_event_line(
-                                event.timestamp,
-                                &event.hook_event_name,
-                                &event.cwd,
-                                event_to_state(&event).map(state_label),
-                                None,
-                            ) + &event_detail(&event)),
-                        );
+                        log.write_line(&hook_event_line(
+                            &event,
+                            event_to_state(&event).map(state_label),
+                            None,
+                        ));
                     }
                     continue;
                 }
             };
-            let reg = match registry.lock() {
+            let mut reg = match registry.lock() {
                 Ok(r) => r,
                 Err(poisoned) => poisoned.into_inner(), // a poisoned lock is still readable
             };
             let mapped = event_to_state(&event);
             let resolved = reg.resolve_cwd(&event.cwd);
             let update = to_update(&event, &reg);
+            // M16.5 WP4: remember it BEFORE emitting, under the same lock, so a promotion
+            // racing this event compares against it (`WorkspaceRegistry::promote`).
+            if let Some(u) = &update {
+                reg.record_emitted(u);
+            }
             (mapped, resolved, update)
         };
 
         // M6 WP1: one telemetry line per drained event (best-effort; never blocks).
         if let Some(log) = &status_log {
-            log.write_line(
-                &(format_event_line(
-                    event.timestamp,
-                    &event.hook_event_name,
-                    &event.cwd,
-                    mapped.map(state_label),
-                    resolved.as_deref(),
-                ) + &event_detail(&event)),
-            );
+            log.write_line(&hook_event_line(
+                &event,
+                mapped.map(state_label),
+                resolved.as_deref(),
+            ));
         }
 
         if let Some(update) = update {
@@ -226,6 +230,53 @@ pub fn workspace_deregister(
     // This command body runs on the main thread, so the AppKit hide inside is safe.
     crate::pip::commands::reconcile_pip_for_workspace_count(&app, open_count);
     Ok(())
+}
+
+/// Show a workspace as needing the operator while its turn sits at a verify-human pause
+/// (M16.5 WP4). The workflow-gated frontend calls this after its turn-end read; the
+/// promotion travels back out on [`STATUS_EVENT`] so the filmstrip, PiP and tray agree.
+///
+/// Returns `true` if applied, `false` if refused because the workspace's latest event is no
+/// longer the `Stop` named by `stop_event_at` (see [`WorkspaceRegistry::promote`]). A
+/// refusal is a normal outcome, not an error.
+///
+/// Sync and non-blocking: one lock and one emit, no waiting (`sync_commands_do_not_block`).
+#[tauri::command]
+pub fn workspace_status_promote(
+    app: AppHandle,
+    registry: State<'_, SharedRegistry>,
+    workspace_id: String,
+    stop_event_at: u64,
+) -> Result<bool, String> {
+    let promoted = registry
+        .lock()
+        .map_err(|_| "workspace registry lock poisoned".to_string())?
+        .promote(&workspace_id, stop_event_at, Attention::VerifyHuman);
+    // The lock is dropped at the end of the statement above, before the emit.
+    let Some(update) = promoted else {
+        return Ok(false);
+    };
+    app.emit(STATUS_EVENT, &update)
+        .map_err(|e| format!("workspace-status emit failed: {e}"))?;
+    Ok(true)
+}
+
+/// Clear every live display overlay at once (M16.5 WP4). The frontend calls this when the
+/// M10.9 workflow gate turns OFF. Returns how many workspaces were cleared.
+#[tauri::command]
+pub fn workspace_status_clear_attention(
+    app: AppHandle,
+    registry: State<'_, SharedRegistry>,
+) -> Result<usize, String> {
+    let cleared = registry
+        .lock()
+        .map_err(|_| "workspace registry lock poisoned".to_string())?
+        .clear_attention();
+    for update in &cleared {
+        app.emit(STATUS_EVENT, update)
+            .map_err(|e| format!("workspace-status emit failed: {e}"))?;
+    }
+    Ok(cleared.len())
 }
 
 /// M6 WP1 helper: best-effort telemetry of a registry mutation — resolves the status
@@ -422,6 +473,40 @@ mod tests {
         assert!(emitted.iter().all(|u| u.workspace_id == "ws-1"));
     }
 
+    #[test]
+    fn hook_event_line_threads_each_wire_field_into_its_own_slot() {
+        // M16.5 WP1, reshaped at WP4. Both drain-loop log sites call `hook_event_line`, and
+        // the drain loop needs a live app, so this pins the threading at the builder: each
+        // value lands in its own slot. Built from wire JSON, the shape the loop receives.
+        let stop: HookEvent = serde_json::from_str(
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","timestamp":7,"background_task_count":2,"background_task_types":["shell","monitor"]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            hook_event_line(&stop, Some("background_work"), Some("ws-1")),
+            "7 STATUS event=Stop cwd=/p mapped=background_work resolved=ws-1 outcome=emitted bg=2 bg_types=shell,monitor"
+        );
+
+        // A non-Stop event carries no tail, so its line is byte-identical to the pre-WP1 one.
+        let submit: HookEvent = serde_json::from_str(
+            r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","timestamp":8,"prompt":"hi"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            hook_event_line(&submit, Some("running"), None),
+            "8 STATUS event=UserPromptSubmit cwd=/p mapped=running resolved=none outcome=dropped"
+        );
+
+        // A pre-M16.5 wire line (no types) keeps its old tail exactly.
+        let old_stop: HookEvent = serde_json::from_str(
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","timestamp":9,"background_task_count":0}"#,
+        )
+        .unwrap();
+        assert!(
+            hook_event_line(&old_stop, Some("idle"), Some("ws-1")).ends_with(" bg=0 bg_types=-")
+        );
+    }
+
     /// M13.5 WP2 Phase 3 — the **consuming-surface** test for the `BackgroundWork` state,
     /// at the same real-socket → `to_update` seam the other two end-to-end tests use.
     /// Codifies the live socket run performed by hand at verify-self: the emitted DTO is
@@ -434,35 +519,6 @@ mod tests {
     /// the only thing that ever clears it is a later `Stop` with a zero count. If that
     /// stopped working the dot would stick purple forever — the same stuck-state class as
     /// the stale-blue defect Phase 1 fixed.
-    #[test]
-    fn event_detail_threads_each_wire_field_into_its_own_slot() {
-        // M16.5 WP1. Both drain-loop log sites append `event_detail`, and the drain loop
-        // needs a live app, so this pins the field threading at the helper: each value
-        // must land in its own slot (types after `bg_types=`, key names after `keys=`).
-        // Built from wire JSON, the shape the drain loop actually receives.
-        let stop: HookEvent = serde_json::from_str(
-            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_task_count":2,"background_task_types":["shell","monitor"],"payload_keys":["cwd","session_id"]}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            event_detail(&stop),
-            " bg=2 bg_types=shell,monitor keys=cwd,session_id"
-        );
-
-        let submit: HookEvent = serde_json::from_str(
-            r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hi","payload_keys":["prompt"]}"#,
-        )
-        .unwrap();
-        assert_eq!(event_detail(&submit), " keys=prompt");
-
-        // A pre-M16.5 wire line (prod build, no new fields) keeps its old tail exactly.
-        let old_stop: HookEvent = serde_json::from_str(
-            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_task_count":0}"#,
-        )
-        .unwrap();
-        assert_eq!(event_detail(&old_stop), " bg=0 bg_types=-");
-    }
-
     #[test]
     fn end_to_end_socket_background_work_emits_then_clears_on_a_clean_stop() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -517,6 +573,67 @@ mod tests {
         // would leave every surface rendering the honest-but-wrong "unknown" grey dot.
         let wire = serde_json::to_value(emitted[0].state).unwrap();
         assert_eq!(wire, serde_json::Value::String("background_work".into()));
+    }
+
+    /// M16.5 WP4 Phase 1 — the consuming-surface test for the artifact-watch fix, at the
+    /// same real-socket → `to_update` seam. Codifies the verify-self run, where hand-built
+    /// `Stop` lines on the dev socket turned scratch-a's dot grey, then purple.
+    ///
+    /// The lines are the shape the real hook emits (`background_task_types` captured from
+    /// `claudesk-hook.pl` at verify-self), so this also pins that the field survives the
+    /// socket parse. A unit test on `event_to_state` builds the struct directly and cannot
+    /// show that.
+    #[test]
+    fn end_to_end_socket_an_artifact_watch_emits_idle_and_real_work_still_emits_background_work() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let sock = dir.path().join("hook.sock");
+        let listener = bind_listener(&sock).unwrap();
+        let (tx, rx) = mpsc::channel::<HookEvent>();
+        let _handle = spawn_listener(listener, tx);
+
+        let ws_dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(ws_dir.path(), "ws-1".to_string());
+        let ws_cwd = ws_dir.path().to_string_lossy().to_string();
+
+        let mut client = UnixStream::connect(&sock).unwrap();
+        for types in [
+            r#"["monitor"]"#,
+            r#"["shell"]"#,
+            r#"["?"]"#,
+            r#"["monitor"]"#,
+        ] {
+            let line = format!(
+                "{{\"hook_event_name\":\"Stop\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\",\"background_task_count\":1,\"background_task_types\":{types}}}\n"
+            );
+            client.write_all(line.as_bytes()).unwrap();
+        }
+        let _ = client.shutdown(std::net::Shutdown::Both);
+
+        let mut emitted = Vec::new();
+        for _ in 0..4 {
+            let ev = rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("event should arrive");
+            if let Some(update) = to_update(&ev, &reg) {
+                emitted.push(update);
+            }
+        }
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+
+        let states: Vec<WorkspaceState> = emitted.iter().map(|u| u.state).collect();
+        assert_eq!(
+            states,
+            vec![
+                WorkspaceState::Idle,
+                WorkspaceState::BackgroundWork,
+                WorkspaceState::BackgroundWork,
+                WorkspaceState::Idle,
+            ],
+            "a watch-only Stop must reach the surfaces as Idle, and a shell or unknown-type \
+             task must still reach them as BackgroundWork"
+        );
+        assert!(emitted.iter().all(|u| u.workspace_id == "ws-1"));
     }
 
     /// **M13.5 WP3 — the turn-start discriminator, end-to-end through the real socket.**

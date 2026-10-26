@@ -161,3 +161,33 @@ describe("R1 — the readout is disabled while an apply is queued (paydown WP8, 
     expect(writes().map((c) => c.args)).toEqual([{ path: OWN, mode: "fsd" }]);
   });
 });
+
+describe("M16.5 WP4 — the verify-human overlay is DISPLAY ONLY (operator ruling Q1, 'color only')", () => {
+  it("the header dot reads awaiting while the respawn guard still sees idle", async () => {
+    // The true state is idle; the overlay says a verify-human pause is up. The dot must go
+    // blue, and a drive-mode Apply must still apply at once rather than queue as "busy" —
+    // `readyToRespawn` reads `statusState`, never the display state.
+    const el = await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      statusState: "idle",
+      statusDisplayState: "awaiting_input",
+    });
+    const dot = el.querySelector(".workspace-header .status-dot, .status-dot");
+    expect(dot?.className).toContain("status-dot-awaiting");
+
+    // The confirm's body is `applyConfirmBody(readyToRespawn(statusState, …))`: the "now"
+    // wording means the guard saw idle, the "busy" wording would mean it saw the overlay.
+    await choose(el, "fsd");
+    const body = el.textContent ?? "";
+    expect(body).toContain("to this session now?");
+    expect(body).not.toContain("Claude Code is busy");
+  });
+
+  it("with no overlay the dot shows the true state (positive control)", async () => {
+    const el = await mountWorkspace({ gate: true, statusState: "idle" });
+    expect(el.querySelector(".status-dot")?.className).toContain(
+      "status-dot-idle",
+    );
+  });
+});

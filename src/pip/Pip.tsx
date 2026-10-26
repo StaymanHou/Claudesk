@@ -36,7 +36,7 @@ import {
   applyStatusUpdate,
   emptyStatusMap,
   snippetFor,
-  stateFor,
+  displayStateFor,
   WORKSPACE_STATUS_EVENT,
   type WorkspaceStatusMap,
   type WorkspaceStatusUpdate,
@@ -325,7 +325,8 @@ function PipTile({
   mirrorRefs: React.MutableRefObject<Map<string, HTMLDivElement | null>>;
   lastMirrorRef: React.MutableRefObject<PipMirrorFrame>;
 }) {
-  const state = stateFor(statusMap, tile.id);
+  // M16.5 WP4: the PiP is a DISPLAY consumer, so it shows the verify-human overlay.
+  const state = displayStateFor(statusMap, tile.id);
   const snippet = snippetFor(statusMap, tile.id);
 
   if (layout === "minimal") {

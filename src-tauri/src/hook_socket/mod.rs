@@ -148,14 +148,11 @@ pub struct HookEvent {
     pub background_task_count: Option<u64>,
     /// `Stop` only (M16.5 WP1): the `type` of each outstanding background task, in the
     /// payload's order (`"shell"`, …; `"?"` where CC sent no scalar type). A type is an
-    /// enum-ish tag, so it is forwarded where `command`/`description` are not. Telemetry
-    /// only for now: `event_to_state` does not read it.
+    /// enum-ish tag, so it is forwarded where `command`/`description` are not. Since M16.5
+    /// WP4 `event_to_state` reads it: a `"monitor"` task (an artifact watch) is not work
+    /// (`status_broadcaster::stop_leaves_background_work`).
     #[serde(default)]
     pub background_task_types: Option<Vec<String>>,
-    /// `Stop` / `UserPromptSubmit`, **dev build only** (M16.5 WP1 probe): the payload's
-    /// top-level key names, never values. Telemetry only.
-    #[serde(default)]
-    pub payload_keys: Option<Vec<String>>,
 }
 
 /// Errors from the socket listener's IO/lifecycle (bind, remove-stale, accept).

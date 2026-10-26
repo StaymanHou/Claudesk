@@ -36,7 +36,7 @@ use tauri::{AppHandle, Listener, Manager};
 
 use super::{aggregate_alarm, is_tray_menu_id, menu_ids, toggle_pip_mode, AlarmState};
 use crate::status_broadcaster::commands::STATUS_EVENT;
-use crate::status_broadcaster::{WorkspaceState, WorkspaceStatusUpdate};
+use crate::status_broadcaster::{display_state, WorkspaceState, WorkspaceStatusUpdate};
 use crate::MAIN_WINDOW_LABEL;
 
 /// The bundled template glyphs, embedded in the binary (no install-path file IO — robust
@@ -194,7 +194,9 @@ fn apply_update(app: &AppHandle, update: WorkspaceStatusUpdate) {
     };
     {
         let mut states = state.states.lock().unwrap_or_else(|p| p.into_inner());
-        states.insert(update.workspace_id, update.state);
+        // M16.5 WP4: the tray is a DISPLAY consumer, so it folds the overlay-aware state.
+        let shown = display_state(&update);
+        states.insert(update.workspace_id, shown);
     } // drop the states lock before the (AppKit) icon swap.
     reconcile(&state);
 }

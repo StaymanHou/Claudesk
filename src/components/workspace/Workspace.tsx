@@ -139,6 +139,13 @@ interface WorkspaceProps {
    * feeds the live value from the app-level subscription.
    */
   statusState?: WireWorkspaceState;
+  /**
+   * What the header status DOT shows (M16.5 WP4) — `statusState` plus the verify-human
+   * overlay. Defaults to `statusState`. ⚠️ Only the indicator reads it: the respawn wait
+   * and `readyToRespawn` keep `statusState`, since a verify-human pause has nothing in
+   * flight (operator ruling Q1, "color only").
+   */
+  statusDisplayState?: WireWorkspaceState;
   /** Last prompt/message snippet for the indicator tooltip (M3 WP6). */
   statusSnippet?: string;
 }
@@ -149,6 +156,7 @@ export function Workspace({
   onSessionId,
   registerDirtyProbe,
   statusState = "unknown",
+  statusDisplayState,
   statusSnippet,
 }: WorkspaceProps) {
   // M4 WP4b — which half (left CC terminal / right panel) holds keyboard focus, so the
@@ -1438,7 +1446,10 @@ export function Workspace({
             ED ▶
           </button>
         </div>
-        <WorkspaceStatusIndicator state={statusState} snippet={statusSnippet} />
+        <WorkspaceStatusIndicator
+          state={statusDisplayState ?? statusState}
+          snippet={statusSnippet}
+        />
       </div>
       {/* M6 WP3 — the ◀ CC collapse hides the left half via display:none. That makes
           XtermPane's fitAndResize see host.offsetParent === null and SKIP fit()

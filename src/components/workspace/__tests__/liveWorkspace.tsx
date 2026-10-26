@@ -106,6 +106,8 @@ export interface MountOptions {
   storedDriveMode?: string | null;
   projectPath?: string;
   statusState?: "idle" | "running" | "unknown";
+  /** M16.5 WP4 — the header dot's display state (the verify-human overlay), if any. */
+  statusDisplayState?: "awaiting_input";
   /** F-b — the profile both `project_get_profile` and `cc_session_profile` answer with. */
   profile?: string | null;
   /** Extra IPC answers by command name, for commands the harness does not otherwise stub. */
@@ -159,6 +161,7 @@ export async function mountWorkspace(opts: MountOptions) {
         workspace={model}
         visible
         statusState={o.statusState ?? "idle"}
+        statusDisplayState={o.statusDisplayState}
       />,
     );
   await act(async () => rerender!(opts));

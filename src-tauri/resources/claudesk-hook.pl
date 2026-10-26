@@ -14,7 +14,6 @@
 #   source                        (SessionStart)
 #   reason                        (SessionEnd; e.g. prompt_input_exit / other — WP6.5)
 #   background_task_count, background_task_types   (Stop; types only — M16.5 WP1)
-#   payload_keys                  (Stop / UserPromptSubmit; DEV build only — M16.5 WP1)
 # `notification_type` (QoL-WP2) lets the broadcaster gate AwaitingInput on genuine
 # input-needed types (permission_prompt / elicitation_dialog) vs informational ones
 # (idle_prompt / auth_success) — so an idle nudge doesn't flip a busy dot blue. The
@@ -243,14 +242,6 @@ if ($event eq 'Stop') {
             (defined $t && !ref $t) ? "$t" : '?';
         } @tasks
     ];
-}
-
-# M16.5 WP1 probe — the payload's top-level KEY NAMES (never values), on Stop and
-# UserPromptSubmit, for discovering which fields CC sends. DEV BUILD ONLY: gated on this
-# script's own basename (`claudesk-hook-dev.pl`, the dev identity's deployed copy), so a
-# production install never emits it. Key names are schema, not content.
-if (($event eq 'Stop' || $event eq 'UserPromptSubmit') && $0 =~ /-dev\.pl\z/) {
-    $out{payload_keys} = [ sort keys %$payload ];
 }
 
 my $line = encode_json(\%out) . "\n";

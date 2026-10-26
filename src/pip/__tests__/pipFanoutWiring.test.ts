@@ -235,11 +235,18 @@ describe("M5 WP4 Phase 4 — minimal-layout attention weighting wiring", () => {
 // chance). The single-occurrence reuse guard above is necessary but not sufficient — this
 // adds the "no layout branch escapes the shared indicator" coverage.
 describe("M5 WP4 Phase 5 — cross-layout never-disagree invariant (structural)", () => {
-  it("the dot state is derived from stateFor ONCE per tile (single source)", () => {
-    // One `state = stateFor(...)` per PipTile — every layout branch reads the SAME value,
-    // so the PiP can never show a different state than the shared map for a workspace.
-    const matches = pipSource.match(/stateFor\(statusMap, tile\.id\)/g) ?? [];
-    expect(matches.length).toBe(1);
+  it("the dot state is derived from displayStateFor ONCE per tile (single source)", () => {
+    // One `state = displayStateFor(...)` per PipTile — every layout branch reads the SAME
+    // value, so the PiP can never show a different state than the shared map for a workspace.
+    // ⚠️ M16.5 WP4: the source is the DISPLAY funnel, the same one the filmstrip reads, so
+    // a verify-human overlay shows on both. A bare `stateFor` here would make the PiP grey
+    // while the filmstrip is blue — the exact disagreement this invariant forbids.
+    const display =
+      pipSource.match(/displayStateFor\(statusMap, tile\.id\)/g) ?? [];
+    expect(display.length).toBe(1);
+    const truth =
+      pipSource.match(/(?<!display)stateFor\(statusMap, tile\.id\)/g) ?? [];
+    expect(truth.length).toBe(0);
   });
 
   it("every dot in the PiP is the shared WorkspaceStatusIndicator (no hand-rolled status-dot)", () => {

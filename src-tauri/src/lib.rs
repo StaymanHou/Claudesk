@@ -627,6 +627,8 @@ pub fn run() {
             // event (no match) so nothing is emitted.
             status_broadcaster::commands::workspace_register,
             status_broadcaster::commands::workspace_deregister,
+            status_broadcaster::commands::workspace_status_promote,
+            status_broadcaster::commands::workspace_status_clear_attention,
             // QoL-WP0: start/stop a per-workspace filesystem watcher. The frontend
             // invokes start on workspace-open (alongside workspace_register) and stop
             // on close; the watcher emits debounced, gitignore-filtered `fs-change`

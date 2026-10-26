@@ -14,7 +14,8 @@
 //!   **unless** the event's `background_task_count > 0`, in which case
 //!   [`WorkspaceState::BackgroundWork`] (M13.5 WP2: control returned, a backgrounded job
 //!   is still running). A missing count is treated as 0, so an older hook script degrades
-//!   to the plain `Stop → Idle` contract.
+//!   to the plain `Stop → Idle` contract. ⚠️ An artifact watch (task type `monitor`) is
+//!   not work and does not count (M16.5 WP4, [`stop_leaves_background_work`]).
 //! - `PostToolUse`      → [`WorkspaceState::Running`] (a tool finished, CC resumed —
 //!   the **answer-resume signal**: when a user answers an `AskUserQuestion`/permission
 //!   prompt CC fires `PostToolUse` but NO `UserPromptSubmit`, so this is what clears a
@@ -75,7 +76,9 @@ pub enum WorkspaceState {
     /// CC has paused for the user (permission / input) — emitted on `Notification`.
     AwaitingInput,
     /// CC returned control but a **backgrounded job it launched is still running** —
-    /// emitted on a `Stop` whose `background_task_count > 0` (M13.5 WP2). Neither busy
+    /// emitted on a `Stop` whose `background_task_count > 0` (M13.5 WP2), unless every
+    /// outstanding task is an artifact watch (M16.5 WP4, [`stop_leaves_background_work`]).
+    /// Neither busy
     /// nor done: the turn ended, so CC wants nothing from you, but the workspace is not
     /// finished either.
     ///
@@ -194,6 +197,42 @@ const INFORMATIONAL_NOTIFICATION_TYPES: [&str; 5] = [
     "elicitation_response",
 ];
 
+/// The background-task `type` that is NOT work: CC's watch on an artifact the agent
+/// published or opened, waiting for comments and republishes (M16.5 WP4). It can stay
+/// alive for the rest of the session with nothing running, so counting it lit the dot
+/// purple on an idle workspace
+/// (`SURFACE-2026-10-09-ARTIFACT-WATCH-LIGHTS-THE-DOT-PURPLE-WITH-NOTHING-RUNNING`).
+///
+/// ⚠️ Measured, not assumed: a watch started with CC's `Monitor` TOOL arrives as `"shell"`
+/// (CC 2.1.306, 2026-10-21), so excluding `"monitor"` cannot hide a watch the agent or the
+/// operator started on purpose.
+const PASSIVE_BACKGROUND_TASK_TYPE: &str = "monitor";
+
+/// Does this `Stop` leave real background work outstanding? (M13.5 WP2, narrowed M16.5 WP4.)
+///
+/// True iff at least one outstanding task is not [`PASSIVE_BACKGROUND_TASK_TYPE`].
+///
+/// ⚠️ **Exclude ONE type; never allow-list.** `"?"` (CC sent no scalar type) and any type
+/// CC adds later still count as work. That fails toward the pre-M16.5 colour, the same
+/// direction as the unknown-`notification_type` fallback in [`notification_awaits_input`].
+///
+/// ⚠️ **The count stays the authority when the types cannot be trusted.** When
+/// `background_task_types` is absent (a hook script deployed before M16.5 WP1) or its length
+/// disagrees with `background_task_count`, the decision is the count alone, exactly as
+/// before. `None` and `Some(0)` counts still mean "nothing outstanding".
+pub(crate) fn stop_leaves_background_work(event: &HookEvent) -> bool {
+    let count = event.background_task_count.unwrap_or(0);
+    if count == 0 {
+        return false;
+    }
+    match event.background_task_types.as_deref() {
+        Some(types) if types.len() as u64 == count => {
+            types.iter().any(|t| t != PASSIVE_BACKGROUND_TASK_TYPE)
+        }
+        _ => true,
+    }
+}
+
 /// Normalize a [`HookEvent`] to a [`WorkspaceState`]. Returns `None` for any event
 /// that is not a mapped lifecycle event, OR for a `Notification` whose
 /// `notification_type` is a recognized informational one (a no-op — the prior state
@@ -202,14 +241,11 @@ pub fn event_to_state(event: &HookEvent) -> Option<WorkspaceState> {
     match event.hook_event_name.as_str() {
         "UserPromptSubmit" => Some(WorkspaceState::Running),
         // Stop = the turn ended. Which state that means depends on whether CC left any
-        // backgrounded job running (M13.5 WP2): a positive count is BackgroundWork
-        // ("control returned, work outstanding"), zero/absent is plain Idle.
-        //
-        // ⚠️ `None` and `Some(0)` MUST behave identically — an older hook script (or a CC
-        // that stops sending the field) omits it entirely, and that has to degrade to the
-        // pre-M13.5 `Stop → Idle` behaviour rather than to a wrong colour. `unwrap_or(0)`
-        // is what makes the undocumented upstream field safe to depend on.
-        "Stop" => Some(if event.background_task_count.unwrap_or(0) > 0 {
+        // backgrounded job running (M13.5 WP2): real outstanding work is BackgroundWork
+        // ("control returned, work outstanding"), none is plain Idle. An artifact watch
+        // alone is not work (M16.5 WP4) — see `stop_leaves_background_work`, which also
+        // carries the `None`-count degrade rule.
+        "Stop" => Some(if stop_leaves_background_work(event) {
             WorkspaceState::BackgroundWork
         } else {
             WorkspaceState::Idle
@@ -243,6 +279,21 @@ pub(crate) fn state_label(state: WorkspaceState) -> &'static str {
         WorkspaceState::BackgroundWork => "background_work",
         WorkspaceState::Unknown => "unknown",
     }
+}
+
+/// Why a workspace is showing as needing the operator even though its hook-derived
+/// [`WorkspaceState`] says otherwise (M16.5 WP4). A **display overlay**, never a state:
+/// it changes what the dot, PiP and tray SHOW, and nothing a guard reads.
+///
+/// ⚠️ Set only by [`commands::workspace_status_promote`], which only the workflow-gated
+/// frontend invokes. The broadcaster never derives one from a hook event, so with the M10.9
+/// gate OFF it never appears and the DTO is byte-identical to before.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Attention {
+    /// The turn stopped at the workflow's `feature-verify-human` pause (operator ruling,
+    /// M16.5 WP1: EVERY verify-human pause reads blue, with or without background work).
+    VerifyHuman,
 }
 
 /// The status update broadcast on the `workspace-status` Tauri event — the single
@@ -345,6 +396,16 @@ pub struct WorkspaceStatusUpdate {
     /// than inventing one.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub session_id: Option<String>,
+    /// The display overlay, if one is live for this workspace (M16.5 WP4). ⚠️ Surfaces that
+    /// answer "what colour / does this need me?" read it through [`display_state`] (Rust)
+    /// or `displayStateFor` (TS). Guards that protect in-flight work (close/quit, respawn)
+    /// read `state` and must NOT read this: a verify-human pause has nothing in flight
+    /// (operator ruling Q1, "color only").
+    ///
+    /// Absent (omitted on the wire) for every hook-derived update, which is what keeps the
+    /// gate-OFF DTO byte-identical.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub attention: Option<Attention>,
 }
 
 /// Maps a canonicalized project path → its `workspace_id`. The cwd→workspace seam:
@@ -357,6 +418,48 @@ pub struct WorkspaceStatusUpdate {
 pub struct WorkspaceRegistry {
     /// canonicalized-project-path-string → workspace_id
     by_path: HashMap<String, String>,
+    /// Each open workspace's LAST EMITTED hook-derived update, plus any live display
+    /// overlay (M16.5 WP4). The compare-and-set in [`promote`](Self::promote) reads it, so a
+    /// promotion decided for a `Stop` can never overwrite a newer event.
+    last_emitted: HashMap<String, LastEmitted>,
+}
+
+/// What the registry remembers about one workspace's latest emitted update (M16.5 WP4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LastEmitted {
+    /// The hook-derived update exactly as emitted. Never carries an overlay itself.
+    update: WorkspaceStatusUpdate,
+    /// The overlay currently shown on top of it, if any.
+    attention: Option<Attention>,
+}
+
+/// The re-emit for an overlay change: `base` with `attention` set (or cleared).
+///
+/// ⚠️ **The turn markers are CLEARED, not copied.** `base` is usually the `Stop` itself,
+/// and raw-stream consumers key on `is_turn_end` / `is_turn_start`
+/// (`[[workspace-status-map-collapses-consecutive-events]]`). Copying them would make the
+/// re-emit read as a SECOND turn end, so the supervisor would decide the same turn twice.
+fn overlay_update(
+    base: &WorkspaceStatusUpdate,
+    attention: Option<Attention>,
+) -> WorkspaceStatusUpdate {
+    WorkspaceStatusUpdate {
+        is_turn_start: None,
+        is_turn_end: None,
+        attention,
+        ..base.clone()
+    }
+}
+
+/// The state a status SURFACE shows for an update: AwaitingInput while an overlay is live,
+/// else the hook-derived state (M16.5 WP4). The tray's fold reads this; the TS mirror is
+/// `displayStateFor`. ⚠️ Only display consumers may call it (see
+/// [`WorkspaceStatusUpdate::attention`]).
+pub fn display_state(update: &WorkspaceStatusUpdate) -> WorkspaceState {
+    match update.attention {
+        Some(Attention::VerifyHuman) => WorkspaceState::AwaitingInput,
+        None => update.state,
+    }
 }
 
 impl WorkspaceRegistry {
@@ -380,7 +483,62 @@ impl WorkspaceRegistry {
     /// `workspace_deregister` command (close → deregister).
     pub fn deregister(&mut self, project_path: &Path) {
         let key = canonical_key(project_path);
-        self.by_path.remove(&key);
+        if let Some(workspace_id) = self.by_path.remove(&key) {
+            // A closed workspace's overlay must not outlive it (M16.5 WP4).
+            self.last_emitted.remove(&workspace_id);
+        }
+    }
+
+    /// Remember an update the drain loop is about to emit (M16.5 WP4). It replaces the
+    /// previous record, which is what clears any overlay on the workspace's next
+    /// state-mapped hook event.
+    pub fn record_emitted(&mut self, update: &WorkspaceStatusUpdate) {
+        self.last_emitted.insert(
+            update.workspace_id.clone(),
+            LastEmitted {
+                update: update.clone(),
+                attention: None,
+            },
+        );
+    }
+
+    /// Apply a display overlay to `workspace_id`, but ONLY if its last emitted update is
+    /// still the `Stop` whose `last_event_at` is `stop_event_at` (M16.5 WP4). Returns the
+    /// update to emit, or `None` when refused.
+    ///
+    /// ⚠️ **Compare-and-set, because the decision is slow.** The frontend decides after the
+    /// transcript-flush wait and up to ~3 s of adjudication. If the operator replied in that
+    /// window, the newer `UserPromptSubmit` is the last record and the stale promotion must
+    /// not turn a Running dot blue. Refused too: an unknown workspace, and a record that is
+    /// not a turn end.
+    pub fn promote(
+        &mut self,
+        workspace_id: &str,
+        stop_event_at: u64,
+        attention: Attention,
+    ) -> Option<WorkspaceStatusUpdate> {
+        let entry = self.last_emitted.get_mut(workspace_id)?;
+        let is_that_stop = entry.update.is_turn_end == Some(true)
+            && entry.update.last_event_at == Some(stop_event_at);
+        if !is_that_stop {
+            return None;
+        }
+        entry.attention = Some(attention);
+        Some(overlay_update(&entry.update, Some(attention)))
+    }
+
+    /// Clear every live overlay (M16.5 WP4), returning one re-emit per cleared workspace.
+    /// The frontend calls this when the M10.9 gate turns OFF, so "OFF = byte-identical"
+    /// holds immediately rather than at each workspace's next event.
+    pub fn clear_attention(&mut self) -> Vec<WorkspaceStatusUpdate> {
+        self.last_emitted
+            .values_mut()
+            .filter(|e| e.attention.is_some())
+            .map(|e| {
+                e.attention = None;
+                overlay_update(&e.update, None)
+            })
+            .collect()
     }
 
     /// Resolve an event's `cwd` to a `workspace_id`, or `None` if no open workspace
@@ -493,6 +651,8 @@ pub fn to_update(event: &HookEvent, registry: &WorkspaceRegistry) -> Option<Work
         // ⚠️ Empty means absent — the hook's `#[serde(default)]` yields `""` for a payload
         // that omits the key, and an empty-string session id is not a usable address.
         session_id: Some(event.session_id.clone()).filter(|s| !s.is_empty()),
+        // A hook event never carries an overlay; only `promote` sets one.
+        attention: None,
     })
 }
 
@@ -506,6 +666,13 @@ pub fn to_update(event: &HookEvent, registry: &WorkspaceRegistry) -> Option<Work
 ///
 /// Kept as a named predicate (mirroring [`notification_awaits_input`]) so the rule has ONE
 /// home and a test can pin it directly.
+///
+/// ⚠️ **A prompt typed mid-turn fires this at ENQUEUE, not when CC starts it, and that is KEPT
+/// by measurement** (M16.5 WP4). CC fires no `Stop` on an Esc interrupt (0 of 16), so the
+/// "no `Stop` since the last submit" discriminator would also drop the marker on every prompt
+/// after an Esc (0 of 8 kept). The safe variant catches only 6 of 34 queued prompts. The
+/// measurements and the upstream ask: `arch/status-channel-and-surfaces.md` §A.5, "Queued prompts".
+/// Do not change this without new data.
 pub fn event_is_turn_start(event: &HookEvent) -> bool {
     event.hook_event_name == "UserPromptSubmit"
 }
@@ -554,7 +721,6 @@ mod tests {
             reason: None,
             background_task_count: None,
             background_task_types: None,
-            payload_keys: None,
         }
     }
 
@@ -576,7 +742,6 @@ mod tests {
             reason: None,
             background_task_count: None,
             background_task_types: None,
-            payload_keys: None,
         }
     }
 
@@ -646,7 +811,6 @@ mod tests {
         HookEvent {
             background_task_count: count,
             background_task_types: None,
-            payload_keys: None,
             ..ev("Stop", cwd)
         }
     }
@@ -691,6 +855,74 @@ mod tests {
         );
     }
 
+    /// Build a `Stop` carrying a count AND the per-task types (M16.5 WP4).
+    fn stop_with_types(count: u64, types: &[&str]) -> HookEvent {
+        HookEvent {
+            background_task_types: Some(types.iter().map(|t| t.to_string()).collect()),
+            ..stop_with_bg(Some(count), "/p")
+        }
+    }
+
+    #[test]
+    fn an_artifact_watch_alone_is_not_background_work() {
+        // M16.5 WP4 — THE fix for
+        // SURFACE-2026-10-09-ARTIFACT-WATCH-LIGHTS-THE-DOT-PURPLE-WITH-NOTHING-RUNNING.
+        // A `monitor` task is CC's watch on a published/opened artifact: nothing is running.
+        assert_eq!(
+            event_to_state(&stop_with_types(1, &["monitor"])),
+            Some(WorkspaceState::Idle)
+        );
+        assert_eq!(
+            event_to_state(&stop_with_types(2, &["monitor", "monitor"])),
+            Some(WorkspaceState::Idle)
+        );
+        // Real work alongside a watch still counts, in either order.
+        assert_eq!(
+            event_to_state(&stop_with_types(2, &["monitor", "shell"])),
+            Some(WorkspaceState::BackgroundWork)
+        );
+        assert_eq!(
+            event_to_state(&stop_with_types(2, &["subagent", "monitor"])),
+            Some(WorkspaceState::BackgroundWork)
+        );
+    }
+
+    #[test]
+    fn an_unknown_task_type_still_counts_as_background_work() {
+        // ⚠️ Exclude-one-type, never allow-list: `?` (CC sent no scalar type) and a type CC
+        // adds later both keep the pre-M16.5 colour, the safe direction.
+        for t in ["?", "shell", "subagent", "remote_agent_from_the_future"] {
+            assert_eq!(
+                event_to_state(&stop_with_types(1, &[t])),
+                Some(WorkspaceState::BackgroundWork),
+                "{t} must count as work"
+            );
+        }
+    }
+
+    #[test]
+    fn untrusted_types_fall_back_to_the_count() {
+        // ⚠️ An older deployed hook sends the count but no types; a misaligned list cannot
+        // be read per task. Both decide on the count alone, exactly as before WP4.
+        assert_eq!(
+            event_to_state(&stop_with_bg(Some(2), "/p")),
+            Some(WorkspaceState::BackgroundWork)
+        );
+        assert_eq!(
+            event_to_state(&stop_with_types(2, &["monitor"])),
+            Some(WorkspaceState::BackgroundWork)
+        );
+        assert_eq!(
+            event_to_state(&stop_with_types(1, &[])),
+            Some(WorkspaceState::BackgroundWork)
+        );
+        // A zero count is Idle whatever the types say.
+        assert_eq!(
+            event_to_state(&stop_with_types(0, &["shell"])),
+            Some(WorkspaceState::Idle)
+        );
+    }
+
     #[test]
     fn background_work_only_ever_comes_from_stop() {
         // ⚠️ A stray count on a NON-Stop event must not produce BackgroundWork. The Perl
@@ -701,7 +933,6 @@ mod tests {
             let ev = HookEvent {
                 background_task_count: Some(3),
                 background_task_types: None,
-                payload_keys: None,
                 ..ev(name, "/p")
             };
             assert_ne!(
@@ -1328,6 +1559,30 @@ mod tests {
     }
 
     #[test]
+    fn a_submit_with_no_stop_since_the_last_is_still_a_turn_start() {
+        // M16.5 WP4 4.3, KEPT BY MEASUREMENT: a prompt queued mid-turn and the first prompt
+        // after an Esc (CC fires no `Stop` on an interrupt) both arrive as a second
+        // `UserPromptSubmit` with no `Stop` in between, and nothing tells them apart. The
+        // order-based discriminator would drop the marker on 8 of 8 post-Esc prompts, so every
+        // submit stays a turn start. See `arch/status-channel-and-surfaces.md` §A.5 →
+        // "Queued prompts" and anthropics/claude-code#105187 before changing this.
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(dir.path(), "ws-1".to_string());
+        let cwd = dir.path().to_string_lossy().to_string();
+
+        let mut starts = Vec::new();
+        for name in ["UserPromptSubmit", "PostToolUse", "UserPromptSubmit"] {
+            let update = to_update(&ev(name, &cwd), &reg).expect("mapped");
+            reg.record_emitted(&update);
+            if name == "UserPromptSubmit" {
+                starts.push(update.is_turn_start);
+            }
+        }
+        assert_eq!(starts, vec![Some(true), Some(true)]);
+    }
+
+    #[test]
     fn event_is_turn_end_predicate_pins_the_rule() {
         // M15 WP3. The mirror of the turn-start pin — one home for the rule.
         assert!(event_is_turn_end(&ev("Stop", "/p")));
@@ -1443,6 +1698,7 @@ mod tests {
             is_turn_start: Some(false),
             is_turn_end: Some(false),
             session_id: Some("sess-abc".to_string()),
+            attention: Some(Attention::VerifyHuman),
         };
         let json = serde_json::to_string(&full).unwrap();
         let back: WorkspaceStatusUpdate = serde_json::from_str(&json).unwrap();
@@ -1482,6 +1738,8 @@ mod tests {
         // stops guarding.
         assert_eq!(parsed.is_turn_end, None);
         assert_eq!(parsed.session_id, None);
+        // M16.5 WP4: an absent overlay is no overlay.
+        assert_eq!(parsed.attention, None);
 
         // (3) The snake_case state rendering the tray folds over is pinned end-to-end.
         assert_eq!(
@@ -1518,7 +1776,6 @@ mod tests {
                 session_id: "sess-live".to_string(),
                 background_task_count: Some(bg),
                 background_task_types: None,
-                payload_keys: None,
                 ..ev("Stop", "/proj")
             };
 
@@ -1679,6 +1936,8 @@ mod tests {
             is_turn_start: Some(true),
             is_turn_end: Some(false),
             session_id: Some("sess-abc".to_string()),
+            // Absent, as on every hook-derived update: the key set below must NOT grow.
+            attention: None,
         };
         let value = serde_json::to_value(&update).unwrap();
         let obj = value.as_object().unwrap();
@@ -1727,9 +1986,11 @@ mod tests {
             is_turn_start: None,
             is_turn_end: None,
             session_id: None,
+            attention: None,
         };
         let value = serde_json::to_value(&update).unwrap();
         let obj = value.as_object().unwrap();
+        assert!(!obj.contains_key("attention"));
         assert!(!obj.contains_key("last_event_at"));
         assert!(!obj.contains_key("last_output_snippet"));
         assert!(!obj.contains_key("notification_type"));
@@ -1880,5 +2141,199 @@ mod tests {
             "a 5th WorkspaceState exists — add it to `arch_doc_names_every_emitted_workspace_state` \
              and document it in arch/status-channel-and-surfaces.md"
         );
+    }
+
+    // ---- M16.5 WP4: the verify-human display overlay ----
+
+    /// A registry with one workspace at `cwd`, plus the `Stop` it last emitted.
+    fn registry_after_stop(stop_at: u64) -> (WorkspaceRegistry, WorkspaceStatusUpdate) {
+        let dir = std::env::temp_dir();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(&dir, "ws-1".to_string());
+        let cwd = dir.to_string_lossy().to_string();
+        let stop = HookEvent {
+            timestamp: Some(stop_at),
+            ..ev("Stop", &cwd)
+        };
+        let update = to_update(&stop, &reg).expect("a registered Stop maps");
+        reg.record_emitted(&update);
+        (reg, update)
+    }
+
+    #[test]
+    fn a_hook_derived_update_serializes_byte_identically_to_before_the_overlay() {
+        // ⚠️ The gate-OFF guarantee at the wire: no hook event ever carries `attention`, so
+        // the JSON every surface receives is exactly the pre-WP4 string.
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(Path::new("/nonexistent-wp4"), "ws-1".to_string());
+        let stop = HookEvent {
+            timestamp: Some(42),
+            session_id: "s".to_string(),
+            ..ev("Stop", "/nonexistent-wp4")
+        };
+        let json = serde_json::to_string(&to_update(&stop, &reg).unwrap()).unwrap();
+        assert_eq!(
+            json,
+            r#"{"workspace_id":"ws-1","state":"idle","last_event_at":42,"is_turn_start":false,"is_turn_end":true,"session_id":"s"}"#
+        );
+    }
+
+    #[test]
+    fn promote_applies_to_the_stop_it_names_and_reads_as_awaiting_on_display_only() {
+        let (mut reg, stop) = registry_after_stop(100);
+        let shown = reg
+            .promote("ws-1", 100, Attention::VerifyHuman)
+            .expect("the named Stop is still the latest event");
+        assert_eq!(shown.attention, Some(Attention::VerifyHuman));
+        // ⚠️ `state` stays the hook truth, so guards reading it are unaffected (Q1).
+        assert_eq!(shown.state, WorkspaceState::Idle);
+        assert_eq!(display_state(&shown), WorkspaceState::AwaitingInput);
+        assert_eq!(display_state(&stop), WorkspaceState::Idle);
+        // ⚠️ The re-emit must not read as a second turn end or a turn start.
+        assert_eq!(shown.is_turn_end, None);
+        assert_eq!(shown.is_turn_start, None);
+        assert_eq!(shown.last_event_at, Some(100));
+        assert_eq!(
+            serde_json::to_value(&shown).unwrap()["attention"],
+            serde_json::json!("verify_human")
+        );
+    }
+
+    #[test]
+    fn promote_is_refused_when_a_newer_event_arrived_or_the_stop_is_not_named() {
+        // A reply typed inside the decision window: the newer UserPromptSubmit is the record.
+        let (mut reg, _) = registry_after_stop(100);
+        let cwd = std::env::temp_dir().to_string_lossy().to_string();
+        let reply = HookEvent {
+            timestamp: Some(200),
+            ..ev("UserPromptSubmit", &cwd)
+        };
+        reg.record_emitted(&to_update(&reply, &reg).unwrap());
+        assert_eq!(reg.promote("ws-1", 100, Attention::VerifyHuman), None);
+
+        // An older/other Stop's identity.
+        let (mut reg, _) = registry_after_stop(100);
+        assert_eq!(reg.promote("ws-1", 99, Attention::VerifyHuman), None);
+
+        // An unknown workspace, and a workspace with no record yet.
+        assert_eq!(reg.promote("ws-404", 100, Attention::VerifyHuman), None);
+        let mut fresh = WorkspaceRegistry::new();
+        fresh.register(&std::env::temp_dir(), "ws-1".to_string());
+        assert_eq!(fresh.promote("ws-1", 100, Attention::VerifyHuman), None);
+
+        // A latest record that is not a turn end (same timestamp, different event).
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(&std::env::temp_dir(), "ws-1".to_string());
+        let not_a_stop = HookEvent {
+            timestamp: Some(100),
+            ..ev("PostToolUse", &cwd)
+        };
+        reg.record_emitted(&to_update(&not_a_stop, &reg).unwrap());
+        assert_eq!(reg.promote("ws-1", 100, Attention::VerifyHuman), None);
+    }
+
+    #[test]
+    fn the_next_recorded_event_clears_the_overlay() {
+        let (mut reg, _) = registry_after_stop(100);
+        reg.promote("ws-1", 100, Attention::VerifyHuman).unwrap();
+        let cwd = std::env::temp_dir().to_string_lossy().to_string();
+        let next = to_update(
+            &HookEvent {
+                timestamp: Some(300),
+                ..ev("UserPromptSubmit", &cwd)
+            },
+            &reg,
+        )
+        .unwrap();
+        reg.record_emitted(&next);
+        assert_eq!(next.attention, None, "hook events never carry the overlay");
+        assert!(reg.clear_attention().is_empty(), "nothing left to clear");
+    }
+
+    #[test]
+    fn clear_attention_re_emits_each_live_overlay_cleared_and_deregister_forgets() {
+        let (mut reg, _) = registry_after_stop(100);
+        reg.promote("ws-1", 100, Attention::VerifyHuman).unwrap();
+        let cleared = reg.clear_attention();
+        assert_eq!(cleared.len(), 1);
+        assert_eq!(cleared[0].workspace_id, "ws-1");
+        assert_eq!(cleared[0].attention, None);
+        assert_eq!(
+            cleared[0].is_turn_end, None,
+            "a clear is not a turn end either"
+        );
+        assert_eq!(display_state(&cleared[0]), WorkspaceState::Idle);
+        assert!(reg.clear_attention().is_empty(), "idempotent");
+
+        // Close the workspace: its record (and any overlay) goes with it.
+        let (mut reg, _) = registry_after_stop(100);
+        reg.promote("ws-1", 100, Attention::VerifyHuman).unwrap();
+        reg.deregister(&std::env::temp_dir());
+        assert!(reg.clear_attention().is_empty());
+        assert_eq!(reg.promote("ws-1", 100, Attention::VerifyHuman), None);
+    }
+
+    #[test]
+    fn display_state_promotes_background_work_too() {
+        // needs-you-outranks-busy: a verify-human pause with a dev server up reads blue.
+        let (_, stop) = registry_after_stop(1);
+        let busy = WorkspaceStatusUpdate {
+            state: WorkspaceState::BackgroundWork,
+            attention: Some(Attention::VerifyHuman),
+            ..stop
+        };
+        assert_eq!(display_state(&busy), WorkspaceState::AwaitingInput);
+    }
+
+    #[test]
+    fn a_promoted_stop_survives_the_wire_and_lights_the_tray() {
+        // M16.5 WP4 Phase 2 — THE CONSUMING-SURFACE TEST for the overlay, codifying the live
+        // verify-self run (a real Stop on the dev socket, then `workspace_status_promote`).
+        // The pieces each have tests; this asserts they COMPOSE: the re-emit the command builds
+        // crosses the wire, parses the way the tray parses it, and folds to a LIT glyph through
+        // the tray's own `aggregate_alarm`. Both Stop states, because blue must win over purple
+        // (needs-you-outranks-busy).
+        use crate::tray::{aggregate_alarm, AlarmState};
+        for (bg, truth) in [
+            (0, WorkspaceState::Idle),
+            (1, WorkspaceState::BackgroundWork),
+        ] {
+            let mut registry = WorkspaceRegistry::default();
+            registry.register(Path::new("/proj"), "ws-1".to_string());
+            let stop = HookEvent {
+                timestamp: Some(500),
+                background_task_count: Some(bg),
+                background_task_types: Some(vec!["shell".to_string(); bg as usize]),
+                ..ev("Stop", "/proj")
+            };
+            let emitted = to_update(&stop, &registry).unwrap();
+            registry.record_emitted(&emitted);
+            // Before the overlay the tray is neutral for both states.
+            assert_eq!(
+                aggregate_alarm(&[display_state(&emitted)]),
+                AlarmState::Neutral
+            );
+
+            let reemit = registry
+                .promote("ws-1", 500, Attention::VerifyHuman)
+                .expect("the named Stop is still the latest event");
+            let wire = serde_json::to_string(&reemit).unwrap();
+            let seen: WorkspaceStatusUpdate = serde_json::from_str(&wire).unwrap();
+
+            assert_eq!(
+                seen.state, truth,
+                "the wire keeps the hook truth for {truth:?}"
+            );
+            assert_eq!(seen.attention, Some(Attention::VerifyHuman));
+            assert_eq!(
+                seen.is_turn_end, None,
+                "the re-emit is not a second turn end"
+            );
+            assert_eq!(
+                aggregate_alarm(&[display_state(&seen)]),
+                AlarmState::Attention,
+                "an overlaid {truth:?} must light the tray"
+            );
+        }
     }
 }

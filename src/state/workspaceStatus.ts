@@ -26,6 +26,13 @@ export type WireWorkspaceState =
   | "unknown";
 
 /**
+ * Why a workspace is SHOWN as needing the operator although its wire `state` says
+ * otherwise — mirrors `status_broadcaster::Attention` (M16.5 WP4). A display overlay,
+ * never a state: only {@link displayStateFor} reads it.
+ */
+export type WireAttention = "verify_human";
+
+/**
  * The payload of the `workspace-status` Tauri event — mirrors
  * `status_broadcaster::WorkspaceStatusUpdate` field-for-field, snake_case.
  * Optional fields are omitted on the wire when absent (backend
@@ -106,6 +113,16 @@ export interface WorkspaceStatusUpdate {
    * normalized to absent backend-side rather than presented as a real address.
    */
   session_id?: string;
+  /**
+   * The display overlay, if one is live (M16.5 WP4: the turn stopped at a verify-human
+   * pause). Absent on every hook-derived update, so with the workflow gate OFF it never
+   * appears.
+   *
+   * ⚠️ **Read it only through {@link displayStateFor}.** The close/quit guard
+   * (`isActiveState`) and the respawn guard (`readyToRespawn`) read `state`, because a
+   * verify-human pause has nothing in flight to protect (operator ruling Q1, "color only").
+   */
+  attention?: WireAttention;
 }
 
 /** The Tauri event name — mirrors `status_broadcaster::commands::STATUS_EVENT`. */
@@ -179,6 +196,8 @@ export function statusPresentation(
 export interface WorkspaceStatusEntry {
   state: WireWorkspaceState;
   snippet?: string;
+  /** The live display overlay, if any (M16.5 WP4). Cleared by the next update without one. */
+  attention?: WireAttention;
 }
 
 /**
@@ -205,6 +224,7 @@ export function applyStatusUpdate(
     [update.workspace_id]: {
       state: update.state,
       snippet: update.last_output_snippet,
+      attention: update.attention,
     },
   };
 }
@@ -219,6 +239,25 @@ export function stateFor(
   workspaceId: string,
 ): WireWorkspaceState {
   return map[workspaceId]?.state ?? "unknown";
+}
+
+/**
+ * The state a status SURFACE should show for a workspace id (M16.5 WP4): `awaiting_input`
+ * while a display overlay is live, otherwise {@link stateFor}. The TS mirror of Rust's
+ * `status_broadcaster::display_state`, which the tray uses.
+ *
+ * ⚠️ **Display consumers only** — the filmstrip, the workspace header dot and the PiP. A
+ * guard that protects in-flight work must keep reading {@link stateFor}, or a verify-human
+ * pause would start prompting "busy" on close and refuse a drive-mode change.
+ */
+export function displayStateFor(
+  map: WorkspaceStatusMap,
+  workspaceId: string,
+): WireWorkspaceState {
+  // `!= null`, not `!== undefined`: a `null` off the wire must not read as an overlay.
+  return map[workspaceId]?.attention != null
+    ? "awaiting_input"
+    : stateFor(map, workspaceId);
 }
 
 /**

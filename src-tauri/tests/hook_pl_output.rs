@@ -550,72 +550,30 @@ fn dev_hook_copy(dir: &tempfile::TempDir) -> PathBuf {
 }
 
 #[test]
-fn dev_basename_forwards_payload_key_names_never_values() {
-    // M16.5 WP1 probe. Under the dev basename, Stop and UserPromptSubmit carry the
-    // payload's top-level key NAMES (sorted), so a capture shows which fields CC sends.
-    // A value of a field the hook does not otherwise forward must still never appear.
+fn neither_basename_forwards_payload_key_names() {
+    // M16.5 WP4 removed WP1's dev-only `payload_keys` probe capture. It was gated on the
+    // dev basename, so this runs the script under BOTH names: neither may emit the key
+    // list, and a value of a field the hook does not forward never rides along.
     if !perl_available() {
         return;
     }
     let dir = tempfile::TempDir::new().unwrap();
     let dev = dev_hook_copy(&dir);
-
-    let stop = r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","zeta_field":"ZETA_VALUE","background_tasks":[]}"#;
-    let line = run_hook_script_capture_line(&dev, stop, None).expect("line");
-    assert!(
-        !line.contains("ZETA_VALUE"),
-        "values never ride along: {line}"
-    );
-    assert_eq!(
-        as_json(&line)["payload_keys"],
-        serde_json::json!([
-            "background_tasks",
-            "cwd",
-            "hook_event_name",
-            "session_id",
-            "zeta_field"
-        ])
-    );
-
-    let submit = r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hi","alpha_field":"ALPHA_VALUE"}"#;
-    let line = run_hook_script_capture_line(&dev, submit, None).expect("line");
-    assert!(
-        !line.contains("ALPHA_VALUE"),
-        "values never ride along: {line}"
-    );
-    assert_eq!(
-        as_json(&line)["payload_keys"],
-        serde_json::json!([
-            "alpha_field",
-            "cwd",
-            "hook_event_name",
-            "prompt",
-            "session_id"
-        ])
-    );
-
-    // Other events stay as they were, even on the dev build.
-    let notif = r#"{"hook_event_name":"Notification","session_id":"s","cwd":"/p","message":"m"}"#;
-    let line = run_hook_script_capture_line(&dev, notif, None).expect("line");
-    assert!(as_json(&line).get("payload_keys").is_none());
-}
-
-#[test]
-fn prod_basename_never_forwards_payload_keys() {
-    // The positive control above runs the SAME script under the dev name; this one runs
-    // the repo copy, whose basename is the production `claudesk-hook.pl`.
-    if !perl_available() {
-        return;
-    }
-    for payload in [
-        r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_tasks":[]}"#,
-        r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hi"}"#,
-    ] {
-        let v = as_json(&run_hook_capture_line(payload).expect("line"));
-        assert!(
-            v.get("payload_keys").is_none(),
-            "a production install must never emit payload_keys: {v}"
-        );
+    for script in [hook_path(), dev] {
+        for payload in [
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","zeta_field":"ZETA_VALUE","background_tasks":[]}"#,
+            r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hi","zeta_field":"ZETA_VALUE"}"#,
+        ] {
+            let line = run_hook_script_capture_line(&script, payload, None).expect("line");
+            assert!(
+                !line.contains("ZETA_VALUE"),
+                "values never ride along: {line}"
+            );
+            assert!(
+                as_json(&line).get("payload_keys").is_none(),
+                "{script:?} must not emit payload_keys: {line}"
+            );
+        }
     }
 }
 

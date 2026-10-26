@@ -59,8 +59,8 @@ UserPromptSubmit hook ──> is_turn_start ──> [turn ends] ──> useSuper
 policy graph **single-sided**, so "funnel every policy read through ONE function" stays structurally
 easy, and it builds **no new backend→frontend IPC direction**.
 
-⚠️ **THE SUPERVISOR OWNS FIVE RUST COMMANDS.** It was three at M15 close; the activity record added
-two on 2026-09-25. Enumerate all five:
+⚠️ **THE SUPERVISOR CALLS SIX RUST COMMANDS.** It was three at M15 close; the activity record added
+two on 2026-09-25, and the verify-human overlay one more on 2026-10-21 (M16.5 WP4). Enumerate all six:
 
 | Command | Defined | Does |
 |---|---|---|
@@ -69,6 +69,7 @@ two on 2026-09-25. Enumerate all five:
 | **`supervisor_adjudicate`** | `src-tauri/src/adjudicator/commands.rs` | **spawns `claude -p`** — returns raw stdout or a stringified error |
 | `supervisor_activity_append` | `src-tauri/src/supervisor_activity/commands.rs` | file IO — appends one opaque JSONL record line (async) |
 | `supervisor_activity_read` | `src-tauri/src/supervisor_activity/commands.rs` | file IO — returns the newest N raw lines (async, capped) |
+| `workspace_status_promote` | `src-tauri/src/status_broadcaster/commands.rs` | applies the verify-human **display overlay** to one workspace iff its latest event is still the named `Stop` (compare-and-set), and re-emits on `workspace-status`. Decision-free: the TS side decides that the turn stopped at verify-human. Owned by the status channel, not the supervisor (`arch/status-channel-and-surfaces.md`) |
 
 ⚠️ **`supervisor_adjudicate` is NOT file IO, and an earlier draft of this section wrongly said Rust
 exposes the first two "and nothing else" — corrected 2026-09-15 at WP5 verify-self.** It is
@@ -337,6 +338,48 @@ stays at **9**. ⚠️ **A supervisor surface that does NOT render from that rea
 new subject, and the pin must bump in the same change.** The backstop is real but
 partial: the guard's allowlist is **all of `src/**`**, so a supervisor panel/menu-id/chord *of a
 shape arms 1–3 already select on* trips today — a genuinely novel shape would not.
+
+### The verify-human blue: a status-channel INPUT, not a surface, so no seventh arm (M16.5 WP4, 2026-10-21)
+
+At every turn end, after the decision, `useSupervisor` calls `promoteIfVerifyHuman`
+(`verifyHumanPause.ts`). If the session's most recent skill invocation is `feature-verify-human`
+and the supervisor did not fire, it asks the backend for the display overlay
+(`workspace_status_promote`; the overlay itself is in
+[status-channel-and-surfaces](status-channel-and-surfaces.md) §A).
+
+- ⚠️ **It lives in the turn-end handler, OUTSIDE `decideTurn`.** The operator ruled that the dot must
+  not change colour because the supervisor was switched off, so the overlay works with the
+  supervisor toggle OFF and with no stored drive mode. Both of those are early exits in
+  `decideTurn`, before it reads the transcript. It **reuses the decision's tail** when the decision
+  read one (`onTailRead`), so a supervised turn still costs one 512 KiB read; it reads separately
+  only on those early exits. It writes **no activity record**, so "one record per turn end" holds.
+- ⚠️ **After the verdict, never before.** No promotion follows a `fired` / `recycle-started` /
+  `duplicate-turn-end` decision, so a chained turn never flashes blue. The cost is that blue
+  appears ~0.1 s after a plain stop (135 ms measured live), or up to the adjudicator's ~3 s on an
+  adjudicated turn (operator-accepted, P3.verify-human.2).
+- ⚠️ **SESSION-scoped, with a memo.** A checklist spans turns that invoke no skill, so the read is
+  the most recent invocation in the tail: a `Skill` call or a `<command-name>` line, whichever is
+  later, ignoring sidechains. `SessionSkillMemo` carries it past the 512 KiB window, and a
+  turn-start guard forgets it when one turn outgrew the window. Over 45 days: 380 of 407 verify-human
+  stops turned blue, with 0 false blues.
+- ⚠️ **NOT keyed on the turn's `TRANSITION:` token** (P3.verify-human.0, operator decision A,
+  2026-10-26). A turn that emits F11/F12/F13 and then stops reads blue. That happened once in 324
+  verify-human stops, and the auto-skip variant never happened. A token rule would have un-blued
+  4–5 real asks (a question after F13, F12s asking the operator to act, and tokens quoted in
+  checklists). Pinned by `verifyHumanPause.test.tsx`.
+- ⚠️ **No seventh OFF-invariant arm, and that is a recorded decision.** This is not a new surface:
+  it is a value fed into the existing status channel, and every status surface already renders
+  through the display funnels. The guard's arms select on *registration shapes* (panel sets, menu
+  ids, chords, row cells, the skill row, the readout). None of them can express "a DTO field is
+  never set", so a seventh arm would be a source-text guard checking nothing. OFF-invariance is
+  pinned **behaviourally at the single funnel** instead:
+  - with `enabled: false`, nothing is read and nothing is promoted, on a hand-built host and on the
+    real `Workspace` (`verifyHumanPauseLive.test.tsx`);
+  - the gate's ON→OFF edge clears every live overlay, through the real `App` and gate seam
+    (`gateOffClearWiring.test.tsx`);
+  - with the field absent, both display funnels return `state` unchanged.
+
+  The `armSubjects` pin stays at **9**.
 
 ---
 

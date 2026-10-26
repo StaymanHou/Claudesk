@@ -94,7 +94,10 @@ export function coercePipLayout(value: unknown): PipLayout {
 /** A minimal structural subset of the wire status map this module needs — each entry
  *  exposes at least a `state` string (`WorkspaceStatusMap` satisfies this). Kept narrow
  *  so this module doesn't depend on the full `workspaceStatus` types. */
-export type AttentionStatusMap = Record<string, { state: string }>;
+export type AttentionStatusMap = Record<
+  string,
+  { state: string; attention?: string | null }
+>;
 
 /** The wire state literal that means "this workspace is waiting on the operator". Kept
  *  in sync with `WireWorkspaceState`'s `awaiting_input` (snake_case wire contract).
@@ -106,12 +109,15 @@ export type AttentionStatusMap = Record<string, { state: string }>;
  *  distinguished by its own dot COLOUR (purple) and a slow breathe, not by priority. */
 export const AWAITING_INPUT_STATE = "awaiting_input";
 
-/** True iff the workspace's current wire state is awaiting-input (the "needs me" cue). */
+/** True iff the workspace needs the operator: its wire state is awaiting-input, OR a
+ *  display overlay is live (M16.5 WP4 — a verify-human pause reads as "needs me" here too,
+ *  matching `displayStateFor`, so the PiP sorts and pops it like any other ask). */
 export function isAwaitingInput(
   statusMap: AttentionStatusMap,
   workspaceId: string,
 ): boolean {
-  return statusMap[workspaceId]?.state === AWAITING_INPUT_STATE;
+  const entry = statusMap[workspaceId];
+  return entry?.attention != null || entry?.state === AWAITING_INPUT_STATE;
 }
 
 /**

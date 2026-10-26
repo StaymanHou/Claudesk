@@ -32,6 +32,7 @@ import {
   setWorkflowInvite,
 } from "./state/workflowSubstrate";
 import { useWorkflowFeaturesEnabled } from "./state/useWorkflowFeaturesEnabled";
+import { useClearAttentionOnGateOff } from "./state/useClearAttentionOnGateOff";
 import {
   loadOrder,
   reorder,
@@ -117,7 +118,8 @@ function App() {
   } = useWorkspaceList();
   // M3 WP6 — live CC status from the `workspace-status` hook channel + the
   // open/close registration that makes WP4's cwd→workspace match resolve.
-  const { stateFor, snippetFor } = useWorkspaceStatus(workspaces);
+  const { stateFor, displayStateFor, snippetFor } =
+    useWorkspaceStatus(workspaces);
 
   // M4 WP3 P4 — the user-arranged, persisted filmstrip order (a list of project_paths,
   // localStorage-backed). Read once on mount; a drag-drop updates it + persists. It's the
@@ -288,6 +290,8 @@ function App() {
   // Worth noting the OFF-invariant guard could NOT see the violation: its bypass scan matches
   // the raw command strings, so an import of the typed wrapper was invisible to it.
   const workflowFeaturesEnabled = useWorkflowFeaturesEnabled();
+  // M16.5 WP4 — the verify-human overlay must not outlive the gate.
+  useClearAttentionOnGateOff(workflowFeaturesEnabled);
   const [inviteSettings, setInviteSettings] = useState<{
     workflowInvite: WorkflowInviteOutcome | null;
   } | null>(null);
@@ -840,7 +844,7 @@ function App() {
           <>
             <Filmstrip
               tiles={tiles}
-              statusFor={stateFor}
+              statusFor={displayStateFor}
               snippetFor={snippetFor}
               collapsed={collapsed}
               onToggleCollapsed={toggleCollapsed}
@@ -857,6 +861,7 @@ function App() {
               focusedId={focusedId}
               onSessionId={setSessionId}
               statusFor={stateFor}
+              displayStatusFor={displayStateFor}
               snippetFor={snippetFor}
               registerDirtyProbe={registerDirtyProbe}
             />

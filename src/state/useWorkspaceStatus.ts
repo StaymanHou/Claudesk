@@ -26,6 +26,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTauriListen } from "../useTauriListen";
 import {
   applyStatusUpdate,
+  displayStateFor,
   emptyStatusMap,
   snippetFor,
   stateFor,
@@ -39,6 +40,11 @@ import type { Workspace } from "./workspace";
 export interface WorkspaceStatusApi {
   /** The live state for a workspace id — Unknown until its first hook event. */
   stateFor: (workspaceId: string) => WireWorkspaceState;
+  /**
+   * The state a status SURFACE shows (M16.5 WP4): `stateFor` plus the verify-human
+   * overlay. ⚠️ Display only — guards keep `stateFor` (see `displayStateFor`).
+   */
+  displayStateFor: (workspaceId: string) => WireWorkspaceState;
   /** The last prompt/message snippet for a workspace id (tooltip), if any. */
   snippetFor: (workspaceId: string) => string | undefined;
 }
@@ -115,6 +121,10 @@ export function useWorkspaceStatus(
     (workspaceId: string) => stateFor(statusMap, workspaceId),
     [statusMap],
   );
+  const displayStateForCb = useCallback(
+    (workspaceId: string) => displayStateFor(statusMap, workspaceId),
+    [statusMap],
+  );
   const snippetForCb = useCallback(
     (workspaceId: string) => snippetFor(statusMap, workspaceId),
     [statusMap],
@@ -122,6 +132,7 @@ export function useWorkspaceStatus(
 
   return {
     stateFor: stateForCb,
+    displayStateFor: displayStateForCb,
     snippetFor: snippetForCb,
   };
 }

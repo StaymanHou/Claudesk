@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   applyStatusUpdate,
+  displayStateFor,
   emptyStatusMap,
   snippetFor,
   stateFor,
@@ -279,5 +280,54 @@ describe("snippetFor", () => {
       state: "idle",
     });
     expect(snippetFor(map, "ws-1")).toBeUndefined();
+  });
+});
+
+describe("M16.5 WP4 — the verify-human display overlay", () => {
+  const stop: WorkspaceStatusUpdate = {
+    workspace_id: "ws-1",
+    state: "idle",
+    is_turn_end: true,
+  };
+  const overlaid: WorkspaceStatusUpdate = {
+    workspace_id: "ws-1",
+    state: "idle",
+    attention: "verify_human",
+  };
+
+  it("an overlay shows awaiting_input on DISPLAY, while stateFor keeps the truth", () => {
+    const map = applyStatusUpdate(
+      applyStatusUpdate(emptyStatusMap, stop),
+      overlaid,
+    );
+    expect(displayStateFor(map, "ws-1")).toBe("awaiting_input");
+    // ⚠️ The guards' read: `isActiveState(stateFor(..))` must not see the overlay (Q1).
+    expect(stateFor(map, "ws-1")).toBe("idle");
+  });
+
+  it("over background work too (needs-you-outranks-busy)", () => {
+    const map = applyStatusUpdate(emptyStatusMap, {
+      ...overlaid,
+      state: "background_work",
+    });
+    expect(displayStateFor(map, "ws-1")).toBe("awaiting_input");
+    expect(stateFor(map, "ws-1")).toBe("background_work");
+  });
+
+  it("the next update without an overlay clears it", () => {
+    let map = applyStatusUpdate(emptyStatusMap, overlaid);
+    map = applyStatusUpdate(map, { workspace_id: "ws-1", state: "running" });
+    expect(displayStateFor(map, "ws-1")).toBe("running");
+  });
+
+  it("no overlay, an unseen workspace, or a null off the wire: display equals stateFor", () => {
+    const map = applyStatusUpdate(emptyStatusMap, stop);
+    expect(displayStateFor(map, "ws-1")).toBe("idle");
+    expect(displayStateFor(map, "ws-unseen")).toBe("unknown");
+    const nulled = applyStatusUpdate(emptyStatusMap, {
+      ...stop,
+      attention: null as unknown as undefined,
+    });
+    expect(displayStateFor(nulled, "ws-1")).toBe("idle");
   });
 });

@@ -23,7 +23,7 @@
 // ⚠️ **THE GATE IS CHECKED INSIDE THE CALLBACK, NOT AROUND THE SUBSCRIPTION.** `useTurnEnd`
 // subscribes unconditionally and filters inside, so hook order cannot depend on `enabled`.
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTurnEnd } from "./turnEnd";
 import {
@@ -47,6 +47,11 @@ import type { TurnEndSignal } from "./turnEnd";
 import { armOrigin, cancelOrigin } from "./turnOrigin";
 import { claimTurnEnd } from "./turnEndDedupe";
 import type { WorkspaceStatusUpdate } from "../workspaceStatus";
+import {
+  promoteIfVerifyHuman,
+  SessionSkillMemo,
+  type VerifyHumanPauseDeps,
+} from "./verifyHumanPause";
 
 /** The shape Rust's `wip_read` command returns. */
 interface WipRead {
@@ -105,6 +110,15 @@ export interface SupervisorHost {
   readonly onRecycle: (info: RecycleRequest) => RecycleStatus;
   /** Diagnostic sink. Defaults to `console.warn`. */
   readonly warn?: (message: string) => void;
+  /**
+   * M16.5 WP4 — the verify-human overlay's IO (the tail read and the promote command).
+   * Defaults to the real `transcript_tail` / `workspace_status_promote` invokes; tests pass
+   * doubles so the call is captured as a VALUE.
+   */
+  readonly verifyHumanPause?: Pick<
+    VerifyHumanPauseDeps,
+    "readTail" | "promote"
+  >;
   /** Activity-record sink. Defaults to the live feed plus `supervisor-activity.log`. */
   readonly record?: (record: ActivityRecord) => void | Promise<void>;
   /** The app version stamped on each record. Defaults to the cached Tauri `getVersion`. */
@@ -157,6 +171,11 @@ export async function decideTurn(
   host: SupervisorHost,
   ledger: FireLedger,
   ccSessionId: string | null,
+  /**
+   * M16.5 WP4 — told each tail this decision reads, so the verify-human read can reuse it
+   * instead of reading the transcript a second time. Not called on the early exits.
+   */
+  onTailRead?: (tail: TranscriptTail) => void,
 ): Promise<Decision> {
   const warn = host.warn ?? ((m: string) => console.warn(m));
   const withheld = (reason: Decision["reason"] & string): Decision => ({
@@ -196,13 +215,16 @@ export async function decideTurn(
   let outcome: FanOutOutcome;
   try {
     outcome = await fireOne(workspace, {
-      readTail: async (w) =>
-        invoke<TranscriptTail>("transcript_tail", {
+      readTail: async (w) => {
+        const tail = await invoke<TranscriptTail>("transcript_tail", {
           projectPath: w.projectPath,
           sessionId: w.sessionId,
           // Selects the config root by the session's LIVE profile, not the row's stored one.
           ptySessionId: w.ptySessionId,
-        }),
+        });
+        onTailRead?.(tail);
+        return tail;
+      },
       // ⚠️ The label is forwarded THROUGH as `injectCommand`'s 4th argument. Dropping it would
       // fall back to the `"auto-resume"` default and point every supervisor failure at M12's arm
       // instead of this one.
@@ -342,6 +364,14 @@ export async function decideTurn(
 export function useSupervisor(host: SupervisorHost): void {
   const ledgerRef = useRef<FireLedger | null>(null);
   if (ledgerRef.current === null) ledgerRef.current = new FireLedger();
+  // M16.5 WP4 — the verify-human read's memory past the 512 KiB tail window. Cleared when the
+  // gate turns OFF: nothing is read while it is off, so an entry would go stale.
+  const skillMemoRef = useRef<SessionSkillMemo | null>(null);
+  if (skillMemoRef.current === null)
+    skillMemoRef.current = new SessionSkillMemo();
+  useEffect(() => {
+    if (!host.enabled) skillMemoRef.current?.clear();
+  }, [host.enabled]);
 
   const onTurnEnd = useCallback(
     async (
@@ -355,6 +385,8 @@ export function useSupervisor(host: SupervisorHost): void {
 
       const ts = (host.now ?? Date.now)();
       let decision: Decision;
+      // The last tail the decision read (its retry loop may read more than once), if any.
+      let decisionTail: TranscriptTail | null = null;
       // ⚠️ ONE DECISION PER `Stop` (`turnEndDedupe.ts`). A second delivery of the same event is
       // still recorded, so the duplication stays visible, but it is never decided again.
       if (!claimTurnEnd(host.workspaceId, event?.last_event_at)) {
@@ -365,6 +397,9 @@ export function useSupervisor(host: SupervisorHost): void {
             host,
             ledgerRef.current as FireLedger,
             event?.session_id ?? null,
+            (tail) => {
+              decisionTail = tail;
+            },
           );
         } catch (e) {
           // `fireOne` isolates its own failures; this catches caller code (`onRecycle`) so the
@@ -374,6 +409,36 @@ export function useSupervisor(host: SupervisorHost): void {
           );
           decision = { outcome: "error", reason: "sweep-threw" };
         }
+      }
+      // M16.5 WP4 — a verify-human pause reads blue (display overlay only). ⚠️ AFTER the
+      // decision, because a fired turn must not flash blue; and independent of the supervisor
+      // toggle and the stored mode, which is why it is here and not inside `decideTurn` (whose
+      // early exits skip the transcript). It writes no activity record, so "one record per turn
+      // end" still holds, and a failure here is logged and must not cost the turn its record.
+      try {
+        await promoteIfVerifyHuman(event, decision, {
+          workspaceId: host.workspaceId,
+          projectPath: host.projectPath,
+          ptySessionId: host.ccSessionIdRef.current,
+          // ⚠️ Reuse the decision's own read when it made one: same turn, already past the
+          // flush wait, and no second 512 KiB read. Read separately only when `decideTurn`
+          // exited before reading (toggle OFF, no stored mode), where the dot must still work.
+          readTail: async (args) => {
+            const reused = decisionTail;
+            if (reused) return reused;
+            return host.verifyHumanPause?.readTail
+              ? host.verifyHumanPause.readTail(args)
+              : invoke<TranscriptTail>("transcript_tail", args);
+          },
+          promote:
+            host.verifyHumanPause?.promote ??
+            ((args) => invoke<boolean>("workspace_status_promote", args)),
+          memo: skillMemoRef.current ?? undefined,
+        });
+      } catch (e) {
+        (host.warn ?? ((m: string) => console.warn(m)))(
+          `supervisor: verify-human promote failed for ${host.workspaceId} — ${String(e)}`,
+        );
       }
       // ⚠️ **EXACTLY ONE RECORD PER TURN END, and this is the only place one is written.** Every
       // exit of `decideTurn` returns here, and a throw is caught above, so a turn end that leaves no

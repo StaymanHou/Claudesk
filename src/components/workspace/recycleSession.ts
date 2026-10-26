@@ -356,20 +356,16 @@ async function awaitCompletion(
     void listen<WorkspaceStatusUpdate>(WORKSPACE_STATUS_EVENT, (event) => {
       if (settled) return;
       if (event.payload.workspace_id !== workspaceId) return;
-      // This machine needs "a `Stop` hook event arrived", and the wire carries only the
-      // DERIVED state — so it must match every state a `Stop` can map to.
+      // This machine needs "a `Stop` hook event arrived". ⚠️ It reads `is_turn_end`, the
+      // backend's own classification (`event_is_turn_end`), and NOT `state`.
       //
-      // ⚠️ `Stop` maps to `idle` OR `background_work` (M13.5 WP2): a turn that ends while a
-      // backgrounded job is still running emits `background_work`. Matching only `idle` made
-      // that `Stop` invisible here, hanging `awaiting-stop` to its timeout and suppressing the
-      // `no-fresh-write` failure in `awaiting-fresh-write` — and Recycle runs `/session-handoff`
-      // in a session that may well have a job outstanding, so it is the *likely* case, not an
-      // edge one. Keep this list in sync with `event_to_state`'s `Stop` arm, NOT with the set
-      // of states that happen to mean "not busy".
-      if (
-        event.payload.state === "idle" ||
-        event.payload.state === "background_work"
-      ) {
+      // It used to match `state === "idle" || "background_work"` (every state a `Stop` maps
+      // to, M13.5 WP2). M16.5 WP4 broke that proxy: the verify-human overlay re-emits the
+      // workspace's last update with the SAME `state` (`idle` / `background_work`) and the
+      // turn markers cleared, so a state match would read that re-emit as a second `Stop`
+      // and advance the machine early. `is_turn_end` is true on the real `Stop` alone, in
+      // both of its states, and on nothing else (`[[derived-state-is-not-a-proxy-for-its-event]]`).
+      if (event.payload.is_turn_end === true) {
         feed({ kind: "stop" });
       }
     }).then(
