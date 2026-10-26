@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-10-21  # WP2 shipped (adjudicator re-measure: FAILS the break axis); WP3 gains 3.4–3.6
+updated: 2026-10-26  # WP4 shipped (status-dot semantics: artifact watch idle, verify-human blue; 4.3 kept, upstream #105187)
 cycle: milestone-16-5-supervisor-hardening-qol-and-paydown
 ---
 
@@ -173,15 +173,15 @@ the 29 scorable records the +1 margin rested on?
     resolved id per call (`--output-format json`) in the activity log and warn when it changes, or
     pin a full id. Re-score on the WP2 set when it changes.
 
-### WP4: Status-channel semantics — the purple dot and turn starts
+### WP4: Status-channel semantics — the purple dot and turn starts ✅ SHIPPED 2026-10-26 (commit 53141d4)
 
 **Milestone:** M16.5
 **Dependencies:** WP1 (its verdicts choose every design here)
 **Size:** M (L if a question comes back "transcript"; split then)
 **Tasks:**
-- [ ] 4.1 **Artifact watch → no false purple**, by the mechanism WP1 found. If the count cannot be
+- [x] 4.1 **Artifact watch → no false purple**, by the mechanism WP1 found. If the count cannot be
       told apart, record an upstream CC ask and stop. Do not guess from text.
-- [ ] 4.2 **EVERY verify-human pause reads blue** (AwaitingInput), whether or not a background task
+- [x] 4.2 **EVERY verify-human pause reads blue** (AwaitingInput), whether or not a background task
       is running (operator ruling, WP1 verify-human, 2026-10-20: today ~2/3 read grey, ~1/3 purple).
       Signal: the supervisor's turn-end read (last `Skill` was `feature-verify-human` and no fire
       followed). Behind `workflow_features_enabled`, byte-identical when off.
@@ -191,9 +191,15 @@ the 29 scorable records the +1 margin rested on?
     whether it routes through that subject before claiming it does.
   - ⚠️ Sweep every consumer of `BackgroundWork` / `AwaitingInput`
     (`[[derived-state-is-not-a-proxy-for-its-event]]`). The four-state vocabulary is unchanged.
-- [ ] 4.3 **`is_turn_start` on dequeues:** apply the discriminator WP1 found, or record that
+- [x] 4.3 **`is_turn_start` on dequeues:** apply the discriminator WP1 found, or record that
       navigation keeps the mid-turn markers. Turn attribution (`⚙`) must be unaffected.
-- [ ] 4.4 Remove WP1's raw-payload capture. Keep the count line.
+- [x] 4.4 Remove WP1's raw-payload capture. Keep the count line.
+**As built (2026-10-26):**
+- 4.1: a `monitor`-only `Stop` is Idle. Exactly one type is excluded, and the count decides when the types are absent or misaligned.
+- 4.2: blue is a gated display overlay (`attention`), not a fifth state. **No seventh arm** (pin stays 9; OFF-invariance pinned behaviourally).
+- 4.3: markers KEPT by measurement (Esc fires no `Stop`, 0/16), and the upstream ask was filed as anthropics/claude-code#105187.
+- Operator decision A: the blue is NOT keyed on the turn's exit token (1 false blue in 324, against 4–5 lost asks).
+- Where it's written down: `arch/status-channel-and-surfaces.md` §A + §A.5 "Queued prompts", `arch/workflow-supervisor.md` §G.
 
 ### WP5: QoL batch — the papercuts
 

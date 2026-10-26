@@ -105,6 +105,7 @@
 
 - [node-strip-types-fails-on-extensionless-runtime-imports.md](node-strip-types-fails-on-extensionless-runtime-imports.md) — `node --experimental-strip-types` breaks on extensionless RUNTIME imports (fine when siblings are `import type`), so it seems to work then fails. Use a throwaway vitest spec.
 - [bsd-sed-lacks-word-boundary.md](bsd-sed-lacks-word-boundary.md) — BSD `sed` has no `\b`, so a mutation probe using it silently no-ops and every mutant reads as "guard survived" — a hole that isn't there. Use `perl -pi -e`; assert the mutation landed.
+- [check-payload-before-outward-send.md](check-payload-before-outward-send.md) — Before `gh … --body-file` (any outward send from a file), `test -s` + `head` the payload in the same step; a failed `sed` stage filed an EMPTY public issue (#105187).
 - [zsh-unquoted-var-does-not-word-split.md](zsh-unquoted-var-does-not-word-split.md) — The Bash tool runs zsh: `for f in $files` iterates ONCE over the whole list, so a bulk rename/mutation loop silently no-ops. Pipe to `xargs` (or `${(f)var}`) and grep-confirm it landed.
 - [bash-cargo-env.md](bash-cargo-env.md) — Bash subshells don't inherit `~/.cargo/env`; cargo/rustc need an explicit PATH prefix.
 - [perl-alarm-watchdog-orphans-cargo-test-binary.md](perl-alarm-watchdog-orphans-cargo-test-binary.md) — A `perl alarm`+`exec` watchdog around `cargo test` kills cargo but orphans the test binary (PPID 1, still running); `pgrep -fl claudesk_lib-` after and kill only your own PID.

@@ -4,6 +4,46 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m16-5-wp4-status-channel-semantics — 2026-10-26
+
+*(feature-review-quality on ship commit `b69201d` (feature `53141d4`), window `53141d4^..b69201d`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 5 MINOR. Four are auto-backlogged here; the 5th, a stale "drafted, unsent" line in `arch/status-channel-and-surfaces.md` §A.5, was fixed in place before archive.)*
+
+## SURFACE-2026-10-26-QUALITY-WP4-OVERLAY-EMIT-OUTSIDE-THE-LOCK-CAN-ARRIVE-STALE
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/status_broadcaster/commands.rs` (`workspace_status_promote`, `workspace_status_clear_attention`) + the drain loop's emit.
+- **Finding:** Both commands release the registry lock before `app.emit`, and so does the drain loop. If a newer hook event is recorded and emitted between the promote's unlock and its emit, the stale overlay arrives last. Neither the TS `applyStatusUpdate` nor the tray's `apply_update` compares `last_event_at`, so the dot shows the old `Stop` plus blue while CC runs, until the next mapped event. The clear path can re-emit an older base update in the same way.
+- **Why it matters:** The window is microseconds, but `verifyHumanPause.ts` says "a reply typed while this ran therefore wins". The compare-and-set protects the registry, not the order of emits.
+- **Suggested action:** Either emit while holding the lock (check that `emit` cannot re-enter the registry), or soften the doc claim to "the registry never overwrites a newer event".
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-26-QUALITY-WP4-PIP-ISAWAITINGINPUT-REIMPLEMENTS-THE-OVERLAY-RULE
+- **Severity:** MINOR
+- **Location:** `src/pip/pipLayout.ts` `isAwaitingInput`
+- **Finding:** The overlay rule lives in three places: Rust `display_state`, TS `displayStateFor`, and `isAwaitingInput`, which re-implements `attention != null` instead of calling the funnel. Inside the PiP, the dot colour comes from `displayStateFor` but the attention ordering comes from `isAwaitingInput`, and the `pipFanoutWiring` single-source pin covers only the dot.
+- **Why it matters:** A future `Attention` variant that should not mean "needs me" would need three coordinated edits, and the PiP's sort and colour could drift apart.
+- **Suggested action:** Have `isAwaitingInput` call `displayStateFor(update) === "awaiting_input"`, and extend the `pipFanoutWiring` pin to the ordering.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-26-QUALITY-WP4-UNWAITED-SEPARATE-TAIL-READ-UNEXPLAINED
+- **Severity:** MINOR
+- **Location:** `src/state/supervisor/useSupervisor.ts`, the verify-human `readTail` fallback.
+- **Finding:** The separate read (supervisor toggle OFF, or no stored mode) calls `transcript_tail` within milliseconds of `Stop`, with no `isTurnComplete` flush wait. CC flushes the final line 74–109 ms after `Stop`. The read is probably still correct, since the late line is end-of-turn assistant text with no skill invocation, but nothing says so, and the adjacent comment cites the flush wait as the reason to reuse the decision's tail.
+- **Why it matters:** It invites a reader to "fix" a path that is fine, or to rely on it for a property it lacks.
+- **Suggested action:** Add one sentence on why the unwaited read is safe for this question (the last *invocation* precedes the flushed line). Or, if a skill-invoking last line is possible, apply the same wait.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-26-QUALITY-WP4-TYPE-CYCLE-VERIFYHUMANPAUSE-USESUPERVISOR
+- **Severity:** MINOR
+- **Location:** `src/state/supervisor/verifyHumanPause.ts` (`import type { Decision } from "./useSupervisor"`)
+- **Finding:** This is a type-only two-way module dependency: `useSupervisor.ts` imports `verifyHumanPause.ts`, which imports a type from `useSupervisor.ts`.
+- **Why it matters:** It is harmless at runtime, but it is low-cost tidy-up.
+- **Suggested action:** Move `Decision` into a leaf types module, or have `mayPromote` take its own `{ outcome; reason }` shape.
+- **Priority:** low
+- **Status:** pending
+
 # m16-5-wp2-adjudicator-remeasure — 2026-10-21
 
 *(feature-review-quality on ship commit `c5fc34f` (feature `904dcc8`), window `904dcc8^..c5fc34f`; drive_mode=autopilot. 0 CRITICAL, 3 MAJOR, 8 MINOR. Ten are auto-backlogged here; the 8th MINOR (a stale WIP leaf) was fixed in place before archive.)*
@@ -100,50 +140,14 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # m16-5-wp1-hook-payload-probe — 2026-10-20
 
-*(feature-review-quality on ship commit `e63831b` (feature `d9f13ab`), window `d9f13ab^..e63831b`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-10-20-QUALITY-WP1-DOC-COMMENT-DETACHED-FROM-ITS-TEST
-- **Severity:** MAJOR
-- **Location:** `src-tauri/src/status_broadcaster/commands.rs` → `event_detail_threads_each_wire_field_into_its_own_slot` / `end_to_end_socket_background_work_emits_then_clears_on_a_clean_stop`
-- **Finding:** The new test was inserted between the end-to-end BackgroundWork test and its 12-line rustdoc, so that rustdoc now attaches to the string-format helper test. It carries the warning that the clearing edge is the only guard against a dot stuck purple forever.
-- **Why it matters:** a maintainer of the BackgroundWork clearing path reads the wrong rationale against the wrong test, and the real invariant test is undocumented.
-- **Suggested action:** move the new test (with its own comment) above the M13.5 rustdoc block, so the rustdoc sits directly on `end_to_end_socket_background_work_emits_then_clears_on_a_clean_stop` again. Natural fit: M16.5 WP4 (it edits this file).
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-10-20-QUALITY-WP1-TELEMETRY-TAIL-CONCATENATED-AT-TWO-SITES
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/status_broadcaster/commands.rs` → both drain-loop `log.write_line(&(format_event_line(...) + &event_detail(&event)))` sites
-- **Finding:** The tail is concatenated at two call sites; the codify test pins only the helper, so deleting `+ &event_detail(&event)` at either site passes every test.
-- **Why it matters:** the "could this pass if the code it names were deleted?" class (`docs/lessons/source-text-guards.md`); the `bg=`/`bg_types=` tail is permanent.
-- **Suggested action:** one `format_hook_event_line(&HookEvent, mapped, resolved)` used by both sites, so the threading is structural.
-- **Priority:** low
-- **Status:** pending
+*(feature-review-quality on ship commit `e63831b` (feature `d9f13ab`), window `d9f13ab^..e63831b`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged. M16.5 WP4 resolved all but the one below, 2026-10-26.)*
 
 ## SURFACE-2026-10-20-QUALITY-WP1-REDUNDANT-NONE-FIELDS-IN-SPREAD-LITERALS
 - **Severity:** MINOR
-- **Location:** `src-tauri/src/status_broadcaster/mod.rs` tests → the three `..ev(...)` / `..stop_with_bg(...)` struct-update literals
-- **Finding:** They set `background_task_types: None, payload_keys: None` explicitly although the spread already supplies them.
-- **Why it matters:** noise, and three extra sites WP4 4.4 must touch to remove `payload_keys`.
-- **Suggested action:** drop the explicit fields from the spread literals; keep them only in full literals.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-10-20-QUALITY-WP1-PAYLOAD-KEYS-REMOVAL-NOT-MARKED
-- **Severity:** MINOR
-- **Location:** `claudesk-hook.pl` (dev-only block + header line), `HookEvent::payload_keys`, `format_event_detail`'s `keys=` branch, the test literals, four tests; `wbs.md` WP4 4.4
-- **Finding:** The dev-only `payload_keys` capture is spread over five places with no removal marker, and WP4 4.4's wording ("raw-payload capture … keep the count line") does not name `payload_keys` or say that `background_task_types` stays.
-- **Why it matters:** the cleanup is not grep-able and could take the permanent type forwarding with it.
-- **Suggested action:** reword WP4 4.4 to "remove `payload_keys` everywhere; KEEP `background_task_count` and `background_task_types`", and optionally mark each site.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-10-20-QUALITY-WP1-DEV-BASENAME-DUPLICATED-IN-THE-HOOK
-- **Severity:** MINOR
-- **Location:** `claudesk-hook.pl` → `$0 =~ /-dev\.pl\z/`; `tests/hook_pl_output.rs` → `dev_hook_copy`
-- **Finding:** The dev gate re-derives the dev basename that `hook_install::commands::script_basename` owns; the test hardcodes its own copy.
-- **Why it matters:** renaming the dev basename would silently disable the probe while both tests stay green. Low impact: the code is temporary (WP4 4.4).
-- **Suggested action:** none beyond removing it at WP4 4.4; if it outlives WP4, derive from the single source.
+- **Location:** `src-tauri/src/status_broadcaster/mod.rs` tests → `stop_with_bg` and two inline `HookEvent { …, ..ev(...) }` literals
+- **Finding:** *(Rewritten 2026-10-26: the `payload_keys: None` half went with the field in M16.5 WP4.)* They still set `background_task_types: None` explicitly although the `..ev(...)` spread already supplies it.
+- **Why it matters:** noise; a reader wonders whether `None` is being forced over a different default.
+- **Suggested action:** drop the explicit field from the spread literals; keep it only in full literals.
 - **Priority:** low
 - **Status:** pending
 

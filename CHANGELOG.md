@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-26
+
+- **Feature shipped:** M16.5 WP4 status-channel semantics: a workspace whose only background task is an artifact watch now reads idle instead of purple, and every verify-human pause reads blue on all three status surfaces (behind the workflow-features gate, as a display overlay that leaves the close/quit and respawn guards reading the true state); queued-prompt turn markers are kept by measurement and the fix was asked of Claude Code upstream (anthropics/claude-code#105187).
+- **Backlog resolved:** SURFACE-2026-10-09-ARTIFACT-WATCH-LIGHTS-THE-DOT-PURPLE-WITH-NOTHING-RUNNING — a `Stop` whose only outstanding task is a `monitor` (the artifact/comment watch) maps to Idle.
+- **Backlog resolved:** SURFACE-2026-09-29-VERIFY-HUMAN-PAUSE-WITH-A-BACKGROUND-SHELL-SHOWS-PURPLE-NOT-BLUE — every verify-human pause, with or without background work, now reads blue through the `attention` display overlay.
+- **Backlog resolved:** SURFACE-2026-10-20-QUALITY-WP1-DOC-COMMENT-DETACHED-FROM-ITS-TEST — the M13.5 clearing-edge rustdoc sits on `end_to_end_socket_background_work_emits_then_clears_on_a_clean_stop` again.
+- **Backlog resolved:** SURFACE-2026-10-20-QUALITY-WP1-TELEMETRY-TAIL-CONCATENATED-AT-TWO-SITES — both drain-loop log sites now share one `hook_event_line` builder.
+- **Backlog resolved:** SURFACE-2026-10-20-QUALITY-WP1-PAYLOAD-KEYS-REMOVAL-NOT-MARKED — the dev-only `payload_keys` capture is removed everywhere, with a test that neither hook basename emits it.
+- **Backlog resolved:** SURFACE-2026-10-20-QUALITY-WP1-DEV-BASENAME-DUPLICATED-IN-THE-HOOK — the hook's dev-basename gate went with the `payload_keys` block.
+- **Backlog resolved:** SURFACE-2026-10-20-QUALITY-WP1-REDUNDANT-NONE-FIELDS-IN-SPREAD-LITERALS (partial) — the `payload_keys: None` half is gone with the field; the redundant `background_task_types: None` half remains open.
+- **Milestone:** M16.5 WP4: Status-channel semantics — the purple dot and turn starts.
+
 ## 2026-10-21
 
 - **Feature shipped:** M16.5 WP2 adjudicator re-measurement. On 291 operator-labelled turns mined from every project, the supervisor's `claude -p` adjudicator holds 95/103 real waits (0.92) but lets only 126/188 real breaks fire (0.67, stable over three runs), so it fails the 0.80/0.80 bar on the break axis; the bar is kept, and the follow-ups (no auto-chaining of the product and incident workflows, a revised adjudicator question, a loud model pin) are WP3 tasks 3.4–3.6.

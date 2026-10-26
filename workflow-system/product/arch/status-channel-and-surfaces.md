@@ -99,8 +99,8 @@ A prompt typed while a turn is running fires `UserPromptSubmit` **when it is que
   that the supervisor's R-1 accepted cost rests on. Rule B is safe but barely helps.
 - So a spurious mid-turn stop on the marker walk is the cheaper error. Turn attribution (`⚙`) is
   unaffected. The clean fix is upstream (a "queued" flag on `UserPromptSubmit`, or an interrupt
-  hook). An ask is drafted, unsent, at `workflow-system/outbox/` (see the WP4 WIP / CHANGELOG for
-  whether it was sent).
+  hook). The ask was filed 2026-10-26 as
+  **anthropics/claude-code#105187** (text: `workflow-system/outbox/UPSTREAM-to-claude-code-queued-prompt-signal.md`).
 
 ## B. Three status surfaces (subscribers)
 

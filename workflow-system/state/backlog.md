@@ -48,41 +48,6 @@
 - **Priority:** medium (the picker is the entry point to every workspace, and the failure looks like a lost click)
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
-## SURFACE-2026-10-09-ARTIFACT-WATCH-LIGHTS-THE-DOT-PURPLE-WITH-NOTHING-RUNNING
-- **Source:** operator (dogfooding, 2026-10-09)
-- **Target level:** feature:spec
-- **Type:** bug
-- **Summary:** After the agent creates, edits, or shows an artifact (the `Artifact` tool), the workspace's status dot goes **purple** (BackgroundWork) even though no job, task, or process is running. Purple should mean background jobs / tasks / running processes only. An opened or published artifact is not one.
-- **Context:** `status_broadcaster::event_to_state` maps `Stop` + `background_task_count > 0` to `BackgroundWork` (M13.5 WP2). Claudesk sees only the **count**, never what the tasks are. **Hypothesis (unconfirmed):** an `Artifact` publish or open starts a watch on that artifact (for republishes and comments), and CC counts the watch as a background task in `background_task_count`. If so, the dot stays purple for as long as the watch is alive, which can be the rest of the session. `status-channel.log` does not record the count today, so this has not been measured.
-- **Related:** `SURFACE-2026-09-29-VERIFY-HUMAN-PAUSE-WITH-A-BACKGROUND-SHELL-SHOWS-PURPLE-NOT-BLUE` has the same root (an opaque count drives the colour) but the other symptom (a real shell hides an ask). Any fix should consider both.
-- **Constraints any fix must respect (do not re-derive):**
-  - ⚠️ **Never from PTY output.** CC's footer text (`1 shell · 1 agent`) must not be parsed for state.
-  - ⚠️ The hook gives a **count, never the tasks**. Telling a watch apart from a shell may need another source (the hook payload, if a later CC version carries task kinds; the transcript's tool calls; or an upstream CC request).
-  - Sweep every consumer of `BackgroundWork` / `AwaitingInput` / `Idle` if the mapping changes (`derived-state-is-not-a-proxy-for-its-event`).
-- **Suggested action:** measure first. Log `background_task_count` on `Stop` in `status-channel.log`, then compare a turn that publishes an artifact with one that does not. Also capture the raw `Stop` payload to see whether it says what the tasks are. If the watch is what is counted, decide whether Claudesk can discount it (transcript read of `Artifact` calls) or whether it needs an upstream ask.
-- **Priority:** medium (a false "busy" on an idle workspace; scanning the filmstrip for purple stops meaning anything)
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-
-## SURFACE-2026-09-29-VERIFY-HUMAN-PAUSE-WITH-A-BACKGROUND-SHELL-SHOWS-PURPLE-NOT-BLUE
-- **⚠️ SCOPE WIDENED (2026-10-20, operator, M16.5 WP1 verify-human):** EVERY verify-human pause should read **blue**, with or without a background task. Measured: of 106 verify-human turn ends since 2026-09-25, ~69 read grey `idle` and ~37 purple, so both are wrong. Signal chosen at WP1: the supervisor's turn-end read. Scheduled as M16.5 WP4 task 4.2. The title below describes only the original purple symptom.
-- **Source:** operator (feature:verify-human, `m16-wp2-media-in-editor-tab` Phase 2, 2026-09-29)
-- **Target level:** product:wbs
-- **Type:** gap
-- **Summary:** When a turn ends at a human-verification pause while a background shell is still running (the agent-launched `pnpm tauri:dev` waiting for the check), the workspace's status dot is **purple** (BackgroundWork), not **blue** (AwaitingInput). The operator is being asked to act, but the dot says "nothing needs you".
-- **Context:** Observed on the claudesk workspace's filmstrip tile. The turn ended with the Phase 2 verify-human checklist and CC's footer showed `1 shell · 1 agent` still running. `status_broadcaster::event_to_state` maps `Stop` + `background_task_count > 0` to `BackgroundWork` by design (the four-state vocabulary, M13.5 WP2). It sees a **count** of background tasks, never what the turn asked for. A dev server kept alive *for* the verification is exactly the case where "background work" and "waiting on you" are both true, and the dot picks the one that hides the ask. This is the false-negative direction the `semantic-distance-not-just-visual-distance-for-status-colour` prior warns about: purple exists to mean *ignorable*.
-- **Operator ask:** make Claudesk workflow-aware here, so a turn that ends at a verify-human pause reads like the blue blinking AwaitingInput dot, even with a background task running.
-- **Constraints any fix must respect (do not re-derive):**
-  - ⚠️ **Never from PTY output.** State comes from the hook channel and workflow files, not from parsing CC's text on screen (CLAUDE.md → "PTY byte-injection for input; hook channel for state").
-  - It is workflow knowledge, so it belongs to the **default-OFF workflow layer** (`workflow_features_enabled`, M10.9). With the gate off, the dot must behave exactly as today.
-  - A pause turn often emits **no** `TRANSITION:` token (verify-human waits instead of transitioning), so a token-only detector would miss it.
-- **Candidate signals (unmeasured):**
-  1. The supervisor's turn-end transcript read (M15, TypeScript) already knows which skill ran last in the turn and which policy cell applies. "The last `Skill` of the turn was `feature-verify-human` and the turn ended without a transition" means the turn stopped inside a PAUSE state. The supervisor could publish that alongside its decision, and the dot could promote BackgroundWork → AwaitingInput for that turn.
-  2. The WIP's `## Current Node` (`Path: … > verify-human`). ⚠️ No WIP-content parsing exists today, and adding one is a new coupling to the workflow's file format.
-  3. Upstream (mccc): have verify-human (and any PAUSE-at-entry skill) end its turn in a way the hook channel can see, for example a `Notification` whose `notification_type` Claudesk already classifies as input-needed.
-- **Suggested action:** a small feature. Measure first: how often a PAUSE-state turn end coincides with `background_task_count > 0` in the corpus, and which of the three signals is present on those turns. Then pick one, behind the gate. Check the four-state guard and the `derived-state-is-not-a-proxy-for-its-event` sweep (every consumer of `BackgroundWork` / `AwaitingInput`) when the mapping changes.
-- **Priority:** medium (an attention false negative on the one moment the workflow deliberately asks for the operator, but a scan of the filmstrip still finds it)
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-
 ## SURFACE-2026-09-28-SUPERVISOR-FIRES-ON-A-TRANSITION-TOKEN-QUOTED-IN-PROSE
 - **Source:** feature:verify-self (`silent-supervisor` Phase 3)
 - **Target level:** feature:spec
@@ -103,6 +68,14 @@
 - **Priority:** medium (decisions are already deduplicated; what remains is a leak plus missing `⚙` in the affected workspace)
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
+## Code-quality findings — m16-5-wp4-status-channel-semantics (2026-10-26)
+
+- **Pointer:** **4 MINOR** from the review of `b69201d` (0 CRITICAL, 0 MAJOR; a 5th MINOR was fixed in place). The four: the overlay emit leaves the lock before `emit`, so a stale overlay can arrive last; the PiP's `isAwaitingInput` re-implements the overlay rule; the unwaited separate tail read is unexplained; and a type-only import cycle between `verifyHumanPause` and `useSupervisor`.
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp4-status-channel-semantics — 2026-10-26`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** WP8's paydown. The emit-order item pairs naturally with any later status-channel change.
+
 ## Code-quality findings — m16-5-wp2-adjudicator-remeasure (2026-10-21)
 
 - **Pointer:** **3 MAJOR + 7 MINOR** from the review of `c5fc34f`.
@@ -121,12 +94,12 @@
 
 ## Code-quality findings — m16-5-wp1-hook-payload-probe (2026-10-20)
 
-- **Pointer:** **1 MAJOR + 4 MINOR** from the review of `e63831b`. The MAJOR: a new test was inserted between the end-to-end BackgroundWork test and its rustdoc, so the "clearing edge" warning now sits on the wrong test. The MINORs: the telemetry tail concatenated at two unguarded sites, redundant `None` fields in spread literals, `payload_keys` removal not marked (and WP4 4.4's wording), and the dev basename duplicated in the hook. All five touch files M16.5 WP4 edits anyway.
+- **Pointer:** **1 MINOR remainder** from the review of `e63831b`. M16.5 WP4 resolved the MAJOR and three MINORs (2026-10-26). What remains: three test struct-update literals still set `background_task_types: None` explicitly, although the `..ev(...)` spread already supplies it.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp1-hook-payload-probe — 2026-10-20`.
-- **Priority:** medium (the MAJOR) / low (the rest)
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor` (or fold into M16.5 WP4). To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
+- **Pickup shape:** a one-minute tidy in WP8's paydown.
 
 ## Code-quality findings — m16-wp3-review-player (2026-10-20)
 

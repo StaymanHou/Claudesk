@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16.5 WP4 — Status-channel semantics: the purple dot and turn starts
 
 **Workflow:** feature
-**State:** ship (complete) — `53141d4`, local `main`, not pushed (operator: push only on request)
+**State:** Completed 2026-10-26 (shipped `53141d4` + `b69201d`, local `main`, not pushed)
 **Created:** 2026-10-21
 **Entry:** spec (complex feature)
 **WBS:** `workflow-system/product/wbs.md` → WP4 (critical path: WP4 → `/release` → WP7 → WP8).
@@ -526,17 +526,71 @@ Problem statement unchanged (2026-10-26, Phase 3 F12 re-entry for P3.verify-huma
     - Gap proven: a rule-A mutant in `to_update` ("a turn start only if the last emitted was a turn end") compiled and landed (`grep` L643/L650). The 4 pre-existing turn-start tests (`event_is_turn_start_predicate_pins_the_rule`, `turn_start_separates_the_two_running_producers`, `turn_start_is_false_for_every_other_mapped_event`, `end_to_end_socket_one_turn_start_per_turn_not_one_per_tool_call`) all PASSED on it; only the new test FAILED. File restored (shasum match).
     - Full run: `pnpm verify:auto` → EXIT=0 (42s). vitest 3534, cargo lib **1034** (+1), lint 0 errors / 1 old warning.
 
+## Code-Quality Review
+
+*(feature-review-quality, 2026-10-26, ship commit `b69201d`, window `53141d4^..b69201d`, drive_mode=autopilot. 0 CRITICAL / 0 MAJOR / 5 MINOR. MINOR 1–4 auto-backlogged to `backlog-quality-findings.md`. MINOR 5 FIXED IN PLACE before archive.)*
+
+### Strengths
+- The verify-human blue is a separate `attention` overlay, not a fifth `WorkspaceState`. The close/quit and respawn guards keep reading `state`, and display surfaces read through named funnels (`display_state` / `displayStateFor`), each documenting which readers may use it.
+- `WorkspaceRegistry::promote` is a compare-and-set on the `Stop`'s own `last_event_at` + `is_turn_end`. `overlay_update` clears the turn markers so the re-emit can't read as a second turn end. Both are tested, including through the tray fold.
+- `recycleSession.awaitCompletion` now keys on `is_turn_end`, applying `derived-state-is-not-a-proxy-for-its-event` before the re-emit could trigger it.
+- `stop_leaves_background_work` excludes one type and falls back to the count. It fails toward the old colour, and each branch is tested.
+- The `payload_keys` probe is removed in every layer. The two drain-loop log sites share `hook_event_line`.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+1. [`status_broadcaster/commands.rs` promote/clear] The emit happens after the lock is released, so a stale overlay can arrive last. The compare-and-set protects the registry, not the order of emits; `verifyHumanPause.ts` "a reply typed while this ran therefore wins" overstates it. → backlogged `SURFACE-2026-10-26-QUALITY-WP4-OVERLAY-EMIT-OUTSIDE-THE-LOCK-CAN-ARRIVE-STALE`
+2. [`src/pip/pipLayout.ts` `isAwaitingInput`] Re-implements `attention != null` instead of calling `displayStateFor`, so the overlay rule has three homes and the PiP's ordering vs colour is unpinned. → backlogged `…-PIP-ISAWAITINGINPUT-REIMPLEMENTS-THE-OVERLAY-RULE`
+3. [`useSupervisor.ts` separate `readTail`] Unwaited read (no `isTurnComplete` flush wait); probably safe, but unexplained. → backlogged `…-UNWAITED-SEPARATE-TAIL-READ-UNEXPLAINED`
+4. [`verifyHumanPause.ts:40`] Type-only import cycle with `useSupervisor.ts`. → backlogged `…-TYPE-CYCLE-VERIFYHUMANPAUSE-USESUPERVISOR`
+5. [`arch/status-channel-and-surfaces.md` §A.5] The doc said "drafted, unsent", but the ask was filed as #105187. → **FIXED in place** (now names the issue).
+
+### Assessment
+Well-built, and it leaves the codebase better than it found it. The Rust side is decision-free, with the decision made in TS (matches R-4). The display/guard split is explicit at every reader, and the one consumer at risk (`recycleSession`) was migrated in the same commit. Tests aim at the boundaries the project's lessons call out (real socket + tray fold, gate-OFF on the real `Workspace`/`App`, the mutation-proven kept turn-start rule), and the no-seventh-arm decision is reasoned and recorded. The debt is small and local. The warning-heavy comments in `useSupervisor.ts` are getting long (already routed to the comment-convention pass).
+
+### If you disagree
+Mark a finding `[DISMISSED]` in this section before `/feature-finalize` archives the WIP.
+
 ## Test Triage — offInvariantGuard "no module bypasses the seam to read the setting directly" (Phase 3 verify-codify, 2026-10-26)
 Classification: Obsolete test (of my own): the new `src/__tests__/gateOffClearWiring.test.tsx` names the raw gate command `workflow_get_features_enabled` to answer the seed. The guard is correct, and the code under test is correct.
 Confidence: high
 Evidence: the guard's offenders list is exactly `["src/__tests__/gateOffClearWiring.test.tsx"]`; the file matches on its `if (cmd === "workflow_get_features_enabled")` mock answer.
 Action: rewrote the new test to drive the REAL seam only through its broadcast event (`WORKFLOW_FEATURES_ENABLED_EVENT`: ON, then OFF). The command name no longer appears, and the guard's allowlist is untouched.
 
+## Retrospect
+- **What changed in our understanding:**
+  - The verify-human signal had to be SESSION-scoped (a checklist spans turns with no skill call), and the 512 KiB tail needed a memo plus a turn-start guard to stay honest (380/407 hits, 0 false).
+  - The "auto-skip false blue" the operator raised turned out to be a frequency question, not a mechanism one. It never occurred (0 of 324), and the general exit-and-stop case occurred once. The obvious fix was net-negative, because `TRANSITION:` tokens are routinely quoted inside asks.
+  - CC fires no `Stop` on Esc, which is what killed every local discriminator for queued prompts (4.3).
+- **Assumptions that held:**
+  - WP1's three verdicts (`monitor` is the artifact watch, blue for every verify-human pause, enqueue-time submits) held through build.
+  - "Display overlay, not a fifth state" (Q1) kept the close/quit and respawn guards untouched.
+  - No seventh guard arm was needed.
+- **Assumptions that were wrong:**
+  - The handoff's "likely fix" for P3.verify-human.0 (suppress blue on an exit token) assumed the gap was common and the token reliable. Measurement refuted both.
+  - The Phase 3 tests mounted `useSupervisor` on a hand-built host, which left the `Workspace`/`App` wiring uncovered until codify. Six mutants there, including a `Workspace` gate forced ON, would have passed the earlier suite.
+  - The four pre-existing turn-start tests could not see an order-based (stateful) change to `is_turn_start`.
+- **Approach delta:**
+  - The F12 back-loop shipped pins + documentation instead of the planned code fix (operator decision A).
+  - Phase 3 codify added consuming-surface tests through the real `Workspace` and `App`.
+  - Phase 4 codify added a stateful turn-start pin.
+  - 4.3's upstream ask was filed (anthropics/claude-code#105187) rather than kept unsent. Agent error: the first filing had an empty body (an unchecked `sed` extraction), fixed within ~1 minute via `gh issue edit`.
+  - Two pre-existing stale doc claims were corrected in passing (`session_id` "dropped before the DTO", a `:502` line citation).
+
+**Closure:** Requester = operator — closure notice for self-record.
+> **Feature complete:** M16.5 WP4 (status-channel semantics) has shipped. An artifact watch no longer lights the dot purple, and every verify-human pause now reads blue on the filmstrip, header, PiP and menu bar (workflow features ON only), while the close/quit guards keep protecting real background work. WP7's installed-build acceptance re-checks it after the next `/release`.
+
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality against ship commit `53141d4`
+- **Path:** Feature > finalize (complete) — archived
+- **Active scope:** none
 - **Blocked:** none
-- **Unvisited:** review-quality, finalize
+- **Unvisited:** none (session-reflect next)
 - **Open discoveries:** none
 
 ## Discoveries

@@ -191,6 +191,10 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
   - (2) the `sonnet` pin is an **alias** that moved to `claude-sonnet-5-5` on 2026-09-29, unseen.
   - (3) **operator ruling: the product and incident workflows must not auto-chain** (prior `supervisor-chains-execution-workflows-only`).
   - WP3 gains 3.4 (that gate), 3.5 (revise the question, re-score on the frozen set in `tooling/adjudicator-probe/`) and 3.6 (a loud pin).
+- ✅ **WP4 SHIPPED 2026-10-26 (`53141d4`): an artifact watch reads idle; every verify-human pause reads blue.** ⚠️ Do NOT re-derive (`arch/status-channel-and-surfaces.md` §A/§A.5, `arch/workflow-supervisor.md` §G):
+  - (1) The blue is a gated **display overlay** (`attention`), NOT a fifth state, and it owns **no seventh guard arm**.
+  - (2) It is **NOT keyed on the turn's exit token** (operator decision A: 1 false blue in 324, against 4–5 real asks lost).
+  - (3) `is_turn_start` on queued prompts is **KEPT by measurement** (Esc fires no `Stop`). Fixing it is upstream: anthropics/claude-code#105187.
 
 ✅ **M16 — the right-panel media viewer — CLOSED 2026-10-20** (WP1 probe → WP2 editor-tab media + glance viewer → WP3 review player). WBS + probe outcomes archived at `workflow-system/product/archive/milestone-16-right-panel-media-viewer/wbs.md`; ⚠️ **as-built lives in `arch/right-panel-surfaces.md` → "Media in the editor tab" and `arch/security-posture.md` → "Media transport" — read those before touching media.** ⚠️ Deferred, NOT passed: hardened runtime (→ `/release`) and the `scripture-reading` dogfood pass (AC-21). Next: M16.5 (above). The `/util-grill-me` rulings there are SETTLED; do not re-litigate them:
 - ⚠️ Depth is chosen by **FILE TYPE**, never by a per-project setting or the profile. Images and PDFs get the glance viewer; audio and video always get the review player.
