@@ -32,3 +32,74 @@ export function extractTransitionId(line: string): string | null {
   const m = TRANSITION_TOKEN_RE.exec(line.replace(/\*/g, ""));
   return m ? m[1] : null;
 }
+
+/**
+ * Leading line decoration: whitespace, a list marker (`-`, `*`, `+`, `1.`), a blockquote `>`,
+ * and markdown emphasis (`*`, `_`). Applied repeatedly.
+ */
+const LINE_DECORATION_RE = /^(?:\s+|[-+]\s|\d+[.)]\s|>|[*_]+)/;
+
+/** What may END the text before an emitted token: a sentence or clause boundary. */
+const CLAUSE_BOUNDARY_RE = /(?:[.!?:;,(\u2192\u2014]|->|[.!?]\))$/;
+
+/**
+ * Extract the transition id a message EMITS, or `null` when there is none: the last
+ * `TRANSITION:` that OPENS A SENTENCE OR CLAUSE and is not inside a quote.
+ *
+ * ⚠️ M16.5 WP3 3.1 — a token QUOTED in prose must not fire. The reader used to take the last
+ * `TRANSITION:` anywhere in the message, and live (2026-09-28) a turn whose final message said
+ * *The "Built / TRANSITION: F8" reply was the literal text you asked for* re-fired its own
+ * skill.
+ *
+ * The rule, measured on the local corpus (`tooling/adjudicator-probe/tokenSplit.probe.ts`):
+ * - **Emitted:** the token begins its line (after list / quote / emphasis decoration), or the
+ *   text before it ends a clause: `.` `!` `?` `:` `;` `→` `—` `->`, ignoring emphasis and
+ *   backticks between (`Approved. **TRANSITION: F13**`, `` → `TRANSITION: F38` ``).
+ * - **Quoted:** the token is the object of a verb (`` I'm still not emitting `TRANSITION: F13` ``),
+ *   sits inside a double-quoted span (`"…"`, `“…”`), or sits inside a code span that holds
+ *   other text before it. A fenced code block is NOT a quote: older sessions emitted the
+ *   verdict alone inside one.
+ *
+ * ⚠️ Two simpler rules were REFUTED by that replay, so do not reach for them:
+ * - "the token must start its line" (the WBS default) withheld 132 of 477 recent real
+ *   verdicts, because emitted verdicts now usually END a sentence;
+ * - "a backticked token is a quote" withheld hundreds of older real ones, written
+ *   `` `TRANSITION: F8` — build → verify-auto ``.
+ */
+export function extractEmittedTransitionId(text: string): string | null {
+  const lines = text.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    for (
+      let at = line.lastIndexOf("TRANSITION:");
+      at >= 0;
+      at = at === 0 ? -1 : line.lastIndexOf("TRANSITION:", at - 1)
+    ) {
+      if (!opensClause(line.slice(0, at))) continue;
+      const id = extractTransitionId(line.slice(at));
+      if (id !== null) return id;
+    }
+  }
+  return null;
+}
+
+/** Does a token preceded by `prefix` (on its line) open a sentence or clause, unquoted? */
+function opensClause(prefix: string): boolean {
+  const count = (ch: string): number => prefix.split(ch).length - 1;
+  if (count('"') % 2 === 1 || count("\u201C") > count("\u201D")) return false;
+  // Inside a code span, the token is emitted only if it OPENS the span
+  // (`` `TRANSITION: F8` ``); any other text in the span makes it a quoted instruction
+  // (`` `Reply with exactly this line: TRANSITION: T2` ``).
+  if (count("`") % 2 === 1) {
+    const open = prefix.lastIndexOf("`");
+    if (prefix.slice(open + 1).replace(/[\s*_]/g, "") !== "") return false;
+    prefix = prefix.slice(0, open);
+  }
+  for (;;) {
+    const m = LINE_DECORATION_RE.exec(prefix);
+    if (m === null) break;
+    prefix = prefix.slice(m[0].length);
+  }
+  const before = prefix.replace(/[\s*_`]+$/, "");
+  return before === "" || CLAUSE_BOUNDARY_RE.test(before);
+}

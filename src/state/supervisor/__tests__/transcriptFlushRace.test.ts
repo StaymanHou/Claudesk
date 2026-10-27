@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireOne, type FanOutDeps, type SupervisedWorkspace } from "../fanOut";
 import { FireLedger } from "../verdict";
 import type { TranscriptTail } from "../transcript";
+import { claudeJsonReply } from "./adjudicatorReply";
 
 const PATH = "/t/race.jsonl";
 
@@ -74,7 +75,10 @@ function deps(
     inject: async (_pty, command) => {
       injected.push(command);
     },
-    adjudicator: { run: async () => "PROCEED", warn: () => {} },
+    adjudicator: {
+      run: async () => claudeJsonReply("PROCEED"),
+      warn: () => {},
+    },
     ledger,
     warn: () => {},
   };

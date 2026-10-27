@@ -25,7 +25,7 @@
 // predicates OVER-flag by ~15x, and the binding failure direction (ruling R-6 condition 2) is
 // to WITHHOLD — a missed break costs an operator nudge; a wrong fire is unrecoverable.
 
-import { extractTransitionId } from "../workflowMachine/transitionToken";
+import { extractEmittedTransitionId } from "../workflowMachine/transitionToken";
 
 /**
  * Token usage as Claude Code writes it onto an assistant line.
@@ -257,10 +257,9 @@ export function readTurn(lines: readonly TranscriptLine[]): TurnReading {
   for (let i = lines.length - 1; i > floor; i--) {
     const text = assistantText(lines[i]);
     if (!text.includes("TRANSITION:")) continue;
-    // ⚠️ Read the LAST token in the block, not the first: a block that narrates the table
-    // before emitting its own verdict would otherwise yield the quoted id.
-    const idx = text.lastIndexOf("TRANSITION:");
-    const id = extractTransitionId(text.slice(idx));
+    // ⚠️ Only an EMITTED token is a verdict: one that opens a sentence or clause and is not
+    // quoted (M16.5 WP3 3.1). The last one wins: see `extractEmittedTransitionId`.
+    const id = extractEmittedTransitionId(text);
     if (id) {
       verdictIndex = i;
       edgeId = id;

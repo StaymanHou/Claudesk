@@ -311,6 +311,10 @@ describe("readTurn — trap 2: the chain window must not close early", () => {
 //     token — trap 1's real-world shape, the thing a file-level grep misreads as a verdict;
 //   • lines 1-2 are a real emitted verdict followed by a real `Skill` call — a true chain.
 //
+// ⚠️ M16.5 WP3 3.1: the redaction had folded the emitted verdict's prose and token onto one
+// line (`[redacted] TRANSITION: F7`), which the line-start rule reads as a QUOTE. The token is
+// back on its own line, the shape of an emitted verdict; only the redaction placeholder changed.
+//
 // ⚠️ If Claude Code's transcript format ever changes shape, THIS is the test that fails.
 describe("readTurn — against a REAL captured transcript", () => {
   const realLines = (): string[] =>

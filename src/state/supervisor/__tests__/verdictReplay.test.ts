@@ -112,11 +112,13 @@ describe("⚠️ the scoring set is the NON-CIRCULAR one", () => {
 });
 
 describe("M15 WP3 — the verdict replayed over the frozen fixture", () => {
-  it("⚠️ fires on 34 of the 36 operator-corroborated breaks", () => {
-    // The number the operator approved at verify-human (2026-09-13). Pinned EXACTLY rather
-    // than as a floor: a change in either direction is a behavior change worth reading. A
-    // higher number is not automatically better — it could mean the detector started firing
-    // on an edge the policy says to pause on.
+  it("⚠️ fires on 32 of the 36 operator-corroborated breaks", () => {
+    // The operator approved 34 at verify-human (2026-09-13). M16.5 WP3 3.4 took it to 32 by
+    // ruling, not by regression: the operator's 2026-10-21 ruling (design prior
+    // `supervisor-chains-execution-workflows-only`) is that the incident workflow never
+    // auto-chains, so the two incident nudges in this set (I17, I18) are no longer breaks the
+    // supervisor should fire. Pinned EXACTLY rather than as a floor: a change in either
+    // direction is a behavior change worth reading.
     const gt = groundTruth();
     const fired = gt.filter(
       (r) =>
@@ -124,13 +126,15 @@ describe("M15 WP3 — the verdict replayed over the frozen fixture", () => {
         "fire",
     );
     expect(gt.length).toBe(36);
-    expect(fired.length).toBe(34);
+    expect(fired.length).toBe(32);
   });
 
-  it("⚠️ pins the TWO misses and WHY each is correct behavior, not a defect", () => {
-    // Both were verified edge-by-edge at verify-self and accepted by the operator. Pinning
-    // the REASONS is what keeps a future regression from silently changing one of them into
-    // a fire while the 34/36 count stays put.
+  it("⚠️ pins the FOUR misses and WHY each is correct behavior, not a defect", () => {
+    // Pinning the REASONS is what keeps a future regression from silently changing one of
+    // them into a fire while the count stays put. All four are incident edges, and since
+    // M16.5 WP3 3.4 the workflow gate answers each before the policy is read. Before it, I2
+    // withheld as `unmapped` (no upstream row) and I6 as `policy-not-auto` (PAUSE at the
+    // incident-forced Mode 2), and I17/I18 fired.
     const misses = groundTruth()
       .map((r) => ({
         edge: r.edge_id,
@@ -144,13 +148,10 @@ describe("M15 WP3 — the verdict replayed over the frozen fixture", () => {
       .sort((a, b) => a.edge.localeCompare(b.edge));
 
     expect(misses).toEqual([
-      // The known upstream gap — no policy row governs it. Firing would require exactly the
-      // `?? "auto"` fallback the inherited contract forbids.
-      { edge: "I2", reason: "unmapped" },
-      // investigate -> mitigate. Row "before mitigate (I6)", cell PAUSE at the incident-forced
-      // Mode 2. The operator nudged past a pause upstream deliberately places before
-      // mitigating — the policy being right and the operator overriding it.
-      { edge: "I6", reason: "policy-not-auto" },
+      { edge: "I17", reason: "workflow-not-supervised" },
+      { edge: "I18", reason: "workflow-not-supervised" },
+      { edge: "I2", reason: "workflow-not-supervised" },
+      { edge: "I6", reason: "workflow-not-supervised" },
     ]);
   });
 

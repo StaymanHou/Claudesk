@@ -31,6 +31,7 @@ import {
   resetOrigins,
   type SupervisorOrigin,
 } from "../turnOrigin";
+import { claudeJsonReply } from "./adjudicatorReply";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -59,6 +60,17 @@ const tailFor = (edgeId: string, tokens?: number): TranscriptTail => ({
   ],
 });
 
+/** A closed turn whose final message is `text` verbatim (M16.5 WP3 3.1). */
+const textTail = (text: string): TranscriptTail => ({
+  path: "/t/a.jsonl",
+  lines: [
+    JSON.stringify({
+      type: "assistant",
+      message: { stop_reason: "end_turn", content: [{ type: "text", text }] },
+    }),
+  ],
+});
+
 /** A feature WIP at a non-final boundary, the shape that allows a recycle. */
 const WIP_AT_BOUNDARY = {
   path: "/p/workflow-system/state/wip/f.md",
@@ -80,6 +92,8 @@ interface Setup {
   claimAtInject?: boolean;
   unsentInput?: boolean;
   onRecycle?: (info: RecycleRequest) => RecycleStatus;
+  /** The adjudicator's raw stdout (default: the pinned model answering PROCEED). */
+  adjudicatorReply?: string;
 }
 
 let root: Root | null = null;
@@ -149,7 +163,8 @@ async function mount(setup: Setup = {}, extra: Setup[] = []) {
         return setup.tail();
       }
       if (cmd === "wip_read") return setup.wip ?? { path: null, text: "" };
-      if (cmd === "supervisor_adjudicate") return "PROCEED";
+      if (cmd === "supervisor_adjudicate")
+        return setup.adjudicatorReply ?? claudeJsonReply("PROCEED");
       if (cmd === "cc_input") {
         // Claim here, as the turn start this injection produces would: it proves the origin was
         // armed BEFORE the invoke, not after it resolved.
@@ -300,6 +315,75 @@ describe("AC-1: exactly one record per turn end, one per exit", () => {
     expect(records[0].reason).toBe("policy-not-auto");
     expect(records[0].edgeId).toBe("F3");
     expect(records[0].detail).toEqual(expect.any(String));
+  });
+
+  // M16.5 WP3 — the two withholds this WP added, through the real `useSupervisor` funnel
+  // (the consuming surface the live dev run drove), each with a positive control.
+  it("workflow-not-supervised: a product edge is recorded with its edge, and nothing reaches the PTY", async () => {
+    // P9 (wbs → context) is AUTO in autopilot and dispatchable; it fired before 3.4.
+    await mount({ tail: () => tailFor("P9") });
+    await turnEnd();
+    expect(records.map((r) => [r.outcome, r.reason, r.edgeId])).toEqual([
+      ["withheld", "workflow-not-supervised", "P9"],
+    ]);
+    expect(injected).toEqual([]);
+  });
+
+  it("⚠️ a token QUOTED mid-sentence is no verdict (the 2026-09-28 wrong fire)", async () => {
+    await mount({
+      tail: () => textTail("I am not emitting `TRANSITION: T2` here."),
+    });
+    await turnEnd();
+    expect(records.map((r) => [r.outcome, r.reason])).toEqual([
+      ["withheld", "no-verdict"],
+    ]);
+    expect(injected).toEqual([]);
+  });
+
+  it("…and the same edge EMITTED at the end of a sentence fires (positive control)", async () => {
+    await mount({ tail: () => textTail("Built. **TRANSITION: T2**") });
+    await turnEnd();
+    expect(records.map((r) => [r.outcome, r.command])).toEqual([
+      ["fired", "/task-act"],
+    ]);
+    expect(injected).toHaveLength(1);
+  });
+
+  // M16.5 WP3 3.6 — the resolved model reaches the durable record through the real funnel.
+  it("fired: the record carries the model that adjudicated it", async () => {
+    await mount({ tail: () => tailFor("F5") });
+    await turnEnd();
+    expect(
+      records.map((r) => [r.outcome, r.command, r.adjudicatorModel]),
+    ).toEqual([["fired", "/feature-plan", "claude-sonnet-5-5"]]);
+  });
+
+  it("⚠️ a reply from another model is an ERROR `adjudicator-failed`, naming that model, and nothing fires", async () => {
+    await mount({
+      tail: () => tailFor("F5"),
+      adjudicatorReply: claudeJsonReply("PROCEED", ["claude-sonnet-6"]),
+    });
+    await turnEnd();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      outcome: "error",
+      reason: "adjudicator-failed",
+      edgeId: "F5",
+      adjudicatorModel: "claude-sonnet-6",
+    });
+    expect(records[0].detail).toContain("withheld-on-model-mismatch");
+    expect(injected).toEqual([]);
+  });
+
+  it("a genuine AWAITING stays a WITHHOLD `adjudicator-says-awaiting`, with the model", async () => {
+    await mount({
+      tail: () => tailFor("F5"),
+      adjudicatorReply: claudeJsonReply("AWAITING"),
+    });
+    await turnEnd();
+    expect(
+      records.map((r) => [r.outcome, r.reason, r.adjudicatorModel]),
+    ).toEqual([["withheld", "adjudicator-says-awaiting", "claude-sonnet-5-5"]]);
   });
 
   it("unsent-input-present", async () => {

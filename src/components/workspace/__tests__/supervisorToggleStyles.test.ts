@@ -38,6 +38,8 @@ const CLASSES = {
   "workspace-header-supervisor-group": ".workspace-header-supervisor-group {",
   "workspace-header-supervisor-activity":
     ".workspace-header-supervisor-activity {",
+  // M16.5 WP3 — the structural-failure alarm marker.
+  "workspace-header-supervisor-alarm": ".workspace-header-supervisor-alarm {",
 } as const;
 
 /** The class tokens inside the toggle's `className` attributes — literal and template forms. */

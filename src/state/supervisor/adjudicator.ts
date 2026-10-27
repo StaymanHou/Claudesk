@@ -24,10 +24,13 @@
 //      `haiku` is NOT_SEPARABLE on identical data (23/29 vs sonnet's 25/29 against a >=24
 //      bar). A silent downgrade would regress the supervisor **with no code change and no
 //      signal**. → `ADJUDICATOR_MODEL` + `assertPinnedModel`.
-//      ⚠️ The pin is an ALIAS, and the assertion compares strings, so it cannot see the alias
-//      moving. It moved: `sonnet` resolved to `claude-sonnet-5` through 2026-09-28 and to
-//      `claude-sonnet-5-5` from 09-29 (M16.5 WP2), with no code change and no signal — the
-//      exact failure this condition names.
+//      ⚠️ The pin USED to be the alias `sonnet`, and the assertion compares strings, so it
+//      could not see the alias moving. It moved: `sonnet` resolved to `claude-sonnet-5`
+//      through 2026-09-28 and to `claude-sonnet-5-5` from 09-29 (M16.5 WP2), with no code
+//      change and no signal. M16.5 WP3 3.6 closed it two ways: the pin is now a FULL model id,
+//      and every reply is `--output-format json`, whose `modelUsage` names the model that
+//      actually answered. Anything but exactly the pin withholds as
+//      `withheld-on-model-mismatch` and surfaces on the badge alarm.
 //
 //   2. ⚠️ BIAS EVERY FAILURE TOWARD WITHHOLDING.
 //      On error, timeout, unavailability, or an unparseable answer the supervisor must NOT
@@ -58,7 +61,7 @@
  * The pinned adjudicator model. ⚠️ **Changing this string is a behavior change that must go
  * through a re-measurement**, not a config tweak — see condition 1 above.
  */
-export const ADJUDICATOR_MODEL = "sonnet";
+export const ADJUDICATOR_MODEL = "claude-sonnet-5-5";
 
 /** How long to wait for the adjudicator before giving up (and withholding). */
 export const ADJUDICATOR_TIMEOUT_MS = 20_000;
@@ -78,13 +81,57 @@ export type AdjudicationBasis =
   /** ⚠️ A failure path. Always pairs with `AWAITING` — see condition 2. */
   | "withheld-on-error"
   | "withheld-on-timeout"
-  | "withheld-on-unparseable";
+  | "withheld-on-unparseable"
+  /** The reply came from a model other than the pin (M16.5 WP3 3.6). */
+  | "withheld-on-model-mismatch";
 
 export interface AdjudicationResult {
   readonly answer: Adjudication;
   readonly basis: AdjudicationBasis;
   /** Model-reported text or the error, for `console.warn`. Never parsed for control flow. */
   readonly detail: string;
+  /**
+   * The model(s) that actually answered, comma-joined from the reply's `modelUsage`, or `null`
+   * when no reply envelope was read (spawn error, timeout, non-JSON stdout). For the activity
+   * record; the control decision is already in `basis`.
+   */
+  readonly model: string | null;
+}
+
+/** What `claude -p --output-format json` printed, reduced to what the adjudicator reads. */
+export interface ReplyEnvelope {
+  /** The model's text answer. */
+  readonly result: string;
+  /** CC reported the run itself as failed. */
+  readonly isError: boolean;
+  /** The models that answered (`modelUsage` keys), in reply order. */
+  readonly models: readonly string[];
+}
+
+/**
+ * Parse the JSON envelope `claude -p --output-format json` prints. `null` for anything that is
+ * not one (non-JSON, no string `result`), which the caller withholds on.
+ *
+ * Shape captured live from CC 2.1.310 (2026-10-26): `{type:"result", subtype:"success",
+ * is_error:false, result:"PROCEED", modelUsage:{"claude-sonnet-5-5":{…}}, …}`.
+ */
+export function parseReplyEnvelope(stdout: string): ReplyEnvelope | null {
+  let j: unknown;
+  try {
+    j = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  if (!j || typeof j !== "object") return null;
+  const o = j as { result?: unknown; is_error?: unknown; modelUsage?: unknown };
+  if (typeof o.result !== "string") return null;
+  const usage =
+    o.modelUsage && typeof o.modelUsage === "object" ? o.modelUsage : {};
+  return {
+    result: o.result,
+    isError: o.is_error === true,
+    models: Object.keys(usage),
+  };
 }
 
 /**
@@ -188,9 +235,10 @@ export async function adjudicate(
   const withheld = (
     basis: Exclude<AdjudicationBasis, "model">,
     detail: string,
+    resolved: string | null = null,
   ): AdjudicationResult => {
     warn(`supervisor adjudicator: ${basis} — withholding the fire. ${detail}`);
-    return { answer: "AWAITING", basis, detail };
+    return { answer: "AWAITING", basis, detail, model: resolved };
   };
 
   // ⚠️ **CONDITION 1 IS ENFORCED HERE, AT THE ONE PLACE AN ADJUDICATION ACTUALLY RUNS.**
@@ -222,12 +270,43 @@ export async function adjudicate(
     return withheld(basis, message);
   }
 
-  const parsed = parseAdjudication(raw);
+  const envelope = parseReplyEnvelope(raw);
+  if (envelope === null) {
+    return withheld(
+      "withheld-on-unparseable",
+      `reply was not a JSON envelope: ${JSON.stringify(raw.slice(0, 120))}`,
+    );
+  }
+  const resolved =
+    envelope.models.length > 0 ? envelope.models.join(",") : null;
+  if (envelope.isError) {
+    return withheld(
+      "withheld-on-error",
+      `claude reported an error: ${envelope.result.slice(0, 120)}`,
+      resolved,
+    );
+  }
+  // ⚠️ EXACTLY the pin, alone. An extra model (an auxiliary call CC starts making) is as
+  // unmeasured as a different one, so it withholds too, and the badge alarm makes it loud.
+  if (envelope.models.length !== 1 || envelope.models[0] !== model) {
+    return withheld(
+      "withheld-on-model-mismatch",
+      `answered by ${resolved ?? "an unreported model"}, pinned "${model}". Re-measure before changing the pin.`,
+      resolved,
+    );
+  }
+  const parsed = parseAdjudication(envelope.result);
   if (parsed === null) {
     return withheld(
       "withheld-on-unparseable",
-      `reply was ${JSON.stringify(raw.slice(0, 120))}`,
+      `reply was ${JSON.stringify(envelope.result.slice(0, 120))}`,
+      resolved,
     );
   }
-  return { answer: parsed, basis: "model", detail: raw.trim() };
+  return {
+    answer: parsed,
+    basis: "model",
+    detail: envelope.result.trim(),
+    model: resolved,
+  };
 }

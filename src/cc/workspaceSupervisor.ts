@@ -31,6 +31,7 @@ import {
 } from "../state/supervisor/activityRecord";
 import { relativeTime } from "../components/workspace/diff/diffModel";
 import type { SupervisorOrigin } from "../state/supervisor/turnOrigin";
+import type { SupervisorAlarm } from "../state/supervisor/failureAlarm";
 
 /** What the workspace header should render for the supervisor toggle. */
 export interface WorkspaceSupervisorReadout {
@@ -71,6 +72,11 @@ export interface WorkspaceSupervisorReadout {
    * here. With the gate OFF the whole readout is `null`, and so is this.
    */
   readonly turnBadge: SupervisorTurnBadge | null;
+  /**
+   * M16.5 WP3 — the structural-failure alarm, or `null`: a short marker text and the sentence
+   * the tooltip leads with. Part of THIS readout, so it inherits the gate (no seventh arm).
+   */
+  readonly alarm: { readonly text: string; readonly title: string } | null;
 }
 
 /** The turn readout's supervisor mark. */
@@ -110,6 +116,12 @@ export const SUPERVISOR_OFF_LABEL = "unsupervised";
 export const SUPERVISOR_SUPPRESSED_GLYPH = "⏸";
 
 /**
+ * The structural-failure alarm's glyph (M16.5 WP3). `!`, because `⚠` is the drive-mode
+ * readout's STALE marker and `⏸` is suppression; this one means "it keeps failing".
+ */
+export const SUPERVISOR_ALARM_GLYPH = "!";
+
+/**
  * Derive the workspace header's supervisor readout.
  *
  * ⚠️ **Returns `null` when the gate is OFF — the gate decision lives in ONE place**, and the
@@ -141,8 +153,26 @@ export function workspaceSupervisorReadout(
     readonly nowMs: number;
   } | null = null,
   turnOrigin: SupervisorOrigin | null = null,
+  failure: SupervisorAlarm | null = null,
 ): WorkspaceSupervisorReadout | null {
   if (!gateEnabled) return null;
+
+  // ⚠️ Shown whatever the toggle says: it reports what the log shows, and a supervisor turned
+  // off after failing has still been failing.
+  const alarm = failure
+    ? {
+        text: SUPERVISOR_ALARM_GLYPH,
+        title:
+          failure.kind === "transcript-format"
+            ? `SUPERVISOR CANNOT READ TURNS: the last ${failure.count} turn ends withheld ` +
+              '"transcript-incomplete". Claude Code\'s transcript format has probably changed, ' +
+              "so the supervisor will not fire until it is updated."
+            : `SUPERVISOR ADJUDICATOR FAILING: the last ${failure.count} fire candidates ` +
+              'withheld "adjudicator-failed" (an error, a timeout, or a model other than the ' +
+              "pinned one). See the ▾ activity list for the detail.",
+      }
+    : null;
+  const alarmLine = alarm ? `${alarm.title}\n\n` : "";
 
   // ⚠️ Suppression is only meaningful while supervision is ON. A workspace the operator turned
   // off is not "held back by your typing" — it is off. Showing both would make the badge mean
@@ -166,6 +196,7 @@ export function workspaceSupervisorReadout(
     // clears it — otherwise a held-back workspace reads as a broken one, which is the opposite
     // of the reassurance this marker exists to give.
     title:
+      alarmLine +
       (suppressed
         ? "Workflow supervisor is ON but HELD BACK — you have unsent input in this pane, so it " +
           "will not run a skill over what you are typing. Submit the line (or press Esc / " +
@@ -174,7 +205,8 @@ export function workspaceSupervisorReadout(
           ? "Workflow supervisor is ON for this project — it may auto-run the next skill when a " +
             "turn ends. Click to turn it off for this project only."
           : "Workflow supervisor is OFF for this project — it will never auto-run a skill here. " +
-            "Click to turn it back on.") + lastLine,
+            "Click to turn it back on.") +
+      lastLine,
     label:
       `Workflow supervisor for ${workspaceName}: ${enabled ? "on" : "off"}` +
       `${suppressed ? ", currently held back by unsent input" : ""}. Click to toggle.`,
@@ -186,5 +218,6 @@ export function workspaceSupervisorReadout(
           title: `The workflow supervisor started this turn (it ran ${turnOrigin.command}).`,
         }
       : null,
+    alarm,
   };
 }

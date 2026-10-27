@@ -11,7 +11,11 @@ import {
   uncaught,
   unmountWorkspace,
 } from "./liveWorkspace";
-import { resetActivityFeed } from "../../../state/supervisor/activityFeed";
+import {
+  publishActivity,
+  resetActivityFeed,
+} from "../../../state/supervisor/activityFeed";
+import { buildRecord } from "../../../state/supervisor/activityRecord";
 
 vi.mock(
   "../XtermPane",
@@ -237,5 +241,87 @@ describe("the activity popover and hint on a live Workspace", () => {
     expect(
       ipcCalls.filter((c) => c.cmd === "supervisor_activity_read"),
     ).toEqual([]);
+  });
+});
+
+// M16.5 WP3 3.2 / 3.6 — the structural-failure ALARM on the real `Workspace` header.
+describe("the failure alarm on a live Workspace", () => {
+  const ALARM = "workspace-header-supervisor-alarm";
+  /** Oldest first, as the durable file holds them. */
+  const failing = (n: number) =>
+    Array.from({ length: n }, (_, i) =>
+      line({
+        reason: "transcript-incomplete",
+        edgeId: null,
+        ts: Date.now() - 60_000 + i * 1_000,
+      }),
+    );
+
+  it("⚠️ survives a relaunch: the mount seed replays the log and raises it", async () => {
+    const el = await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      ipcAnswers: { supervisor_activity_read: failing(3) },
+    });
+    const marker = q(el, ALARM);
+    expect(marker?.textContent).toContain("!");
+    expect(marker?.getAttribute("title")).toContain(
+      "SUPERVISOR CANNOT READ TURNS",
+    );
+    expect(q(el, "workspace-header-supervisor")?.getAttribute("title")).toMatch(
+      /^SUPERVISOR CANNOT READ TURNS/,
+    );
+  });
+
+  it("a newer clean turn in the log means no alarm", async () => {
+    const el = await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      ipcAnswers: {
+        supervisor_activity_read: [
+          ...failing(3),
+          line({ reason: "no-verdict", ts: Date.now() - 1_000 }),
+        ],
+      },
+    });
+    expect(q(el, ALARM)).toBeNull();
+  });
+
+  it("appears live when the third failure is published, with no relaunch", async () => {
+    const el = await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+    });
+    const publish = async (i: number) =>
+      act(async () => {
+        publishActivity(
+          buildRecord({
+            ts: Date.now() + i,
+            appVersion: null,
+            workspaceId: "ws-1",
+            projectPath: OWN,
+            sessionId: null,
+            outcome: "error",
+            reason: "adjudicator-failed",
+          }),
+        );
+      });
+    await publish(1);
+    await publish(2);
+    expect(q(el, ALARM)).toBeNull();
+    await publish(3);
+    expect(q(el, ALARM)?.getAttribute("title")).toContain(
+      "SUPERVISOR ADJUDICATOR FAILING",
+    );
+  });
+
+  it("⚠️ with the gate OFF there is no alarm, even with the log full of failures", async () => {
+    const el = await mountWorkspace({
+      gate: false,
+      storedDriveMode: "autopilot",
+      ipcAnswers: { supervisor_activity_read: failing(5) },
+    });
+    expect(q(el, ALARM)).toBeNull();
+    expect(q(el, "workspace-header-supervisor")).toBeNull();
   });
 });

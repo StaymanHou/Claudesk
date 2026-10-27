@@ -161,6 +161,7 @@ export interface FanOutDeps {
 export type FanOutReason =
   | WithholdReason
   | "adjudicator-says-awaiting"
+  | "adjudicator-failed"
   | "transcript-unreadable"
   | "transcript-incomplete"
   | "no-transcript"
@@ -186,6 +187,8 @@ export interface FanOutOutcome {
   readonly mode?: DriveMode;
   /** The verdict's detail: the policy cell, or the adjudicator's basis. */
   readonly detail?: string;
+  /** The model that adjudicated, when the adjudicator ran (M16.5 WP3 3.6). */
+  readonly adjudicatorModel?: string | null;
   readonly tokens?: number;
   /**
    * M15 WP4 — set when the verdict was `recycle` rather than `fire`.
@@ -343,6 +346,7 @@ export async function fireOne(
     return {
       ...known,
       mode: verdict.mode,
+      adjudicatorModel: verdict.adjudicatorModel,
       workspaceId: workspace.workspaceId,
       fired: false,
       reason: "context-pressure-recycle",
@@ -354,10 +358,21 @@ export async function fireOne(
     };
   }
   if (verdict.kind !== "fire") {
-    known = { ...known, edgeId: verdict.edgeId, detail: verdict.detail };
+    known = {
+      ...known,
+      edgeId: verdict.edgeId,
+      detail: verdict.detail,
+      ...(verdict.adjudicatorModel === undefined
+        ? {}
+        : { adjudicatorModel: verdict.adjudicatorModel }),
+    };
     return no(verdict.reason);
   }
-  known = { ...known, mode: verdict.mode };
+  known = {
+    ...known,
+    mode: verdict.mode,
+    adjudicatorModel: verdict.adjudicatorModel,
+  };
 
   // ⚠️ M14 WP0 — THE UNSENT-INPUT SUPPRESSION. READ THE PLACEMENT NOTES BEFORE MOVING THIS.
   //

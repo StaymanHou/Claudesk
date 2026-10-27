@@ -231,6 +231,12 @@ the 29 scorable records the +1 margin rested on?
 - [ ] 5.6 **VFR frame-step** (`SURFACE-2026-10-20-REVIEW-PLAYER-VFR-FRAME-STEP`). Measure on a real
       macOS screen recording first. If steps skip or repeat, step by presented frames (rVFC
       `mediaTime`). If they don't, close the entry on the measurement.
+- [ ] 5.7 **Workspace list order** (`SURFACE-2026-10-27-WORKSPACE-LIST-ORDER-NEEDS-A-UX-PASS`; added
+      by the operator 2026-10-27). Design-first:
+  - Confirm which list ("selection box": the picker, or the filmstrip `▾`).
+  - Measure today's order for **A** (fresh launch) and **B** (some workspaces already open).
+  - Present orders with a recommendation (mockup if the difference is spatial). Build what the
+    operator picks.
 
 ### WP6: Per-result and per-file replace
 
@@ -442,6 +448,3 @@ the alias pin loud). R027 stays SKIP. No mccc note is sent.
 **Evidence:** `workflow-system/product/wp2-adjudicator-set.json` (361 records; text only on
 claudesk rows) and `src/state/supervisor/__tests__/adjudicatorRemeasure.test.ts`, a replay with
 no live calls that pins the verdict.
-
-## Session Handoff — 2026-10-26 09:40
-Handed off. See `workflow-system/state/.session.md` to restore.

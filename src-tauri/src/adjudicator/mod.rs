@@ -84,11 +84,20 @@ pub fn run_adjudicator(
     run_command(adjudicator_command(model), prompt, timeout_ms)
 }
 
-/// The `claude -p --model <model>` invocation. Its own function so a test can pin the argv
-/// without spawning `claude`.
+/// The `claude -p --model <model> --output-format json` invocation. Its own function so a test
+/// can pin the argv without spawning `claude`.
+///
+/// ⚠️ `--output-format json` (M16.5 WP3 3.6) makes stdout a JSON envelope whose `modelUsage`
+/// keys name the model that ACTUALLY answered. Rust still returns that stdout raw (R-4); the TS
+/// side parses it and withholds when the resolved model is not the pin. A plain-text reply can
+/// only say what was asked for, which is how an alias moved silently once.
 fn adjudicator_command(model: &str) -> Command {
     let mut cmd = Command::new("claude");
-    cmd.arg("-p").arg("--model").arg(model);
+    cmd.arg("-p")
+        .arg("--model")
+        .arg(model)
+        .arg("--output-format")
+        .arg("json");
     cmd
 }
 
@@ -365,7 +374,16 @@ mod tests {
         let cmd = adjudicator_command("claude-haiku-4-5");
         assert_eq!(cmd.get_program(), "claude");
         let args: Vec<_> = cmd.get_args().collect();
-        assert_eq!(args, ["-p", "--model", "claude-haiku-4-5"]);
+        assert_eq!(
+            args,
+            [
+                "-p",
+                "--model",
+                "claude-haiku-4-5",
+                "--output-format",
+                "json"
+            ]
+        );
     }
 
     // The tests below drive `run_command` — the SAME spawn/stdin/wait/kill code

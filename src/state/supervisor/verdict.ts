@@ -34,7 +34,7 @@
 // (R-6 condition 2), and a supervisor that silently declines is indistinguishable from one
 // that is broken. A named reason is what makes "it didn't fire" diagnosable.
 
-import { isDispatchable } from "../workflowMachine/types";
+import { isDispatchable, type WorkflowId } from "../workflowMachine/types";
 import { resolvePolicy } from "../workflowMachine/lookup";
 import type { DriveMode, PolicyContext } from "../workflowMachine/policy";
 import {
@@ -77,7 +77,12 @@ export type WithholdReason =
   /** Policy says AUTO but the edge's target is not a dispatchable skill. */
   | "not-dispatchable"
   /** The turn already invoked the next skill — nothing to do. */
-  | "already-chained";
+  | "already-chained"
+  /**
+   * The edge belongs to a workflow the supervisor never advances: product or incident.
+   * See {@link SUPERVISED_WORKFLOWS}.
+   */
+  | "workflow-not-supervised";
 
 /** The supervisor's decision for one turn. */
 export type Verdict =
@@ -87,7 +92,7 @@ export type Verdict =
       readonly edgeId: string;
       /** The slash command to inject, WITHOUT the leading slash. */
       readonly skill: string;
-      /** The mode actually applied (incidents force Mode 2 inside the funnel). */
+      /** The mode actually applied. (The funnel forces Mode 2 for incidents, but an incident edge never fires: see `SUPERVISED_WORKFLOWS`.) */
       readonly mode: DriveMode;
     }
   | {
@@ -98,6 +103,22 @@ export type Verdict =
       /** Human-readable detail for the diagnostic. */
       readonly detail: string;
     };
+
+/**
+ * The workflows the supervisor may advance (M16.5 WP3 3.4; operator ruling 2026-10-21, design
+ * prior `supervisor-chains-execution-workflows-only`).
+ *
+ * ⚠️ **An ALLOW-list, so a new workflow is human-paced until someone adds it here**, which is
+ * what the prior says. Product steps are strategy and incident steps are damage control: each
+ * output is something the operator weighs before the next step, so they withhold in EVERY mode,
+ * FSD included, even on an edge the pause-policy table marks AUTO. That table is mccc's meaning
+ * and stays right for a bare-terminal agent; this is Claudesk's turn-boundary scope.
+ *
+ * ⚠️ Keyed on `edge.workflow`, never on the id's letter: the id prefix only correlates with the
+ * workflow (`[[classifier-must-key-on-the-classified-property]]`).
+ */
+export const SUPERVISED_WORKFLOWS: ReadonlySet<WorkflowId> =
+  new Set<WorkflowId>(["feature", "task", "session-ops"]);
 
 /** Everything the verdict needs. Pure in, pure out — no IO, no React, no Tauri. */
 export interface VerdictInput {
@@ -203,6 +224,18 @@ export function decideVerdict(input: VerdictInput): Verdict {
       "unknown-edge",
       reading.edgeId,
       `"${reading.edgeId}" is not an edge in the graph`,
+    );
+  }
+
+  // ⚠️ Checked BEFORE the cell and the `unmapped` arm: the workflow alone decides, so the
+  // reason must not point an operator at the policy table. The edge comes from the funnel's
+  // own resolution (both arms carry it) rather than from the graph directly, which would make
+  // this module a second graph-to-policy wirer (`workflowMachineFunnel.test.ts`).
+  if (!SUPERVISED_WORKFLOWS.has(resolved.edge.workflow)) {
+    return withhold(
+      "workflow-not-supervised",
+      reading.edgeId,
+      `the ${resolved.edge.workflow} workflow is human-paced — the supervisor never advances it`,
     );
   }
   if (resolved.outcome === "unmapped") {
@@ -379,6 +412,8 @@ export type SupervisedVerdict =
       readonly edgeId: string;
       readonly skill: string;
       readonly mode: DriveMode;
+      /** The model that adjudicated this fire (M16.5 WP3 3.6), for the activity record. */
+      readonly adjudicatorModel: string | null;
     }
   | {
       /**
@@ -405,12 +440,26 @@ export type SupervisedVerdict =
       readonly mode: DriveMode;
       /** The context reading that crossed the threshold, for the diagnostic. */
       readonly tokens: number;
+      /** The model that adjudicated the turn first (M16.5 WP3 3.6). */
+      readonly adjudicatorModel: string | null;
     }
   | {
       readonly kind: "withhold";
-      readonly reason: WithholdReason | "adjudicator-says-awaiting";
+      readonly reason:
+        | WithholdReason
+        /** The pinned model answered AWAITING: the turn waits on the operator. */
+        | "adjudicator-says-awaiting"
+        /**
+         * The adjudication itself FAILED (error, timeout, unparseable reply, or a model other
+         * than the pin), so the turn withholds by R-6 condition 2. Kept apart from
+         * `adjudicator-says-awaiting` (M16.5 WP3) so a run of failures is countable by reason
+         * and raises the badge alarm, instead of reading as a string of genuine waits.
+         */
+        | "adjudicator-failed";
       readonly edgeId: string | null;
       readonly detail: string;
+      /** Set on the two adjudicator reasons; absent on mechanical withholds. */
+      readonly adjudicatorModel?: string | null;
     };
 
 /**
@@ -434,9 +483,13 @@ export async function decideSupervised(
   if (ruling.answer === "AWAITING") {
     return {
       kind: "withhold",
-      reason: "adjudicator-says-awaiting",
+      reason:
+        ruling.basis === "model"
+          ? "adjudicator-says-awaiting"
+          : "adjudicator-failed",
       edgeId: mechanical.edgeId,
       detail: `adjudicator (${ruling.basis}): ${ruling.detail}`,
+      adjudicatorModel: ruling.model,
     };
   }
 
@@ -460,9 +513,10 @@ export async function decideSupervised(
       skill: mechanical.skill,
       mode: mechanical.mode,
       tokens,
+      adjudicatorModel: ruling.model,
     };
   }
-  return mechanical;
+  return { ...mechanical, adjudicatorModel: ruling.model };
 }
 
 /**

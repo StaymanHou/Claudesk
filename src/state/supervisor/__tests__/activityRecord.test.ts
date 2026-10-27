@@ -34,7 +34,20 @@ describe("buildRecord", () => {
       detail: null,
       command: null,
       tokens: null,
+      adjudicatorModel: null,
     });
+  });
+
+  it("carries the adjudicator's resolved model when one is known (M16.5 WP3 3.6)", () => {
+    expect(
+      buildRecord({ ...base, adjudicatorModel: "claude-sonnet-5-5" })
+        .adjudicatorModel,
+    ).toBe("claude-sonnet-5-5");
+  });
+
+  it("an adjudicator FAILURE is an error outcome, a genuine AWAITING is a withhold", () => {
+    expect(outcomeForReason("adjudicator-failed")).toBe("error");
+    expect(outcomeForReason("adjudicator-says-awaiting")).toBe("withheld");
   });
 });
 

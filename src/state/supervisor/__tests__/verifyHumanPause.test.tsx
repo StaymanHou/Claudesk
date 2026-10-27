@@ -23,6 +23,7 @@ import {
   mayPromote,
   SessionSkillMemo,
 } from "../verifyHumanPause";
+import { claudeJsonReply } from "./adjudicatorReply";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -281,7 +282,7 @@ async function mount(setup: Setup = {}) {
         return true;
       }
       if (cmd === "wip_read") return { path: null, text: "" };
-      if (cmd === "supervisor_adjudicate") return "PROCEED";
+      if (cmd === "supervisor_adjudicate") return claudeJsonReply("PROCEED");
       if (cmd === "cc_input") {
         injected.push(String((args as { data: string }).data));
         return null;

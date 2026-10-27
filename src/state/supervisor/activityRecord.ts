@@ -62,12 +62,19 @@ export interface ActivityRecord {
   readonly command: string | null;
   /** The context token reading, when it was taken. */
   readonly tokens: number | null;
+  /**
+   * The model(s) that actually adjudicated, from the reply's `modelUsage` (M16.5 WP3 3.6), or
+   * `null` when no adjudication ran or no reply was read. Added without a `v` bump: a new
+   * field changes no existing field's meaning. Optional because lines written before it lack it.
+   */
+  readonly adjudicatorModel?: string | null;
 }
 
 /** Failures of the supervisor's own machinery, as opposed to decisions it made. */
 const ERROR_REASONS: ReadonlySet<SupervisorReason> = new Set<SupervisorReason>([
   "sweep-threw",
   "inject-failed",
+  "adjudicator-failed",
 ]);
 
 /** The outcome a non-fire, non-recycle reason maps to. */
@@ -90,6 +97,7 @@ export interface RecordInput {
   readonly detail?: string | null;
   readonly command?: string | null;
   readonly tokens?: number | null;
+  readonly adjudicatorModel?: string | null;
 }
 
 /** Build a complete record, filling every absent optional field with `null`. */
@@ -109,6 +117,7 @@ export function buildRecord(input: RecordInput): ActivityRecord {
     detail: input.detail ?? null,
     command: input.command ?? null,
     tokens: input.tokens ?? null,
+    adjudicatorModel: input.adjudicatorModel ?? null,
   };
 }
 

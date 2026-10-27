@@ -25,6 +25,8 @@ import {
 import { EDGES } from "../../workflowMachine/edges";
 import { isDispatchable } from "../../workflowMachine/types";
 import { DRIVE_MODES } from "../../workflowMachine/policy";
+import { resolvePolicy } from "../../workflowMachine/lookup";
+import { claudeJsonReply } from "./adjudicatorReply";
 
 const assistantText = (text: string): TranscriptLine => ({
   type: "assistant",
@@ -60,15 +62,16 @@ describe("decideVerdict — the fire path", () => {
     expect(v.mode).toBe("autopilot");
   });
 
-  it("reports the EFFECTIVE mode — incidents are forced to Mode 2 inside the funnel", () => {
-    // ⚠️ I5 resolves AUTO even when the stored mode is `stepping`, because the funnel
-    // applies the incident override. The verdict must report the mode that was APPLIED,
-    // not the one requested — otherwise a diagnostic reads as a contradiction.
-    const v = decide(emitted("I5"), "stepping");
-    expect(v.kind).toBe("fire");
-    if (v.kind !== "fire") return;
-    expect(v.skill).toBe("incident-investigate");
-    expect(v.mode).toBe("orchestrated");
+  it("⚠️ never fires an incident edge, even where the funnel's forced Mode 2 says AUTO", () => {
+    // I5 resolves AUTO even when the stored mode is `stepping`, because the funnel applies the
+    // incident override (Mode 2). It used to FIRE here. M16.5 WP3 3.4: the incident workflow is
+    // human-paced, so the edge withholds before the policy is read, in every mode.
+    for (const mode of ["stepping", "autopilot", "fsd"] as const) {
+      const v = decide(emitted("I5"), mode);
+      expect(v.kind).toBe("withhold");
+      if (v.kind !== "withhold") return;
+      expect(v.reason).toBe("workflow-not-supervised");
+    }
   });
 });
 
@@ -156,13 +159,17 @@ describe("decideVerdict — ⚠️ the negative arm, asserted as hard as the pos
   });
 
   it("⚠️ withholds on an UNMAPPED edge — never coerced to auto", () => {
-    // I2 (report → triage) has NO governing policy row upstream and IS dispatchable — the
-    // single most dangerous edge for an `?? "auto"` fallback. 31 edges are unmapped; a
-    // default would fire on all of them.
-    const v = decide(emitted("I2"));
+    // F2 (entry → plan) has no governing policy row (an entry sentinel) and IS dispatchable,
+    // so an `?? "auto"` fallback would fire it. 31 edges are unmapped; a default would fire on
+    // all of them. ⚠️ This used I2 (the one `no-row-upstream` edge) until M16.5 WP3 3.4 put the
+    // incident workflow behind `workflow-not-supervised`, which now answers I2 first. I2 is
+    // still unmapped in the funnel, so lifting that gate would bring the danger back:
+    // asserted below so this test says so.
+    const v = decide(emitted("F2"));
     expect(v.kind).toBe("withhold");
     if (v.kind !== "withhold") return;
     expect(v.reason).toBe("unmapped");
+    expect(resolvePolicy("I2", "autopilot").outcome).toBe("unmapped");
   });
 
   it("withholds when the turn already chained", () => {
@@ -209,6 +216,88 @@ describe("decideVerdict — mode sensitivity", () => {
     expect(stepping.kind).toBe("withhold");
     if (stepping.kind !== "withhold") return;
     expect(stepping.reason).toBe("policy-not-auto");
+  });
+});
+
+describe("⚠️ decideVerdict — only the execution workflows chain (M16.5 WP3 3.4)", () => {
+  // The 31 product/incident fire candidates M16.5 WP2 mined from the corpus by driving the
+  // real `decideVerdict`, as an edge multiset (the transcript text is not committed). Each one
+  // fired before 3.4.
+  const WP2_MINED_PRODUCT_AND_INCIDENT: Readonly<Record<string, number>> = {
+    P9: 13,
+    I18: 5,
+    P3: 4,
+    P7: 4,
+    P5: 3,
+    I14: 1,
+    I17: 1,
+  };
+
+  it("pins the fixture's size to the 31 WP2 counted", () => {
+    const total = Object.values(WP2_MINED_PRODUCT_AND_INCIDENT).reduce(
+      (a, b) => a + b,
+      0,
+    );
+    expect(total).toBe(31);
+  });
+
+  it("⚠️ withholds every mined candidate, and the GATE is what stops it", () => {
+    for (const edgeId of Object.keys(WP2_MINED_PRODUCT_AND_INCIDENT)) {
+      // Anti-vacuity: without the gate this edge would fire in autopilot (AUTO cell and a
+      // dispatchable target), so the withhold below is the gate's doing and nothing else's.
+      const r = resolvePolicy(edgeId, "autopilot");
+      expect(r.outcome, edgeId).toBe("resolved");
+      if (r.outcome !== "resolved") continue;
+      expect(r.cell.kind, edgeId).toBe("auto");
+      expect(isDispatchable(r.edge.dispatchTarget), edgeId).toBe(true);
+
+      const v = decide(emitted(edgeId));
+      expect(v.kind, edgeId).toBe("withhold");
+      if (v.kind !== "withhold") continue;
+      expect(v.reason, edgeId).toBe("workflow-not-supervised");
+    }
+  });
+
+  it("withholds EVERY product and incident edge in EVERY mode, FSD included", () => {
+    const gated = EDGES.filter(
+      (e) => e.workflow === "product" || e.workflow === "incident",
+    );
+    expect(gated.length).toBeGreaterThan(0);
+    for (const e of gated) {
+      for (const mode of DRIVE_MODES) {
+        const v = decide(emitted(e.id), mode);
+        expect(v.kind, `${e.id} in ${mode}`).toBe("withhold");
+        if (v.kind !== "withhold") continue;
+        expect(v.reason, `${e.id} in ${mode}`).toBe("workflow-not-supervised");
+      }
+    }
+  });
+
+  it("decides feature, task and session-ops edges exactly as before (the gate never fires)", () => {
+    for (const workflow of ["feature", "task", "session-ops"] as const) {
+      const edges = EDGES.filter((e) => e.workflow === workflow);
+      expect(edges.length, workflow).toBeGreaterThan(0);
+      // At least one edge per workflow must still FIRE, or "unchanged" is vacuous.
+      let fired = 0;
+      for (const e of edges) {
+        for (const mode of DRIVE_MODES) {
+          const v = decide(emitted(e.id), mode);
+          if (v.kind === "fire") fired++;
+          else
+            expect(v.reason, `${e.id} in ${mode}`).not.toBe(
+              "workflow-not-supervised",
+            );
+        }
+      }
+      expect(fired, workflow).toBeGreaterThan(0);
+    }
+  });
+
+  it("keys on the edge's WORKFLOW, so an unknown id still reports unknown-edge", () => {
+    const v = decide(emitted("P999"));
+    expect(v.kind).toBe("withhold");
+    if (v.kind !== "withhold") return;
+    expect(v.reason).toBe("unknown-edge");
   });
 });
 
@@ -326,7 +415,7 @@ describe("FireLedger — ⚠️ idempotency keyed on the TURN", () => {
 
 describe("⚠️ decideSupervised — the HYBRID's ordering", () => {
   const tailDeps = (answer: string) => ({
-    run: async () => answer,
+    run: async () => claudeJsonReply(answer),
     warn: () => {},
   });
 
@@ -380,7 +469,7 @@ describe("⚠️ decideSupervised — the HYBRID's ordering", () => {
       {
         run: async () => {
           calls++;
-          return "PROCEED";
+          return claudeJsonReply("PROCEED");
         },
         warn: () => {},
       },
@@ -395,18 +484,20 @@ describe("⚠️ decideSupervised — the HYBRID's ordering", () => {
     const d = {
       run: async ({ prompt }: { prompt: string }) => {
         adjudicated.push(prompt);
-        return "PROCEED";
+        return claudeJsonReply("PROCEED");
       },
       warn: () => {},
     };
-    for (const edge of ["F5", "F6", "P3", "P5"]) {
+    // ⚠️ Execution-workflow edges only: product (`P*`) edges withhold before adjudication
+    // since M16.5 WP3 3.4.
+    for (const edge of ["F5", "F6", "T2", "S22"]) {
       await decideSupervised(
         { lines: emitted(edge), storedMode: "autopilot", tail: `tail-${edge}` },
         d,
       );
     }
     expect(adjudicated).toHaveLength(4);
-    for (const edge of ["F5", "F6", "P3", "P5"]) {
+    for (const edge of ["F5", "F6", "T2", "S22"]) {
       expect(adjudicated.some((p) => p.includes(`tail-${edge}`))).toBe(true);
     }
   });
@@ -423,8 +514,45 @@ describe("⚠️ decideSupervised — the HYBRID's ordering", () => {
     );
     expect(r.kind).toBe("withhold");
     if (r.kind !== "withhold") return;
-    expect(r.reason).toBe("adjudicator-says-awaiting");
+    // M16.5 WP3: a FAILED adjudication has its own reason, so a run of them is countable.
+    expect(r.reason).toBe("adjudicator-failed");
     expect(r.detail).toContain("withheld-on-error");
+  });
+
+  it("a genuine AWAITING from the pinned model keeps `adjudicator-says-awaiting`, with the model", async () => {
+    const r = await decideSupervised(
+      { lines: emitted("F5"), storedMode: "autopilot", tail: "Shall I?" },
+      { run: async () => claudeJsonReply("AWAITING"), warn: () => {} },
+    );
+    expect(r.kind).toBe("withhold");
+    if (r.kind !== "withhold") return;
+    expect(r.reason).toBe("adjudicator-says-awaiting");
+    expect(r.adjudicatorModel).toBe("claude-sonnet-5-5");
+  });
+
+  it("a reply from a model other than the pin is a FAILED adjudication", async () => {
+    const r = await decideSupervised(
+      { lines: emitted("F5"), storedMode: "autopilot", tail: "Done." },
+      {
+        run: async () => claudeJsonReply("PROCEED", ["claude-sonnet-6"]),
+        warn: () => {},
+      },
+    );
+    expect(r.kind).toBe("withhold");
+    if (r.kind !== "withhold") return;
+    expect(r.reason).toBe("adjudicator-failed");
+    expect(r.detail).toContain("withheld-on-model-mismatch");
+    expect(r.adjudicatorModel).toBe("claude-sonnet-6");
+  });
+
+  it("a fire carries the model that adjudicated it", async () => {
+    const r = await decideSupervised(
+      { lines: emitted("F5"), storedMode: "autopilot", tail: "Done." },
+      { run: async () => claudeJsonReply("PROCEED"), warn: () => {} },
+    );
+    expect(r.kind).toBe("fire");
+    if (r.kind !== "fire") return;
+    expect(r.adjudicatorModel).toBe("claude-sonnet-5-5");
   });
 });
 
@@ -437,7 +565,7 @@ describe("⚠️ decideSupervised — the HYBRID's ordering", () => {
 // to `fire` — that is what proves each arm is load-bearing.
 describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
   const tailDeps = (answer: string) => ({
-    run: async () => answer,
+    run: async () => claudeJsonReply(answer),
     warn: () => {},
   });
 

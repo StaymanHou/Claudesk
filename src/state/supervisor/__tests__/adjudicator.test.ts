@@ -14,8 +14,10 @@ import {
   ADJUDICATOR_TIMEOUT_MS,
   assertPinnedModel,
   parseAdjudication,
+  parseReplyEnvelope,
   type AdjudicatorDeps,
 } from "../adjudicator";
+import { claudeJsonReply } from "./adjudicatorReply";
 
 const deps = (
   run: AdjudicatorDeps["run"],
@@ -25,26 +27,33 @@ const deps = (
 };
 
 describe("⚠️ R-6 condition 1 — the model is PINNED and a change fails loudly", () => {
-  it("pins sonnet", () => {
-    // haiku is NOT_SEPARABLE on identical data (23/29 vs 25/29 against a >=24 bar).
-    expect(ADJUDICATOR_MODEL).toBe("sonnet");
+  it("pins a FULL model id, never an alias", () => {
+    // haiku is NOT_SEPARABLE on identical data (23/29 vs 25/29 against a >=24 bar). And the
+    // pin must not be an alias: `sonnet` moved to a new model on 2026-09-29 with no code change
+    // and no signal (M16.5 WP3 3.6).
+    expect(ADJUDICATOR_MODEL).toBe("claude-sonnet-5-5");
+    expect(ADJUDICATOR_MODEL).toMatch(/^claude-[a-z]+-\d/);
   });
 
   it("throws — not warns — when the model is not the pinned one", () => {
     // ⚠️ THE POINT OF THE CONDITION. A silent downgrade regresses break detection with NO
     // code change and NO signal, so the failure has to be impossible to ignore.
-    expect(() => assertPinnedModel("haiku")).toThrow(/must be "sonnet"/);
+    expect(() => assertPinnedModel("haiku")).toThrow(
+      /must be "claude-sonnet-5-5"/,
+    );
     expect(() => assertPinnedModel("haiku")).toThrow(/NOT_SEPARABLE/);
     expect(() => assertPinnedModel(null)).toThrow(/got none/);
     expect(() => assertPinnedModel(undefined)).toThrow(/got none/);
-    expect(() => assertPinnedModel("sonnet")).not.toThrow();
+    // The alias is not the pin either: it is exactly the thing that moved silently.
+    expect(() => assertPinnedModel("sonnet")).toThrow();
+    expect(() => assertPinnedModel(ADJUDICATOR_MODEL)).not.toThrow();
   });
 
   it("passes the pinned model to the runner, not whatever the caller supplies", () => {
     const seen: string[] = [];
     const d = deps(async ({ model }) => {
       seen.push(model);
-      return "PROCEED";
+      return claudeJsonReply("PROCEED");
     });
     return adjudicate("tail", d).then(() => {
       expect(seen).toEqual([ADJUDICATOR_MODEL]);
@@ -87,18 +96,40 @@ describe("⚠️ R-6 condition 2 — EVERY failure path withholds", () => {
     ]) {
       const r = await adjudicate(
         "tail",
-        deps(async () => reply),
+        deps(async () => claudeJsonReply(reply)),
       );
       expect(r.answer, `reply ${JSON.stringify(reply)}`).toBe("AWAITING");
       expect(r.basis).toBe("withheld-on-unparseable");
     }
   });
 
+  it("⚠️ withholds when stdout is not the JSON envelope at all (M16.5 WP3 3.6)", async () => {
+    // A bare "PROCEED" is what the runner returned before `--output-format json`; it is now as
+    // unreadable as garbage, because it says nothing about which model answered.
+    for (const stdout of ["PROCEED", "", "{", JSON.stringify({ result: 1 })]) {
+      const r = await adjudicate(
+        "tail",
+        deps(async () => stdout),
+      );
+      expect(r.answer, `stdout ${JSON.stringify(stdout)}`).toBe("AWAITING");
+      expect(r.basis).toBe("withheld-on-unparseable");
+    }
+  });
+
+  it("⚠️ withholds when CC reports the run as an error, even with a PROCEED result", async () => {
+    const r = await adjudicate(
+      "tail",
+      deps(async () => claudeJsonReply("PROCEED", undefined, true)),
+    );
+    expect(r.answer).toBe("AWAITING");
+    expect(r.basis).toBe("withheld-on-error");
+  });
+
   it("⚠️ has NO path to PROCEED except the pinned model explicitly saying so", async () => {
     // The structural statement of condition 2: the only way to get a fire is an exact answer.
     const proceeding = await adjudicate(
       "tail",
-      deps(async () => "PROCEED"),
+      deps(async () => claudeJsonReply("PROCEED")),
     );
     expect(proceeding.answer).toBe("PROCEED");
     expect(proceeding.basis).toBe("model");
@@ -110,7 +141,7 @@ describe("⚠️ R-6 condition 2 — EVERY failure path withholds", () => {
     );
     const garbage = await adjudicate(
       "tail",
-      deps(async () => "maybe"),
+      deps(async () => claudeJsonReply("maybe")),
     );
     expect([rejected.answer, garbage.answer]).toEqual(["AWAITING", "AWAITING"]);
   });
@@ -270,7 +301,7 @@ describe("⚠️ CONDITION 1 IS LIVE — the pin runs, it is not merely exported
 
   it("THROWS when a caller overrides the model — a downgrade cannot run silently", async () => {
     const deps: AdjudicatorDeps = {
-      run: async () => "PROCEED",
+      run: async () => claudeJsonReply("PROCEED"),
       model: "haiku",
       warn: () => {},
     };
@@ -278,7 +309,7 @@ describe("⚠️ CONDITION 1 IS LIVE — the pin runs, it is not merely exported
     // RUNTIME failures toward withholding, but a wrong pinned model is a CONFIGURATION error
     // the operator must see, not a turn to skip quietly.
     await expect(adjudicate("any tail", deps)).rejects.toThrow(
-      /model must be "sonnet"/,
+      /model must be "claude-sonnet-5-5"/,
     );
   });
 
@@ -289,7 +320,7 @@ describe("⚠️ CONDITION 1 IS LIVE — the pin runs, it is not merely exported
     const deps: AdjudicatorDeps = {
       run: async () => {
         ran = true;
-        return "PROCEED";
+        return claudeJsonReply("PROCEED");
       },
       model: "opus",
       warn: () => {},
@@ -306,12 +337,76 @@ describe("⚠️ CONDITION 1 IS LIVE — the pin runs, it is not merely exported
     const deps: AdjudicatorDeps = {
       run: async (a) => {
         seen.push(a.model);
-        return "PROCEED";
+        return claudeJsonReply("PROCEED");
       },
       warn: () => {},
     };
     const r = await adjudicate("any tail", deps);
     expect(r.answer).toBe("PROCEED");
     expect(seen).toEqual([ADJUDICATOR_MODEL]);
+  });
+});
+
+describe("⚠️ M16.5 WP3 3.6 — the RESOLVED model must be the pin", () => {
+  // The requested model is checked before the spawn (above); this checks what actually
+  // answered, read from the reply's `modelUsage`. That is the half an alias can defeat.
+
+  it("records the resolved model on a real answer", async () => {
+    const r = await adjudicate(
+      "tail",
+      deps(async () => claudeJsonReply("PROCEED")),
+    );
+    expect(r).toMatchObject({
+      answer: "PROCEED",
+      basis: "model",
+      model: "claude-sonnet-5-5",
+    });
+  });
+
+  it("⚠️ a reply from a DIFFERENT model withholds, even when it says PROCEED", async () => {
+    const r = await adjudicate(
+      "tail",
+      deps(async () => claudeJsonReply("PROCEED", ["claude-sonnet-6"])),
+    );
+    expect(r.answer).toBe("AWAITING");
+    expect(r.basis).toBe("withheld-on-model-mismatch");
+    expect(r.model).toBe("claude-sonnet-6");
+    expect(r.detail).toContain("claude-sonnet-6");
+  });
+
+  it("⚠️ an EXTRA model beside the pin withholds too (exactly the pin, alone)", async () => {
+    const r = await adjudicate(
+      "tail",
+      deps(async () =>
+        claudeJsonReply("PROCEED", [ADJUDICATOR_MODEL, "claude-haiku-5-5"]),
+      ),
+    );
+    expect(r.basis).toBe("withheld-on-model-mismatch");
+    expect(r.model).toBe("claude-sonnet-5-5,claude-haiku-5-5");
+  });
+
+  it("an envelope with NO model reported withholds as a mismatch, with model null", async () => {
+    const r = await adjudicate(
+      "tail",
+      deps(async () => claudeJsonReply("PROCEED", [])),
+    );
+    expect(r.basis).toBe("withheld-on-model-mismatch");
+    expect(r.model).toBeNull();
+  });
+
+  it("parses the envelope shape captured live from CC 2.1.310", () => {
+    const live = JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result: "PROCEED",
+      modelUsage: { "claude-sonnet-5-5": { inputTokens: 3 } },
+      total_cost_usd: 0.01,
+    });
+    expect(parseReplyEnvelope(live)).toEqual({
+      result: "PROCEED",
+      isError: false,
+      models: ["claude-sonnet-5-5"],
+    });
   });
 });

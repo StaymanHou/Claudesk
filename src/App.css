@@ -647,6 +647,16 @@ body,
   opacity: 0.75;
 }
 
+/* M16.5 WP3 — the structural-failure ALARM: the supervisor has failed the same way several turns in
+   a row (transcript format, or the adjudicator). ⚠️ Unlike suppression this IS a fault, so it takes
+   the error red the activity popover already uses for `is-error` rows (#f85149), per
+   `reuse-the-established-status-palette-before-inventing-a-hue`. Not the alarm-blue #539bf5
+   (AwaitingInput: "needs your answer"): this needs a fix, not a reply. */
+.workspace-header-supervisor-alarm {
+  color: #f85149;
+  font-weight: 700;
+}
+
 /* Unsupervised — the same calm grey `.status-dot-idle` uses. */
 .workspace-header-supervisor.is-off {
   background-color: rgba(128, 128, 128, 0.12);

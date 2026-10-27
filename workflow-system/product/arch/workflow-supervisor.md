@@ -111,6 +111,22 @@ header warns: *"Do not 'simplify' the count in either direction without reading 
 bare step name, only 8 on an `F<n>` id). The detector parses an **edge**; the policy is recorded
 per **state**, so the edge→policy-row mapping is **derivation work, not a lookup**.
 
+### Only the EXECUTION workflows chain (M16.5 WP3, 2026-10-26)
+
+⚠️ **`decideVerdict` withholds `workflow-not-supervised` on any edge whose `edge.workflow` is not
+in `SUPERVISED_WORKFLOWS` (`verdict.ts`): `feature`, `task`, `session-ops`.** Product and incident
+edges never fire, in any mode, FSD included. Operator ruling 2026-10-21 (prior
+`supervisor-chains-execution-workflows-only`): the pause-policy table marks some `P*`/`I*` edges
+AUTO, and autopilot was firing `/product-research` or `/incident-resolve` unattended (31 of 361
+mined fire candidates).
+- It is an **allow-list**, so a workflow added upstream is unsupervised until it is named.
+- The gate sits after `already-chained` and before the policy cell. `unknown-edge` is still
+  reported first. It reads the edge off `resolvePolicy`'s own resolution, because importing
+  `edges` directly trips the funnel guard ("wires graph to policy in exactly ONE module").
+  `resolvePolicy` itself is unchanged: it is still the policy truth for other readers.
+- The M15 replay moved from 34/36 to **32/36** fires. The two that left are the incident nudges
+  I17/I18, as the ruling intends.
+
 ### The one conditional cell — and its fallback is a safety property
 
 `verify-human` in autopilot is `autoSkip(["no-integration-boundary","verify-self-all-pass"],
@@ -168,6 +184,28 @@ the report-raised watermark (§F).
   (→ `no-verdict`). Unscoped, it FIRED one live (a turn ending on `F8` fired the previous turn's
   `T2` as `/task-act`). The ledger could not have stopped that, because `verdictIndex` indexes the
   512 KiB tail window, shifts once the file outgrows it, and lives in memory.
+- **Which token is the verdict (`extractEmittedTransitionId`, `transitionToken.ts`; M16.5 WP3,
+  2026-10-26).** `readTurn` used to take the LAST `TRANSITION:` anywhere in the final text, so a
+  token the model merely QUOTED (``I'd stopped on `TRANSITION: F8` ``) fired a skill (seen live
+  2026-09-28). The rule now is that **the token opens a clause and is not quoted**, and the last
+  such token wins. It is the only token regex in production `src/`.
+  - ⚠️ **NOT "line start".** That was the WBS default, and replaying it over the corpus showed it
+    would have withheld **132 of 477** recent real verdicts. The shipped rule withholds 7 of 478
+    (5 quotes, plus 2 real mid-sentence verdicts such as `…, so TRANSITION: F30.`). Since June it
+    is 86 of 8,347 withheld, 4 changed (older multi-token lines), and **0 gained**. The replay is
+    `tooling/adjudicator-probe/tokenSplit.probe.ts`, driving the real `readTurn`. The operator
+    kept this rule over line start.
+  - A fenced block is **not** a quote (older sessions emitted the verdict alone inside a fence).
+    A code span is a quote only when it holds **other text before** the token. A span the token
+    opens (`` `TRANSITION: F8` — build ``) is emitted.
+  - The upstream fix is mccc's: an inbox request for one canonical form, a bare
+    `TRANSITION: <id>` final line (`workflow-system/outbox/HANDOFF-to-mccc-2026-10-26-canonical-transition-token.md`).
+- **The format the completion check depends on is PINNED (M16.5 WP3 3.2).** `transcriptFormat.test.ts`
+  drives the real `isTurnComplete` over a live-captured, whitelist-redacted turn close
+  (`__tests__/fixtures/live-turn-close.jsonl`, CC 2.1.310). Each signal (`stop_reason`,
+  `stop_hook_summary`, `turn_duration`) has its own test with the other two removed. Refresh it
+  with `tooling/adjudicator-probe/transcriptFixture.probe.ts`. Renaming the `end_turn` VALUE is an
+  equivalent mutant by design: any non-`tool_use` stop reason is terminal.
 
 ### Idempotency — the `FireLedger`
 
@@ -189,8 +227,19 @@ Measured: the best regex arm caught 7/30 wrong-fires at a cost of 4/43 true brea
 catches 25/29 at a cost of 6/41.
 
 **R-6's three binding conditions:**
-1. **The model is PINNED** (`sonnet`) and `assertPinnedModel` runs inside `adjudicate` before every
-   spawn — a silent downgrade regresses the supervisor with no code change and no signal.
+1. **The model is PINNED to a FULL id, and the resolved id is CHECKED** *(M16.5 WP3 3.6,
+   2026-10-26)*. `ADJUDICATOR_MODEL = "claude-sonnet-5-5"`, and `assertPinnedModel` runs inside
+   `adjudicate` before every spawn. ⚠️ Until WP3 the pin was the alias `"sonnet"` (historical),
+   which moved silently to `claude-sonnet-5-5` on 2026-09-29, so condition 1 could not see a
+   moving alias. Now Rust spawns `claude -p --model <id> --output-format json` and returns stdout
+   raw (R-4). `adjudicate` parses the envelope (`parseReplyEnvelope`) and requires the resolved
+   `modelUsage` models to be **exactly the pin, alone**. All 873 WP2 scoring calls resolved that
+   way. Otherwise it withholds as `withheld-on-model-mismatch` (another model, an extra one, or
+   none), `withheld-on-error` (`is_error`, or a spawn/IPC failure that is not a timeout),
+   `withheld-on-unparseable` (not JSON, or a `result` that is neither AWAITING nor PROCEED) or
+   `withheld-on-timeout`. Every basis other than `model` becomes the record reason
+   `adjudicator-failed` (`decideSupervised`, `verdict.ts`; §F) and feeds the alarm. A genuine
+   `AWAITING` from the pinned model stays `adjudicator-says-awaiting`.
 2. **The failure direction is WITHHOLDING.** On adjudicator error/timeout/unavailability the
    supervisor must **not** fire: "stays silent, operator nudges" is the recoverable status quo,
    while firing into an awaiting turn is not.
@@ -203,6 +252,21 @@ catches 25/29 at a cost of 6/41.
    2026-09-29 (condition 1 cannot see a moving alias). Follow-ups: WBS WP3 3.5 (revise the
    question) and 3.6 (a loud pin). Evidence: `wbs.md` → "Probe outcomes" → WP2,
    `wp2-adjudicator-set.json`, `src/state/supervisor/__tests__/adjudicatorRemeasure.test.ts`.
+   ⚠️ **3.5 re-measured it and KEPT THE QUESTION (M16.5 WP3, 2026-10-27).** Five candidate
+   questions were tuned on a seeded dev split of the frozen set (seed 20261026, 146 rows), and
+   the best was scored once on the untouched held-out half (145 rows, 3 runs). The best, v5
+   (hash `7c3133ebe6f3384a`), asks whether the turn itself puts a concrete question or task in
+   front of the operator. It held **0.830 / fired 0.801** against the shipped question's **0.869
+   / 0.695** on the same rows, which misses the operator's waits-held floor of ≥0.85, so
+   `adjudicationPrompt` is unchanged. ⚠️ **The ceiling is the INPUT, not the wording.** Across all
+   five candidates, each break gained cost about one wait. A "ready for your review" stop BEFORE
+   verify-human runs is a break; the verify-human turn that presents the checklist is a wait; the
+   last 400 characters read alike. A next attempt needs more input (the edge id, whether the next
+   skill presents its own checklist), not another rewording. The tooling is
+   `tooling/adjudicator-probe/wp3.probe.ts` + `candidates.ts` + `wp3.ts`: the split is written
+   once, `final` refuses without a candidate hash recorded first, the frozen labels are
+   hash-checked, and an `error` row is retried and superseded rather than left to score as
+   AWAITING. A residual one would still score AWAITING; the final held-out runs had none.
 
 ---
 
@@ -280,8 +344,33 @@ for dev. It is size-capped at 5 MiB with one rotated generation (`.log.1`), reus
   last_event_at)`, module-level in `turnEndDedupe.ts`. A repeat is recorded as
   `duplicate-turn-end` and never decided again. An event with no `last_event_at` is never deduped.
   If this reason ever appears in the log, the duplicate consumer is back: go and find it.
+  ⚠️ **M16.5 WP3 (2026-10-27): still not reproduced, and DEV-ONLY on the evidence.** The installed
+  build had written 0 `duplicate-turn-end` in 1,278 records (snapshot 2026-10-27; the log grows). All 9 dev duplicates are ws-1 /
+  scratch-c in sessions with source edits in flight. On 10-20 ws-1 was the only workspace and
+  every `Stop` doubled, so a second workspace is not the trigger. Eight live scenarios were 1:1:
+  fresh launch, A then B, A/B/A, two hot reloads (one remounting every workspace at `App` level),
+  a third workspace, a fire, and a full reload. Narrowed context and the unprobed suspects are in
+  `SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-…` (low).
 - **Reasons added 2026-09-28:** `transcript-incomplete` (the turn's close never reached the
   transcript within the budget) and `duplicate-turn-end` (see above). Both are `withheld`.
+- **Reasons added at M16.5 WP3 (2026-10-26):** `workflow-not-supervised` (`withheld`, §C) and
+  `adjudicator-failed` (outcome **`error`**, §D condition 1). The latter was split out of
+  `adjudicator-says-awaiting` so the alarm keys on the reason, never on detail text. A record
+  that went through the adjudicator carries **`adjudicatorModel`**, the resolved id (`v` stays
+  1; the field is optional). It is not named `model`, because `useSupervisor.test.ts`'s source
+  guard matches a bare `model:`.
+- **The failure alarm (M16.5 WP3 3.2; `failureAlarm.ts`).** It exists for the failure that went
+  unseen once already, the silent supervisor. It is a pure fold over the activity feed, keyed by
+  `projectPath` (`activityFeed.ts`) like every other read of the record, with two axes: consecutive `transcript-incomplete` (CC's format moved) and consecutive
+  `adjudicator-failed`. At `ALARM_THRESHOLD` = 3 the readout's `alarm` field shows a red `!` (`#f85149`) on the
+  `⚙ supervised` badge, and its sentence leads the tooltip ("SUPERVISOR CANNOT READ TURNS…" /
+  "SUPERVISOR ADJUDICATOR FAILING…").
+  - The reason map is an exhaustive `Record<SupervisorReason, …>`, so a new reason does not
+    compile unclassified. Each axis counts only turns that reached it: earlier exits are
+    neutral, and any other outcome on that axis clears it.
+  - ⚠️ **It SURVIVES a relaunch** (operator decision, overriding the spec's "resets"): the mount
+    seed replays the project's newest 50 records through the same fold.
+  - It is part of the gated readout, so it owns **no seventh guard arm**.
 - **`inject-failed` is now reachable.** `injectCommand` swallows a rejected `cc_input`, so the
   supervisor passes an `onIpcError` that re-throws. Before this, a failed injection was reported as
   a fire.

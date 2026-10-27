@@ -125,6 +125,10 @@ const ALLOWED_IMPORTERS = [
   // `wires graph to policy in exactly ONE module` — that test exempts `__tests__`, and
   // tripping it would have meant a hand-rolled derivation rather than a contract check.
   "state/__tests__/workflowMachineUpstreamContract.test.ts",
+  // M16.5 WP3 3.1, added because this guard fired. It imports only `transitionToken`
+  // (the token parse), to drive the quoted-vs-emitted rule. It produces no verdict and
+  // imports neither `edges` nor `policy`.
+  "state/__tests__/emittedTransitionToken.test.ts",
   // ⚠️ THE FIRST PRODUCTION CONSUMER — M15 WP3 Phase 2, added BECAUSE THIS GUARD FIRED.
   // This is the moment the guard was built for, so the review it forces is recorded here:
   //

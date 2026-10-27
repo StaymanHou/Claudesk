@@ -11,8 +11,9 @@
   - Two further problems with the old baseline: the M15 numbers R-6 accepted came from a different prompt than the one that shipped, and on `claude-sonnet-5`, not today's `claude-sonnet-5-5`.
   - Evidence is `workflow-system/product/wp2-adjudicator-set.json`, and `adjudicatorRemeasure.test.ts` pins the verdict.
 - **Suggested action:** Revise the adjudicator's one question to the supervisor's real need, e.g. *"does the turn need information or a decision that only the human can give, beyond permission to continue?"*. Re-score it on the frozen set with a held-out split, so the prompt is not fitted to the set. ⚠️ A prompt change is a behavior change: re-measure both axes, since wrong-fire recall is the axis that must not drop.
+- **WP3 measurement (2026-10-27, M16.5 WP3 task 3.5; the question was KEPT):** five candidate questions were tuned on a seeded dev split (seed 20261026, 146 rows). The chosen one, v5 (`tooling/adjudicator-probe/candidates.ts`, hash `7c3133ebe6f3384a`), scored **0.830 waits held / 0.801 breaks fired** on the untouched held-out split (145 rows, mean of 3 runs). The shipped question scores 0.869 / 0.695 on the same split. That misses AC-18's waits-held floor of ≥0.85, so `adjudicationPrompt` was not changed. Across the five, raising breaks fired cost waits held almost one-for-one. The labels turn on context the tail does not carry: a "ready for your review" stop before verify-human is a break, and the verify-human checklist turn is a wait. ⚠️ So another wording pass on tail-only input is unlikely to clear the bar. A next attempt would need more input (for example the emitted transition id, or whether the next step's skill presents its own checklist), or a change to the bar, which is the operator's call.
 - **Priority:** high
-- **Status:** pending
+- **Status:** open — re-measured at M16.5 WP3 (3.5), question KEPT per AC-18 (see the WP3 measurement above). Stays open.
 
 ## SURFACE-2026-10-21-ADJUDICATOR-PIN-IS-AN-ALIAS-THAT-MOVED-SILENTLY
 
@@ -23,7 +24,7 @@
 - **Context:** M15's record stores only the alias, so its model was inferred from transcripts. On M15's own subset and truth, break-preserved moved from 35/41 (0.85) to 28/37 (0.76).
 - **Suggested action:** Either pin a full model id, or have the Rust runner request `--output-format json` and surface the resolved id (activity log + a loud warning when it changes). Re-measure on the WP2 set whenever it changes.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** fixed in M16.5 WP3 Phase 2 (3.6: full-id pin `claude-sonnet-5-5` + resolved-model check → `adjudicator-failed`) — resolved at `/feature-finalize`, not before (delete-on-resolve with its CHANGELOG line).
 
 ## SURFACE-2026-10-21-SUPERVISOR-AUTO-CHAINS-PRODUCT-AND-INCIDENT-WORKFLOWS
 
@@ -35,7 +36,7 @@
 - **Related, unresolved:** R002, a verify-human at the end of a WP ("close WP1 and open WP2"), was ruled "a legitimate pause because it's at the boundary between two WP's". Whether the supervisor should hold at a WP's last-phase boundary is not decided. It is recorded here, not built.
 - **Suggested action:** WP3 task 3.4. Gate `decideVerdict` on the edge's workflow, so product and incident edges withhold with a named reason (`workflow-not-supervised`), and pin it with a test per workflow. The WP2 adjudicator set already excludes these 31.
 - **Priority:** high
-- **Status:** pending
+- **Status:** fixed in M16.5 WP3 Phase 1 (3.4: `workflow-not-supervised`, `SUPERVISED_WORKFLOWS` allow-list) — resolved at `/feature-finalize`, not before (delete-on-resolve with its CHANGELOG line).
 
 ## SURFACE-2026-10-19-PICKER-FILTER-AUTOCORRECT-HIJACKS-THE-ROW-CLICK
 - **Source:** operator (dogfooding, 2026-10-19, screenshot)
@@ -56,7 +57,7 @@
 - **Context:** Observed live 2026-09-28 in the dev build. A `/feature-verify-auto` turn in scratch-c emitted no token of its own, but its final message said *The "Built / TRANSITION: F8" reply was the literal text you asked for*, and the supervisor fired `/feature-verify-auto` again. This is now reachable because the supervisor fires at all: before `silent-supervisor` it read the previous turn's tail. Corpus (21 days, 138 turn-ending messages with a token): **119** at line start (67 on the last line, 52 followed by more text), **19 mid-line**. The mid-line cases mix REAL verdicts (`… (TRANSITION: P10).`, `→ **TRANSITION: F13**`, `` `TRANSITION: P13` ``) with QUOTES (``I'd stopped on `TRANSITION: F8` again``), so neither "must start a line" nor "must be the last line" separates them cleanly.
 - **Suggested action:** a design decision about the token contract (`transitionToken.ts` / upstream mccc's Phase 3d regex contract). Options: (a) require line start, trading ~14% of today's verdicts for withholds (the safe direction under R-6); (b) have mccc emit the token in one canonical form (last line, bare) and require exactly that; (c) have the adjudicator judge quoted-vs-emitted. Recovery today is Esc.
 - **Priority:** medium-high (a wrong fire re-runs a skill; it is recoverable, but the supervisor is about to ship firing)
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
+- **Status:** fixed in M16.5 WP3 Phase 1 (3.1: `extractEmittedTransitionId`, the opens-a-clause-not-quoted rule) — resolved at `/feature-finalize`, not before (delete-on-resolve with its CHANGELOG line).
 
 ## SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR
 - **Source:** feature:verify-self (`silent-supervisor` Phase 3)
@@ -65,8 +66,14 @@
 - **Summary:** In one workspace, every emitted `Stop` reached the supervisor's `onTurnEnd` TWICE, and neither of its supervisor-started turns got the `⚙` turn-attribution badge.
 - **Context:** Dev build, 2026-09-28. `ws-1` (scratch-c) was the first workspace opened in that app run, then a second (scratch-b, `ws-3`) was opened beside it. Each of `ws-1`'s `Stop`s is one `outcome=emitted` line in `status-channel.log`, yet two activity records were written (`fired` + `duplicate-turn-end`; the dedupe from `silent-supervisor` AC-4 contained it). `ws-3` never duplicated, not even after a third workspace was opened. The live React tree held exactly ONE `Workspace` fiber for `ws-1` and one root, and `ws-1`'s turn total was correct (the pane's turn-start tap is not duplicated). The same symptom was seen on 2026-09-25 (one emitted `Stop`, two records). **Candidate explanation (unconfirmed):** a leftover, still-subscribed earlier instance of `ws-1`'s subtree. Its `useSupervisor` would make the duplicate call, and its pane would consume the pending `⚙` origin (claim is consume-once) before the live pane.
 - **Suggested action:** reproduce from a fresh dev launch (open A, open B, run a turn in A, and count records per `Stop`), then find which subscription survives unmount (`useTauriListen`'s cleanup; the XtermPane turn-start tap; any remount of the first workspace when the layout gains a second). A `duplicate-turn-end` line in `supervisor-activity.log` is the detector.
-- **Priority:** medium (decisions are already deduplicated; what remains is a leak plus missing `⚙` in the affected workspace)
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
+- **M16.5 WP3 repro attempt (2026-10-27): NOT REPRODUCED; no fix shipped (AC-12).** A fresh env-stripped dev build was driven through the MCP bridge with real `cc_input` turns in scratch workspaces. It was 1 `Stop` : 1 record in ws-1 in every one of 8 scenarios: fresh launch; A then B (ids `ws-1`/`ws-3`, as on 09-28); A/B/A; HMR of `turnEnd.ts`; HMR of `useTauriListen.ts`, which REMOUNTED both workspaces at App level; a third workspace; an AUTO-edge fire; and a full page reload that re-minted `ws-1`. The `⚙` landed on the firing pane only. **Narrowed context from the logs:**
+  - The installed build has written **0** `duplicate-turn-end` in 1,278 records (v0.7.1 to v0.8.0, snapshot 2026-10-27). The leak is **dev-build-only** as far as is observed.
+  - All 9 dev `duplicate-turn-end` records ever written are ws-1 / scratch-c: 3 on 09-28 and 6 on 10-20. Both were sessions with source edits in flight. (09-25 shows the same doubling as same-second record pairs, from before the dedupe existed.)
+  - On 10-20, ws-1 was the ONLY workspace and every `Stop` doubled from the run's first turn, so **a second workspace is NOT the trigger**. The duplicate record lands in the same second as the real one and before it: two near-simultaneous deliveries, not a replay.
+  - Remaining suspects, unprobed: a long chain of mixed HMR updates (the probe ran two); a Rust-rebuild relaunch while Vite stays up; StrictMode's dev-only double effect interacting with one of those.
+  - The `duplicate-turn-end` dedupe already contains the decision, so the residual cost is a dev-only stray record and a possibly-missing `⚙`.
+- **Priority:** low (lowered 2026-10-27, M16.5 WP3: dev-build-only on the evidence, 0 in 1,278 installed-build records; decisions are already deduplicated)
+- **Status:** open — NOT reproduced at M16.5 WP3 (3.3, AC-12; see the repro attempt above). Stays open at low.
 
 ## Code-quality findings — m16-5-wp4-status-channel-semantics (2026-10-26)
 
@@ -1022,3 +1029,24 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** If VFR review matters in dogfooding, step by presented frames instead (seek just past the current rVFC `mediaTime`, then confirm a new frame presented). Measure on a real screen recording first.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
+
+## SURFACE-2026-10-26-MEDIATABLIVE-FLAKES-UNDER-FULL-SUITE-LOAD
+- **Source:** feature:build (M16.5 WP3 Phase 2)
+- **Target level:** product:wbs (WP8 paydown)
+- **Type:** tech-debt
+- **Summary:** `src/components/workspace/editor/__tests__/mediaTabLive.test.tsx` → "an image issues ZERO read_file calls and renders from the canonical asset URL" failed once in a full `vitest run src`, then passed 42/42 in three isolated runs.
+- **Context:** Seen 2026-10-26 during WP3 Phase 2 while unrelated supervisor tests were failing in the same run, so load or timing is the likely trigger. It is unrelated to WP3. A flaky test trains readers to rerun instead of reading.
+- **Suggested action:** Run the full suite a few times to measure the rate. Look for a timing-dependent wait (a fixed frame count, or a `setTimeout` race with the asset-URL resolution).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-27-WORKSPACE-LIST-ORDER-NEEDS-A-UX-PASS
+- **Source:** operator (2026-10-27, at the WP3 session handoff)
+- **Target level:** product:wbs → **M16.5 WP5 task 5.7** (operator asked to fit it into a plan bucket)
+- **Type:** new-work (QoL)
+- **Summary:** The order of the workspaces in the selection list "is somewhat strange". Revisit how it is sorted today and design a better order for two scenarios: **A — a fresh app launch** (nothing open) and **B — some workspaces are already active in the app**.
+- **Context:** As of 2026-10-27 the project picker's list comes from `projects.json`, sorted most-recently-opened first by descending `last_opened_at` (`config_store::sort_by_recency`). `record_open` stamps it on every open, so the order shuffles with each open, and the picker does not distinguish a project that already has a live workspace. ⚠️ Confirm at spec which surface the operator means ("selection box"): the picker list (most likely), or the filmstrip's `▾` workspace switcher. Do not assume.
+- **Suggested action:** WP5 task 5.7, design-first. Measure the current order in both scenarios on a real `projects.json`. Propose orders with a recommendation (for B, e.g. open workspaces grouped first, or marked in place; for A, recency vs a stable order). If the difference is spatial, use `/util-option-mockup`. The operator picks, then build.
+- **Priority:** medium
+- **Status:** pending
+

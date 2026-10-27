@@ -93,6 +93,7 @@ import { useSupervisor } from "../../state/supervisor/useSupervisor";
 import { UnsentInputWatermark } from "../../state/supervisor/unsentInput";
 import {
   publishActivity,
+  useActivityAlarm,
   useLatestActivity,
 } from "../../state/supervisor/activityFeed";
 import { recentForProject } from "../../state/supervisor/activityRecord";
@@ -248,6 +249,7 @@ export function Workspace({
   // The supervisor activity record's in-UI half: the project's newest decision (the badge's
   // "last action" hint) and the popover listing recent ones.
   const lastActivity = useLatestActivity(workspace.project_path);
+  const supervisorAlarm = useActivityAlarm(workspace.project_path);
   // ⚠️ The hint's clock is refreshed on HOVER, when the tooltip is actually read, rather than on a
   // timer: a ticking timer would re-render a component hosting a live terminal every few seconds
   // for a label nobody is looking at.
@@ -257,11 +259,14 @@ export function Workspace({
   useEffect(() => {
     // Seed the hint from the durable file once per project, so it survives a relaunch. ⚠️ Gated:
     // with workflow features OFF this reads nothing, and nothing ever writes the file.
+    // M16.5 WP3: the project's newest 50 records are replayed oldest-first, so the failure alarm
+    // (`failureAlarm.ts`) also survives a relaunch instead of silently resetting.
     if (!workflowEnabled) return;
     let cancelled = false;
     void readActivityLines(2000).then((lines) => {
-      const [newest] = recentForProject(lines, workspace.project_path, 1);
-      if (!cancelled && newest) publishActivity(newest);
+      if (cancelled) return;
+      const recent = recentForProject(lines, workspace.project_path, 50);
+      for (const record of recent.reverse()) publishActivity(record);
     });
     return () => {
       cancelled = true;
@@ -293,6 +298,7 @@ export function Workspace({
     unsentInput,
     lastActivity ? { record: lastActivity, nowMs: hintNowMs } : null,
     turnNav.origin,
+    supervisorAlarm,
   );
   const driveModeReadout = workspaceDriveModeReadout(
     storedDriveMode,
@@ -1094,6 +1100,19 @@ export function Workspace({
                 spec review (a second control whose effect is invisible until the next turn end).
                 ⚠️ Mirrors the drive-mode readout's ⚠-stale / ⏳-pending marker shape, which is
                 the established precedent for a derived badge in this exact element. */}
+              {/* M16.5 WP3 — the structural-failure ALARM. Unlike the suppressed marker, this one
+                is meant to be noticed: the supervisor has failed the same way several turns in a
+                row and will keep withholding until something outside it changes. */}
+              {supervisorReadout.alarm && (
+                <span
+                  className="workspace-header-supervisor-alarm"
+                  data-testid="workspace-header-supervisor-alarm"
+                  title={supervisorReadout.alarm.title}
+                >
+                  {" "}
+                  {supervisorReadout.alarm.text}
+                </span>
+              )}
               {supervisorReadout.suppressed && (
                 <span
                   className="workspace-header-supervisor-suppressed"

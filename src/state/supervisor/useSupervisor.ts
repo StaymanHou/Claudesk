@@ -324,6 +324,7 @@ export async function decideTurn(
     mode: outcome.mode ?? null,
     detail: outcome.detail ?? null,
     tokens: outcome.tokens ?? null,
+    adjudicatorModel: outcome.adjudicatorModel ?? null,
   };
 
   // ⚠️ The recycle is handed to the CALLER. This hook never calls `recycleSession` itself —

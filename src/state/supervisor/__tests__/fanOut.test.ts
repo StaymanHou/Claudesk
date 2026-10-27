@@ -20,6 +20,7 @@ import { parseTranscript, type TranscriptTail } from "../transcript";
 import { RECYCLE_TOKEN_THRESHOLD } from "../contextPressure";
 import { parseWip } from "../wipPhases";
 import { UnsentInputWatermark } from "../unsentInput";
+import { claudeJsonReply } from "./adjudicatorReply";
 
 /** A transcript tail for a turn that emitted `edgeId`, did not chain, and has closed. */
 const tailFor = (edgeId: string, path = "/t/a.jsonl"): TranscriptTail => ({
@@ -64,7 +65,7 @@ const harness = (
     inject: async (pty, command, label) => {
       injected.push({ pty, command, label });
     },
-    adjudicator: { run: async () => answer, warn: () => {} },
+    adjudicator: { run: async () => claudeJsonReply(answer), warn: () => {} },
     ledger: new FireLedger(),
     warn: () => {},
     injected,
@@ -167,7 +168,7 @@ describe("⚠️ idempotency — the ledger is claimed BEFORE the inject", () =>
       adjudicator: {
         run: async () => {
           adjudications++;
-          return "PROCEED";
+          return claudeJsonReply("PROCEED");
         },
         warn: () => {},
       },

@@ -14,7 +14,6 @@
 //   `--no-session-persistence` so ~300 judgments do not land in the transcript corpus.
 
 import { it } from "vitest";
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   appendFileSync,
@@ -23,12 +22,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import {
-  ADJUDICATOR_MODEL,
-  ADJUDICATOR_TIMEOUT_MS,
-  adjudicationPrompt,
-  parseAdjudication,
-} from "../../src/state/supervisor/adjudicator";
+import { adjudicationPrompt } from "../../src/state/supervisor/adjudicator";
+import { adjudicateOnce } from "./runner";
 import type { Candidate } from "./corpus";
 import type { SheetRow } from "./labelSheet";
 import { keyOf } from "./redact";
@@ -102,68 +97,6 @@ it("set", () => {
   );
 });
 
-/** Every variable a parent Claude Code session or a Claudesk PTY sets. */
-function cleanEnv(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const [k, v] of Object.entries(process.env))
-    if (!/^(CLAUDE|CLAUDESK)/.test(k)) env[k] = v;
-  return env;
-}
-
-function adjudicateOnce(
-  key: string,
-  run: number,
-  tail: string,
-): Promise<Answer> {
-  return new Promise((resolve) => {
-    const child = spawn(
-      "claude",
-      [
-        "-p",
-        "--model",
-        ADJUDICATOR_MODEL,
-        "--output-format",
-        "json",
-        "--no-session-persistence",
-      ],
-      { cwd: "/", env: cleanEnv(), stdio: ["pipe", "pipe", "pipe"] },
-    );
-    let out = "";
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGKILL");
-    }, ADJUDICATOR_TIMEOUT_MS);
-    child.stdout.on("data", (d: Buffer) => (out += d.toString()));
-    child.on("close", () => {
-      clearTimeout(timer);
-      const base = { key, run, models: [] as string[], raw: out.slice(0, 400) };
-      if (timedOut) return resolve({ ...base, answer: null, basis: "timeout" });
-      try {
-        const j = JSON.parse(out) as {
-          result?: string;
-          is_error?: boolean;
-          modelUsage?: Record<string, unknown>;
-        };
-        const models = Object.keys(j.modelUsage ?? {});
-        if (j.is_error || typeof j.result !== "string")
-          return resolve({ ...base, models, answer: null, basis: "error" });
-        const parsed = parseAdjudication(j.result);
-        resolve({
-          ...base,
-          models,
-          raw: j.result.slice(0, 200),
-          answer: parsed,
-          basis: parsed === null ? "unparseable" : "model",
-        });
-      } catch {
-        resolve({ ...base, answer: null, basis: "error" });
-      }
-    });
-    child.stdin.end(adjudicationPrompt(tail));
-  });
-}
-
 function readAnswers(): Answer[] {
   const path = join(OUT, "answers.jsonl");
   if (!existsSync(path)) return [];
@@ -189,7 +122,11 @@ it("score", async () => {
   const worker = async () => {
     while (next < todo.length) {
       const item = todo[next++];
-      const a = await adjudicateOnce(item.key, run, item.tail);
+      const a = await adjudicateOnce(
+        item.key,
+        run,
+        adjudicationPrompt(item.tail),
+      );
       appendFileSync(join(OUT, "answers.jsonl"), `${JSON.stringify(a)}\n`);
     }
   };

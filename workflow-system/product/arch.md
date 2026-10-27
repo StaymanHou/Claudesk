@@ -28,7 +28,7 @@ subsystem you need.
 | [Native app menu](arch/app-menu.md) | the menu bar, and why it carries no accelerators |
 | [Time analytics](arch/time-analytics.md) | the SQLite exception and its load-bearing rules |
 | [Claude Code profiles (F-b)](arch/profiles.md) | named `CLAUDE_CONFIG_DIR`s: store, fail-closed resolution, spawn env/argv, workflow-off funnel, per-profile hooks, the create wizard, Delete-to-Trash |
-| [Workflow supervisor](arch/workflow-supervisor.md) | the typed policy graph, turn-end detection, the `claude -p` adjudicator, context-pressure recycle, the mccc ownership boundary |
+| [Workflow supervisor](arch/workflow-supervisor.md) | the typed policy graph (⚠️ only feature/task/session-ops edges chain), turn-end detection (the emitted-token rule), the `claude -p` adjudicator (full-id pin + resolved-model check; question re-measured and kept at M16.5 WP3), context-pressure recycle, observability (activity record + failure alarm), the mccc ownership boundary |
 
 **Writing here:** add to the **subsystem** file — never a new milestone section; that append habit is
 what grew the old file monotonically. A superseded design survives only as a `⚠️ do not reinstate` note
