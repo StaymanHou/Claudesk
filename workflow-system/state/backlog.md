@@ -75,6 +75,14 @@
 - **Priority:** low (lowered 2026-10-27, M16.5 WP3: dev-build-only on the evidence, 0 in 1,278 installed-build records; decisions are already deduplicated)
 - **Status:** open — NOT reproduced at M16.5 WP3 (3.3, AC-12; see the repro attempt above). Stays open at low.
 
+## Code-quality findings — m16-5-wp3-supervisor-correctness (2026-10-27)
+
+- **Pointer:** **1 MAJOR + 6 MINOR** from the review of `3e92860` (feature `565a363`; 0 CRITICAL). MAJOR: the failure alarm counts per project although both failures it watches are machine-wide, so a broken adjudicator lights each badge late. MINOR: the clause-boundary docstring omits `,` and `(`; the probe runner skips production's model check; the activity feed dedupes by timestamp; the alarm seed races a live publish; the adjudicator tooltip omits unparseable replies; one overlong JSDoc line.
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp3-supervisor-correctness — 2026-10-27`.
+- **Priority:** medium (the MAJOR); low (the rest)
+- **Status:** pending
+- **Pickup shape:** WP8's paydown. The MAJOR and the seed race both touch `activityFeed.ts` and should be fixed together.
+
 ## Code-quality findings — m16-5-wp4-status-channel-semantics (2026-10-26)
 
 - **Pointer:** **4 MINOR** from the review of `b69201d` (0 CRITICAL, 0 MAJOR; a 5th MINOR was fixed in place). The four: the overlay emit leaves the lock before `emit`, so a stale overlay can arrive last; the PiP's `isAwaitingInput` re-implements the overlay rule; the unwaited separate tail read is unexplained; and a type-only import cycle between `verifyHumanPause` and `useSupervisor`.

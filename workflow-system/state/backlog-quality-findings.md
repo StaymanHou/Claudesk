@@ -4,6 +4,73 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m16-5-wp3-supervisor-correctness — 2026-10-27
+
+*(feature-review-quality on ship commit `3e92860` (feature `565a363`), window `565a363^..3e92860`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 6 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-10-27-QUALITY-WP3-FAILURE-ALARM-COUNTS-PER-PROJECT-FOR-MACHINE-WIDE-FAILURES
+- **Severity:** MAJOR
+- **Location:** `src/state/supervisor/activityFeed.ts` (the fold keyed by `projectPath`) + `failureAlarm.ts`.
+- **Finding:** The alarm counts per project, but both failures it watches are MACHINE-wide: a CC transcript-format change, or a retired/moved adjudicator model. Each project must see 3 consecutive fire candidates fail before ITS badge lights. Fire candidates are rare, and 3–4 projects are in flight, so a broken adjudicator can stay silent per badge much longer than "3 failures" suggests.
+- **Why it matters:** The alarm exists to catch a silent supervisor. Keying it on an attribute that only correlates with the failure (`[[classifier-must-key-on-the-classified-property]]`) delays the signal in exactly the case it is for.
+- **Suggested action:** Count at least the adjudicator axis machine-wide (one counter over every record), and show it on every badge. Consider the same for the transcript axis. Keep the per-project tooltip context.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-10-27-QUALITY-WP3-CLAUSE-BOUNDARY-DOCSTRING-OMITS-COMMA-AND-PAREN
+- **Severity:** MINOR
+- **Location:** `src/state/workflowMachine/transitionToken.ts` (`extractEmittedTransitionId` docstring vs `CLAUSE_BOUNDARY_RE`); `arch/workflow-supervisor.md` §D.
+- **Finding:** The docstring lists `. ! ? : ; → — ->` as clause boundaries, but the regex also accepts `,`, `(` and `[.!?])`, and tests depend on them (`Plan complete, \`TRANSITION: F7\``, `(TRANSITION: P10)`).
+- **Why it matters:** The comma is the loosest boundary and the likeliest source of a quoted token firing. A reader tuning the rule from the prose won't know it is there.
+- **Suggested action:** List the full set in the docstring (and the arch doc if it states one).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-27-QUALITY-WP3-PROBE-RUNNER-SKIPS-THE-PRODUCTION-MODEL-CHECK
+- **Severity:** MINOR
+- **Location:** `tooling/adjudicator-probe/runner.ts` (`adjudicateOnce`).
+- **Finding:** It is called "production-shaped", but it parses the JSON envelope itself and does not apply production's exactly-the-pin check (`parseReplyEnvelope` + the model check in `adjudicator.ts`).
+- **Why it matters:** The tool that justifies a pin or wording change would score another model's answer as valid, which is the silent alias move 3.6 just closed in production. Two envelope parsers can also drift apart.
+- **Suggested action:** Reuse `parseReplyEnvelope` and the model check (export them if needed), and record a mismatch as its own `basis`.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-27-QUALITY-WP3-ACTIVITY-FEED-DEDUPES-BY-TIMESTAMP
+- **Severity:** MINOR
+- **Location:** `src/state/supervisor/activityFeed.ts` (`!(held && held.ts === record.ts)`).
+- **Finding:** Duplicate records are detected by timestamp, and the `held !== record` part is redundant after the earlier return. Two distinct same-millisecond records for one project would be folded once.
+- **Why it matters:** Low impact today (`duplicate-turn-end` is neutral on both axes), but a timestamp stands in for record identity, and the redundant condition hides the intent.
+- **Suggested action:** Key on record identity, or say why ts suffices; drop the redundant condition.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-27-QUALITY-WP3-ALARM-SEED-RACES-A-LIVE-PUBLISH
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/Workspace.tsx` (the mount seed: `readActivityLines` → replay of the newest 50).
+- **Finding:** The replay is async. If a live decision for the project is published before it resolves, `publishActivity` drops all 50 replayed records as older than the held one, and the alarm silently restarts from zero.
+- **Why it matters:** That defeats "survives a relaunch" (operator decision P2.verify-human.2), silently, in a narrow window.
+- **Suggested action:** Fold the replay before accepting live records, or merge by ts.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-27-QUALITY-WP3-ADJUDICATOR-ALARM-TOOLTIP-OMITS-UNPARSEABLE
+- **Severity:** MINOR
+- **Location:** `src/cc/workspaceSupervisor.ts` (the "SUPERVISOR ADJUDICATOR FAILING" text).
+- **Finding:** It lists "an error, a timeout, or a model other than the pinned one", but an unparseable reply is also `adjudicator-failed`.
+- **Why it matters:** It points the operator at the wrong causes.
+- **Suggested action:** Add "an unreadable reply".
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-27-QUALITY-WP3-OVERLONG-JSDOC-LINE-IN-VERDICT
+- **Severity:** MINOR
+- **Location:** `src/state/supervisor/verdict.ts` (the one-line JSDoc on the applied mode, ~line 95).
+- **Finding:** It runs well past the file's ~100-column comment width (Prettier does not wrap comments).
+- **Why it matters:** Cosmetic.
+- **Suggested action:** Wrap it.
+- **Priority:** low
+- **Status:** pending
+
 # m16-5-wp4-status-channel-semantics — 2026-10-26
 
 *(feature-review-quality on ship commit `b69201d` (feature `53141d4`), window `53141d4^..b69201d`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 5 MINOR. Four are auto-backlogged here; the 5th, a stale "drafted, unsent" line in `arch/status-channel-and-surfaces.md` §A.5, was fixed in place before archive.)*

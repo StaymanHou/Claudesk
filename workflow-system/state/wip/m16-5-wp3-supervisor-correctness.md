@@ -509,11 +509,43 @@ is already recorded in AC-1.
 - Final gate: `pnpm verify:auto` → EXIT=0 (35s, 3,622 tests) at P5 verify-codify, with no code change since.
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality against `565a363`
+- **Path:** Feature > finalize
+- **Active scope:** finalize (review-quality done: 0 CRITICAL / 1 MAJOR / 6 MINOR, auto-backlogged)
 - **Blocked:** none
-- **Unvisited:** review-quality; finalize
+- **Unvisited:** finalize
 - **Open discoveries:** SURFACE-2026-10-26-MEDIATABLIVE-FLAKES-UNDER-FULL-SUITE-LOAD (low, unrelated)
+
+## Code-Quality Review — m16-5-wp3-supervisor-correctness
+
+*(feature-review-quality, ship commit `3e92860`, feature `565a363`, 2026-10-27; drive_mode=autopilot → all findings auto-backlogged, F39.)*
+
+### Strengths
+- `failureAlarm.ts` classifies every reason through an exhaustive `Record<SupervisorReason, AxisEffects>`, so a new reason cannot compile unclassified. The count/clear/neutral effects per axis encode "only turns that reached this axis count".
+- `SUPERVISED_WORKFLOWS` is an allow-list keyed on `resolved.edge.workflow`, read from `resolvePolicy`'s own result, so `verdict.ts` does not become a second graph-to-policy wiring and the funnel guard stays meaningful.
+- The token rule was chosen by corpus replay; the refuted alternatives are recorded with numbers, and every must-not-fire case is paired with a must-fire control through the real `readTurn` and `useSupervisor`.
+- `transcriptFormat.test.ts` isolates each completion signal (an OR-predicate trap), with the `end_turn` equivalent mutant named.
+- `adjudicator-failed` keys the alarm on the reason, not detail text, and the alarm lives in the gated readout, so the OFF-invariant pin stays at 6 arms / 9 subjects.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`src/state/supervisor/activityFeed.ts:22`] The failure alarm counts per `projectPath`, but both failures it watches are machine-wide, so a broken adjudicator can stay silent per badge far longer than three failures. → `SURFACE-2026-10-27-QUALITY-WP3-FAILURE-ALARM-COUNTS-PER-PROJECT-FOR-MACHINE-WIDE-FAILURES` (medium)
+
+**MINOR**
+- [`transitionToken.ts:43-60`] The docstring's clause-boundary list omits `,`, `(` and `[.!?])`. → `…-CLAUSE-BOUNDARY-DOCSTRING-OMITS-COMMA-AND-PAREN`
+- [`tooling/adjudicator-probe/runner.ts`] A "production-shaped" runner without production's exact-pin model check. → `…-PROBE-RUNNER-SKIPS-THE-PRODUCTION-MODEL-CHECK`
+- [`activityFeed.ts:36`] Dedupe by timestamp, plus a redundant condition. → `…-ACTIVITY-FEED-DEDUPES-BY-TIMESTAMP`
+- [`Workspace.tsx:262-270`] The async seed can be dropped by an earlier live publish, so the alarm silently resets. → `…-ALARM-SEED-RACES-A-LIVE-PUBLISH`
+- [`workspaceSupervisor.ts:171`] The adjudicator alarm tooltip omits unparseable replies. → `…-ADJUDICATOR-ALARM-TOOLTIP-OMITS-UNPARSEABLE`
+- [`verdict.ts:95`] An overlong JSDoc line. → `…-OVERLONG-JSDOC-LINE-IN-VERDICT`
+
+### Assessment
+A well-executed change that leaves the supervisor better. Each fix is a small, pure change at an existing chokepoint, and the tests drive the real components through the real funnel with positive controls. The token rule is a heuristic, but it is measured and fails toward withholding. Follow up on two things: the alarm is keyed per project while its failures are machine-wide, and the scoring runner does not enforce the model check production now does. Neither is a correctness bug in what shipped.
+
+### If you disagree
+Dismiss any finding by marking its line `[DISMISSED]` in this section before `/feature-finalize` archives the WIP.
 
 ## Discoveries
 [SURFACED-2026-10-26] Phase 2 — mediaTabLive.test.tsx flaked once under full-suite load (unrelated); logged as SURFACE-2026-10-26-MEDIATABLIVE-FLAKES-UNDER-FULL-SUITE-LOAD.
