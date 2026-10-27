@@ -195,6 +195,11 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
   - (1) The blue is a gated **display overlay** (`attention`), NOT a fifth state, and it owns **no seventh guard arm**.
   - (2) It is **NOT keyed on the turn's exit token** (operator decision A: 1 false blue in 324, against 4–5 real asks lost).
   - (3) `is_turn_start` on queued prompts is **KEPT by measurement** (Esc fires no `Stop`). Fixing it is upstream: anthropics/claude-code#105187.
+- ✅ **WP3 SHIPPED 2026-10-27 (`565a363`): only execution workflows chain, only an EMITTED token counts, adjudicator failures are loud.** ⚠️ Do NOT re-derive (`arch/workflow-supervisor.md` §C/§D/§F):
+  - (1) The token rule is **"opens a clause, not quoted"**, NOT line start (that would withhold 132/477 real verdicts). A code span is a quote only with other text before the token.
+  - (2) The adjudicator pin is the FULL id `claude-sonnet-5-5`, and the resolved model must be exactly it; every failure basis becomes `adjudicator-failed`.
+  - (3) **3.5 KEPT the question by measurement**: the best rewrite scored 0.830/0.801 held-out against 0.869/0.695. The ceiling is the tail-only INPUT, so do not try another rewording.
+  - (4) **3.3 NOT reproduced**: 0 duplicates in the installed build, dev-only on the evidence.
 
 ✅ **M16 — the right-panel media viewer — CLOSED 2026-10-20** (WP1 probe → WP2 editor-tab media + glance viewer → WP3 review player). WBS + probe outcomes archived at `workflow-system/product/archive/milestone-16-right-panel-media-viewer/wbs.md`; ⚠️ **as-built lives in `arch/right-panel-surfaces.md` → "Media in the editor tab" and `arch/security-posture.md` → "Media transport" — read those before touching media.** ⚠️ Deferred, NOT passed: hardened runtime (→ `/release`) and the `scripture-reading` dogfood pass (AC-21). Next: M16.5 (above). The `/util-grill-me` rulings there are SETTLED; do not re-litigate them:
 - ⚠️ Depth is chosen by **FILE TYPE**, never by a per-project setting or the profile. Images and PDFs get the glance viewer; audio and video always get the review player.

@@ -15,29 +15,6 @@
 - **Priority:** high
 - **Status:** open — re-measured at M16.5 WP3 (3.5), question KEPT per AC-18 (see the WP3 measurement above). Stays open.
 
-## SURFACE-2026-10-21-ADJUDICATOR-PIN-IS-AN-ALIAS-THAT-MOVED-SILENTLY
-
-- **Source:** feature:build (M16.5 WP2 Phase 3)
-- **Target level:** product:arch (R-6 condition 1) → **M16.5 WP3 task 3.6** (operator, 2026-10-21)
-- **Type:** gap
-- **Summary:** `ADJUDICATOR_MODEL = "sonnet"` is an alias. It resolved to `claude-sonnet-5` through 2026-09-28 and to `claude-sonnet-5-5` from 09-29, with no code change and no signal. `assertPinnedModel` compares the alias string, so it cannot see the move, which is exactly the failure condition 1 exists to make loud.
-- **Context:** M15's record stores only the alias, so its model was inferred from transcripts. On M15's own subset and truth, break-preserved moved from 35/41 (0.85) to 28/37 (0.76).
-- **Suggested action:** Either pin a full model id, or have the Rust runner request `--output-format json` and surface the resolved id (activity log + a loud warning when it changes). Re-measure on the WP2 set whenever it changes.
-- **Priority:** medium
-- **Status:** fixed in M16.5 WP3 Phase 2 (3.6: full-id pin `claude-sonnet-5-5` + resolved-model check → `adjudicator-failed`) — resolved at `/feature-finalize`, not before (delete-on-resolve with its CHANGELOG line).
-
-## SURFACE-2026-10-21-SUPERVISOR-AUTO-CHAINS-PRODUCT-AND-INCIDENT-WORKFLOWS
-
-- **Source:** feature:verify-human (M16.5 WP2 Phase 2, the operator's sample review)
-- **Target level:** product:wbs (WP3, task 3.4)
-- **Type:** bug
-- **Summary:** In autopilot the supervisor fires the next skill on **product** and **incident** workflow AUTO edges, for example `P3 → /product-research` and `I18 → /incident-resolve`. The operator's ruling (2026-10-21) is that neither workflow should auto-chain. Design prior: `supervisor-chains-execution-workflows-only`.
-- **Context:** The WP2 miner, driving the real `decideVerdict`, finds that 31 of 361 historical fire candidates are product (24) or incident (7). Each would fire into a strategic or high-stakes step unattended. ⚠️ This is the supervisor's TURN-BOUNDARY scope, Claudesk's half of the mccc ownership split; the pause-policy table (mccc's meaning) is not wrong for a bare-terminal agent, which only self-chains.
-- **Related, unresolved:** R002, a verify-human at the end of a WP ("close WP1 and open WP2"), was ruled "a legitimate pause because it's at the boundary between two WP's". Whether the supervisor should hold at a WP's last-phase boundary is not decided. It is recorded here, not built.
-- **Suggested action:** WP3 task 3.4. Gate `decideVerdict` on the edge's workflow, so product and incident edges withhold with a named reason (`workflow-not-supervised`), and pin it with a test per workflow. The WP2 adjudicator set already excludes these 31.
-- **Priority:** high
-- **Status:** fixed in M16.5 WP3 Phase 1 (3.4: `workflow-not-supervised`, `SUPERVISED_WORKFLOWS` allow-list) — resolved at `/feature-finalize`, not before (delete-on-resolve with its CHANGELOG line).
-
 ## SURFACE-2026-10-19-PICKER-FILTER-AUTOCORRECT-HIJACKS-THE-ROW-CLICK
 - **Source:** operator (dogfooding, 2026-10-19, screenshot)
 - **Target level:** task
@@ -48,16 +25,6 @@
 - **Suggested action:** add the attributes to `picker-filter`, then verify in the dev app: type `eos`, confirm no bubble, click the row, confirm the workspace opens. Also sweep the app's other free-text filter/search inputs for the same gap (`ProjectSearch`, `CommandPalette`, the settings wizards, the Prompt panel if it is an `<input>`/`<textarea>`) and decide per site. A prompt box may want spellcheck on, but a filter never does.
 - **Priority:** medium (the picker is the entry point to every workspace, and the failure looks like a lost click)
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-
-## SURFACE-2026-09-28-SUPERVISOR-FIRES-ON-A-TRANSITION-TOKEN-QUOTED-IN-PROSE
-- **Source:** feature:verify-self (`silent-supervisor` Phase 3)
-- **Target level:** feature:spec
-- **Type:** bug
-- **Summary:** The supervisor fires a `TRANSITION:` token that the model merely QUOTED in its final message. `readTurn` takes the last `TRANSITION:` anywhere in the turn's final assistant text.
-- **Context:** Observed live 2026-09-28 in the dev build. A `/feature-verify-auto` turn in scratch-c emitted no token of its own, but its final message said *The "Built / TRANSITION: F8" reply was the literal text you asked for*, and the supervisor fired `/feature-verify-auto` again. This is now reachable because the supervisor fires at all: before `silent-supervisor` it read the previous turn's tail. Corpus (21 days, 138 turn-ending messages with a token): **119** at line start (67 on the last line, 52 followed by more text), **19 mid-line**. The mid-line cases mix REAL verdicts (`… (TRANSITION: P10).`, `→ **TRANSITION: F13**`, `` `TRANSITION: P13` ``) with QUOTES (``I'd stopped on `TRANSITION: F8` again``), so neither "must start a line" nor "must be the last line" separates them cleanly.
-- **Suggested action:** a design decision about the token contract (`transitionToken.ts` / upstream mccc's Phase 3d regex contract). Options: (a) require line start, trading ~14% of today's verdicts for withholds (the safe direction under R-6); (b) have mccc emit the token in one canonical form (last line, bare) and require exactly that; (c) have the adjudicator judge quoted-vs-emitted. Recovery today is Esc.
-- **Priority:** medium-high (a wrong fire re-runs a skill; it is recoverable, but the supervisor is about to ship firing)
-- **Status:** fixed in M16.5 WP3 Phase 1 (3.1: `extractEmittedTransitionId`, the opens-a-clause-not-quoted rule) — resolved at `/feature-finalize`, not before (delete-on-resolve with its CHANGELOG line).
 
 ## SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR
 - **Source:** feature:verify-self (`silent-supervisor` Phase 3)
@@ -162,8 +129,8 @@
 
 ## Code-quality findings — silent-supervisor (2026-09-28)
 
-- **Pointer:** **1 MAJOR + 5 MINOR** from the review of `778fe72`. The MAJOR: the new transcript completion wait keys on undocumented CC transcript fields, so a CC format change would silently withhold every turn as `transcript-incomplete` with no alarm. The MINORs: a "stripped once" claim with two strip sites, a "user prose" floor that also counts `isMeta` skill bodies, a stale "read at the last possible moment" comment + reason list, a dedupe store only one test file resets, and an ad-hoc widened `onTurnEnd` param. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# silent-supervisor — 2026-09-28`.
-- **Priority:** medium (the MAJOR) / low (the rest)
+- **Pointer:** **5 MINOR** remain from the review of `778fe72`. (The MAJOR, no alarm for a CC transcript-format change, was resolved at M16.5 WP3, 2026-10-27.) The MINORs: a "stripped once" claim with two strip sites, a "user prose" floor that also counts `isMeta` skill bodies, a stale "read at the last possible moment" comment + reason list, a dedupe store only one test file resets, and an ad-hoc widened `onTurnEnd` param. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# silent-supervisor — 2026-09-28`.
+- **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
@@ -406,10 +373,7 @@
 - **How to check:** `jq 'select(.projectPath=="<proj>")' <app-data>/supervisor-activity.log` on the
   installed app (`com.claudesk.app`), or scan CC transcripts for commands arriving ~4 s after
   turn end (`[[supervisor-activity-observable-from-cc-transcripts]]`).
-- **Related open items:** `SURFACE-2026-09-28-SUPERVISOR-FIRES-ON-A-TRANSITION-TOKEN-QUOTED-IN-PROSE`,
-  `SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR`,
-  `SURFACE-2026-09-28-QUALITY-TRANSCRIPT-COMPLETION-WAIT-HAS-NO-ALARM-FOR-A-CC-FORMAT-CHANGE`
-  (a CC transcript-format change would silently bring this bug back).
+- **Related open items:** `SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR`. (The quoted-token and format-alarm items it once listed were resolved at M16.5 WP3, 2026-10-27; the format alarm now makes the CC-format-change regression loud.)
 - **Priority:** medium (a release containing `778fe72` — `v0.7.1` — is installed as of 2026-09-29; per this entry's own rule it drops from high). Was: high until a release containing `778fe72` is installed (the field build is still
   silent); medium after that.
 - **Status:** pending — **a plain fire IS now observed on the installed build:** `v0.7.1` fired four times on 2026-10-12 (`bluecg-maps`, autopilot, P3→P5→P7→P9 in `supervisor-activity.log`), on top of the 2026-09-29 recycle. What remains is the on-screen half (a fire with its `⚙`, a fire with another app focused, Esc recovery); scheduled to close in **M16.5** (roadmap, 2026-10-20). Earlier: fix shipped in `v0.7.1` (2026-09-29). Checks 1–4 and 6 were deferred to dogfooding on the installed release (now `v0.7.1`).

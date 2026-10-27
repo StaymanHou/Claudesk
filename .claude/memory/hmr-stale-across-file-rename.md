@@ -1,6 +1,6 @@
 ---
 name: hmr-stale-across-file-rename
-description: A long-lived Vite/HMR dev window can half-apply and fake a regression — after a file RENAME *or* any in-place edit to a component holding useRef/useState. Relaunch before believing a verify result, not just before suspecting the diff.
+description: A long-lived Vite/HMR dev window can half-apply and fake a regression — after a file RENAME *or* any in-place edit to a component holding useRef/useState — and an edit that bubbles to App REMOUNTS every workspace and respawns its CC (stale `cc-N` ids, silent no-op input). Relaunch before believing a verify result, not just before suspecting the diff.
 metadata:
   type: project
 ---
@@ -26,6 +26,17 @@ Concretely: `DocsPanel.tsx` took four HMR updates in 31 seconds while a fix was 
 "re-verify" ran ~18s later inside that tree. The panel still blanked, so the fix looked wrong. It
 was correct — a fresh launch of the identical source passed every check, and telemetry then
 showed a clean single cycle (`body=1, setLoaded=1, cancelledSkip=0`).
+
+**3. An edit that bubbles to `App` REMOUNTS every workspace and RESPAWNS its CC session (added
+2026-10-27, M16.5 WP3 Phase 4).** Editing a widely-imported non-component module
+(`src/useTauriListen.ts`) produced one HMR update across `App`, `Workspace`, `XtermPane` and `Pip`.
+`ProjectPicker` logged *"Could not Fast Refresh (\"matchesFilter\" export is incompatible)"* and was
+invalidated up to `App`. Every workspace was remounted, so its PTY was respawned and the ids moved
+(`cc-1/2` → `cc-3/4`). A `cc_input` to the old id then **silently does nothing**: no error, and no
+`UserPromptSubmit` in `status-channel.log`, which reads exactly like "the turn didn't start". After
+ANY source edit during a live check, re-read `ccSessionId` from the fiber before driving a turn.
+(Unlike triggers 1–2 this is a clean remount, not a stale tree: listeners were cleaned up correctly,
+1 Stop : 1 record afterwards.)
 
 **The rule, stated so it fires next time:** *relaunch before believing a verify RESULT* — not
 merely before suspecting the diff. Any verify-self observation taken after editing a component

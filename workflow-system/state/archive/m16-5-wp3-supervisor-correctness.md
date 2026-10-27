@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16.5 WP3 — Supervisor correctness
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** completed 2026-10-27
 **Created:** 2026-10-26
 **Entry:** spec (complex feature), from `wbs.md` → WP3 (tasks 3.1–3.6)
 
@@ -509,11 +509,11 @@ is already recorded in AC-1.
 - Final gate: `pnpm verify:auto` → EXIT=0 (35s, 3,622 tests) at P5 verify-codify, with no code change since.
 
 ## Current Node
-- **Path:** Feature > finalize
-- **Active scope:** finalize (review-quality done: 0 CRITICAL / 1 MAJOR / 6 MINOR, auto-backlogged)
+- **Path:** Feature > done (archived)
+- **Active scope:** none
 - **Blocked:** none
-- **Unvisited:** finalize
-- **Open discoveries:** SURFACE-2026-10-26-MEDIATABLIVE-FLAKES-UNDER-FULL-SUITE-LOAD (low, unrelated)
+- **Unvisited:** none
+- **Open discoveries:** SURFACE-2026-10-26-MEDIATABLIVE-FLAKES-UNDER-FULL-SUITE-LOAD (low, unrelated; in backlog)
 
 ## Code-Quality Review — m16-5-wp3-supervisor-correctness
 
@@ -546,6 +546,30 @@ A well-executed change that leaves the supervisor better. Each fix is a small, p
 
 ### If you disagree
 Dismiss any finding by marking its line `[DISMISSED]` in this section before `/feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:**
+  - The WBS's "line start" token rule was wrong for today's corpus. Emitted verdicts now usually END a sentence, so line start would have withheld 132 of 477 real verdicts. A corpus replay found a rule that withholds 7 and gains 0.
+  - The adjudicator's break-axis failure is a property of its INPUT, not its wording. Across five candidates, each break gained cost about one wait, because "ready for your review" before verify-human (a break) and the verify-human checklist turn (a wait) read alike in the last 400 characters.
+  - The leaked subscription is dev-build-only on the evidence (0 in 1,278 installed-build records), and a second workspace is not its trigger.
+- **Assumptions that held:**
+  - A held-out split chosen before any score kept 3.5 honest: v5 dropped from 0.904 to 0.830 waits on held-out.
+  - Execution-only chaining was a small, pure change at the existing chokepoint.
+  - Both 3.3 and 3.5 had their "no" outcome written into the spec (AC-12, AC-18), so neither result needed a back-loop.
+- **Assumptions that were wrong:**
+  - The handoff read the v4 run as a prompt problem. It was a usage-limit outage (zero tokens, `duration_api_ms: 0`), and it had also silently contaminated 37 of v3's rows, which the scorer counted as AWAITING. A failed call that scores as a real answer is a measurement defect, so the scorer now retries `error` rows.
+  - The P5.1 arch resync inverted the code-span rule. It was caught only by a fresh fact-checking runner, not by any gate (`archDocEnumeration` does not read prose).
+- **Approach delta:**
+  - 3.1 shipped the clause rule rather than line start (operator decision at Phase 1).
+  - 3.2 also counts adjudicator failures, and survives a relaunch (operator).
+  - 3.5 ended as KEEP; 3.3 ended as not-reproduced.
+  - Phase 3 grew a frozen-labels guard and CI fields at verify-self.
+  - A review MAJOR (the alarm keyed per project for machine-wide failures) went to WP8.
+
+## Closure
+> **Feature complete:** M16.5 WP3 (supervisor correctness) has shipped. The workflow supervisor now chains only the feature/task/session workflows, fires only on a TRANSITION token the turn actually emits (not one it quotes), pins its adjudicator to a full model id it verifies on every call, and raises a red `!` on the supervised badge after three straight transcript or adjudicator failures. The adjudicator question was re-measured and kept, and the duplicate-turn-end leak was not reproduced (dev-only). See `arch/workflow-supervisor.md` §C/§D/§F.
+
+Requester = operator — closure notice for self-record.
 
 ## Discoveries
 [SURFACED-2026-10-26] Phase 2 — mediaTabLive.test.tsx flaked once under full-suite load (unrelated); logged as SURFACE-2026-10-26-MEDIATABLIVE-FLAKES-UNDER-FULL-SUITE-LOAD.

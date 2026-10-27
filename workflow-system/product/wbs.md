@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-10-26  # WP4 shipped (status-dot semantics: artifact watch idle, verify-human blue; 4.3 kept, upstream #105187)
+updated: 2026-10-27  # WP3 shipped (execution-only chaining, emitted-token rule, loud pin + failure alarm; 3.5 kept by measurement, 3.3 not reproduced)
 cycle: milestone-16-5-supervisor-hardening-qol-and-paydown
 ---
 
@@ -122,13 +122,13 @@ the 29 scorable records the +1 margin rested on?
 - [x] 2.4 Record the verdict. If the bar moves, change `adjudicator.ts` with its pinned-model test,
       and note whether option (c) of WP3.1 is now viable.
 
-### WP3: Supervisor correctness — quoted token, format alarm, leaked subscription
+### WP3: Supervisor correctness — quoted token, format alarm, leaked subscription ✅ SHIPPED 2026-10-27 (commit 565a363)
 
 **Milestone:** M16.5
 **Dependencies:** none. It needs WP2 only if option (c) is chosen for 3.1.
 **Size:** M
 **Tasks:**
-- [ ] 3.1 **A token quoted in prose must not fire**
+- [x] 3.1 **A token quoted in prose must not fire**
       (`SURFACE-2026-09-28-SUPERVISOR-FIRES-ON-A-TRANSITION-TOKEN-QUOTED-IN-PROSE`).
   - Default (a): `readTurn` accepts only a line-start token.
   - Re-run the 138-message corpus split and record what moves to withheld.
@@ -139,25 +139,29 @@ the 29 scorable records the +1 margin rested on?
     so routing quoted-token turns through it would withhold a third of the real ones. (a)
     stands. WP2's labels add one data point: R214 is a quoted `TRANSITION: F10b` inside an
     analysis turn, which the operator labelled AWAITING.
-- [ ] 3.2 **A positive alarm for a CC transcript-format change**
+  - ✅ **As built: "opens a clause, not quoted", NOT (a) line start** (operator kept it at WP3 verify-human): line start would have withheld 132 of 477 real verdicts; the shipped rule withholds 7 of 478 and gains 0. mccc inbox message filed.
+- [x] 3.2 **A positive alarm for a CC transcript-format change**
       (`SURFACE-2026-09-28-QUALITY-TRANSCRIPT-COMPLETION-WAIT-HAS-NO-ALARM-FOR-A-CC-FORMAT-CHANGE`,
       the silent-supervisor MAJOR).
   - N consecutive `transcript-incomplete` withholds for one workspace surface on the badge hint.
   - A pinned transcript fixture refreshed from a live capture, so a renamed `stop_reason` /
     `system` subtype fails a test. ⚠️ Mutation-prove both halves.
-- [ ] 3.3 **The leaked workspace subscription**
+  - ✅ Alarm at 3 consecutive per project (`failureAlarm.ts`, also counts `adjudicator-failed`), survives a relaunch (operator); live turn-close fixture + refresh probe. ⚠️ Review MAJOR: it should count machine-wide (`SURFACE-2026-10-27-QUALITY-WP3-FAILURE-ALARM-COUNTS-PER-PROJECT-…` → WP8).
+- [x] 3.3 **The leaked workspace subscription**
       (`SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR`).
   - Reproduce from a fresh dev launch: open A, open B, run a turn in A, and count records per
     `Stop`.
   - Find the subscription that survives unmount and fix it there. The `duplicate-turn-end` dedupe
     stays as defense.
   - Done = one record per `Stop`, and the `⚙` lands in the right pane.
-- [ ] 3.4 **The supervisor must not auto-chain the product or incident workflows**
+  - ✅ **Outcome: NOT reproduced** in 8 live scenarios, so no speculative fix (AC-12). Installed build: 0 duplicates in 1,278 records (dev-only on the evidence). The backlog item stays open at low with the narrowed context.
+- [x] 3.4 **The supervisor must not auto-chain the product or incident workflows**
       (`SURFACE-2026-10-21-SUPERVISOR-AUTO-CHAINS-PRODUCT-AND-INCIDENT-WORKFLOWS`; operator ruling at
       WP2 2026-10-21, design prior `supervisor-chains-execution-workflows-only`).
   - `decideVerdict` withholds on any product (`P*`) or incident (`I*`) edge with a named reason.
   - A test per workflow; the 31 historical candidates WP2 mined are the fixture.
-- [ ] 3.5 **Revise the adjudicator's question so it lets an unneeded ask fire**
+  - ✅ `workflow-not-supervised` via the `SUPERVISED_WORKFLOWS` allow-list (feature, task, session-ops); M15 replay 34 → 32/36.
+- [x] 3.5 **Revise the adjudicator's question so it lets an unneeded ask fire**
       (`SURFACE-2026-10-21-ADJUDICATOR-FAILS-THE-BREAK-AXIS-ON-ASK-SHAPED-TURNS`; added by the
       operator at WP2's verdict, 2026-10-21).
   - The shipped question ("is this turn waiting for the human to reply?") fires 126/188 real breaks
@@ -168,10 +172,12 @@ the 29 scorable records the +1 margin rested on?
     is the axis that must not drop.
   - Replace `wp2-adjudicator-set.json`'s answers and `adjudicatorRemeasure.test.ts`'s pinned
     verdict only with a new measurement, never by editing the numbers.
-- [ ] 3.6 **Make the alias pin loud** (`SURFACE-2026-10-21-ADJUDICATOR-PIN-IS-AN-ALIAS-THAT-MOVED-SILENTLY`).
+  - ✅ **Outcome: the question was KEPT by measurement** (AC-18). The best of 5 dev-tuned candidates (v5) scored 0.830 waits held / 0.801 breaks fired on the held-out split, against the shipped 0.869 / 0.695, missing the ≥0.85 waits floor. The ceiling is the tail-only INPUT, not the wording (`arch/workflow-supervisor.md` §D R-6 condition 3). The backlog item stays open.
+- [x] 3.6 **Make the alias pin loud** (`SURFACE-2026-10-21-ADJUDICATOR-PIN-IS-AN-ALIAS-THAT-MOVED-SILENTLY`).
   - `sonnet` moved from `claude-sonnet-5` to `claude-sonnet-5-5` on 2026-09-29 unseen. Record the
     resolved id per call (`--output-format json`) in the activity log and warn when it changes, or
     pin a full id. Re-score on the WP2 set when it changes.
+  - ✅ Full-id pin `claude-sonnet-5-5` and an exactly-the-pin resolved-model check; any failure basis becomes `adjudicator-failed`.
 
 ### WP4: Status-channel semantics — the purple dot and turn starts ✅ SHIPPED 2026-10-26 (commit 53141d4)
 

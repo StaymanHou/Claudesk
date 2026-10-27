@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-27
+
+- **Feature shipped:** M16.5 WP3 supervisor correctness: the workflow supervisor now chains only the execution workflows (feature, task, session), fires only on a TRANSITION token a turn emits rather than one it quotes, pins its adjudicator to the full model id `claude-sonnet-5-5` and checks the resolved model on every call, and shows a red `!` on the supervised badge after three consecutive transcript or adjudicator failures; the adjudicator's question was re-measured on a held-out split and kept (no rewrite cleared the bar), and the duplicate-turn-end leak was not reproduced and appears to be dev-only.
+- **Backlog resolved:** SURFACE-2026-09-28-SUPERVISOR-FIRES-ON-A-TRANSITION-TOKEN-QUOTED-IN-PROSE — only a token that opens a clause and is not quoted counts as the turn's verdict (`extractEmittedTransitionId`).
+- **Backlog resolved:** SURFACE-2026-10-21-SUPERVISOR-AUTO-CHAINS-PRODUCT-AND-INCIDENT-WORKFLOWS — product and incident edges withhold as `workflow-not-supervised` in every drive mode.
+- **Backlog resolved:** SURFACE-2026-10-21-ADJUDICATOR-PIN-IS-AN-ALIAS-THAT-MOVED-SILENTLY — the pin is the full id `claude-sonnet-5-5` and a reply from any other model is withheld as `adjudicator-failed`.
+- **Backlog resolved:** SURFACE-2026-09-28-QUALITY-TRANSCRIPT-COMPLETION-WAIT-HAS-NO-ALARM-FOR-A-CC-FORMAT-CHANGE — three consecutive `transcript-incomplete` turns raise the badge alarm, and a live-captured turn-close fixture pins the format.
+- **Milestone:** M16.5 WP3 — Supervisor correctness — quoted token, format alarm, leaked subscription.
+
 ## 2026-10-26
 
 - **Feature shipped:** M16.5 WP4 status-channel semantics: a workspace whose only background task is an artifact watch now reads idle instead of purple, and every verify-human pause reads blue on all three status surfaces (behind the workflow-features gate, as a display overlay that leaves the close/quit and respawn guards reading the true state); queued-prompt turn markers are kept by measurement and the fix was asked of Claude Code upstream (anthropics/claude-code#105187).

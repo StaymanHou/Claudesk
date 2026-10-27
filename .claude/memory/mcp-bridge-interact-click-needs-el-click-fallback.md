@@ -1,6 +1,6 @@
 ---
 name: mcp-bridge-interact-click-needs-el-click-fallback
-description: mcp__tauri__webview_interact{click} can fail with "window.__MCP__.resolveRef is undefined" when the bridge's ref helper isn't loaded on the page — fall back to a plain el.click() inside webview_execute_js, which drives every control type. Also: read the real Tauri command names from lib.rs's invoke handler instead of guessing.
+description: mcp__tauri__webview_interact{click} can fail with "window.__MCP__.resolveRef is undefined" when the bridge's ref helper isn't loaded on the page — fall back to a plain el.click() inside webview_execute_js, which drives every control type EXCEPT pointer-driven ones (a filmstrip tile: switch workspaces with a ⌘⇧N keydown on document.activeElement). Also: read the real Tauri command names from lib.rs's invoke handler instead of guessing.
 metadata:
   type: reference
 ---
@@ -35,6 +35,20 @@ const r = el.getBoundingClientRect();
 const top = document.elementFromPoint(r.left + r.width/2, r.top + r.height/2);
 const reachable = r.top >= 0 && r.bottom <= innerHeight && !!top && (el === top || el.contains(top));
 ```
+
+**⚠️ Exception: `el.click()` does NOTHING on a filmstrip tile (added 2026-10-27).** `.filmstrip-tile`
+has no click handler. The `.filmstrip` container drives tiles with
+`onPointerDown`/`onPointerMove`/`onPointerUp` (click vs drag-reorder), so a click on a tile returns
+fine and changes nothing. To switch the centre-stage workspace from the bridge, send the app's own
+`⌘⇧<N>` chord to the **focused element** (it bubbles to the app's keydown handler):
+
+```js
+(() => { (document.activeElement || document.body).dispatchEvent(new KeyboardEvent('keydown',
+  {key:'1', code:'Digit1', metaKey:true, shiftKey:true, bubbles:true, cancelable:true})); })()
+```
+
+A keydown dispatched on `window` alone did NOT switch. Confirm the switch with
+`.filmstrip-tile--active`, never a screenshot, because a screenshot can lag a frame.
 
 **Second, cheaper lesson from the same session: don't guess Tauri command names.** Two plausible guesses (`workflow_substrate_status`, `get_workflow_invite`) were both wrong and each cost a round-trip; the real names were `workflow_substrate_installed` and `workflow_get_invite`. `grep` the `invoke_handler` list in `src-tauri/src/lib.rs` first — it is the authoritative registry, and a wrong name returns a generic `Command <x> not found` that looks like a backend problem rather than a typo.
 

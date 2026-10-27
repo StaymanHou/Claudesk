@@ -361,14 +361,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit `778fe72`, window `778fe72^..778fe72`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged.)*
 
-## SURFACE-2026-09-28-QUALITY-TRANSCRIPT-COMPLETION-WAIT-HAS-NO-ALARM-FOR-A-CC-FORMAT-CHANGE
-- **Severity:** MAJOR
-- **Location:** `src/state/supervisor/transcript.ts` (`isTurnComplete`), `src/state/supervisor/fanOut.ts` (the completion wait in `fireOne`)
-- **Finding:** every decision is now gated on `isTurnComplete`, which keys on three UNDOCUMENTED CC transcript properties: `stop_reason` values and the `system` subtypes `stop_hook_summary` / `turn_duration`. If a CC release renames or drops them, every turn waits ~2 s and withholds `transcript-incomplete`, which is exactly the "supervisor silently never fires" symptom this feature fixed, and nothing flags it except someone reading the activity log.
-- **Suggested action:** a positive alarm. Candidates: N consecutive `transcript-incomplete` withholds for one workspace surface on the badge hint (or a console warn), and/or a pinned transcript fixture refreshed from a live capture at each CC version bump. Per CLAUDE.md: silence from a component whose success is invisible is not evidence it works.
-- **Priority:** medium
-- **Status:** fixed in M16.5 WP3 Phase 2 (3.2: `failureAlarm.ts` + the live turn-close fixture) — resolved at `/feature-finalize`, not before (delete-on-resolve with its CHANGELOG line). (`backlog.md` has no stub for it, only a cross-reference in the supervisor-silence entry; update that at finalize.)
-
 ## SURFACE-2026-09-28-QUALITY-SILENT-SUPERVISOR-MINOR-BATCH
 - **Severity:** MINOR ×5
 - **Findings:**
