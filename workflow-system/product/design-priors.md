@@ -1,7 +1,7 @@
 ---
 stage: design-priors
 state: active
-updated: 2026-10-21
+updated: 2026-10-27
 ---
 
 # Design Priors — Claudesk
@@ -250,3 +250,17 @@ There is a second, sharper reason for the destructive half specifically: a user 
 
 **Origin:** M16.5 WP2 Phase 2 verify-human (2026-10-21). The operator's sample review labelled R040 (I18 → `incident-resolve`) and R133 (P3 → `product-research`) AWAITING. Neither turn's text asked anything; the operator's reasons were "incident workflow shouldn't auto chain" and "product workflow shouldn't auto chain either". The shipped policy table fires both: 31 of 361 mined fire candidates are product (24) or incident (7). The fix is `SURFACE-2026-10-21-SUPERVISOR-AUTO-CHAINS-PRODUCT-AND-INCIDENT-WORKFLOWS` → WBS WP3 task 3.4. Related: [[explicit-selectable-mode-over-inferred-mode]] (the drive mode is still the operator's switch; this prior bounds what any mode may automate).
 
+## simple-version-first-when-the-source-fix-shrank-the-problem
+
+**Axis:** effort vs marginal gain (how far to harden a safety net)
+
+**Lean:** When the underlying problem has already become rare at its source, keep the remaining work on the component that catches it, but build the **simple** version. An advanced enhancement whose likely gain is minor goes to the **backlog** with its measurement, not into the work package. This is not a cut or a deferral of the work itself.
+
+**Decision rule:** ask **"does this fix a failure the operator can see, or tune accuracy on an event that is already rare?"**
+- **Visible failure** (it goes silent, does the wrong thing, or a signal is missing) → build it, in its simplest correct form.
+- **Accuracy tuning on a rare event** (richer adjudicator input, a cleverer heuristic, chasing the last few points of a score) → backlog it, at low priority, with the measurement that motivated it.
+- Do not overcomplicate the simple version to pre-empt the advanced one.
+
+**Why (⚠️ INFERRED; approved as proposed by the operator 2026-10-27, why not yet sharpened; directional + overridable):** Since Opus 5.5 and the recent mccc changes, auto-chain breaks are rare at the source. That makes the supervisor a backstop, not the main defence. Every added layer of sophistication costs verification and maintenance permanently, while its payoff shrinks as the event it targets gets rarer.
+
+**Origin:** M16.5 WP3 close (2026-10-27). Task 3.5 re-measured the adjudicator question and kept it: every rewrite traded breaks for waits about one-for-one, and the next lever (more input than the turn's tail) is an advanced, minor-gain enhancement. The operator: *"not to cut or defer, but just make it simple. doesn't have to overcomplicate it. And more advanced enhancement (which likely will produce minor gains) can be sent back to backlog."* Applied at once: `SURFACE-2026-10-21-ADJUDICATOR-FAILS-THE-BREAK-AXIS-ON-ASK-SHAPED-TURNS` was lowered from high to low. WP3's review MAJOR (count the failure alarm machine-wide) stays in WP8, because it is a visible-failure fix. Related: [[supervisor-chains-execution-workflows-only]] (what the supervisor may automate), [[escape-hatch-to-the-os-over-in-app-infrastructure]] (the same "permanent surface for a rare case" cost, on the build-vs-delegate axis).
