@@ -18,9 +18,15 @@ interface PickerOverlayProps {
   onOpen: (projectPath: string) => void;
   /** Close the overlay without opening anything (Esc / backdrop / close button). */
   onDismiss: () => void;
+  /** M16.5 WP5 (5.7) — open workspaces' project paths; the picker lists them last. */
+  openProjectPaths?: readonly string[];
 }
 
-export function PickerOverlay({ onOpen, onDismiss }: PickerOverlayProps) {
+export function PickerOverlay({
+  onOpen,
+  onDismiss,
+  openProjectPaths,
+}: PickerOverlayProps) {
   // Esc closes — registered on the document so it fires regardless of focus
   // (the picker's own filter input, a recent row, anywhere inside the overlay).
   useEffect(() => {
@@ -58,7 +64,7 @@ export function PickerOverlay({ onOpen, onDismiss }: PickerOverlayProps) {
         >
           ×
         </button>
-        <ProjectPicker onOpen={onOpen} />
+        <ProjectPicker onOpen={onOpen} openProjectPaths={openProjectPaths} />
       </div>
     </div>
   );

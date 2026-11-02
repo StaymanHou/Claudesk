@@ -29,6 +29,8 @@ import {
 } from "react";
 import {
   clampViewport,
+  viewportForKey,
+  viewportKeyAction,
   viewportSeedKey,
   type DataWindow,
   type Viewport,
@@ -123,25 +125,32 @@ export function ViewportProvider({
     setRaw(clampViewport(seed, dataWindow));
   }, [seed, dataWindow]);
 
-  // WP6b-1 Phase 2 — minimal keyboard reset: pressing `0` resets the viewport to
-  // the seed (the "get un-lost" affordance; same action as the Toolbar "Fit day"
-  // button). Deliberately NOT `Escape` — that closes the dashboard (GlobalDashboard's
-  // own handler), so binding it here would create a double-action. Ignores typing
-  // into inputs. Torn down on unmount. (Arrow-pan / +/- zoom / Home-End are DEFERRED
-  // — SURFACE-2026-07-13-M9-WP6B1-KEYBOARD-PAN-ZOOM-DEFERRED.)
+  // WP6b-1 Phase 2 — keyboard reset: pressing `0` resets the viewport to the seed (the
+  // "get un-lost" affordance; same action as the Toolbar "Fit day" button). Deliberately
+  // NOT `Escape` — that closes the dashboard (GlobalDashboard's own handler), so binding it
+  // here would create a double-action.
+  // M16.5 WP5 (5.5) — plus `←`/`→` pan, `+`/`=`/`-` zoom and `Home`/`End`, through the
+  // pure `viewportForKey` and the same clamping setter as the drag/wheel gestures. Bare keys
+  // only (⌘/⌃/⌥ combos are left alone) and never while typing into an input. Torn down on
+  // unmount.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "0") return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return; // leave ⌘/⌃/⌥-combos alone
+      const action = viewportKeyAction(e); // null for ⌘/⌃/⌥ combos and other keys
+      if (action === null) return;
       const t = e.target as HTMLElement | null;
       const tag = t?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (t && t.isContentEditable))
         return;
-      reset();
+      if (action === "reset") {
+        reset();
+        return;
+      }
+      e.preventDefault(); // Home/End/arrows would otherwise scroll the page
+      setViewport((prev) => viewportForKey(prev, action, dataWindow) ?? prev);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [reset]);
+  }, [reset, setViewport, dataWindow]);
 
   const value = useMemo<ViewportCtx>(
     () => ({ viewport, setViewport, reset, dataWindow }),

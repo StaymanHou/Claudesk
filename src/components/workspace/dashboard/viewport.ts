@@ -486,6 +486,86 @@ export function zoomViewport(
   return { visible_start_min: newStart, visible_end_min: newStart + newRange };
 }
 
+/** M16.5 WP5 (5.5) — fraction of the visible span one arrow press pans by. */
+export const KEY_PAN_FRACTION = 0.1;
+/** M16.5 WP5 (5.5) — span factor per `+` / `-` press (the source `claude-time` set). */
+export const KEY_ZOOM_FACTOR = 1.25;
+/** M16.5 WP5 (5.5) — the bare keys {@link viewportForKey} handles. */
+export const VIEWPORT_KEYS: ReadonlySet<string> = new Set([
+  "ArrowLeft",
+  "ArrowRight",
+  "+",
+  "=",
+  "-",
+  "Home",
+  "End",
+]);
+
+/** The keydown fields {@link viewportKeyAction} reads (a structural `KeyboardEvent` subset). */
+export interface ViewportKeyEvent {
+  key: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+}
+
+/**
+ * What a keydown does to the Day-view viewport: `"reset"` for a bare `0`, the key itself
+ * for a {@link VIEWPORT_KEYS} key, `null` otherwise — including any ⌘/⌃/⌥ combo, which is
+ * left to the app and the editor. The predicate lives HERE, not inline in the listener, so
+ * the keydown registration site delegates its chord matching (the convention
+ * `offInvariantGuard.test.ts` enforces).
+ */
+export function viewportKeyAction(
+  e: ViewportKeyEvent,
+): "reset" | string | null {
+  if (e.metaKey || e.ctrlKey || e.altKey) return null;
+  if (e.key === "0") return "reset";
+  return VIEWPORT_KEYS.has(e.key) ? e.key : null;
+}
+
+/**
+ * M16.5 WP5 (5.5) — the viewport a bare key moves to, or `null` if the key is not a
+ * viewport key. `←`/`→` pan by {@link KEY_PAN_FRACTION} of the span, `+`/`=` zoom in and
+ * `-` zoom out by {@link KEY_ZOOM_FACTOR} around the centre, `Home`/`End` jump to the
+ * start/end of `dataWindow` keeping the span. (`0` = reset stays in `ViewportProvider`.)
+ * The caller clamps, exactly as for the drag and wheel gestures.
+ */
+export function viewportForKey(
+  vp: Viewport,
+  key: string,
+  dataWindow: DataWindow,
+): Viewport | null {
+  const span = vp.visible_end_min - vp.visible_start_min;
+  const shift = (deltaMin: number): Viewport => ({
+    visible_start_min: vp.visible_start_min + deltaMin,
+    visible_end_min: vp.visible_end_min + deltaMin,
+  });
+  switch (key) {
+    case "ArrowLeft":
+      return shift(-span * KEY_PAN_FRACTION);
+    case "ArrowRight":
+      return shift(span * KEY_PAN_FRACTION);
+    case "+":
+    case "=":
+      return zoomViewport(vp, 1 / KEY_ZOOM_FACTOR, 0.5);
+    case "-":
+      return zoomViewport(vp, KEY_ZOOM_FACTOR, 0.5);
+    case "Home":
+      return {
+        visible_start_min: dataWindow[0],
+        visible_end_min: dataWindow[0] + span,
+      };
+    case "End":
+      return {
+        visible_start_min: dataWindow[1] - span,
+        visible_end_min: dataWindow[1],
+      };
+    default:
+      return null;
+  }
+}
+
 // ── Adaptive tick density (ported dashboard.jsx pickTickInterval/ticksInViewport)
 /** Candidate tick intervals in minutes, coarse → fine (source scale set). */
 const TICK_SCALES = [1440, 360, 60, 30, 15, 10, 5, 1] as const;

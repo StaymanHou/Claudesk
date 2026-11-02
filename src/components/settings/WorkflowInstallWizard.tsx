@@ -20,6 +20,7 @@ import {
   CANCELLING_LABEL,
   CONSENT_ITEMS,
 } from "./workflowInstallCopy";
+import { NO_TEXT_ASSIST } from "../noTextAssist";
 
 /** The upstream repository. Not user-editable — only the destination is. */
 const ORIGIN_URL =
@@ -220,7 +221,7 @@ export function WorkflowInstallWizard({
                 value={dest}
                 onChange={(e) => setDest(e.target.value)}
                 data-testid="install-location"
-                spellCheck={false}
+                {...NO_TEXT_ASSIST}
               />
               {/* Both affordances, deliberately. The picker is the discoverable path; the text
                   field stays editable because the default destination does not exist yet, and a

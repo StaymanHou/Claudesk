@@ -173,9 +173,16 @@ fn perform_quit_teardown(app: &tauri::AppHandle) {
                 .lock()
                 .map(|reg| reg.open_project_paths())
                 .unwrap_or_default();
-            for path in paths {
-                session_state::clear_and_persist(&dir, &path);
+            for path in &paths {
+                session_state::clear_and_persist(&dir, path);
             }
+            // M16.5 WP5 (5.7): a graceful quit closes every open workspace, so stamp
+            // `last_closed_at` on each — the picker's next-launch order is "last closed".
+            // One write for all of them; best-effort like the rest of this teardown.
+            config_store::commands::record_closed_best_effort(
+                app,
+                paths.iter().map(std::path::PathBuf::from).collect(),
+            );
         }
     }
     // M3 WP3: unlink the hook socket on close (mirror the kill_all reaping discipline).

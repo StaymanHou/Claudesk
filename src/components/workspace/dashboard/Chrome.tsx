@@ -150,7 +150,7 @@ export function Toolbar({
           className="dashboard-fit-day"
           data-testid="dashboard-fit-day"
           onClick={onFitDay}
-          title="Fit the whole window in view (reset zoom/pan · press 0)"
+          title="Fit the whole window in view (reset zoom/pan · press 0). Keys: ← → pan, + − zoom, Home / End jump to the ends"
           style={{
             background: CT_TOKENS.surfaceDim,
             color: CT_TOKENS.textSecondary,

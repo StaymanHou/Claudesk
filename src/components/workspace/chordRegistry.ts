@@ -437,6 +437,40 @@ export const CHORD_REGISTRY: readonly ChordEntry[] = [
     requiresWorkflowGate: false,
   },
   {
+    id: "cm6-find-next",
+    label: "⌘G",
+    host: "editor",
+    outcomes: [
+      { description: "Find the next match", whenFocused: "the editor" },
+    ],
+    matcher: null,
+    claudeskOwned: false,
+    requiresWorkflowGate: false,
+  },
+  {
+    id: "cm6-select-all-matches",
+    label: "⌘⇧L",
+    host: "editor",
+    outcomes: [
+      {
+        description: "Select all matches of the search",
+        whenFocused: "the editor",
+      },
+    ],
+    matcher: null,
+    claudeskOwned: false,
+    requiresWorkflowGate: false,
+  },
+  {
+    id: "cm6-goto-line",
+    label: "⌘⌥G",
+    host: "editor",
+    outcomes: [{ description: "Go to line", whenFocused: "the editor" }],
+    matcher: null,
+    claudeskOwned: false,
+    requiresWorkflowGate: false,
+  },
+  {
     id: "cm6-toggle-wrap",
     label: "⌘\\",
     host: "editor",

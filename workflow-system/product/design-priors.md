@@ -1,7 +1,7 @@
 ---
 stage: design-priors
 state: active
-updated: 2026-10-27
+updated: 2026-11-02
 ---
 
 # Design Priors — Claudesk
@@ -264,3 +264,18 @@ There is a second, sharper reason for the destructive half specifically: a user 
 **Why (⚠️ INFERRED; approved as proposed by the operator 2026-10-27, why not yet sharpened; directional + overridable):** Since Opus 5.5 and the recent mccc changes, auto-chain breaks are rare at the source. That makes the supervisor a backstop, not the main defence. Every added layer of sophistication costs verification and maintenance permanently, while its payoff shrinks as the event it targets gets rarer.
 
 **Origin:** M16.5 WP3 close (2026-10-27). Task 3.5 re-measured the adjudicator question and kept it: every rewrite traded breaks for waits about one-for-one, and the next lever (more input than the turn's tail) is an advanced, minor-gain enhancement. The operator: *"not to cut or defer, but just make it simple. doesn't have to overcomplicate it. And more advanced enhancement (which likely will produce minor gains) can be sent back to backlog."* Applied at once: `SURFACE-2026-10-21-ADJUDICATOR-FAILS-THE-BREAK-AXIS-ON-ASK-SHAPED-TURNS` was lowered from high to low. WP3's review MAJOR (count the failure alarm machine-wide) stays in WP8, because it is a visible-failure fix. Related: [[supervisor-chains-execution-workflows-only]] (what the supervisor may automate), [[escape-hatch-to-the-os-over-in-app-infrastructure]] (the same "permanent surface for a rare case" cost, on the build-vs-delegate axis).
+
+## chooser-leads-with-what-you-can-act-on
+
+**Axis:** information architecture (ordering inside a list the operator picks from)
+
+**Lean:** A list the operator chooses from leads with the items they can **act on now**. Items whose state the operator already has in front of them (already open, already running) go **last**, grouped and marked, not hidden: they stay reachable, but they never sit where the next action is.
+
+**Decision rule:** for each row ask **"would choosing this start something new, or only show me something I already have?"**
+- **Starts something new** → leads, ordered by what the operator was most recently working on (for the picker: last closed).
+- **Already in front of me** → a muted, labelled group at the end; clicking it still does the sensible thing (switch to it).
+- Do not hide the second group to "clean up" the list; a marked row costs little, a missing one costs a hunt.
+
+**Why (⚠️ INFERRED; approved as proposed by the operator 2026-11-02, why not yet sharpened; directional + overridable):** Attention is the scarce resource (`claudesk-philosophy`). Rows the operator can already see elsewhere (the filmstrip shows every open workspace) are noise in a chooser, and putting them first is the worst place for noise, because the top of a list is where the eye lands for the next action.
+
+**Origin:** M16.5 WP5 task 5.7, Phase 1 verify-human (2026-11-02). The picker sorted by last opened, so the workspaces opened that morning sat at the top of ⌘⇧N. The operator: *"I don't want to see them at the top. That's useless information,"* and ruled the order to be **last closed**, with open workspaces given their own treatment. Related: [[group-surfaces-by-the-question-they-answer]] (ordering of sibling SURFACES; this prior orders ROWS inside one surface), [[needs-you-outranks-busy]] (the same "lead with what needs the operator" instinct, on the status-dot axis).

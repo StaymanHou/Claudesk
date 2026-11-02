@@ -19,6 +19,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { rankFiles } from "./fuzzyMatch";
 import { FINDER_CHORD_LABEL } from "./finderChord";
+import { NO_TEXT_ASSIST } from "../../noTextAssist";
 
 interface FileFinderProps {
   /** The workspace project dir — the root fs_index walks. */
@@ -122,6 +123,7 @@ export function FileFinder({ projectPath, onOpen, onClose }: FileFinderProps) {
           type="text"
           className="command-palette-input"
           data-testid="file-finder-input"
+          {...NO_TEXT_ASSIST}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -130,7 +132,6 @@ export function FileFinder({ projectPath, onOpen, onClose }: FileFinderProps) {
           onKeyDown={onKeyDown}
           placeholder={`Go to file…  (${FINDER_CHORD_LABEL})`}
           aria-label="file filter"
-          spellCheck={false}
         />
         {error !== null ? (
           <div

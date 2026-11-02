@@ -221,7 +221,13 @@ pub fn workspace_deregister(
         reg.deregister(Path::new(&project_path));
         (reg.len(), closed_id)
     }; // drop the registry lock before the AppKit reconcile (don't hold it across a window op).
-       // M7: forget the closed workspace's last state so the aggregate alarm re-folds without it.
+       // M16.5 WP5 (5.7): the picker sorts by when a project was last CLOSED. Outside the
+       // registry lock; best-effort, so a failed write never fails the close.
+    crate::config_store::commands::record_closed_best_effort(
+        &app,
+        vec![std::path::PathBuf::from(&project_path)],
+    );
+    // M7: forget the closed workspace's last state so the aggregate alarm re-folds without it.
     if let Some(ws_id) = closed_workspace_id {
         crate::tray::commands::forget_workspace(&app, &ws_id);
     }

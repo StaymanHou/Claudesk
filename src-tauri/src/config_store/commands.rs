@@ -152,6 +152,17 @@ pub fn record_open(app: AppHandle, path: String) -> Result<Project, String> {
     add_or_touch(&dir, PathBuf::from(path), now_ms()).map_err(|e| e.to_string())
 }
 
+/// M16.5 WP5 (5.7) — stamp `last_closed_at` on the projects whose workspaces just closed.
+/// Called from `workspace_deregister` (one workspace) and the quit teardown (all open ones).
+/// Best-effort: a failure is logged and never fails the close or the quit that called it.
+pub(crate) fn record_closed_best_effort(app: &AppHandle, paths: Vec<PathBuf>) {
+    let result = resolve_data_dir(app)
+        .and_then(|dir| super::touch_closed(&dir, &paths, now_ms()).map_err(|e| e.to_string()));
+    if let Err(e) = result {
+        eprintln!("[claudesk] could not record last_closed_at for {paths:?}: {e}");
+    }
+}
+
 /// Remove a project from the list. No-op if absent.
 #[tauri::command]
 pub fn remove_project(app: AppHandle, path: String) -> Result<(), String> {

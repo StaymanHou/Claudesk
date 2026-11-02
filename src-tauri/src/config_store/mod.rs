@@ -68,6 +68,14 @@ pub struct Project {
     pub path: PathBuf,
     /// Last-opened timestamp, unix epoch milliseconds. Drives recency ordering.
     pub last_opened_at: i64,
+    /// M16.5 WP5 (5.7) — when this project's workspace last CLOSED, unix epoch ms. Stamped
+    /// by [`touch_closed`] on a workspace close (`workspace_deregister`) and for every open
+    /// workspace on a graceful quit. The picker sorts by it (falling back to
+    /// `last_opened_at` when absent), because the operator ruled that *last closed* is the
+    /// order that answers "what was I just working on?" — an open stamp says only which
+    /// order the morning's workspaces were clicked in. Absent on records that predate it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_closed_at: Option<i64>,
     /// Display label; defaults to the directory basename when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
@@ -100,7 +108,9 @@ pub struct Project {
     /// (`--model`); this value has **no CLI flag and no argv destination**. It reaches
     /// CC as the `CLAUDESK_DRIVE_MODE` **environment variable**, which gates a
     /// `UserPromptSubmit` hook that emits an `additionalContext` line naming the mode —
-    /// so `/session-restore` does not re-ask a question the operator already answered.
+    /// so `/session-restore` does not re-ask a question the operator already answered. ⚠️ That
+    /// skip needs an explicit rule in the skill since 2026-11-02 (M16.5 WP5 5.8; see
+    /// `arch/session-resumption.md` → "The drive-mode signal").
     /// Read `default_model` for the **storage** precedent only; the consumption analogy
     /// breaks at the point that matters (a WP sized on that analogy was mis-sized once
     /// already).
@@ -332,6 +342,7 @@ pub fn add_or_touch(data_dir: &Path, path: PathBuf, now_ms: i64) -> Result<Proje
                 display_name: derive_display_name(&path),
                 path,
                 last_opened_at: now_ms,
+                last_closed_at: None,
                 default_model: None,
                 default_drive_mode: None,
                 // ⚠️ A NEWLY ADDED project is supervised, matching the absent-key default. Written
@@ -344,6 +355,24 @@ pub fn add_or_touch(data_dir: &Path, path: PathBuf, now_ms: i64) -> Result<Proje
             project
         };
         Ok(record)
+    })
+}
+
+/// M16.5 WP5 (5.7) — stamp `last_closed_at = now_ms` on every listed project, in ONE
+/// read-modify-write (a quit closes several workspaces at once). A path with no record is
+/// skipped, not added: closing a workspace must never create a project. Paths are compared
+/// verbatim, matching [`add_or_touch`].
+pub fn touch_closed(data_dir: &Path, paths: &[PathBuf], now_ms: i64) -> Result<(), ConfigError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    update_projects(data_dir, |projects| {
+        for project in projects.iter_mut() {
+            if paths.contains(&project.path) {
+                project.last_closed_at = Some(now_ms);
+            }
+        }
+        Ok(())
     })
 }
 
@@ -631,6 +660,7 @@ mod tests {
         Project {
             path: PathBuf::from(path),
             last_opened_at: ts,
+            last_closed_at: None,
             display_name: Some(
                 Path::new(path)
                     .file_name()
@@ -824,6 +854,7 @@ mod tests {
         let with_mode = vec![Project {
             path: PathBuf::from("/m"),
             last_opened_at: 1,
+            last_closed_at: None,
             display_name: Some("m".into()),
             default_model: None,
             default_drive_mode: Some(DriveMode::Autopilot),
@@ -2010,5 +2041,52 @@ mod tests {
             created.default_model, None,
             "a newly added project inherits CC's default"
         );
+    }
+
+    #[test]
+    fn touch_closed_stamps_only_the_listed_known_projects() {
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a", 10), p("/b", 20), p("/c", 30)]).unwrap();
+        touch_closed(
+            dir.path(),
+            &[
+                PathBuf::from("/a"),
+                PathBuf::from("/c"),
+                PathBuf::from("/unknown"),
+            ],
+            99,
+        )
+        .unwrap();
+        let read = read_projects(dir.path()).unwrap();
+        let closed = |path: &str| {
+            read.iter()
+                .find(|r| r.path == Path::new(path))
+                .unwrap()
+                .last_closed_at
+        };
+        assert_eq!(closed("/a"), Some(99));
+        assert_eq!(closed("/b"), None);
+        assert_eq!(closed("/c"), Some(99));
+        // Closing an unknown path must not ADD a project.
+        assert_eq!(read.len(), 3);
+        // The open stamp is untouched.
+        assert_eq!(
+            read.iter()
+                .find(|r| r.path == Path::new("/a"))
+                .unwrap()
+                .last_opened_at,
+            10
+        );
+    }
+
+    #[test]
+    fn last_closed_at_is_absent_on_disk_until_stamped_and_round_trips() {
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a", 1)]).unwrap();
+        let raw = std::fs::read_to_string(dir.path().join(PROJECTS_FILE)).unwrap();
+        assert!(!raw.contains("last_closed_at"), "{raw}");
+        touch_closed(dir.path(), &[PathBuf::from("/a")], 7).unwrap();
+        let raw = std::fs::read_to_string(dir.path().join(PROJECTS_FILE)).unwrap();
+        assert!(raw.contains("\"last_closed_at\": 7"), "{raw}");
     }
 }

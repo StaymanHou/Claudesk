@@ -40,6 +40,7 @@ import {
   type WizardStep,
 } from "./profileWizardModel";
 import { useEscCapture } from "./useEscCapture";
+import { NO_TEXT_ASSIST } from "../noTextAssist";
 
 interface NewProfileWizardProps {
   /** Names already listed, for the collision check (D.19). */
@@ -176,10 +177,9 @@ export function NewProfileWizard({
             <input
               ref={bindFirst}
               data-testid="profile-wizard-name"
+              {...NO_TEXT_ASSIST}
               type="text"
               value={draft.name}
-              spellCheck={false}
-              autoComplete="off"
               placeholder="e.g. work"
               onChange={(e) =>
                 update(
@@ -198,10 +198,9 @@ export function NewProfileWizard({
             <input
               ref={bindFirst}
               data-testid="profile-wizard-dir"
+              {...NO_TEXT_ASSIST}
               type="text"
               value={draft.configDir}
-              spellCheck={false}
-              autoComplete="off"
               onChange={(e) =>
                 update({ configDir: e.target.value, dirEdited: true })
               }
@@ -247,6 +246,7 @@ export function NewProfileWizard({
             <input
               ref={bindFirst}
               data-testid="profile-wizard-retention"
+              {...NO_TEXT_ASSIST}
               type="text"
               inputMode="numeric"
               value={draft.cleanupPeriodDays}
@@ -262,10 +262,9 @@ export function NewProfileWizard({
             <input
               ref={bindFirst}
               data-testid="profile-wizard-model"
+              {...NO_TEXT_ASSIST}
               type="text"
               value={draft.model}
-              spellCheck={false}
-              autoComplete="off"
               placeholder="Claude Code's default"
               onChange={(e) => update({ model: e.target.value })}
               onKeyDown={onFieldKey}

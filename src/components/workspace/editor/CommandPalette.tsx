@@ -17,6 +17,7 @@ import {
   PALETTE_CHORD_LABEL,
   type PaletteCommand,
 } from "./paletteCommands";
+import { NO_TEXT_ASSIST } from "../../noTextAssist";
 
 interface CommandPaletteProps {
   /** The full command set to offer (filtered live as the user types). */
@@ -114,6 +115,7 @@ export function CommandPalette({ commands, onClose }: CommandPaletteProps) {
           type="text"
           className="command-palette-input"
           data-testid="command-palette-input"
+          {...NO_TEXT_ASSIST}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -122,7 +124,6 @@ export function CommandPalette({ commands, onClose }: CommandPaletteProps) {
           onKeyDown={onKeyDown}
           placeholder={`Type a command…  (${PALETTE_CHORD_LABEL})`}
           aria-label="command filter"
-          spellCheck={false}
         />
         <ul className="command-palette-list" role="listbox">
           {filtered.length === 0 ? (

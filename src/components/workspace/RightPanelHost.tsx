@@ -215,6 +215,10 @@ export function RightPanelHost({
     path: string;
     count: number;
   } | null>(null);
+  // M16.5 WP5 (5.2) — a failed delete / trash, shown inline above the tree until dismissed
+  // or the next delete is requested (SURFACE-2026-06-30-FILE-OP-ERROR-SURFACE). Before this
+  // the failure reached only the console, so a failed delete looked like nothing happened.
+  const [fileOpError, setFileOpError] = useState<string | null>(null);
 
   // QoL-WP1 — register this workspace's unsaved-doc probe with App's close guard. The
   // probe reads the editor's live dirty count at call time (the close handler invokes it
@@ -654,13 +658,15 @@ export function RightPanelHost({
 
   // QoL-WP5 — a delete ✕ was clicked in the FileTree: open the confirm (the actual
   // delete happens on confirm in onDeleteConfirm). Held as the pending path.
-  const requestDeleteFile = (path: string) => setPendingDelete(path);
+  const requestDeleteFile = (path: string) => {
+    setFileOpError(null);
+    setPendingDelete(path);
+  };
 
   // The delete-confirm resolved. On "delete": delete_file, then close any open tab(s)
   // for it across all panes (the file is gone) and bump the tree refresh. On "cancel":
-  // change nothing. A failed delete surfaces — re-open the tree's error path is overkill
-  // for a single op, so we just log via the rejected invoke (no silent swallow; a future
-  // toast could show it). The confirm covered the dirty-tab data-loss case.
+  // change nothing. A failed delete is shown inline above the tree (`fileOpError`, M16.5
+  // WP5) and logged. The confirm covered the dirty-tab data-loss case.
   const onDeleteConfirm = (choice: DeleteFileChoice) => {
     const path = pendingDelete;
     setPendingDelete(null);
@@ -673,19 +679,22 @@ export function RightPanelHost({
       .catch((e: unknown) => {
         // Surface the failure rather than swallow it; the tree stays as-is.
         console.error(`delete_file failed for ${path}:`, e);
+        setFileOpError(`Could not delete ${path}: ${String(e)}`);
       });
   };
 
   // QoL-WP5b — a folder delete ✕ was clicked: open the stronger confirm (the actual
   // recursive trash happens on confirm). FileTree resolves the descendant count.
-  const requestDeleteFolder = (path: string, count: number) =>
+  const requestDeleteFolder = (path: string, count: number) => {
+    setFileOpError(null);
     setPendingDeleteFolder({ path, count });
+  };
 
   // The folder-delete confirm resolved. On "delete": trash_path (recoverable — moves the
   // whole subtree to the macOS Trash, NOT a hard remove_dir_all), then close every open
   // tab UNDER the deleted dir across all panes (prefix match) and bump the tree refresh.
-  // On "cancel": change nothing. A failed trash surfaces (console, like the single-file
-  // delete — a future toast could show it); the tree stays as-is.
+  // On "cancel": change nothing. A failed trash is shown inline above the tree, like the
+  // single-file delete; the tree stays as-is.
   const onDeleteFolderConfirm = (choice: DeleteFileChoice) => {
     const target = pendingDeleteFolder;
     setPendingDeleteFolder(null);
@@ -697,6 +706,9 @@ export function RightPanelHost({
       })
       .catch((e: unknown) => {
         console.error(`trash_path failed for ${target.path}:`, e);
+        setFileOpError(
+          `Could not move ${target.path} to the Trash: ${String(e)}`,
+        );
       });
   };
 
@@ -988,6 +1000,25 @@ export function RightPanelHost({
           .file-tree-body { display:none }) hides the body in the strip. Keeping it
           mounted preserves the expanded-dir Set AND avoids re-issuing the fs_tree
           walk on every collapse→expand cycle. */}
+      {fileOpError !== null && (
+        <div
+          className="file-tree-op-error"
+          data-testid="file-tree-op-error"
+          role="alert"
+        >
+          <span className="file-tree-op-error-text">{fileOpError}</span>
+          <button
+            type="button"
+            className="file-tree-op-error-dismiss"
+            data-testid="file-tree-op-error-dismiss"
+            aria-label="Dismiss"
+            title="Dismiss"
+            onClick={() => setFileOpError(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
       <FileTree
         ref={fileTreeRef}
         projectPath={projectPath}

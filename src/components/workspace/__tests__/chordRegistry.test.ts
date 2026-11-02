@@ -525,12 +525,7 @@ describe("chord registry — COMPLETENESS (the other direction)", () => {
       "Mod-+": "same row as Mod-= (shift variant of the same key)",
       "Mod--": 'same row as Mod-= (the "⌘= / ⌘- / ⌘0" label covers it)',
       "Mod-0": "same row as Mod-=",
-      // From `searchKeymap`, visible only since the spread is resolved. Not rows because
-      // Settings is a reference for the chords whose behavior needs explaining, not a CM6
-      // manual. ⚠️ ⌘⌥G (go to line) is the one plausible future row — a product call.
-      "Mod-g": "find next — search-panel navigation, reached from the ⌘F row",
-      "Mod-Shift-l": "select all matches — search-panel companion to ⌘F / ⌘D",
-      "Mod-Alt-g": "go to line — CM6 built-in, not listed (see note above)",
+      // `searchKeymap`'s ⌘G / ⌘⇧L / ⌘⌥G were here until M16.5 WP5 (5.3) gave each a row.
     };
 
     const editorRows = CHORD_REGISTRY.filter((e) => e.host === "editor");

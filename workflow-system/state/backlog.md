@@ -999,8 +999,11 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Summary:** The review player frame-steps by seeking to the midpoint of a fixed-rate frame grid built from the track's `configuration.framerate`. A variable-frame-rate video (macOS screen recordings, phone video) reports a nominal/average rate, so steps can skip or repeat frames, and the `.ff` timecode is approximate.
 - **Context:** Every M16 WP3 fixture is constant-rate; no VFR file was measured. `snapFps` keeps an unusual rate raw rather than claim a standard one.
 - **Suggested action:** If VFR review matters in dogfooding, step by presented frames instead (seek just past the current rVFC `mediaTime`, then confirm a new frame presented). Measure on a real screen recording first.
+- **Measured at M16.5 WP5 task 5.6 (2026-11-02) — the fault is REAL:** a synthetic VFR H.264 (120 frames, exact 1/600 timebase, 60 fps bursts of 7 with 116.7 ms gaps — the shape of a screen recording; each frame a distinct luma so the shown frame is identifiable; `tmp/scratch/scratch-a/media/wp5-vfr.mp4`, ffprobe `r_frame_rate=60/1 avg_frame_rate=1200/37`) reads as **32.432 fps** in the player. 40 presses of "next frame" in the dev app: **5 exact, 18 skips, 17 repeats** — the canvas pixel repeated 4× at every gap, exactly as the midpoint-grid prediction from the true PTS list said.
+- **Feasibility, measured:** in this WebKit `requestVideoFrameCallback` DOES fire on a paused seek and reports the PRESENTED frame's PTS (seek 0.15 → `mediaTime` 0.1). So a correct VFR step is buildable without a demuxer: **prev** = one seek to `cur - 1ms` (lands on the previous frame); **next** = grow-then-bisect seeks until `mediaTime` changes (≈10–20 seeks worst case), then settle on that frame. Keep the midpoint grid for constant-rate files (M16 WP3's measured rule) — that needs a CFR/VFR decision the player does not have today.
+- **Why not built at WP5 (agent decision, disclosed to the operator 2026-11-02):** a probing engine is not the simple version, it would touch the constant-rate path M16 tuned, and it only matters for VFR files. Per `simple-version-first-when-the-source-fix-shrank-the-problem` and the operator's "drop the enhancement if it is not worth my attention".
 - **Priority:** low
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
+- **Status:** open — measured at M16.5 WP5 (fault confirmed, fix designed, not built)
 
 ## SURFACE-2026-10-26-MEDIATABLIVE-FLAKES-UNDER-FULL-SUITE-LOAD
 - **Source:** feature:build (M16.5 WP3 Phase 2)
@@ -1022,3 +1025,32 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium
 - **Status:** pending
 
+
+## SURFACE-2026-11-02-DRIVE-MODE-MENU-STILL-SHOWN-UNDER-A-CLAUDESK-MODE
+- **Source:** operator (dogfooding, 2026-11-02, screenshot from `mbt-copilot` at `/session-restore`)
+- **Target level:** product:wbs → **M16.5 WP5 task 5.8** (operator asked to fit it into an existing QoL bucket)
+- **Type:** bug (Claudesk half) + new-work (mccc half)
+- **Summary:** In a Claudesk workspace `/session-restore` (and `/session-start`) still show the typed "press Enter to keep current" drive-mode menu every time, even though Claudesk already pre-selected the mode. The operator asks for two things: **(1) mccc:** replace the typed numbered menu with CC's point-and-select question UI (`AskUserQuestion`; four modes fit its 2–4-option limit, with the current mode first and marked); **(2) Claudesk + mccc:** when a Claudesk drive mode is present, skip the menu entirely and use that mode.
+- **Context:**
+  - The signal works for the VALUE but not for the SKIP. Both observed restores (this repo and `mbt-copilot`, 2026-11-02) read `Claudesk reports the drive mode for this workspace as autopilot.` and showed Autopilot as current, then presented the menu anyway. `arch/session-resumption.md` → "The drive-mode signal" says the line "makes the **real** `/session-restore` skip its mode menu", proven live at M12 on short, cold contexts. That claim no longer holds: the skip relied on the model inferring it from a fact-only sentence, and that inference has decayed, the same prose-decay pattern as M15.
+  - ⚠️ The fix **reverses a recorded M12 HARD CONSTRAINT**: "ZERO companion-repo change". That constraint kept the re-prompt for plain-CLI users, and the reversal can still keep it, because the skip is gated on the Claudesk line being present, which a bare terminal never has (the hook emits nothing without `CLAUDESK_DRIVE_MODE`). The operator asked for this reversal on 2026-11-02.
+  - The hook sentence is fact-only by design (`claudesk-hook.pl`: "a prohibition is correct at turn 1 and wrong at turn 60"). Keep it that way: the skip rule belongs in the mccc skills, which consume the signal by name, not in a stronger hook sentence.
+  - Mode changes stay one click away on the workspace header (`⇅ <mode>`, M13.5 WP4), so skipping the menu loses nothing.
+- **Suggested action:** WP5 task 5.8.
+  - Send one mccc inbox message (outbox copy in `workflow-system/outbox/`) with both asks:
+    - (a) `session-start` step 3 and `session-restore` step 4b use `AskUserQuestion` for the mode pick.
+    - (b) both skills skip the pick when a `Claudesk reports the drive mode for this workspace as <mode>.` line is in context, use that mode, and say so in one line. The precedence against `.session.md`'s `drive_mode:` is mccc's to state (lean: Claudesk wins, since it is the live operator setting).
+  - Claudesk side: correct the arch's "makes the real `/session-restore` skip" claim and the "ZERO companion-repo change" constraint.
+  - Once mccc lands, verify live in a Claudesk workspace that restore shows no menu, and in a bare terminal that it still asks, through the select UI.
+- **Priority:** medium (it hits the first turn of every workspace session)
+- **Status:** waiting on mccc — message sent 2026-11-02 (`workflow-system/outbox/HANDOFF-to-mccc-2026-11-02-drive-mode-picker.md`). Claudesk's half is DONE at WP5 5.8 (arch corrected; `CLAUDE.md`, `config_store` and `hook_pl_output.rs` comments updated; the hook stays fact-only). **Remaining (carried, not passed):** once mccc ships, check live that `/session-restore` in a Claudesk workspace shows no mode menu and names the mode, and that a bare terminal still asks through the select UI. As of 2026-11-02 mccc had not landed it (message still in its inbox, no skill change).
+
+## SURFACE-2026-11-02-TRASH-PATH-BLOCKS-THE-MAIN-THREAD
+- **Source:** feature:verify-self (M16.5 WP5 Phase 2)
+- **Target level:** task
+- **Type:** bug
+- **Summary:** Trashing a folder from the file tree froze the UI for more than 7 seconds: the MCP bridge's `webview_execute_js` timed out ("Request timeout after 7000ms") while the trash ran.
+- **Context:** `editor_fs::commands::trash_path` is a SYNC `#[tauri::command]`, so it runs on the main thread. It calls `trash::delete`, which on macOS defaults to the Finder (AppleScript) method, which takes seconds. That is the blocking-on-main-thread class CLAUDE.md warns about (a sync `cc_kill` hung the app the same way). `src-tauri/tests/sync_commands_do_not_block.rs` does not catch it: the guard looks for sleeps and polls, not an AppleScript round-trip inside a crate call. A side observation: Finder moved `wp5-ro/sub` to the Trash even though its parent was `chmod 555`, so the "trash failed" path is hard to reach in practice.
+- **Suggested action:** Make `trash_path` an `async` command (or `spawn_blocking`), the remedy CLAUDE.md names. Add the `trash` call to the guard's notion of blocking if it can be expressed. Measure the freeze before and after with `sample` (memory `verify-main-thread-freeze-via-sample`).
+- **Priority:** medium
+- **Status:** pending

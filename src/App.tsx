@@ -869,6 +869,7 @@ function App() {
               <PickerOverlay
                 onOpen={openFromOverlay}
                 onDismiss={() => setShowPicker(false)}
+                openProjectPaths={workspaces.map((w) => w.project_path)}
               />
             )}
             {/* QoL-WP1 — close-with-unsaved-changes confirm (discard or cancel). Mounted

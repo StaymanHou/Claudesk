@@ -243,6 +243,16 @@ the 29 scorable records the +1 margin rested on?
   - Measure today's order for **A** (fresh launch) and **B** (some workspaces already open).
   - Present orders with a recommendation (mockup if the difference is spatial). Build what the
     operator picks.
+- [ ] 5.8 **Skip the drive-mode menu under a Claudesk mode; make the menu point-and-select**
+      (`SURFACE-2026-11-02-DRIVE-MODE-MENU-STILL-SHOWN-UNDER-A-CLAUDESK-MODE`; added by the operator
+      2026-11-02). Mostly an mccc change:
+  - Send one mccc inbox message: (a) use `AskUserQuestion` for the mode pick in `session-start` /
+    `session-restore`, and (b) skip the pick when the Claudesk drive-mode line is present.
+  - ⚠️ This reverses M12's "ZERO companion-repo change" constraint (operator, 2026-11-02). Correct
+    that constraint and the "makes the real `/session-restore` skip its mode menu" claim in
+    `arch/session-resumption.md`. Keep the hook sentence fact-only.
+  - Verify live once mccc lands: no menu in a Claudesk workspace, still a select menu in a bare
+    terminal.
 
 ### WP6: Per-result and per-file replace
 
@@ -454,6 +464,3 @@ the alias pin loud). R027 stays SKIP. No mccc note is sent.
 **Evidence:** `workflow-system/product/wp2-adjudicator-set.json` (361 records; text only on
 claudesk rows) and `src/state/supervisor/__tests__/adjudicatorRemeasure.test.ts`, a replay with
 no live calls that pins the verdict.
-
-## Session Handoff — 2026-10-27 14:20
-Handed off. See `workflow-system/state/.session.md` to restore.

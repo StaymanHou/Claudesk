@@ -30,6 +30,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { type FileMatches, type SearchQuery } from "./searchModel";
 import { SEARCH_CHORD_LABEL } from "./searchChord";
+import { NO_TEXT_ASSIST } from "../../noTextAssist";
 
 interface ProjectSearchProps {
   /** The workspace project dir — the root project_search walks. */
@@ -136,12 +137,12 @@ export function ProjectSearch({
             type="text"
             className="command-palette-input"
             data-testid="project-search-input"
+            {...NO_TEXT_ASSIST}
             value={query.pattern}
             onChange={(e) => patch({ pattern: e.target.value })}
             onKeyDown={onKeyDown}
             placeholder={`Find in files…  (${SEARCH_CHORD_LABEL})`}
             aria-label="search pattern"
-            spellCheck={false}
           />
           <div
             className="project-search-toggles"
@@ -194,6 +195,7 @@ export function ProjectSearch({
               type="text"
               className="command-palette-input"
               data-testid="project-search-replace"
+              {...NO_TEXT_ASSIST}
               value={replacement}
               onChange={(e) => onReplacementChange(e.target.value)}
               onKeyDown={(e) => {
@@ -206,7 +208,6 @@ export function ProjectSearch({
               }}
               placeholder="Replace with…"
               aria-label="replacement text"
-              spellCheck={false}
             />
             <button
               type="button"

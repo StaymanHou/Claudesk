@@ -626,7 +626,8 @@ fn status_event_shape_is_unchanged() {
 //
 // The script gained a SECOND, independent concern: telemetry still goes OUT to the
 // socket, and a `UserPromptSubmit` `additionalContext` line now comes back on stdout
-// so the real `/session-restore` can skip its mode menu. The hook channel is
+// so `/session-restore` can skip its mode menu (⚠️ since 2026-11-02 that skip needs an explicit
+// rule in the skill; M12's inferred skip decayed — `arch/session-resumption.md`). The hook channel is
 // BIDIRECTIONAL as of M12 — `arch.md`'s "one-directional CC→Claudesk" describes the
 // pre-M12 shape (corrected in WP4d.3).
 // ===========================================================================

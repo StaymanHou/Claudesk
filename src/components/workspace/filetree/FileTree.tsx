@@ -37,6 +37,7 @@ import {
   type GitStatusMap,
 } from "./gitStatus";
 import { dominantStatusByDir } from "./gitRollup";
+import { NO_TEXT_ASSIST } from "../../noTextAssist";
 
 /** Imperative surface the parent drives the tree through (QoL-WP5 — ⌘N opens the input). */
 export interface FileTreeHandle {
@@ -282,6 +283,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
           <input
             className="file-tree-newfile-input"
             data-testid="file-tree-newfile-input"
+            {...NO_TEXT_ASSIST}
             autoFocus
             value={newFileName}
             placeholder={

@@ -192,9 +192,19 @@ absent from this very file.
 
 ⚠️ **THE DELIVERABLE IS A SIGNAL.** A persisted `drive_mode` **already existed on disk in 93% of
 manual restores and was already ignored 74% of the time**, so storing it somewhere new accomplishes
-nothing on its own. The mechanism, **proven live** (per `[[cc-hook-capture-beats-docs]]`, not from
-docs): an **env-var-gated `UserPromptSubmit` hook returning `additionalContext`** makes the **real**
-`/session-restore` skip its mode menu.
+nothing on its own. The mechanism, **proven live** at M12 (per `[[cc-hook-capture-beats-docs]]`, not
+from docs): an **env-var-gated `UserPromptSubmit` hook returning `additionalContext`** that tells the
+model the workspace's mode.
+
+⚠️ **CORRECTED 2026-11-02 (M16.5 WP5 task 5.8): the line no longer makes `/session-restore` SKIP its
+menu.** M12 proved the skip on short, cold contexts. On 2026-11-02 two restores in two Claudesk
+workspaces (`claudesk`, `mbt-copilot`) both read the line, correctly showed the reported mode as
+"current", and then presented the menu anyway. The skills read the line for the **value** but not
+as permission to **skip**; the skip had rested on the model inferring it, and that inference
+decayed (the same prose-decay class as M15). The fix is an explicit rule IN the skills (see the
+reversed constraint below), requested from mccc in
+`workflow-system/outbox/HANDOFF-to-mccc-2026-11-02-drive-mode-picker.md` (also: make the picker
+`AskUserQuestion` point-and-select). Until mccc ships it, expect the menu, pre-set to the right mode.
 
 ```
 picker cell  →  projects.json (default_drive_mode)  →  CLAUDESK_DRIVE_MODE on the CC spawn
@@ -206,9 +216,15 @@ picker cell  →  projects.json (default_drive_mode)  →  CLAUDESK_DRIVE_MODE o
   new WP starts there is nothing to mirror into — and five WIP templates never declare the field.
   **Claudesk does NOT write into `workflow-system/`**; it reads that world (M11's docs viewer is
   read-only and M12 did not change that). Core Principle 2's arrow was backwards and is corrected.
-- **⚠️ HARD CONSTRAINT — ZERO companion-repo change.** `/session-restore`'s re-prompt is **correct**
-  for a plain-CLI user and must not change: a CLI user has stated one intent (*restore*) and said
-  nothing about mode. **The distinguishing fact is the CALLER, not the skill.**
+- **⚠️ REVERSED 2026-11-02 (operator) — this WAS "HARD CONSTRAINT — ZERO companion-repo change".**
+  It held that `/session-restore`'s re-prompt is correct for a plain-CLI user and must not change,
+  and that the distinguishing fact is the CALLER, not the skill. The first half still holds and the
+  reversal keeps it: the skip is gated on the Claudesk line being present, which a bare terminal
+  never has (the hook emits nothing without `CLAUDESK_DRIVE_MODE`). What is reversed is "zero change
+  in mccc": the skills now carry an explicit "skip when the Claudesk line is present" rule, because
+  the inference the zero-change design relied on stopped happening (see the correction above).
+  ⚠️ The hook sentence itself stays **fact-only** (`claudesk-hook.pl`: a prohibition is right at turn
+  1 and wrong at turn 60). The rule lives in the skills, which own what a drive mode MEANS.
 - **`additionalContext` MUST nest under `hookSpecificOutput` with `hookEventName`** — top-level is
   rejected at runtime. Chosen **per-turn** (`UserPromptSubmit`) over one-shot (`SessionStart`)
   because a `SessionStart` injection lands once at position 0 and decays as the session grows.

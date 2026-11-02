@@ -80,6 +80,7 @@ import {
 } from "./profileLine";
 import { NewProfileWizard } from "../settings/NewProfileWizard";
 import { setProjectProfile, type Profile } from "../../state/profiles";
+import { NO_TEXT_ASSIST } from "../noTextAssist";
 
 /**
  * ⚠️ EXECUTABLE seam reference for the M10.9 workflow gate — do not delete as unused.
@@ -358,14 +359,13 @@ export function ProjectModelCell({
           ref={inputRef}
           className="picker-recent-model-input"
           data-testid="picker-recent-model-input"
+          {...NO_TEXT_ASSIST}
           type="text"
           list={HINTS_ID}
           value={draft}
           placeholder={MODEL_UNSET_PLACEHOLDER}
           aria-label={`Claude Code model for ${projectLabel}`}
           title={modelTitle}
-          spellCheck={false}
-          autoComplete="off"
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commitModel}
           onKeyDown={(e) => {
