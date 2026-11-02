@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-02
+
+- **Feature shipped:** M16.5 WP5 QoL batch: name and filter inputs (the picker filter first) turn off spellcheck, autocorrect, autocapitalize and autocomplete, a failed delete or trash shows an inline error above the file tree, the hotkey reference lists ⌘G / ⌘⇧L / ⌘⌥G, the Day view pans and zooms with ←/→/+/−/Home/End, and the project picker orders by last close with open workspaces in a marked "Open" group at the bottom; the VFR frame-step fault was measured but its fix not built, and the drive-mode-menu change was sent to mccc.
+- **Backlog resolved:** SURFACE-2026-10-19-PICKER-FILTER-AUTOCORRECT-HIJACKS-THE-ROW-CLICK — the shared `NO_TEXT_ASSIST` constant turns text assist off on the picker filter and 11 other name/filter inputs, held by a population guard.
+- **Backlog resolved:** SURFACE-2026-06-30-FILE-OP-ERROR-SURFACE — failed delete and trash errors now show inline above the file tree; the gitignored `.env` create collision was confirmed already covered.
+- **Backlog resolved:** SURFACE-2026-09-23-CM6-GO-TO-LINE-HAS-NO-SETTINGS-HOTKEY-ROW — ⌘G, ⌘⇧L and ⌘⌥G moved from `NOT_LISTED` into the chord registry with hotkey-reference rows.
+- **Backlog resolved:** SURFACE-2026-07-31-MODEL-ALIAS-HINTS-COULD-BE-DYNAMIC — closed as declined: the operator rejected recently-used model hints once built, and the change was reverted.
+- **Backlog resolved:** SURFACE-2026-07-13-M9-WP6B1-KEYBOARD-PAN-ZOOM-DEFERRED — the Day view gained ←/→ pan, +/− zoom and Home/End keys alongside the existing `0` reset.
+- **Backlog resolved:** SURFACE-2026-10-27-WORKSPACE-LIST-ORDER-NEEDS-A-UX-PASS — the picker orders by a new `last_closed_at` (stamped on workspace close and on quit) with open workspaces grouped and marked at the bottom.
+- **Milestone:** M16.5 WP5 — QoL batch — the papercuts.
+
 ## 2026-10-27
 
 - **Feature shipped:** M16.5 WP3 supervisor correctness: the workflow supervisor now chains only the execution workflows (feature, task, session), fires only on a TRANSITION token a turn emits rather than one it quotes, pins its adjudicator to the full model id `claude-sonnet-5-5` and checks the resolved model on every call, and shows a red `!` on the supervised badge after three consecutive transcript or adjudicator failures; the adjudicator's question was re-measured on a held-out split and kept (no rewrite cleared the bar), and the duplicate-turn-end leak was not reproduced and appears to be dev-only.

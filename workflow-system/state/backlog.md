@@ -15,17 +15,6 @@
 - **Priority:** low (lowered from high 2026-10-27 per design prior `simple-version-first-when-the-source-fix-shrank-the-problem`: breaks are now rare at source, and the next lever, richer adjudicator input, is an advanced minor-gain enhancement)
 - **Status:** open — re-measured at M16.5 WP3 (3.5), question KEPT per AC-18 (see the WP3 measurement above). Stays open.
 
-## SURFACE-2026-10-19-PICKER-FILTER-AUTOCORRECT-HIJACKS-THE-ROW-CLICK
-- **Source:** operator (dogfooding, 2026-10-19, screenshot)
-- **Target level:** task
-- **Type:** bug
-- **Summary:** Typing `eos` into the project picker's filter box brings up the macOS autocorrect bubble (`Eon ×`) under the input. Clicking the matching `eos` row does not open it. On mousedown the row disappears and the box now reads `Eon`, the correction. The operator wants two things: (1) **no autocorrect at all** on this box, because project names are not dictionary words, and (2) a click on a row must open that row, never accept a correction.
-- **Context:** The filter is the `picker-filter` `<input type="search">` in `ProjectPicker.tsx`. It sets none of `spellCheck` / `autoCorrect` / `autoCapitalize` / `autoComplete`, so WKWebView's native text checking runs on it. **Mechanism (inferred, not measured):** the mousedown on the row blurs the input, WebKit commits the pending correction on blur, and that fires `onChange` → `setFilter("Eon")`. `matchesFilter` then no longer matches `eos`, so the row unmounts before `click` fires on it (the row opens on `onClick`, which needs mousedown and mouseup on the same element). So (2) follows from (1): with no correction pending, nothing can rewrite the filter between mousedown and click.
-- **Precedent:** `FileFinder.tsx` sets `spellCheck={false}`, and `ProjectModelCell.tsx` sets `spellCheck={false}` + `autoComplete="off"`. ⚠️ Whether `spellCheck={false}` alone turns off the macOS **autocorrect** bubble in WKWebView is unverified. WebKit has a separate `autocorrect="off"` attribute (`autoCorrect` in React). Set both, plus `autoCapitalize="off"`, and check live that the bubble no longer appears.
-- **Suggested action:** add the attributes to `picker-filter`, then verify in the dev app: type `eos`, confirm no bubble, click the row, confirm the workspace opens. Also sweep the app's other free-text filter/search inputs for the same gap (`ProjectSearch`, `CommandPalette`, the settings wizards, the Prompt panel if it is an `<input>`/`<textarea>`) and decide per site. A prompt box may want spellcheck on, but a filter never does.
-- **Priority:** medium (the picker is the entry point to every workspace, and the failure looks like a lost click)
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-
 ## SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR
 - **Source:** feature:verify-self (`silent-supervisor` Phase 3)
 - **Target level:** feature:spec
@@ -41,6 +30,14 @@
   - The `duplicate-turn-end` dedupe already contains the decision, so the residual cost is a dev-only stray record and a possibly-missing `⚙`.
 - **Priority:** low (lowered 2026-10-27, M16.5 WP3: dev-build-only on the evidence, 0 in 1,278 installed-build records; decisions are already deduplicated)
 - **Status:** open — NOT reproduced at M16.5 WP3 (3.3, AC-12; see the repro attempt above). Stays open at low.
+
+## Code-quality findings — m16-5-wp5-qol-batch (2026-11-02)
+
+- **Pointer:** **1 MAJOR + 4 MINOR** from the review of `df52ce7` (0 CRITICAL). MAJOR: the quit path stamps `last_closed_at` with canonicalized registry keys against raw stored paths, so symlinked or trailing-slash projects silently miss it. MINOR: the Day-view key listener does not skip SELECT; `viewportKeyAction`'s return type collapses to `string`; the picker row should be its own component; the "Open" group label is a list row.
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp5-qol-batch — 2026-11-02`.
+- **Priority:** medium (the MAJOR); low (the rest)
+- **Status:** pending
+- **Pickup shape:** WP8's paydown. The MAJOR is a small Rust fix in `touch_closed` plus a real-symlink test; the two picker MINORs go together.
 
 ## Code-quality findings — m16-5-wp3-supervisor-correctness (2026-10-27)
 
@@ -692,16 +689,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** pending — routed to `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`
 
-## SURFACE-2026-07-31-MODEL-ALIAS-HINTS-COULD-BE-DYNAMIC
-- **Source:** operator question at M11.5 WP1 Phase 3 verify-human ("Then can this list be dynamic?")
-- **Target level:** product:wbs
-- **Type:** new-work
-- **Summary:** The per-project model control's `datalist` suggestions come from a hardcoded `MODEL_ALIAS_HINTS = ["fable", "opus", "sonnet"]` (`src/cc/modelOverride.ts`). Could it be derived instead of hand-maintained?
-- **Context:** **Not a correctness gap** — the hints affect *autocomplete only*. Any value stays typeable, nothing validates against the list, and its non-exhaustiveness is test-pinned at all three layers (TS normalizer, Rust store, Rust argv builder). If CC ships a new model it works immediately; only the suggestion is missing. **CC exposes no `list-models` command** (verified against `claude --help`: `--model` plus 11 subcommands, none enumerating models), so "dynamic" requires choosing a different source. The staleness cost is bounded, which is why this was not built during WP1.
-- **Suggested action:** **recently-used derivation** is the recommended option — zero dependencies, no network, no credentials, and it surfaces the models this operator actually uses (it is also what the roadmap's own constraint text suggested: "free-text / recently-used / derived"). Union it with the three static aliases so a fresh install still gets suggestions. **Two alternatives considered and not recommended:** scraping CC's own config/state (brittle coupling to an undocumented internal shape — the same anti-brittleness argument as M10.9 §4c), and querying the Anthropic API's models endpoint (authoritative and even entitlement-aware, but adds a network call, credentials Claudesk does not hold, and an offline-failure path to a feature that currently has none — a large surface for autocomplete convenience).
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)*
-
 ## SURFACE-2026-07-31-EDITOR-MINIMAP-STALE-ON-FILE-UPDATE
 - **Source:** operator report (2026-07-31, during the M11.5 bucket-scoping discussion)
 - **Target level:** product:wbs (bug, small)
@@ -797,14 +784,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Evidence 2026-09-23 (paydown-2026-09-23 WP1) — the class at SCALE:** 22 of 100 code-quality finding bodies were resolved-but-undeleted, most by the 2026-08-18/19 paydown, whose CHANGELOG lines claimed them while the bodies stayed. So were 10 of 34 pointer stubs, whose counts no longer matched their bodies, and one claimed closure was only HALF true (`SURFACE-2026-08-18-QUALITY-WP3-LATE-SUBSCRIPTION-DISPOSAL-UNTESTED`: one arm of two). A sweep that resolves SUB-ITEMS of a grouped entry is where this happens, because no heading disappears, so nothing prompts the delete.
 - **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §F.11 (upstream half; a local duplicate-heading guard is optional); stays OPEN until mccc applies it
 
-## SURFACE-2026-07-13-M9-WP6B1-KEYBOARD-PAN-ZOOM-DEFERRED
-- **Source:** feature:plan (M9 WP6b-1, Q4 resolution)
-- **Target level:** feature (future enhancement of the interactive day-timeline viewport) — NOT blocking WP6b-1
-- **Summary:** WP6b-1 ships only a minimal keyboard affordance (`0` → reset viewport to the `hour_range` seed). The source `claude-time` viewport had a full keyboard set — arrow-pan (±10% range), `+`/`-` zoom, `0` reset, Home/End jump-to-edge. Deferred out of WP6b-1 scope: drag-pan + ctrl/cmd-wheel/pinch zoom + the Minimap cover the interaction need; keyboard pan/zoom is a nicety, not a requirement.
-- **Context:** the deferred handlers are cheap (one `window` keydown listener + the same `clampViewport`); adding them later is a small, isolated follow-up. Files: `src/components/workspace/dashboard/` (a keyboard handler alongside `useTimelineGestures.ts` / the `ViewportProvider`).
-- **Priority:** low (post-WP6b-1 nicety; add if a real need surfaces)
-- **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)* (deferred at plan) — **deferred, carry to next cycle** *(M10.9 close, 2026-07-31)*
-
 ## SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE
 - **Source:** feature:build (WP7 Phase 3 relevance gate — operator decision 2026-06-21)
 - **Target level:** product:wbs (a WP7 follow-on, or a small standalone feature)
@@ -814,9 +793,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** add per-result + per-file replace when there's a writable result surface — e.g. clickable per-file "replace in this file" markers rendered into the Find Results tab (via the synthetic click-line callback, the same seam clicks already use), or a richer results panel. Backend `project_replace` already does per-file rewrite; a scope param + a file-filter would extend it.
 - **Priority:** medium
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-
-## Code-quality findings — file-op-error-surface (2026-06-30)
-- **Pointer:** 1 DEFERRED finding (net-new UX) in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# file-op-error-surface`. The 3 silent file-op-failure findings (delete/trash/create-collision) collapsed into one anchored Defer — needs a toast/inline-error surface in RightPanelHost that doesn't exist yet (net-new UX, not debt).
 
 ## Code-quality findings — supervisor-hotfix (2026-09-17)
 - **Pointer:** **1 MINOR remains** (rewritten 2026-09-23). Both MAJORs (the "per turn" toggle freshness claim, narrowed to option (a) with (b)/(c) deferred to F-b; and the unwired `UnsentInputWatermark.clear()` doc, restated as reserved) and the merged Rust doc block were resolved at paydown-2026-09-23 WP4. `CLASSES` pinning only its own length was resolved at WP6 (it now drives the CSS checks and must equal the emitted toggle classes). Remaining: the "do not merge" defence at 2 sites. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-hotfix — 2026-09-17`.
@@ -959,16 +935,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
-## SURFACE-2026-09-23-CM6-GO-TO-LINE-HAS-NO-SETTINGS-HOTKEY-ROW
-- **Source:** task:act (paydown-2026-09-23 fold-back; carried out of the paydown WBS, WP5's closure note)
-- **Target level:** feature:spec (feature backlog, a product call)
-- **Type:** new-work
-- **Summary:** WP5 resolved the `...searchKeymap` spread in the CM6-owned-set guard and surfaced three CM6 bindings that nobody had catalogued: `Mod-g` (find next), `Mod-Shift-l` (select all matches) and `Mod-Alt-g` (**⌘⌥G, go to line**). All three went into `NOT_LISTED` with reasons, and none got a Settings hotkey row, because adding user-facing rows is a product change outside a paydown.
-- **Context:** ⌘⌥G go-to-line is the one a user is likely to look for in the hotkey reference. The guard now resolves the spread, so a row added later is covered automatically.
-- **Suggested action:** Decide whether ⌘⌥G (and possibly ⌘G / ⌘⇧L) gets a row in the `⌘,` hotkey reference. If so, move it from `NOT_LISTED` into the chord registry with a label. The guard's completeness arm will then hold it.
-- **Priority:** low
-- **Status:** pending — operator's call
-
 ## SURFACE-2026-09-23-PAYDOWN-TASK-PATH-WPS-GOT-NO-CODE-QUALITY-REVIEW
 - **Source:** task:act (paydown-2026-09-23 fold-back)
 - **Target level:** feature:spec (a review pass, not a fix)
@@ -1014,17 +980,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** Run the full suite a few times to measure the rate. Look for a timing-dependent wait (a fixed frame count, or a `setTimeout` race with the asset-URL resolution).
 - **Priority:** low
 - **Status:** pending
-
-## SURFACE-2026-10-27-WORKSPACE-LIST-ORDER-NEEDS-A-UX-PASS
-- **Source:** operator (2026-10-27, at the WP3 session handoff)
-- **Target level:** product:wbs → **M16.5 WP5 task 5.7** (operator asked to fit it into a plan bucket)
-- **Type:** new-work (QoL)
-- **Summary:** The order of the workspaces in the selection list "is somewhat strange". Revisit how it is sorted today and design a better order for two scenarios: **A — a fresh app launch** (nothing open) and **B — some workspaces are already active in the app**.
-- **Context:** As of 2026-10-27 the project picker's list comes from `projects.json`, sorted most-recently-opened first by descending `last_opened_at` (`config_store::sort_by_recency`). `record_open` stamps it on every open, so the order shuffles with each open, and the picker does not distinguish a project that already has a live workspace. ⚠️ Confirm at spec which surface the operator means ("selection box"): the picker list (most likely), or the filmstrip's `▾` workspace switcher. Do not assume.
-- **Suggested action:** WP5 task 5.7, design-first. Measure the current order in both scenarios on a real `projects.json`. Propose orders with a recommendation (for B, e.g. open workspaces grouped first, or marked in place; for A, recency vs a stable order). If the difference is spatial, use `/util-option-mockup`. The operator picks, then build.
-- **Priority:** medium
-- **Status:** pending
-
 
 ## SURFACE-2026-11-02-DRIVE-MODE-MENU-STILL-SHOWN-UNDER-A-CLAUDESK-MODE
 - **Source:** operator (dogfooding, 2026-11-02, screenshot from `mbt-copilot` at `/session-restore`)

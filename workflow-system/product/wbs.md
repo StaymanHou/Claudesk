@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-10-27  # WP3 shipped (execution-only chaining, emitted-token rule, loud pin + failure alarm; 3.5 kept by measurement, 3.3 not reproduced)
+updated: 2026-11-02  # WP5 shipped (QoL batch: text assist off, file-op errors, CM6 hotkey rows, Day-view keys, picker order; 5.4 declined, 5.6 measured not fixed, 5.8 mccc half carried)
 cycle: milestone-16-5-supervisor-hardening-qol-and-paydown
 ---
 
@@ -207,43 +207,43 @@ the 29 scorable records the +1 margin rested on?
 - Operator decision A: the blue is NOT keyed on the turn's exit token (1 false blue in 324, against 4–5 lost asks).
 - Where it's written down: `arch/status-channel-and-surfaces.md` §A + §A.5 "Queued prompts", `arch/workflow-supervisor.md` §G.
 
-### WP5: QoL batch — the papercuts
+### WP5: QoL batch — the papercuts ✅ SHIPPED 2026-11-02 (commit df52ce7)
 
 **Milestone:** M16.5
 **Dependencies:** none (parallel with WP1–WP4)
 **Size:** M
 **Tasks:**
-- [ ] 5.1 **Picker filter autocorrect**
+- [x] 5.1 **Picker filter autocorrect**
       (`SURFACE-2026-10-19-PICKER-FILTER-AUTOCORRECT-HIJACKS-THE-ROW-CLICK`).
   - Set `spellCheck`, `autoCorrect` and `autoCapitalize` off on `picker-filter`.
   - Verify live: type `eos`, see no bubble, click the row, and the workspace opens.
   - Then sweep the other filter/search inputs and decide each one. A filter never wants
     spellcheck; the Prompt panel may.
-- [ ] 5.2 **A failed delete / trash shows an error** (`SURFACE-2026-06-30-FILE-OP-ERROR-SURFACE`).
+- [x] 5.2 **A failed delete / trash shows an error** (`SURFACE-2026-06-30-FILE-OP-ERROR-SURFACE`).
   - `RightPanelHost.onDeleteConfirm` / `onDeleteFolderConfirm` only `console.error` today.
   - The create-collision half already errors inline. Confirm it covers a gitignored `.env`, then
     close that half.
   - Reuse an existing pattern (the picker's `pruneToast`, or an inline line in the tree) before
     building a new toast.
-- [ ] 5.3 **Settings hotkey rows for the uncatalogued CM6 bindings**
+- [x] 5.3 **Settings hotkey rows for the uncatalogued CM6 bindings**
       (`SURFACE-2026-09-23-CM6-GO-TO-LINE-HAS-NO-SETTINGS-HOTKEY-ROW`): ⌘⌥G go to line, ⌘G find
       next, ⌘⇧L select all matches. Move them out of `NOT_LISTED`, and keep the CM6-owned-set guard
       green.
-- [ ] 5.4 **Model-alias hints from recent use** (`SURFACE-2026-07-31-MODEL-ALIAS-HINTS-COULD-BE-DYNAMIC`).
+- [x] 5.4 ⛔ **DECLINED by the operator 2026-11-02 (built, then reverted; entry closed)** — **Model-alias hints from recent use** (`SURFACE-2026-07-31-MODEL-ALIAS-HINTS-COULD-BE-DYNAMIC`).
       Use the union of recently used override values and the three static aliases. Still hints,
       never validation, and the non-exhaustiveness pins stay.
-- [ ] 5.5 **Day-view keyboard pan/zoom** (`SURFACE-2026-07-13-M9-WP6B1-KEYBOARD-PAN-ZOOM-DEFERRED`):
+- [x] 5.5 (Day view only; Week-view keys dropped — they need operator design) **Day-view keyboard pan/zoom** (`SURFACE-2026-07-13-M9-WP6B1-KEYBOARD-PAN-ZOOM-DEFERRED`):
       arrows to pan, `+`/`-` to zoom, Home/End. Check the keys against the chord registry first.
-- [ ] 5.6 **VFR frame-step** (`SURFACE-2026-10-20-REVIEW-PLAYER-VFR-FRAME-STEP`). Measure on a real
+- [x] 5.6 ⚠️ **MEASURED, fix NOT built** (5 exact / 18 skips / 17 repeats of 40; accepted at verify-human 2026-11-02, deviating from AC-17; the entry stays OPEN at low with the design) — **VFR frame-step** (`SURFACE-2026-10-20-REVIEW-PLAYER-VFR-FRAME-STEP`). Measure on a real
       macOS screen recording first. If steps skip or repeat, step by presented frames (rVFC
       `mediaTime`). If they don't, close the entry on the measurement.
-- [ ] 5.7 **Workspace list order** (`SURFACE-2026-10-27-WORKSPACE-LIST-ORDER-NEEDS-A-UX-PASS`; added
+- [x] 5.7 (built: ordered by `last_closed_at`, open workspaces in a marked "Open" group at the bottom) **Workspace list order** (`SURFACE-2026-10-27-WORKSPACE-LIST-ORDER-NEEDS-A-UX-PASS`; added
       by the operator 2026-10-27). Design-first:
   - Confirm which list ("selection box": the picker, or the filmstrip `▾`).
   - Measure today's order for **A** (fresh launch) and **B** (some workspaces already open).
   - Present orders with a recommendation (mockup if the difference is spatial). Build what the
     operator picks.
-- [ ] 5.8 **Skip the drive-mode menu under a Claudesk mode; make the menu point-and-select**
+- [x] 5.8 ⚠️ **Claudesk half done; the mccc half and the live check are CARRIED** (message sent; mccc not landed as of 2026-11-02; the entry stays OPEN) — **Skip the drive-mode menu under a Claudesk mode; make the menu point-and-select**
       (`SURFACE-2026-11-02-DRIVE-MODE-MENU-STILL-SHOWN-UNDER-A-CLAUDESK-MODE`; added by the operator
       2026-11-02). Mostly an mccc change:
   - Send one mccc inbox message: (a) use `AskUserQuestion` for the mode pick in `session-start` /

@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M16.5 WP5 — QoL batch (the papercuts)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-11-02 (finalize)
 **Created:** 2026-11-02
 **Entry:** spec (complex feature — 8 independent items across picker, file tree, settings, dashboard, media player, and an mccc handoff)
 **WBS:** `workflow-system/product/wbs.md` → WP5 (tasks 5.1–5.8). Each item's measured detail lives in its backlog entry; this spec does not repeat it.
@@ -259,11 +259,49 @@ None open. The remaining unknowns (5.6's VFR result, 5.7's chosen order) are res
 **5.5 (P2.4):** pure `viewportForKey(vp, key, dataWindow)` + `VIEWPORT_KEYS` + `KEY_PAN_FRACTION`/`KEY_ZOOM_FACTOR` in `dashboard/viewport.ts` (zoom reuses `zoomViewport` at frac 0.5). The existing `0` listener in `ViewportContext.tsx` now also routes those keys through the clamping `setViewport` (functional updater), same modifier/input filters, `preventDefault` so Home/End/arrows do not scroll. Fit-button tooltip names the keys. Tests: `viewportKeys.test.ts` (4).
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality (ship complete)
+- **Path:** Feature > done (archived 2026-11-02)
+- **Active scope:** none
 - **Blocked:** none
 - **Unvisited:** none after Phase 3 (then ship)
 - **Open discoveries:** none
+
+## Retrospect
+- **What changed in our understanding:** Two items were not what their backlog entries assumed. The VFR frame-step fault is real (5 exact / 18 skips / 17 repeats of 40), and the correct fix is a seek-probing engine, not a small change, because WebKit's rVFC reports the presented frame only after a seek lands. And the drive-mode menu was never skipped by the companion skills: M12's "companion skills unchanged" claim was wrong in four places, not one.
+- **Assumptions that held:** The papercuts were independent and small. The existing patterns covered them: one shared `NO_TEXT_ASSIST` constant, an inline error line above the tree instead of a new toast component, chord-registry rows the CM6 guard already held, and the existing `update_projects` write funnel for `last_closed_at`.
+- **Assumptions that were wrong:** That 5.4 (model-alias hints from recent use) was wanted; the operator declined it once built, and it was reverted. That a real screen recording was the right VFR fixture; recording the operator's screen was declined, and a synthetic VFR file with distinct per-frame luma measured it more exactly. That `last_opened_at` order was "strange" because of the sort key alone; it was also that open workspaces sat unmarked at the top.
+- **Approach delta:** 5.4 reverted; 5.5 shipped Day-view keys only (Week-view keys need design); 5.6 measured but not fixed (accepted at verify-human, deviating from AC-17); 5.8's mccc message was sent early at the operator's request and its live check is carried. Code-quality review found one MAJOR the tests could not see: the quit path stamps `last_closed_at` with canonicalized keys against raw stored paths (backlogged medium).
+
+**Feature complete:** M16.5 WP5 (QoL batch) has shipped. Picker and other name/filter inputs no longer autocorrect, a failed delete or trash shows an inline error, the hotkey reference lists ⌘G / ⌘⇧L / ⌘⌥G, the Day view pans and zooms by keyboard, and the project picker orders by last close with open workspaces grouped and marked at the bottom. See it in the next `/release` build. Requester = operator — closure notice for self-record.
+
+## Code-Quality Review — m16-5-wp5-qol-batch
+
+*(feature-review-quality on ship commit `df52ce7`, window `29c3395..df52ce7`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR — all auto-backlogged.)*
+
+### Strengths
+- The new pure modules (`pickerOrder.ts`, and `viewportForKey` / `viewportKeyAction` in `viewport.ts`) are each paired with a live-mount test of the real consuming component, with a positive control, so both the logic and its caller are tested.
+- The fixtures make the right and wrong answers differ (`last_closed_at` vs the old `last_opened_at` sort disagree on purpose; the viewport fixture is off-centre with an uneven span), avoiding guard-catalogue entry 15.
+- `NO_TEXT_ASSIST` replaces scattered, incomplete `spellCheck`/`autoComplete` props with one constant, plus a population guard with a positive control.
+- `touch_closed` goes through the existing `update_projects` funnel, writes once for many projects, skips unknown paths, and keeps old records valid via `skip_serializing_if`.
+- `record_closed_best_effort` runs after the registry lock is released and never fails the close or quit that calls it; the `trash_path` main-thread freeze was backlogged rather than left unrecorded.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`src-tauri/src/lib.rs` quit teardown → `config_store::touch_closed`] The quit path passes `reg.open_project_paths()`, which are canonicalized registry keys, but `touch_closed` compares exactly against `projects.json` paths as the frontend stored them. The close path passes the frontend's own path, so it matches; the quit path misses any project whose stored path is not already its realpath (trailing slash, symlinked parent). — Those projects silently get no `last_closed_at` on quit, so the next-launch picker order is wrong for them. The Rust test uses non-existent paths, where `canonicalize` falls back to the input, so it cannot see the mismatch.
+
+**MINOR**
+- [`ViewportContext.tsx` Day-view key listener] The window-wide listener now calls `preventDefault` on arrows/Home/End/`+`/`-`/`=` but skips only INPUT/TEXTAREA/contentEditable, not SELECT. — A focused `<select>` in a layer above the dashboard (e.g. Settings) would lose its keyboard navigation.
+- [`viewport.ts` `viewportKeyAction`] Returns `"reset" | string | null`, which TypeScript collapses to `string | null`. — A `ViewportKey` union derived from `VIEWPORT_KEYS` would let the compiler catch key typos.
+- [`ProjectPicker.tsx` row rendering] The `isOpen` branch re-indented ~300 lines of row JSX inside `map → map → switch`; the row is ~170 lines four levels deep in a 772-line component. — Extracting a `PickerRow` component would make the next row change easier.
+- [`ProjectPicker.tsx` "Open" group label] The label is a plain `<li>` in the same `<ul>` as the project rows. — Screen readers and `> li` row counts treat it as a row; use `role="presentation"` or a separate heading.
+
+### Assessment
+The batch is well built: pure logic extracted, live-mount tests on the real components, positive controls, and fixtures where the right and wrong answers differ. The one real flaw is in the new Rust persistence: the quit path and the close path pass differently-shaped paths to a function that compares them exactly, and the tests use non-existent paths, which hides it. That is a small fix (canonicalize on both sides, as `session_state` already does). The other items are minor; `ProjectPicker.tsx` keeps getting harder to modify, so the row should be extracted before it grows again.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary> -->
