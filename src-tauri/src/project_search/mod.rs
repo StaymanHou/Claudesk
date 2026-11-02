@@ -66,6 +66,18 @@ pub enum ProjectSearchError {
     /// error names where it stopped.
     #[error("could not write {file} during replace: {reason}")]
     WriteFailed { file: String, reason: String },
+
+    /// A scoped replace (one file, or one match) could not read its target file: it is
+    /// outside the root, gone, binary, or over the read cap. Writes nothing.
+    #[error("could not read {file} for replace: {reason}")]
+    ReadFailed { file: String, reason: String },
+
+    /// The result a scoped replace was aimed at is no longer on disk as the search saw
+    /// it (M16.5 WP6): the targeted line's text changed, the match moved off its
+    /// recorded offset, or the file no longer has any match. Writes nothing — the
+    /// operator re-runs the search rather than replacing something they never saw.
+    #[error("{file} changed since the search; search again")]
+    StaleResult { file: String },
 }
 
 /// The search request: the pattern plus the four mode toggles. Deserialized from the
@@ -308,6 +320,170 @@ pub fn replace_core(
         files_changed,
         matches_replaced,
     })
+}
+
+/// Which results a replace acts on (M16.5 WP6). Deserialized from the IPC call as a
+/// `kind`-tagged object; an absent scope on the command means [`ReplaceScope::All`], so
+/// the Replace All caller is unchanged.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ReplaceScope {
+    /// Every match across the project — today's Replace All ([`replace_core`]).
+    All,
+    /// Every match in one file. `path` is project-relative POSIX, as search returns it.
+    File { path: String },
+    /// Exactly one match: the search result row it came from, carried back verbatim so
+    /// the replace can refuse if the file changed since ([`ProjectSearchError::StaleResult`]).
+    Match {
+        path: String,
+        /// 1-based line number.
+        line: u32,
+        /// Byte range of the match within `line_text`.
+        start: usize,
+        end: usize,
+        /// The full line as the search saw it (no line terminator).
+        line_text: String,
+    },
+}
+
+/// Replace within `scope`. [`ReplaceScope::All`] is exactly [`replace_core`]; the other
+/// two read and rewrite ONE file, resolved root-confined through `editor_fs` (no walk),
+/// with the same composed regex and the same literal-vs-expand rule.
+///
+/// # Errors
+/// - [`ProjectSearchError::BadRoot`] / [`ProjectSearchError::BadPattern`] — as for search.
+/// - [`ProjectSearchError::ReadFailed`] / [`ProjectSearchError::WriteFailed`] — the file.
+/// - [`ProjectSearchError::StaleResult`] — the target no longer matches as searched.
+pub fn replace_in_scope(
+    root: &Path,
+    query: &SearchQuery,
+    replacement: &str,
+    scope: &ReplaceScope,
+) -> Result<ReplaceSummary, ProjectSearchError> {
+    let (path, target) = match scope {
+        ReplaceScope::All => return replace_core(root, query, replacement),
+        ReplaceScope::File { path } => (path, None),
+        ReplaceScope::Match {
+            path,
+            line,
+            start,
+            end,
+            line_text,
+        } => (path, Some((*line, *start, *end, line_text.as_str()))),
+    };
+
+    check_root(root).map_err(|e| match e {
+        crate::fs_index::FsIndexError::BadRoot { root, reason } => {
+            ProjectSearchError::BadRoot { root, reason }
+        }
+    })?;
+    let re = build_regex(query)?;
+
+    let rel = Path::new(path);
+    let contents = crate::editor_fs::read_file_core(root, rel).map_err(|e| {
+        ProjectSearchError::ReadFailed {
+            file: path.clone(),
+            reason: e.to_string(),
+        }
+    })?;
+    let stale = || ProjectSearchError::StaleResult { file: path.clone() };
+
+    let (new_contents, count) = match target {
+        None => {
+            let count = re.find_iter(&contents).count();
+            if count == 0 {
+                return Err(stale());
+            }
+            let replaced = if query.regex {
+                re.replace_all(&contents, replacement).into_owned()
+            } else {
+                re.replace_all(&contents, regex::NoExpand(replacement))
+                    .into_owned()
+            };
+            (replaced, count)
+        }
+        Some((line, start, end, line_text)) => (
+            replace_one_match(
+                &contents,
+                &re,
+                query.regex,
+                replacement,
+                line,
+                start,
+                end,
+                line_text,
+            )
+            .ok_or_else(stale)?,
+            1,
+        ),
+    };
+
+    let changed = new_contents != contents;
+    if changed {
+        crate::editor_fs::write_file_core(root, rel, &new_contents).map_err(|e| {
+            ProjectSearchError::WriteFailed {
+                file: path.clone(),
+                reason: e.to_string(),
+            }
+        })?;
+    }
+    Ok(ReplaceSummary {
+        files_changed: u32::from(changed),
+        matches_replaced: count as u32,
+    })
+}
+
+/// Rewrite the single match at `[start, end)` of 1-based `line`, or `None` if that line's
+/// text is no longer `line_text` or no match of `re` spans exactly that range.
+///
+/// Matching is per LINE, the way [`search_core`] found the row, so an anchor such as `^`
+/// means what it meant in the result. Everything outside the span (other matches, other
+/// lines, `\r\n` terminators) is kept byte for byte.
+#[allow(clippy::too_many_arguments)]
+fn replace_one_match(
+    contents: &str,
+    re: &Regex,
+    expand: bool,
+    replacement: &str,
+    line: u32,
+    start: usize,
+    end: usize,
+    line_text: &str,
+) -> Option<String> {
+    let idx = (line as usize).checked_sub(1)?;
+    // Byte offset of the target line's start: sum of the preceding lines WITH terminators.
+    let mut offset = 0usize;
+    let mut found = None;
+    for (i, raw) in contents.split_inclusive('\n').enumerate() {
+        if i == idx {
+            // `str::lines` (what search used) strips "\n" and a preceding "\r".
+            let text = raw.strip_suffix('\n').unwrap_or(raw);
+            let text = text.strip_suffix('\r').unwrap_or(text);
+            found = Some(text);
+            break;
+        }
+        offset += raw.len();
+    }
+    let text = found?;
+    if text != line_text {
+        return None;
+    }
+    let caps = re.captures_iter(text).find(|c| {
+        c.get(0)
+            .is_some_and(|m| m.start() == start && m.end() == end)
+    })?;
+
+    let mut with = String::new();
+    if expand {
+        caps.expand(replacement, &mut with);
+    } else {
+        with.push_str(replacement);
+    }
+    let mut out = String::with_capacity(contents.len() + with.len());
+    out.push_str(&contents[..offset + start]);
+    out.push_str(&with);
+    out.push_str(&contents[offset + end..]);
+    Some(out)
 }
 
 #[cfg(test)]
@@ -727,5 +903,278 @@ mod tests {
             .unwrap()
             .matches_replaced;
         assert_eq!(replace_total as usize, search_total);
+    }
+    // ── replace_in_scope (M16.5 WP6 — per-file and per-result replace) ───────────
+
+    /// A `Match` scope built from a REAL search result, the way the Find Results tab
+    /// carries it back (so the tests exercise the search→replace round trip).
+    fn match_scope(m: &FileMatches, i: usize) -> ReplaceScope {
+        let r = &m.matches[i];
+        ReplaceScope::Match {
+            path: m.file.clone(),
+            line: r.line,
+            start: r.start,
+            end: r.end,
+            line_text: r.line_text.clone(),
+        }
+    }
+
+    fn file_in<'a>(results: &'a [FileMatches], file: &str) -> &'a FileMatches {
+        results.iter().find(|f| f.file == file).unwrap()
+    }
+
+    #[test]
+    fn scope_all_is_replace_all() {
+        let a = fixture();
+        let b = fixture();
+        let via_scope =
+            replace_in_scope(a.path(), &substring("foo"), "BAR", &ReplaceScope::All).unwrap();
+        let direct = replace_core(b.path(), &substring("foo"), "BAR").unwrap();
+        assert_eq!(via_scope, direct);
+        for f in ["src/main.rs", "src/lib.rs", "README.md", "ignored.txt"] {
+            assert_eq!(
+                fs::read_to_string(a.path().join(f)).unwrap(),
+                fs::read_to_string(b.path().join(f)).unwrap(),
+                "{f}"
+            );
+        }
+    }
+
+    #[test]
+    fn scope_file_touches_only_that_file() {
+        let dir = fixture();
+        let scope = ReplaceScope::File {
+            path: "src/main.rs".to_string(),
+        };
+        let summary = replace_in_scope(dir.path(), &substring("foo"), "BAR", &scope).unwrap();
+        assert_eq!(
+            summary,
+            ReplaceSummary {
+                files_changed: 1,
+                matches_replaced: 2
+            }
+        );
+        let root = dir.path();
+        assert_eq!(
+            fs::read_to_string(root.join("src/main.rs")).unwrap(),
+            "let BAR = 1;\nBAR(bar)\n"
+        );
+        // Every other matching file is untouched.
+        assert_eq!(
+            fs::read_to_string(root.join("src/lib.rs")).unwrap(),
+            "pub fn foobar() {}\n"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("README.md")).unwrap(),
+            "Foo Bar Baz\n"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("ignored.txt")).unwrap(),
+            "foo here\n"
+        );
+    }
+
+    #[test]
+    fn scope_match_rewrites_exactly_one_of_two_on_a_line() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.txt"), "x\nfoo and foo\nfoo\n").unwrap();
+        let results = search_core(dir.path(), &substring("foo")).unwrap();
+        let a = file_in(&results, "a.txt");
+        assert_eq!(a.matches.len(), 3);
+        // The SECOND hit on line 2.
+        assert_eq!((a.matches[1].line, a.matches[1].start), (2, 8));
+        let summary =
+            replace_in_scope(dir.path(), &substring("foo"), "BAR", &match_scope(a, 1)).unwrap();
+        assert_eq!(
+            summary,
+            ReplaceSummary {
+                files_changed: 1,
+                matches_replaced: 1
+            }
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+            "x\nfoo and BAR\nfoo\n"
+        );
+    }
+
+    #[test]
+    fn scope_match_keeps_crlf_line_endings() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("w.txt"), "one\r\nfoo two\r\nthree\r\n").unwrap();
+        let results = search_core(dir.path(), &substring("foo")).unwrap();
+        let w = file_in(&results, "w.txt");
+        replace_in_scope(dir.path(), &substring("foo"), "BAR", &match_scope(w, 0)).unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.path().join("w.txt")).unwrap(),
+            "one\r\nBAR two\r\nthree\r\n"
+        );
+    }
+
+    #[test]
+    fn scope_match_regex_expands_that_matchs_own_captures() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("c.txt"), "id(1) id(2)\n").unwrap();
+        let q = SearchQuery {
+            pattern: r"id\((\d)\)".to_string(),
+            regex: true,
+            case_sensitive: true,
+            whole_word: false,
+        };
+        let results = search_core(dir.path(), &q).unwrap();
+        let c = file_in(&results, "c.txt");
+        replace_in_scope(dir.path(), &q, "key[$1]", &match_scope(c, 1)).unwrap();
+        // The SECOND match's capture (2), not the first's (1).
+        assert_eq!(
+            fs::read_to_string(dir.path().join("c.txt")).unwrap(),
+            "id(1) key[2]\n"
+        );
+    }
+
+    #[test]
+    fn scope_match_substring_inserts_dollar_literally() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("p.txt"), "price X\n").unwrap();
+        let results = search_core(dir.path(), &substring("X")).unwrap();
+        let p = file_in(&results, "p.txt");
+        replace_in_scope(dir.path(), &substring("X"), "$1.99", &match_scope(p, 0)).unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.path().join("p.txt")).unwrap(),
+            "price $1.99\n"
+        );
+    }
+
+    #[test]
+    fn scope_match_refuses_when_the_line_text_changed() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("s.txt");
+        fs::write(&file, "keep\nfoo here\n").unwrap();
+        let results = search_core(dir.path(), &substring("foo")).unwrap();
+        let scope = match_scope(file_in(&results, "s.txt"), 0);
+        // Edited after the search: same line number, different text.
+        fs::write(&file, "keep\nfoo there\n").unwrap();
+        let err = replace_in_scope(dir.path(), &substring("foo"), "BAR", &scope).unwrap_err();
+        assert!(matches!(err, ProjectSearchError::StaleResult { ref file } if file == "s.txt"));
+        assert!(
+            err.to_string().contains("changed since the search"),
+            "{err}"
+        );
+        assert_eq!(fs::read_to_string(&file).unwrap(), "keep\nfoo there\n");
+    }
+
+    #[test]
+    fn scope_match_refuses_an_offset_that_is_no_longer_a_match() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("o.txt");
+        fs::write(&file, "foo foo\n").unwrap();
+        let results = search_core(dir.path(), &substring("foo")).unwrap();
+        let mut scope = match_scope(file_in(&results, "o.txt"), 0);
+        // Same line text, but a range no match spans (shifted by one byte).
+        if let ReplaceScope::Match { start, end, .. } = &mut scope {
+            *start += 1;
+            *end += 1;
+        }
+        let err = replace_in_scope(dir.path(), &substring("foo"), "BAR", &scope).unwrap_err();
+        assert!(
+            matches!(err, ProjectSearchError::StaleResult { .. }),
+            "{err:?}"
+        );
+        assert_eq!(fs::read_to_string(&file).unwrap(), "foo foo\n");
+    }
+
+    #[test]
+    fn scope_match_refuses_a_line_past_the_end() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("e.txt");
+        fs::write(&file, "foo\n").unwrap();
+        let scope = ReplaceScope::Match {
+            path: "e.txt".to_string(),
+            line: 5,
+            start: 0,
+            end: 3,
+            line_text: "foo".to_string(),
+        };
+        let err = replace_in_scope(dir.path(), &substring("foo"), "BAR", &scope).unwrap_err();
+        assert!(
+            matches!(err, ProjectSearchError::StaleResult { .. }),
+            "{err:?}"
+        );
+        assert_eq!(fs::read_to_string(&file).unwrap(), "foo\n");
+    }
+
+    #[test]
+    fn scope_file_with_no_match_left_is_stale_not_success() {
+        let dir = fixture();
+        let scope = ReplaceScope::File {
+            path: "README.md".to_string(),
+        };
+        let q = SearchQuery {
+            pattern: "foo".to_string(),
+            regex: false,
+            case_sensitive: true, // README only has "Foo"
+            whole_word: false,
+        };
+        let err = replace_in_scope(dir.path(), &q, "BAR", &scope).unwrap_err();
+        assert!(matches!(err, ProjectSearchError::StaleResult { ref file } if file == "README.md"));
+        assert_eq!(
+            fs::read_to_string(dir.path().join("README.md")).unwrap(),
+            "Foo Bar Baz\n"
+        );
+    }
+
+    #[test]
+    fn scope_path_outside_the_root_is_refused() {
+        let outer = TempDir::new().unwrap();
+        let root = outer.path().join("proj");
+        fs::create_dir(&root).unwrap();
+        let victim = outer.path().join("victim.txt");
+        fs::write(&victim, "foo\n").unwrap();
+        for scope in [
+            ReplaceScope::File {
+                path: "../victim.txt".to_string(),
+            },
+            ReplaceScope::Match {
+                path: "../victim.txt".to_string(),
+                line: 1,
+                start: 0,
+                end: 3,
+                line_text: "foo".to_string(),
+            },
+        ] {
+            let err = replace_in_scope(&root, &substring("foo"), "BAR", &scope).unwrap_err();
+            assert!(
+                matches!(err, ProjectSearchError::ReadFailed { .. }),
+                "{err:?}"
+            );
+        }
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "foo\n");
+    }
+
+    #[test]
+    fn scope_deserializes_from_the_kind_tagged_ipc_shape() {
+        let all: ReplaceScope = serde_json::from_str(r#"{"kind":"all"}"#).unwrap();
+        assert_eq!(all, ReplaceScope::All);
+        let file: ReplaceScope =
+            serde_json::from_str(r#"{"kind":"file","path":"src/a.rs"}"#).unwrap();
+        assert_eq!(
+            file,
+            ReplaceScope::File {
+                path: "src/a.rs".to_string()
+            }
+        );
+        let m: ReplaceScope = serde_json::from_str(
+            r#"{"kind":"match","path":"a","line":2,"start":1,"end":4,"line_text":"xfoo"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            m,
+            ReplaceScope::Match {
+                path: "a".to_string(),
+                line: 2,
+                start: 1,
+                end: 4,
+                line_text: "xfoo".to_string()
+            }
+        );
     }
 }

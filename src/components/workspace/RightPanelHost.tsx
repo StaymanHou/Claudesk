@@ -109,7 +109,13 @@ import {
   type SearchQuery,
 } from "./search/searchModel";
 import type { FileMatches, HighlightTarget } from "./search/searchModel";
-import { formatFindResults, type FlatMatch } from "./search/findResultsBuffer";
+import {
+  formatFindResults,
+  type FlatMatch,
+  type FindResultsBuffer,
+  type ReplaceTarget,
+} from "./search/findResultsBuffer";
+import { replaceLineActions, scopeFor } from "./search/replaceActions";
 import { replaceAllSpec, type ReplaceAllChoice } from "./search/replaceConfirm";
 import { ConfirmModal } from "./editor/ConfirmModal";
 import {
@@ -314,6 +320,17 @@ export function RightPanelHost({
   // Whether the "find-results" synthetic tab has been created this session (addSynthetic
   // registers the click callback only on first add; later searches just replace content).
   const findResultsAdded = useRef(false);
+  // M16.5 WP6 — what the Find Results tab is showing, so its hover Replace buttons act on
+  // the results ON SCREEN: the buffer (for re-rendering the buttons when the replacement
+  // text changes) and the query that PRODUCED it (not the live query field, which the
+  // operator may have edited since). Null until the first search.
+  const findResultsShown = useRef<{
+    buffer: FindResultsBuffer;
+    query: SearchQuery;
+  } | null>(null);
+  // A per-row replace is in flight: further clicks are ignored until its re-search lands,
+  // so a double click cannot fire the same row twice.
+  const rowReplaceBusy = useRef(false);
 
   // WP10 — whether the FileTree left rail is collapsed (to a strip) to reclaim the
   // editor's horizontal width in the 50/50 split. State lives here so it persists
@@ -721,8 +738,9 @@ export function RightPanelHost({
   // highlight path as the finder/tree (`openFile(path, target)`). The query overlay
   // STAYS open after a search (WP7 Phase 3) so Replace All is reachable; Esc closes it.
   const handleSearchResults = (results: FileMatches[], query: SearchQuery) => {
-    const { text, lineMap, highlights } = formatFindResults(results, query);
-    findResultsLineMap.current = lineMap;
+    const buffer = formatFindResults(results, query);
+    findResultsLineMap.current = buffer.lineMap;
+    findResultsShown.current = { buffer, query };
     setPanel((cur) => selectPanel(cur, "editor"));
     if (!findResultsAdded.current) {
       editorSplitRef.current?.addSynthetic(
@@ -737,11 +755,7 @@ export function RightPanelHost({
     }
     // Content + the matched-text highlights together — the tab marks each hit like
     // Sublime's Find Results (WP7 verify-human fix).
-    editorSplitRef.current?.setSyntheticContent(
-      "find-results",
-      text,
-      highlights,
-    );
+    renderFindResults();
     // Record the counts so Replace All can gate on "a search found matches" and the
     // confirm can show the blast radius. (WP7 Phase 3.)
     setLastCounts({ matches: totalMatchCount(results), files: results.length });
@@ -750,6 +764,72 @@ export function RightPanelHost({
     // backdrop closes the overlay to read them full-screen. (Supersedes the Phase-2
     // close-on-search detail, which predated the in-overlay Replace control.)
   };
+
+  // M16.5 WP6 — (re)render the Find Results tab: its text + hit marks + one hover Replace
+  // button per file header / match row. The buttons' tooltips name the CURRENT replacement
+  // text, so this also re-runs when that text changes (effect below).
+  const renderFindResults = () => {
+    const shown = findResultsShown.current;
+    if (!shown) return;
+    editorSplitRef.current?.setSyntheticContent(
+      "find-results",
+      shown.buffer.text,
+      shown.buffer.highlights,
+      replaceLineActions(shown.buffer.replaceTargets, replacement, (t) =>
+        replaceFromResultsRef.current(t),
+      ),
+    );
+  };
+  useEffect(() => {
+    renderFindResults();
+    // Only the replacement text changes the buttons between searches; a search re-renders
+    // through handleSearchResults.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replacement]);
+
+  // M16.5 WP6 — a hover Replace button in Find Results was clicked: replace that one match
+  // or every match in that file, using the query the shown results came from and the
+  // current replacement text. No confirm: the row (or file group) on screen IS the blast
+  // radius. Then ALWAYS re-run the search with that query (WBS 6.3), success or refusal, so
+  // a replaced row drops out and cannot be replaced twice, and counts match the disk. A
+  // failure (a stale row, a write error) opens the overlay so its inline error row shows.
+  const replaceFromResults = (target: ReplaceTarget) => {
+    const shown = findResultsShown.current;
+    if (!shown || rowReplaceBusy.current) return;
+    rowReplaceBusy.current = true;
+    const query = {
+      pattern: shown.query.pattern,
+      regex: shown.query.regex,
+      case_sensitive: shown.query.caseSensitive,
+      whole_word: shown.query.wholeWord,
+    };
+    const fail = (prefix: string) => (e: unknown) => {
+      setSearchError(`${prefix}: ${String(e)}`);
+      setSearchOpen(true);
+    };
+    setSearchError(null);
+    void invoke("project_replace", {
+      root: projectPath,
+      query,
+      replacement,
+      scope: scopeFor(target),
+    })
+      .catch(fail("Replace failed"))
+      .then(() =>
+        invoke<FileMatches[]>("project_search", { root: projectPath, query }),
+      )
+      .then((r) => handleSearchResults(r, shown.query))
+      .catch(fail("Search failed"))
+      .finally(() => {
+        rowReplaceBusy.current = false;
+      });
+  };
+  // The buttons are built once per render of the tab; they call through this ref so a
+  // click always runs the latest closure (current replacement, current projectPath).
+  const replaceFromResultsRef = useRef(replaceFromResults);
+  useEffect(() => {
+    replaceFromResultsRef.current = replaceFromResults;
+  });
 
   // WP7 Phase 3 — "Replace All" pressed: open the confirm (blast-radius counts). The
   // confirm + the project_replace call live here so the overlay stays a thin input.
@@ -802,7 +882,7 @@ export function RightPanelHost({
         }),
       )
       .then((r) => handleSearchResults(r, searchQuery))
-      .catch((e: unknown) => setSearchError(String(e)));
+      .catch((e: unknown) => setSearchError(`Replace failed: ${String(e)}`));
   };
 
   // P3 — panel-select hotkeys (⌘⇧E/⌘⇧D/⌘⇧T) AND the ⌘P file-finder, registered as a

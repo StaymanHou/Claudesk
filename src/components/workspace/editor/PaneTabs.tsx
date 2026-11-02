@@ -27,7 +27,7 @@ import {
 } from "react";
 import { SplitIcon } from "./SplitIcon";
 import { EditorEmpty } from "./EditorEmpty";
-import type { SyntheticHighlight } from "./SyntheticView";
+import type { SyntheticHighlight, SyntheticLineAction } from "./SyntheticView";
 // M9 WP6a Phase 4 — CM6 lazy-load (SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD).
 // EditorPanel + SyntheticView are the CodeMirror-bearing leaves; lazy-loading them here
 // (rather than the EditorSplit ref-handle above) hoists all @codemirror/@uiw code into a
@@ -153,6 +153,8 @@ interface PaneTabsProps {
   syntheticContent: Record<string, string>;
   /** Hit highlights (0-based char-offset spans into content) per synthetic tab id. */
   syntheticHighlights: Record<string, SyntheticHighlight[]>;
+  /** Per-line buttons per synthetic tab id (M16.5 WP6). */
+  syntheticActions: Record<string, SyntheticLineAction[]>;
   /** Line-click callbacks per synthetic tab id (1-based line number). */
   syntheticLineClick: Record<string, (line: number) => void>;
 }
@@ -177,6 +179,7 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
       onActivated,
       syntheticContent,
       syntheticHighlights,
+      syntheticActions,
       syntheticLineClick,
     },
     ref,
@@ -526,6 +529,7 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
                       <SyntheticView
                         content={syntheticContent[tab.id] ?? ""}
                         highlights={syntheticHighlights[tab.id]}
+                        lineActions={syntheticActions[tab.id]}
                         onLineClick={syntheticLineClick[tab.id]}
                       />
                     )}

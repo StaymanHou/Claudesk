@@ -31,13 +31,20 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 36s (2026-11-02, m16-5-wp5 P3 verify-codify, EXIT=0)
+- **Last:** 41s (2026-11-02, m16-5-wp6 P3 verify-codify, EXIT=0)
 - **Use timeout:** 159000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 41s — 2026-11-02 (m16-5-wp6 P3 verify-codify, EXIT=0)
+  - 37s — 2026-11-02 (m16-5-wp6 P3 verify-auto re-run, EXIT=0)
+  - 35s — 2026-11-02 (m16-5-wp6 P3 verify-auto, EXIT=0)
+  - 43s — 2026-11-02 (m16-5-wp6 P2 verify-codify, EXIT=0)
+  - 47s — 2026-11-02 (m16-5-wp6 P2 verify-auto, EXIT=0)
+  - 45s — 2026-11-02 (m16-5-wp6 P1 verify-codify, EXIT=0)
+  - 43s — 2026-11-02 (m16-5-wp6 P1 verify-auto)
   - 36s — 2026-11-02 (m16-5-wp5 P3 verify-codify, EXIT=0)
   - 43s — 2026-11-02 (m16-5-wp5 P2 verify-codify, EXIT=0)
   - 45s — 2026-11-02 (m16-5-wp5 P2 verify-auto, EXIT=0)

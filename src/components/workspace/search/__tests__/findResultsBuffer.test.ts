@@ -148,4 +148,43 @@ describe("formatFindResults", () => {
     // A click on a NON-match line (the blank at buffer line 5) resolves to null → no-op.
     expect(lineMap[5 - 1]).toBeNull();
   });
+
+  // M16.5 WP6 — every line's replace target, checked by IDENTITY (which file / which match),
+  // not by count: a count-only check passes when targets land on the wrong rows.
+  it("gives each file header a file target and each match row its own match target", () => {
+    const first = m(12, "first");
+    const second = m(20, "second");
+    const third = m(5, "third");
+    const results: FileMatches[] = [
+      { file: "src/a.ts", matches: [first, second] },
+      { file: "src/b.ts", matches: [third] },
+    ];
+    const buf = formatFindResults(results, { pattern: "x" });
+    const lines = buf.text.split("\n");
+    expect(buf.replaceTargets).toHaveLength(lines.length);
+    expect(buf.replaceTargets).toEqual([
+      null, // title
+      null, // blank
+      { kind: "file", file: "src/a.ts" },
+      { kind: "match", file: "src/a.ts", match: first },
+      { kind: "match", file: "src/a.ts", match: second },
+      null, // blank separator
+      { kind: "file", file: "src/b.ts" },
+      { kind: "match", file: "src/b.ts", match: third },
+      null, // blank separator
+      null, // footer
+    ]);
+    // The targets point at the SAME match objects the click map opens.
+    expect(buf.replaceTargets[3]).toMatchObject({
+      match: buf.lineMap[3]!.match,
+    });
+    // A file header carries a replace target but stays unclickable for open-at-match.
+    expect(buf.lineMap[2]).toBeNull();
+  });
+
+  it("gives an empty result no replace targets at all", () => {
+    const buf = formatFindResults([], { pattern: "x" });
+    expect(buf.replaceTargets.every((t) => t === null)).toBe(true);
+    expect(buf.replaceTargets).toHaveLength(buf.text.split("\n").length);
+  });
 });

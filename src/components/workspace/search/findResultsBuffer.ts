@@ -58,6 +58,15 @@ export interface HighlightRange {
   to: number;
 }
 
+/**
+ * What a line's hover Replace button acts on (M16.5 WP6): a file-path header replaces
+ * every match in that file, a match row replaces that one match. Header rows get a target
+ * here but stay `null` in `lineMap`, so CLICKING a header still opens nothing.
+ */
+export type ReplaceTarget =
+  | { kind: "file"; file: string }
+  | { kind: "match"; file: string; match: LineMatch };
+
 /** The formatted Find Results buffer: text + per-line click map + match-hit highlights. */
 export interface FindResultsBuffer {
   /** The full buffer text rendered into the synthetic tab. */
@@ -72,6 +81,11 @@ export interface FindResultsBuffer {
    * synthetic view to highlight the hit (the matched substring, not the whole row).
    */
   highlights: HighlightRange[];
+  /**
+   * One entry per buffer line, parallel to `lineMap`: the line's replace target, or
+   * `null` for the title / blank / "No matches" / footer lines.
+   */
+  replaceTargets: (ReplaceTarget | null)[];
 }
 
 /**
@@ -88,6 +102,7 @@ export function formatFindResults(
   const lines: string[] = [];
   const lineMap: (FlatMatch | null)[] = [];
   const highlights: HighlightRange[] = [];
+  const replaceTargets: (ReplaceTarget | null)[] = [];
 
   // Running 0-based char offset of the START of the line about to be pushed. Each push
   // advances it by the line's char length + 1 for the joining newline — so a match row's
@@ -99,9 +114,11 @@ export function formatFindResults(
     text: string,
     entry: FlatMatch | null,
     highlight?: HighlightRange,
+    target: ReplaceTarget | null = null,
   ) => {
     lines.push(text);
     lineMap.push(entry);
+    replaceTargets.push(target);
     if (highlight) highlights.push(highlight);
     offset += text.length + 1; // +1 for the "\n" that join() inserts between lines
   };
@@ -118,11 +135,14 @@ export function formatFindResults(
 
   if (fileCount === 0) {
     push("No matches", null);
-    return { text: lines.join("\n"), lineMap, highlights };
+    return { text: lines.join("\n"), lineMap, highlights, replaceTargets };
   }
 
   for (const fileGroup of results) {
-    push(`${fileGroup.file}:`, null);
+    push(`${fileGroup.file}:`, null, undefined, {
+      kind: "file",
+      file: fileGroup.file,
+    });
     for (const match of fileGroup.matches) {
       // "   <line>:  <line text>" — the line number is right-context, the text follows.
       // Leading spaces indent the row under its file header (Sublime layout).
@@ -145,6 +165,7 @@ export function formatFindResults(
           from: hitFrom,
           to: hitTo,
         },
+        { kind: "match", file: fileGroup.file, match },
       );
     }
     push("", null); // blank separator after each file group
@@ -156,5 +177,5 @@ export function formatFindResults(
     null,
   );
 
-  return { text: lines.join("\n"), lineMap, highlights };
+  return { text: lines.join("\n"), lineMap, highlights, replaceTargets };
 }

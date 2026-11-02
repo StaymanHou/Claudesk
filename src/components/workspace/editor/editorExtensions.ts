@@ -32,6 +32,7 @@ import {
   selectNextOccurrence,
   openSearchPanel,
 } from "@codemirror/search";
+import { searchPanelNoTextAssist } from "./searchPanelTextAssist";
 import { showMinimap } from "@replit/codemirror-minimap";
 import { languageForPath, languageForId } from "./language";
 import {
@@ -247,6 +248,8 @@ export function buildEditorExtensions(
     // Panel at the top of the editor (VS-Code-like). basicSetup ships the search
     // KEYMAP but not this placement config; adding search() is idempotent with it.
     search({ top: true }),
+    // M16.5 WP6 — no autocorrect in the find/replace fields (they hold patterns).
+    searchPanelNoTextAssist,
     activeLanguage,
     // Font size in its own compartment, seeded at the current size — Cmd+=/-/0
     // reconfigure it at runtime (see coreKeymap.applyZoom).

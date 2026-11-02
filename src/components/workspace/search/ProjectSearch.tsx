@@ -41,7 +41,7 @@ interface ProjectSearchProps {
   /** The current replacement text (lifted, persists across re-opens). */
   replacement: string;
   onReplacementChange: (r: string) => void;
-  /** Last error string (lifted), or null. */
+  /** Last error (lifted), already worded ("Search failed: …" / "Replace failed: …"), or null. */
   error: string | null;
   onError: (e: string | null) => void;
   /** Hand the search results up — RightPanelHost renders them into the Find Results tab. */
@@ -97,7 +97,7 @@ export function ProjectSearch({
       },
     })
       .then((r) => onResults(r, query))
-      .catch((e: unknown) => onError(String(e)))
+      .catch((e: unknown) => onError(`Search failed: ${String(e)}`))
       .finally(() => setSearching(false));
   };
 
@@ -235,7 +235,7 @@ export function ProjectSearch({
             data-testid="project-search-error"
             role="alert"
           >
-            Search failed: {error}
+            {error}
           </div>
         )}
       </div>

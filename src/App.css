@@ -1903,6 +1903,38 @@ body,
   border-radius: 2px;
 }
 
+/* M16.5 WP6 — Find Results' hover Replace buttons (SyntheticView `lineActions`). A CM6
+   widget at the end of its line, pinned to the row's right edge. `visibility: hidden`
+   rather than opacity, so an invisible button is not a click target over the row's text:
+   at rest the tab reads exactly as before, and a row click still opens the file. Colours
+   copied from `.cm-search button` in editor/theme.ts (there is no token layer). */
+.cm-synthetic-action-line {
+  position: relative;
+}
+.cm-synthetic-line-action {
+  visibility: hidden;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: #3a3d41;
+  color: #d4d4d4;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 0.85em;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.cm-synthetic-action-line:hover .cm-synthetic-line-action,
+.cm-synthetic-line-action:focus-visible {
+  visibility: visible;
+}
+.cm-synthetic-line-action:hover {
+  background-color: #45494e;
+}
+
 /* ── WP4 git diff viewer (right-half DiffPanel + Editor↔Diff toggle) ──── */
 /* Editor↔Diff segmented toggle (WP4 stopgap; WP5's panel-switch hotkey replaces
    it). Dark-only, palette-aligned to the editor status bar. */
@@ -2691,6 +2723,14 @@ body,
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* M16.5 WP6 — contain CodeMirror's own z-indexes. CM6's base theme puts
+     `.cm-panels` (the find/replace bar) at z-index 300, gutters at 200 and tooltips at
+     500. With no stacking context around the editor those competed directly with the
+     app overlays' `.command-palette-backdrop` (z-index 20: ⌘P, ⌘⇧F, ⌘⇧P, the picker),
+     so the find bar drew ON TOP of the ⌘P palette. Isolating here, not per
+     `.editor-pane`, keeps every split pane in one context, so a tooltip overflowing
+     one pane is not painted over by the next. */
+  isolation: isolate;
 }
 /* WP11 Phase 5 — `.editor-split-bar` (the dedicated full-width split-control row) was
    removed; the Split button now lives at the right end of the active pane's tab strip

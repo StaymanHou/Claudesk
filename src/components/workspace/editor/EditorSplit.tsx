@@ -30,7 +30,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { PaneTabs, type PaneTabsHandle } from "./PaneTabs";
-import type { SyntheticHighlight } from "./SyntheticView";
+import type { SyntheticHighlight, SyntheticLineAction } from "./SyntheticView";
 import { initialPanesState, panesReducer } from "./editorPanes";
 import {
   dirtyDocCount as dirtyDocCountOf,
@@ -65,12 +65,14 @@ export interface EditorSplitHandle {
   ) => void;
   /**
    * (Re)set a synthetic tab's in-memory content + optional hit highlights (0-based
-   * char-offset spans into `content` — the WP7 matched-text marks).
+   * char-offset spans into `content` — the WP7 matched-text marks) + optional per-line
+   * buttons (M16.5 WP6 — Find Results' hover Replace).
    */
   setSyntheticContent: (
     id: string,
     content: string,
     highlights?: SyntheticHighlight[],
+    lineActions?: SyntheticLineAction[],
   ) => void;
   /**
    * QoL-WP0 — the filesystem watcher reported these (project-relative) paths changed
@@ -163,6 +165,11 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
     // re-renders the marks). The WP7 Find-Results matched-text spans land here.
     const [syntheticHighlights, setSyntheticHighlightsState] = useState<
       Record<string, SyntheticHighlight[]>
+    >({});
+    // Per-line buttons per synthetic tab id (M16.5 WP6). In state, like highlights, so a
+    // re-set re-renders them.
+    const [syntheticActions, setSyntheticActionsState] = useState<
+      Record<string, SyntheticLineAction[]>
     >({});
     const syntheticLineClick = useRef<Record<string, (line: number) => void>>(
       {},
@@ -386,14 +393,21 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
       paneHandles.current.get(panes.activePaneId)?.closeActiveTab();
     }, [panes.activePaneId]);
 
-    // Set/replace a synthetic tab's in-memory content + hit highlights (re-renders the
-    // view). Highlights default to none so a content-only set clears any stale marks.
+    // Set/replace a synthetic tab's in-memory content + hit highlights + line buttons
+    // (re-renders the view). Highlights and buttons default to none so a content-only set
+    // clears any stale marks or buttons.
     const setSyntheticContent = useCallback(
-      (id: string, content: string, highlights: SyntheticHighlight[] = []) => {
+      (
+        id: string,
+        content: string,
+        highlights: SyntheticHighlight[] = [],
+        lineActions: SyntheticLineAction[] = [],
+      ) => {
         setSyntheticContentState((prev) =>
           prev[id] === content ? prev : { ...prev, [id]: content },
         );
         setSyntheticHighlightsState((prev) => ({ ...prev, [id]: highlights }));
+        setSyntheticActionsState((prev) => ({ ...prev, [id]: lineActions }));
       },
       [],
     );
@@ -544,6 +558,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
                 onActivated={onActivated}
                 syntheticContent={syntheticContent}
                 syntheticHighlights={syntheticHighlights}
+                syntheticActions={syntheticActions}
                 syntheticLineClick={syntheticLineClick.current}
                 onFocusPane={() => focusPane(pane.id)}
                 onActivePathChange={(p) => {

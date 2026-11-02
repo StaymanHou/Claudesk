@@ -37,6 +37,7 @@ import { EditorView, keymap } from "@codemirror/view";
 import { Prec, type Extension } from "@codemirror/state";
 import { history, historyKeymap } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
+import { searchPanelNoTextAssist } from "../editor/searchPanelTextAssist";
 import { fontSizeCompartment, fontSizeTheme } from "../editor/theme";
 import { DEFAULT_PROMPT_FONT_PX, nextFontSize } from "./promptFontZoom";
 
@@ -86,6 +87,9 @@ export function promptExtensions(options: PromptExtensionOptions): Extension[] {
     // Find-within-draft. The panel is placed at the top like the editor's, so a long
     // draft's search box does not sit under the fold.
     search({ top: true }),
+    // M16.5 WP6 — the draft is prose and keeps its checking; the FIND fields hold
+    // patterns, so they do not.
+    searchPanelNoTextAssist,
 
     // ⚠️ `editorDarkTheme` is NOT here — it goes through CodeMirror's `theme` PROP, and
     // moving it back into this array re-breaks the panel. The full reason is stated once,
