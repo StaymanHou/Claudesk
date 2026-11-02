@@ -6,16 +6,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # m16-5-wp6-per-result-replace — 2026-11-02
 
-*(feature-review-quality on ship commit `6c97b1a`, window `6c97b1a^..6c97b1a`; drive_mode=autopilot. 1 CRITICAL + 1 MAJOR routed to `/feature-refactor` (F40); 5 MINOR auto-backlogged below.)*
-
-## SURFACE-2026-11-02-QUALITY-WP6-REPLACE-ONE-MATCH-EIGHT-POSITIONAL-ARGS
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/project_search/mod.rs` → `replace_one_match`.
-- **Finding:** 8 positional params behind `#[allow(clippy::too_many_arguments)]`; `line`/`start`/`end`/`line_text` are exactly `ReplaceScope::Match`'s fields.
-- **Why it matters:** `start`/`end` transposition risk; the suppression hides the smell.
-- **Suggested action:** Pass a small struct (or the destructured target).
-- **Priority:** low
-- **Status:** pending
+*(feature-review-quality on ship commit `6c97b1a`, window `6c97b1a^..6c97b1a`; drive_mode=autopilot. 1 CRITICAL + 1 MAJOR fixed by `/feature-refactor` (F40, `390512f`); 5 MINOR auto-backlogged, 1 of them since fixed by that refactor — 4 remain below.)*
 
 ## SURFACE-2026-11-02-QUALITY-WP6-WIRE-QUERY-CONVERSION-REPEATED
 - **Severity:** MINOR

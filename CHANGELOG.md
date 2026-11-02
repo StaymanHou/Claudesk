@@ -10,6 +10,10 @@
 - **Backlog resolved:** SURFACE-2026-07-13-M9-WP6B1-KEYBOARD-PAN-ZOOM-DEFERRED — the Day view gained ←/→ pan, +/− zoom and Home/End keys alongside the existing `0` reset.
 - **Backlog resolved:** SURFACE-2026-10-27-WORKSPACE-LIST-ORDER-NEEDS-A-UX-PASS — the picker orders by a new `last_closed_at` (stamped on workspace close and on quit) with open workspaces grouped and marked at the bottom.
 - **Milestone:** M16.5 WP5 — QoL batch — the papercuts.
+- **Feature shipped:** M16.5 WP6 per-result and per-file replace: Find Results rows and file headers gained hover `Replace` / `Replace in file` buttons that act on the shown search's query, match per line like search, refuse a row whose file changed since the search, and re-run the search after every replace; app overlays now draw above CodeMirror's find bar, and CodeMirror's own find/replace fields no longer autocorrect.
+- **Backlog resolved:** SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE — the read-only Find Results tab gained per-row and per-file replace buttons through a generic `SyntheticView` line-action seam, backed by a `scope` argument on `project_replace`.
+- **Backlog resolved:** SURFACE-2026-11-02-QUALITY-WP6-REPLACE-ONE-MATCH-EIGHT-POSITIONAL-ARGS — the WP6 refactor passed one `MatchTarget` instead of eight positional arguments and removed the clippy allow.
+- **Milestone:** M16.5 WP6 — Per-result and per-file replace.
 
 ## 2026-10-27
 

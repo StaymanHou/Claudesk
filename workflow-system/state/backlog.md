@@ -43,7 +43,7 @@
 
 ## Code-quality findings — m16-5-wp6-per-result-replace (2026-11-02)
 
-- **Pointer:** **5 MINOR** from the review of `6c97b1a` (the 1 CRITICAL + 1 MAJOR went to `/feature-refactor` in the same feature). MINOR: `replace_one_match`'s 8 positional args; the wire-query conversion at 4 sites; Replace All still uses the live query; line actions rebuilt per keystroke; jsdom CM6 shims copied into 5 tests.
+- **Pointer:** **4 MINOR** open from the review of `6c97b1a` (the 1 CRITICAL + 1 MAJOR, and a 5th MINOR, were fixed by the same feature's refactor `390512f`). MINOR: the wire-query conversion at 4 sites; Replace All still uses the live query; line actions rebuilt per keystroke; jsdom CM6 shims copied into 5 tests.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp6-per-result-replace — 2026-11-02`.
 - **Priority:** low (all)
 - **Status:** pending
@@ -801,16 +801,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
   record and nothing re-reads a closed item).
 - **Evidence 2026-09-23 (paydown-2026-09-23 WP1) — the class at SCALE:** 22 of 100 code-quality finding bodies were resolved-but-undeleted, most by the 2026-08-18/19 paydown, whose CHANGELOG lines claimed them while the bodies stayed. So were 10 of 34 pointer stubs, whose counts no longer matched their bodies, and one claimed closure was only HALF true (`SURFACE-2026-08-18-QUALITY-WP3-LATE-SUBSCRIPTION-DISPOSAL-UNTESTED`: one arm of two). A sweep that resolves SUB-ITEMS of a grouped entry is where this happens, because no heading disappears, so nothing prompts the delete.
 - **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §F.11 (upstream half; a local duplicate-heading guard is optional); stays OPEN until mccc applies it
-
-## SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE
-- **Source:** feature:build (WP7 Phase 3 relevance gate — operator decision 2026-06-21)
-- **Target level:** product:wbs (a WP7 follow-on, or a small standalone feature)
-- **Type:** new-work
-- **Summary:** WP7 Phase 3 shipped project-wide **Replace All** ONLY (an overlay Replace field + a confirmed replace-all-across-project). Per-result single-match replace and per-file replace — the other two scopes in the WP7 spec's "full depth" replace — were DEFERRED because the Phase-2 UX redirect moved results into a **read-only** "Find Results" synthetic tab that can't cleanly host per-row / per-file replace affordances.
-- **Context:** the WP7 spec chose full replace depth (per-result + per-file + replace-all). The read-only-tab result surface (operator's chosen Sublime model) removed the writable result rows those two scopes attached to. Replace All covers the headline "rename a string across the project" use case; the finer scopes are a refinement.
-- **Suggested action:** add per-result + per-file replace when there's a writable result surface — e.g. clickable per-file "replace in this file" markers rendered into the Find Results tab (via the synthetic click-line callback, the same seam clicks already use), or a richer results panel. Backend `project_replace` already does per-file rewrite; a scope param + a file-filter would extend it.
-- **Priority:** medium
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 
 ## Code-quality findings — supervisor-hotfix (2026-09-17)
 - **Pointer:** **1 MINOR remains** (rewritten 2026-09-23). Both MAJORs (the "per turn" toggle freshness claim, narrowed to option (a) with (b)/(c) deferred to F-b; and the unwired `UnsentInputWatermark.clear()` doc, restated as reserved) and the merged Rust doc block were resolved at paydown-2026-09-23 WP4. `CLASSES` pinning only its own length was resolved at WP6 (it now drives the CSS checks and must equal the emitted toggle classes). Remaining: the "do not merge" defence at 2 sites. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-hotfix — 2026-09-17`.

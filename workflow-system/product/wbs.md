@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-02  # WP5 shipped (QoL batch: text assist off, file-op errors, CM6 hotkey rows, Day-view keys, picker order; 5.4 declined, 5.6 measured not fixed, 5.8 mccc half carried)
+updated: 2026-11-02  # WP6 shipped (per-result + per-file replace from Find Results; overlay z-order + CM6 find-bar autocorrect side fixes)
 cycle: milestone-16-5-supervisor-hardening-qol-and-paydown
 ---
 
@@ -254,7 +254,7 @@ the 29 scorable records the +1 margin rested on?
   - Verify live once mccc lands: no menu in a Claudesk workspace, still a select menu in a bare
     terminal.
 
-### WP6: Per-result and per-file replace
+### WP6: Per-result and per-file replace ✅ SHIPPED 2026-11-02 (commit 6c97b1a; refactor 390512f)
 
 **Milestone:** M16.5
 **Dependencies:** none
@@ -262,13 +262,14 @@ the 29 scorable records the +1 margin rested on?
 **Description:** The two replace scopes deferred at WP7 (2026-06-21) because Find Results is a
 read-only synthetic tab (`SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE`).
 **Tasks:**
-- [ ] 6.1 ⚠️ **UX decision first**: per-row/per-file markers in the existing Find Results tab via
+- [x] 6.1 ⚠️ **UX decision first**: per-row/per-file markers in the existing Find Results tab via
       the synthetic click-line seam (the prior's lean), vs a richer results panel. If the
       difference is spatial, run `/util-option-mockup` before building.
-- [ ] 6.2 Backend: extend `project_replace` with a scope param and a file filter. Per-file rewrite
+- [x] 6.2 Backend: extend `project_replace` with a scope param and a file filter. Per-file rewrite
       already exists.
-- [ ] 6.3 After a replace, re-run the search so stale rows cannot be replaced twice. Open dirty
+- [x] 6.3 After a replace, re-run the search so stale rows cannot be replaced twice. Open dirty
       buffers keep the disk-conflict path.
+**Outcome (2026-11-02):** 6.1 ruled **hover-revealed buttons in the existing Find Results tab** (`Replace` per row, `Replace in file` per header; no new panel, no confirm; an empty field deletes). 6.2: `project_replace` takes an optional `kind`-tagged `scope` (`all` / `file` / `match`; absent = Replace All); the match scope re-checks the row's text + offset on disk and refuses as `StaleResult`; per-file and per-row replace match PER LINE like search (review-quality CRITICAL, fixed in the refactor). 6.3: every replace re-runs the search with the results' own query; a failure opens the ⌘⇧F overlay with "Replace failed: …". **Folded in (operator-reported):** app overlays draw above CodeMirror's find bar (`isolation: isolate` on `.editor-split`), and CodeMirror's find/replace fields no longer autocorrect (all three CM surfaces). Left open: Replace All's own whole-file matching (`SURFACE-2026-11-02-REPLACE-ALL-MATCHES-WHOLE-FILE-WHILE-SEARCH-MATCHES-PER-LINE`) + 4 MINORs → WP8.
 
 ### WP7: Installed-build acceptance — close the supervisor's live checks
 

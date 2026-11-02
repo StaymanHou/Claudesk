@@ -5,7 +5,8 @@ drive_mode: autopilot
 # Feature: M16.5 WP6 — per-result and per-file replace
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete)
+**Completed:** 2026-11-02
 **Created:** 2026-11-02
 **Entry:** spec (complex feature)
 **Source:** `workflow-system/product/wbs.md` → WP6; backlog `SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE`
@@ -328,11 +329,20 @@ Mark a finding `[DISMISSED]` in this section before `feature-finalize` archives 
 - **Out of refactor scope, logged:** `SURFACE-2026-11-02-REPLACE-ALL-MATCHES-WHOLE-FILE-WHILE-SEARCH-MATCHES-PER-LINE` (medium) — the same anchor disagreement in the pre-existing Replace All, kept whole-file because a test pins multiline replace; changing it is a behaviour change.
 - Gate: `pnpm verify:auto` EXIT=0 (50s): vitest 3670, cargo lib 1055.
 
+## Retrospect
+- **What changed in our understanding:** "Replace in file" is not "Replace All filtered to one file". Search matches line by line and the old replace matched the whole file, so any scope a user reaches from a search ROW has to match the way search did. That only surfaced at review-quality, and a one-line repro confirmed it. Separately, the CodeMirror find bar is DOM that CodeMirror owns, so a population guard over our own JSX `<input>`s can never see it. WP5's "every free-text input" claim had a hole the shape of a third-party widget.
+- **Assumptions that held:** Hover buttons inside the existing tab were enough (the operator ruled it at spec and passed it live). The stale-row refusal made a no-confirm replace safe. Re-running the search as the refresh needed no incremental bookkeeping. The `isolation: isolate` diagnosis of the stacking bug was right the first time.
+- **Assumptions that were wrong:** That reusing `replace_core`'s per-file body for the file scope was "the same match definition". It was the same regex with different anchoring. Also, that jsdom could not see a row click leak: it could, and the double guard (`ignoreEvent` plus mousedown `preventDefault`) meant each single-guard mutant survived. That was a real redundancy, not a test hole, proven by removing both.
+- **Approach delta:** Two operator-reported side fixes were folded in: overlay z-order (as Phase 1) and CodeMirror find-field autocorrect (as P3.6, through an F12 back-loop). Review-quality's CRITICAL forced an F40 refactor: one per-line helper, one literal-vs-expand rule, and `MatchTarget` instead of 8 arguments. Replace All's identical gap was deliberately left out of scope and logged, because a test pins its multiline behavior.
+
+**Closure:** Requester = operator — closure notice for self-record.
+> **Feature complete:** M16.5 WP6 has shipped. Find Results rows and file headers now carry hover `Replace` / `Replace in file` buttons that act on exactly what the search showed, refuse a row whose file changed, and refresh the results after each replace. To see it, press ⌘⇧F in any workspace, search, type a replacement, and hover the results.
+
 ## Current Node
-- **Path:** Feature > refactor (done) > finalize
-- **Active scope:** finalize
+- **Path:** Feature > finalize (done)
+- **Active scope:** none — archived
 - **Blocked:** none
-- **Unvisited:** none after Phase 3
+- **Unvisited:** none
 - **Open discoveries:** none
 
 ## Discoveries
