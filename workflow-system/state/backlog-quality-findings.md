@@ -4,6 +4,55 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m16-5-wp6-per-result-replace — 2026-11-02
+
+*(feature-review-quality on ship commit `6c97b1a`, window `6c97b1a^..6c97b1a`; drive_mode=autopilot. 1 CRITICAL + 1 MAJOR routed to `/feature-refactor` (F40); 5 MINOR auto-backlogged below.)*
+
+## SURFACE-2026-11-02-QUALITY-WP6-REPLACE-ONE-MATCH-EIGHT-POSITIONAL-ARGS
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/project_search/mod.rs` → `replace_one_match`.
+- **Finding:** 8 positional params behind `#[allow(clippy::too_many_arguments)]`; `line`/`start`/`end`/`line_text` are exactly `ReplaceScope::Match`'s fields.
+- **Why it matters:** `start`/`end` transposition risk; the suppression hides the smell.
+- **Suggested action:** Pass a small struct (or the destructured target).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-02-QUALITY-WP6-WIRE-QUERY-CONVERSION-REPEATED
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/RightPanelHost.tsx` (`replaceFromResults`, `onReplaceConfirm` ×2) + `search/ProjectSearch.tsx`.
+- **Finding:** The camelCase→snake_case `SearchQuery` → IPC `query` object is hand-built at 4 sites.
+- **Why it matters:** A new mode toggle must be added in four places.
+- **Suggested action:** `toWireQuery(q)` beside `SearchQuery` in `searchModel.ts`.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-02-QUALITY-WP6-REPLACE-ALL-USES-LIVE-QUERY
+- **Severity:** MINOR (pre-existing; WP6 made the asymmetry explicit)
+- **Location:** `src/components/workspace/RightPanelHost.tsx` → `onReplaceConfirm`.
+- **Finding:** Row buttons act on the query that produced the shown results; Replace All still uses the live `searchQuery` field, while its confirm shows `lastCounts` from the shown results. (Mitigated: editing the query field nulls `lastCounts`, which disables Replace All, so the divergence needs a search between.)
+- **Why it matters:** The two replace paths answer "which query?" differently.
+- **Suggested action:** Have Replace All use `findResultsShown.query` too, or document why not.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-02-QUALITY-WP6-LINE-ACTIONS-REBUILT-PER-KEYSTROKE
+- **Severity:** MINOR
+- **Location:** `RightPanelHost.tsx` (`renderFindResults` effect on `[replacement]`, with an `exhaustive-deps` disable) + `editor/SyntheticView.tsx` (`LineActionWidget.eq` by identity).
+- **Finding:** Each replacement keystroke rebuilds every action → new extension array → CM6 reconfigure → every widget's DOM recreated, though only the tooltip changed.
+- **Why it matters:** Cheap now; scales with large result sets.
+- **Suggested action:** A stable `onClick` (it already goes through a ref) plus `eq` comparing label/title/testid.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-02-QUALITY-WP6-JSDOM-CM6-SHIMS-COPIED
+- **Severity:** MINOR
+- **Location:** `findResultsReplaceLive`, `overlaysOutsideEditorSplitLive`, `syntheticLineActions`, `searchPanelTextAssist` tests (+ WP5's `fileOpErrorLive`).
+- **Finding:** The ResizeObserver / matchMedia / Range-rect shim block is copied into 5 test files.
+- **Why it matters:** The next jsdom gap gets patched in one copy only.
+- **Suggested action:** A shared `src/test-support/cm6JsdomShims.ts` (beside `cssRule.ts`).
+- **Priority:** low
+- **Status:** pending
+
 # m16-5-wp5-qol-batch — 2026-11-02
 
 *(feature-review-quality on ship commit `df52ce7`, window `29c3395..df52ce7`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*

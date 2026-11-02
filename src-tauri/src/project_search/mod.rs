@@ -289,14 +289,9 @@ pub fn replace_core(
             continue;
         }
 
-        // In substring mode the replacement is LITERAL (NoExpand) — a `$` the user typed
-        // is not a capture-group reference. In regex mode `$1`/`${name}` expand normally.
-        let new_contents = if query.regex {
-            re.replace_all(&contents, replacement).into_owned()
-        } else {
-            re.replace_all(&contents, regex::NoExpand(replacement))
-                .into_owned()
-        };
+        // Whole-file, deliberately (see `replace_count_matches_whole_file_effect_under_
+        // multiline_regex`); the scoped replaces below are per-line instead.
+        let new_contents = replace_all_in(&re, &contents, query.regex, replacement);
 
         // A no-op replacement (e.g. `x` → `x`) leaves contents identical — don't rewrite
         // the file or count it as changed, but the matches were still "replaced".
@@ -369,7 +364,15 @@ pub fn replace_in_scope(
             start,
             end,
             line_text,
-        } => (path, Some((*line, *start, *end, line_text.as_str()))),
+        } => (
+            path,
+            Some(MatchTarget {
+                line: *line,
+                start: *start,
+                end: *end,
+                line_text,
+            }),
+        ),
     };
 
     check_root(root).map_err(|e| match e {
@@ -390,30 +393,16 @@ pub fn replace_in_scope(
 
     let (new_contents, count) = match target {
         None => {
-            let count = re.find_iter(&contents).count();
+            let (replaced, count) =
+                replace_every_match_per_line(&contents, &re, query.regex, replacement);
             if count == 0 {
                 return Err(stale());
             }
-            let replaced = if query.regex {
-                re.replace_all(&contents, replacement).into_owned()
-            } else {
-                re.replace_all(&contents, regex::NoExpand(replacement))
-                    .into_owned()
-            };
             (replaced, count)
         }
-        Some((line, start, end, line_text)) => (
-            replace_one_match(
-                &contents,
-                &re,
-                query.regex,
-                replacement,
-                line,
-                start,
-                end,
-                line_text,
-            )
-            .ok_or_else(stale)?,
+        Some(target) => (
+            replace_one_match(&contents, &re, query.regex, replacement, target)
+                .ok_or_else(stale)?,
             1,
         ),
     };
@@ -433,44 +422,94 @@ pub fn replace_in_scope(
     })
 }
 
-/// Rewrite the single match at `[start, end)` of 1-based `line`, or `None` if that line's
-/// text is no longer `line_text` or no match of `re` spans exactly that range.
+/// One search result row, as carried back by [`ReplaceScope::Match`].
+struct MatchTarget<'a> {
+    /// 1-based line number.
+    line: u32,
+    /// Byte range of the match within `line_text`.
+    start: usize,
+    end: usize,
+    line_text: &'a str,
+}
+
+/// THE literal-vs-expand rule, in one place: in substring mode the replacement is
+/// inserted literally (a `$` the user typed is not a group reference, via
+/// [`regex::NoExpand`]); in regex mode `$1` / `${name}` expand.
+fn replace_all_in(re: &Regex, text: &str, expand: bool, replacement: &str) -> String {
+    if expand {
+        re.replace_all(text, replacement).into_owned()
+    } else {
+        re.replace_all(text, regex::NoExpand(replacement))
+            .into_owned()
+    }
+}
+
+/// The lines of `contents` EXACTLY as [`str::lines`] (what [`search_core`] matches) yields
+/// them, each paired with its byte offset and its terminator (`"\n"`, `"\r\n"` or `""`), so
+/// a per-line rewrite can be reassembled byte for byte. A `\r` is a terminator only when a
+/// `\n` follows it, as in `str::lines`.
+fn lines_with_terminators(contents: &str) -> impl Iterator<Item = (usize, &str, &str)> {
+    let mut offset = 0usize;
+    contents.split_inclusive('\n').map(move |raw| {
+        let start = offset;
+        offset += raw.len();
+        let cut = if raw.ends_with("\r\n") {
+            2
+        } else if raw.ends_with('\n') {
+            1
+        } else {
+            0
+        };
+        let (text, term) = raw.split_at(raw.len() - cut);
+        (start, text, term)
+    })
+}
+
+/// Replace every match of `re`, matching PER LINE the way [`search_core`] found them, so a
+/// `^` / `$` anchor means here what it meant in the Find Results the operator clicked.
+/// Returns the new contents and the number of matches replaced.
+fn replace_every_match_per_line(
+    contents: &str,
+    re: &Regex,
+    expand: bool,
+    replacement: &str,
+) -> (String, usize) {
+    let mut out = String::with_capacity(contents.len());
+    let mut count = 0usize;
+    for (_, text, term) in lines_with_terminators(contents) {
+        let n = re.find_iter(text).count();
+        if n == 0 {
+            out.push_str(text);
+        } else {
+            count += n;
+            out.push_str(&replace_all_in(re, text, expand, replacement));
+        }
+        out.push_str(term);
+    }
+    (out, count)
+}
+
+/// Rewrite the single match `target` points at, or `None` if that line's text is no longer
+/// `target.line_text` or no match of `re` spans exactly `[start, end)` on it.
 ///
 /// Matching is per LINE, the way [`search_core`] found the row, so an anchor such as `^`
 /// means what it meant in the result. Everything outside the span (other matches, other
 /// lines, `\r\n` terminators) is kept byte for byte.
-#[allow(clippy::too_many_arguments)]
 fn replace_one_match(
     contents: &str,
     re: &Regex,
     expand: bool,
     replacement: &str,
-    line: u32,
-    start: usize,
-    end: usize,
-    line_text: &str,
+    target: MatchTarget<'_>,
 ) -> Option<String> {
-    let idx = (line as usize).checked_sub(1)?;
-    // Byte offset of the target line's start: sum of the preceding lines WITH terminators.
-    let mut offset = 0usize;
-    let mut found = None;
-    for (i, raw) in contents.split_inclusive('\n').enumerate() {
-        if i == idx {
-            // `str::lines` (what search used) strips "\n" and a preceding "\r".
-            let text = raw.strip_suffix('\n').unwrap_or(raw);
-            let text = text.strip_suffix('\r').unwrap_or(text);
-            found = Some(text);
-            break;
-        }
-        offset += raw.len();
-    }
-    let text = found?;
-    if text != line_text {
+    let idx = (target.line as usize).checked_sub(1)?;
+    let (offset, text, _) = lines_with_terminators(contents).nth(idx)?;
+    if text != target.line_text {
         return None;
     }
     let caps = re.captures_iter(text).find(|c| {
         c.get(0)
-            .is_some_and(|m| m.start() == start && m.end() == end)
+            .is_some_and(|m| m.start() == target.start && m.end() == target.end)
     })?;
 
     let mut with = String::new();
@@ -480,9 +519,9 @@ fn replace_one_match(
         with.push_str(replacement);
     }
     let mut out = String::with_capacity(contents.len() + with.len());
-    out.push_str(&contents[..offset + start]);
+    out.push_str(&contents[..offset + target.start]);
     out.push_str(&with);
-    out.push_str(&contents[offset + end..]);
+    out.push_str(&contents[offset + target.end..]);
     Some(out)
 }
 
@@ -1176,5 +1215,75 @@ mod tests {
                 line_text: "xfoo".to_string()
             }
         );
+    }
+
+    // ── review-quality CRITICAL (M16.5 WP6): File scope matches PER LINE, like search ───
+
+    #[test]
+    fn scope_file_honours_anchors_per_line_like_search() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("a.txt");
+        fs::write(&file, "foo x\nbar\nfoo y\nend foo\n").unwrap();
+        for (pattern, want) in [
+            ("^foo", "Z x\nbar\nZ y\nend foo\n"),
+            ("foo$", "foo x\nbar\nfoo y\nend Z\n"),
+        ] {
+            fs::write(&file, "foo x\nbar\nfoo y\nend foo\n").unwrap();
+            let q = SearchQuery {
+                pattern: pattern.to_string(),
+                regex: true,
+                case_sensitive: true,
+                whole_word: false,
+            };
+            // What the operator saw in Find Results …
+            let shown = total(&search_core(dir.path(), &q).unwrap());
+            let scope = ReplaceScope::File {
+                path: "a.txt".to_string(),
+            };
+            let s = replace_in_scope(dir.path(), &q, "Z", &scope).unwrap();
+            // … is exactly what "Replace in file" replaced. (Whole-file matching replaced 1
+            // of 2 for `^foo` and refused `foo$` as stale.)
+            assert_eq!(s.matches_replaced as usize, shown, "{pattern}");
+            assert_eq!(fs::read_to_string(&file).unwrap(), want, "{pattern}");
+        }
+    }
+
+    #[test]
+    fn scope_file_keeps_crlf_and_untouched_lines_byte_for_byte() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("w.txt");
+        fs::write(&file, "foo\r\nkeep\r\n\r\nfoo foo").unwrap();
+        let scope = ReplaceScope::File {
+            path: "w.txt".to_string(),
+        };
+        let s = replace_in_scope(dir.path(), &substring("foo"), "B", &scope).unwrap();
+        assert_eq!(s.matches_replaced, 3);
+        assert_eq!(fs::read_to_string(&file).unwrap(), "B\r\nkeep\r\n\r\nB B");
+    }
+
+    #[test]
+    fn line_split_is_exactly_str_lines() {
+        for contents in [
+            "",
+            "a",
+            "a\n",
+            "a\nb",
+            "a\r\nb\r\n",
+            "a\r",
+            "a\rb\n",
+            "\n\n",
+            "x\r\n\r\ny",
+        ] {
+            let ours: Vec<&str> = lines_with_terminators(contents)
+                .map(|(_, t, _)| t)
+                .collect();
+            let std: Vec<&str> = contents.lines().collect();
+            assert_eq!(ours, std, "{contents:?}");
+            // And the pieces reassemble to the original, byte for byte.
+            let whole: String = lines_with_terminators(contents)
+                .map(|(_, t, term)| format!("{t}{term}"))
+                .collect();
+            assert_eq!(whole, contents, "{contents:?}");
+        }
     }
 }

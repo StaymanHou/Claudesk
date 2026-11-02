@@ -290,9 +290,47 @@ Problem statement unchanged (2026-11-02, F12 re-entry for P3.verify-human.4) —
     - [x] P3.6 (back-loop fix for P3.verify-human.4) `editor/searchPanelTextAssist.ts`: an `EditorView.updateListener` stamping `NO_TEXT_ASSIST`'s attributes (derived from it, one source) onto `.cm-search` text inputs; added to all THREE surfaces with a find panel — file editor (`buildEditorExtensions`), Prompt panel (`promptExtensions`; the prose draft itself untouched), Find Results (`SyntheticView`, via basicSetup). Test `searchPanelTextAssist.test.tsx` opens the REAL panel on each real extension set; removing the extension from each surface INDIVIDUALLY fails exactly that surface's test (3/3), files restored by shasum.  <!-- status: done -->
   - [x] verify-codify  <!-- status: done 2026-11-02 — integration boundary = the Find Results tab + ⌘⇧F overlay in `RightPanelHost`; new `src/components/workspace/__tests__/findResultsReplaceLive.test.tsx` (4) drives the REAL host (overlay → search → tab → button) with mocked IPC: a row button sends its own `match` scope + current replacement + the results' query, then re-searches with that query; a file button sends its own `file` scope; an edited query field is ignored, an emptied replacement is honoured; a refused replace still re-searches and opens the overlay with `Replace failed: …`. Mutants (individually): live query instead of shown → 1 failed; no re-search → 4 failed; restored by shasum. Already covered at build: buffer targets, `replaceActions`, `SyntheticView` buttons (with the double-guard measurement), `searchPanelTextAssist` (3 surfaces). Full `pnpm verify:auto` EXIT=0 (41s): vitest 281 files / 3670 tests, cargo 1052. -->
 
+## Code-Quality Review
+
+*(feature-review-quality, ship commit `6c97b1a`, window `6c97b1a^..6c97b1a`, drive_mode=autopilot. Reviewer: code-quality-reviewer subagent. **CRITICAL confirmed by the orchestrator with a throwaway repro test** (`^foo`, regex, on `foo x / bar / foo y`): search found 2, File-scope replace replaced 1 and reported success. → F40.)*
+
+### Strengths
+- Stale-row refusal: the match scope carries the search row back verbatim and refuses with a typed, actionable `StaleResult` instead of guessing.
+- `scope` is an optional, `kind`-tagged, backward-compatible extension; absent = the unchanged `replace_core`, pinned both by an equivalence test and at the command wrapper.
+- Tests build scopes from real `search_core` rows (the round trip), covering CRLF, second-capture expansion, literal `$`, path escape, no-write-on-refusal.
+- Clean frontend layering: pure `replaceActions.ts`, a generic `SyntheticView` `lineActions` widget seam, thin host wiring.
+- Comments carry the why (visibility vs opacity, the CM6 z-indexes, the `node:fs` CSS read).
+
+### Issues
+**CRITICAL**
+- [src-tauri/src/project_search/mod.rs, `replace_in_scope` File arm] "Replace in file" matches the WHOLE file while search matches PER LINE, so `^`/`$` disagree: an unchanged file can return a false `StaleResult`, and `^foo` on two lines replaces one and reports success. `replace_one_match` (Match scope) is correctly per-line, so the new function has two rules. Inherited from `replace_core` (Replace All has the same property). — *Fails safe on bytes but gives a false error or a silent partial replace on WP6's own path; no File-scope test used an anchored regex.* → **routed to `/feature-refactor`.**
+
+**MAJOR**
+- [mod.rs: `replace_core` per-file block vs the File arm vs `replace_one_match`] The literal-vs-expand + replace logic is duplicated three ways; that duplication is how the CRITICAL slipped in. — *A single per-line helper used by File (and possibly All) fixes it once.* → **addressed in the same refactor.**
+
+**MINOR** (auto-backlogged → `backlog-quality-findings.md` → `# m16-5-wp6-per-result-replace — 2026-11-02`)
+- [mod.rs `replace_one_match`] 8 positional args behind a clippy allow.
+- [RightPanelHost.tsx ×3 + ProjectSearch.tsx] wire-query conversion repeated at 4 sites.
+- [RightPanelHost.tsx `onReplaceConfirm`] Replace All uses the live query; row buttons use the shown one (pre-existing; mitigated by the `lastCounts` reset).
+- [RightPanelHost.tsx + SyntheticView.tsx] line actions rebuilt (and widgets re-created) per replacement keystroke.
+- [5 test files] jsdom CM6 shim block copied.
+
+### Assessment
+Well built: a clean backward-compatible backend extension, a correct stale check for a no-confirm action, and good frontend layering with each layer tested at its own level. The real debt is the File-scope replace inheriting `replace_core`'s whole-file matching while the Match scope is per-line — a genuine anchored-regex defect the green tests missed. Factoring one per-line helper resolves it and the duplication together; the frontend items are small.
+
+### If you disagree
+Mark a finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
+### Refactor (F40) — 2026-11-02
+- **CRITICAL — FIXED.** "Replace in file" now matches PER LINE through one helper, `replace_every_match_per_line`, built on `lines_with_terminators` (exactly `str::lines`, terminators kept so the file reassembles byte for byte). New tests: `scope_file_honours_anchors_per_line_like_search` (`^foo` and `foo$`: replaced count == search count, exact bytes), `scope_file_keeps_crlf_and_untouched_lines_byte_for_byte`, `line_split_is_exactly_str_lines` (9 inputs incl. a lone trailing `\r`, which the old splitter wrongly stripped). Mutant: File arm back to whole-file → the anchor test fails; restored by shasum.
+- **MAJOR — FIXED.** The literal-vs-expand rule lives in ONE fn, `replace_all_in`, used by Replace All, File scope and (via `caps.expand` / literal) the Match scope's span; the line split is shared by File and Match.
+- **MINOR "8 positional args" — FIXED by the same refactor** (`replace_one_match` takes a `MatchTarget`; the clippy allow is gone). → finalize: delete `SURFACE-2026-11-02-QUALITY-WP6-REPLACE-ONE-MATCH-EIGHT-POSITIONAL-ARGS` from the findings file + pointer count 5 → 4, with its `**Backlog resolved:**` line.
+- **Out of refactor scope, logged:** `SURFACE-2026-11-02-REPLACE-ALL-MATCHES-WHOLE-FILE-WHILE-SEARCH-MATCHES-PER-LINE` (medium) — the same anchor disagreement in the pre-existing Replace All, kept whole-file because a test pins multiline replace; changing it is a behaviour change.
+- Gate: `pnpm verify:auto` EXIT=0 (50s): vitest 3670, cargo lib 1055.
+
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship
+- **Path:** Feature > refactor (done) > finalize
+- **Active scope:** finalize
 - **Blocked:** none
 - **Unvisited:** none after Phase 3
 - **Open discoveries:** none

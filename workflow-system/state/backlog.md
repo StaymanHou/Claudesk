@@ -31,6 +31,24 @@
 - **Priority:** low (lowered 2026-10-27, M16.5 WP3: dev-build-only on the evidence, 0 in 1,278 installed-build records; decisions are already deduplicated)
 - **Status:** open — NOT reproduced at M16.5 WP3 (3.3, AC-12; see the repro attempt above). Stays open at low.
 
+## SURFACE-2026-11-02-REPLACE-ALL-MATCHES-WHOLE-FILE-WHILE-SEARCH-MATCHES-PER-LINE
+- **Source:** feature:refactor (M16.5 WP6, review-quality CRITICAL follow-up)
+- **Target level:** product:wbs
+- **Type:** bug (pre-existing)
+- **Summary:** Replace All (`replace_core`) still runs the regex over the WHOLE file, while ⌘⇧F search matches PER LINE. With an anchored regex the two disagree: `^foo` is shown on every line that starts with `foo` but Replace All replaces only the first line of each file, and `foo$` replaces only a match at the very end of a file (Rust `$` without `(?m)` does not match before `\n`). The confirm dialog's count (from search) then overstates what is replaced, silently.
+- **Context:** WP6's refactor fixed the same defect for the NEW per-file scope (shared per-line helper `replace_every_match_per_line`). Replace All was left whole-file on purpose: a test, `replace_count_matches_whole_file_effect_under_multiline_regex`, pins that a `\n`-spanning regex replaces across lines, and changing that is a behaviour change, not a refactor.
+- **Suggested action:** Decide the rule. Most likely make Replace All per-line too (it only ever replaces what search showed, and search can never show a `\n`-spanning match) and retire the multiline test; or keep whole-file and add `(?m)` so anchors agree. Either way, add an anchored-regex test comparing search's count to Replace All's.
+- **Priority:** medium
+- **Status:** pending
+
+## Code-quality findings — m16-5-wp6-per-result-replace (2026-11-02)
+
+- **Pointer:** **5 MINOR** from the review of `6c97b1a` (the 1 CRITICAL + 1 MAJOR went to `/feature-refactor` in the same feature). MINOR: `replace_one_match`'s 8 positional args; the wire-query conversion at 4 sites; Replace All still uses the live query; line actions rebuilt per keystroke; jsdom CM6 shims copied into 5 tests.
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp6-per-result-replace — 2026-11-02`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** WP8's paydown; the two RightPanelHost items (wire query, Replace All query) go together.
+
 ## Code-quality findings — m16-5-wp5-qol-batch (2026-11-02)
 
 - **Pointer:** **1 MAJOR + 4 MINOR** from the review of `df52ce7` (0 CRITICAL). MAJOR: the quit path stamps `last_closed_at` with canonicalized registry keys against raw stored paths, so symlinked or trailing-slash projects silently miss it. MINOR: the Day-view key listener does not skip SELECT; `viewportKeyAction`'s return type collapses to `string`; the picker row should be its own component; the "Open" group label is a list row.
