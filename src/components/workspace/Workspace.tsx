@@ -21,7 +21,7 @@
 // The `visible` prop drives that toggle, and is forwarded to RightPanelHost to gate
 // panel liveness + the capture-phase hotkey (only the focused workspace's host reacts).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { Workspace as WorkspaceModel } from "../../state/workspace";
@@ -83,6 +83,15 @@ import {
   SKILL_BUTTONS,
   showSkillButtons,
 } from "./skillButtons";
+// 2026-11-03 — the `clear` button. ⚠️ UNGATED and not a `SKILL_BUTTONS` member (`/clear` is a
+// stock CC command); it renders inside the row before `restore`, or alone when the row is absent.
+import {
+  CLEAR_COMMAND,
+  CLEAR_LABEL,
+  CLEAR_TESTID,
+  CLEAR_TITLE,
+  showClearButton,
+} from "./clearButton";
 // M13 WP3 P3.1 — the Recycle operation. ⚠️ NOT a skill button: it is a multi-step operation
 // (two injections + a completion wait + a flag clear + a respawn), so it is a sibling in the
 // same row rather than a `SKILL_BUTTONS` member.
@@ -614,6 +623,28 @@ export function Workspace({
     if (sessionId === null) return; // unreachable — the row does not render without one.
     void fireSkillCommand(sessionId, command);
   };
+
+  // The ungated `clear` button, built once and placed in ONE of two spots below: inside the
+  // skill row before `restore`, or alone when the row is absent. Never both — the row's
+  // presence decides, so the two placements cannot render together.
+  const skillRowShown = showSkillButtons({
+    workflowEnabled,
+    ccSessionId: workspace.cc_session_id,
+  });
+  const clearButton = showClearButton({
+    ccSessionId: workspace.cc_session_id,
+  }) ? (
+    <button
+      type="button"
+      className="workspace-skill-btn workspace-clear-btn"
+      data-testid={CLEAR_TESTID}
+      aria-label={`Run ${CLEAR_COMMAND} in ${workspace.display_name}`}
+      title={CLEAR_TITLE}
+      onClick={() => fireSkill(CLEAR_COMMAND)}
+    >
+      {CLEAR_LABEL}
+    </button>
+  ) : null;
 
   // M13 WP3 P3.1 — the live session id, mirrored into a ref so `awaitFreshSessionId` can watch
   // it CHANGE after a relaunch. The id arrives by a push (XtermPane's `onSessionId` → App state
@@ -1289,27 +1320,30 @@ export function Workspace({
             Session is NOT here — it is WP3's operation, and WP2 deliberately ships without it
             (an earlier version of this comment said "plus the Recycle button", which was false
             at the render site itself). ⚠️ GATED as a whole: every command is a companion-workflow
-            skill, so with the gate off the row is ABSENT, not hidden or disabled. */}
-        {showSkillButtons({
-          workflowEnabled,
-          ccSessionId: workspace.cc_session_id,
-        }) && (
+            skill, so with the gate off the row is ABSENT, not hidden or disabled. The ungated `clear`
+            button is PLACED in it (before `restore`) but is not a member; see `clearButton.ts`. */}
+        {/* The ungated `clear` button, alone, when the gated row below is absent. */}
+        {!skillRowShown && clearButton}
+        {skillRowShown && (
           <div
             className="workspace-skill-row"
             data-testid="workspace-skill-row"
           >
             {SKILL_BUTTONS.map((btn) => (
-              <button
-                key={btn.command}
-                type="button"
-                className="workspace-skill-btn"
-                data-testid={`workspace-skill-${btn.command.slice(1)}`}
-                aria-label={`Run ${btn.command} in ${workspace.display_name}`}
-                title={btn.title}
-                onClick={() => fireSkill(btn.command)}
-              >
-                {btn.label}
-              </button>
+              <Fragment key={btn.command}>
+                {/* `clear` goes immediately before `restore` (`/clear` → `/session-restore`). */}
+                {btn.command === "/session-restore" && clearButton}
+                <button
+                  type="button"
+                  className="workspace-skill-btn"
+                  data-testid={`workspace-skill-${btn.command.slice(1)}`}
+                  aria-label={`Run ${btn.command} in ${workspace.display_name}`}
+                  title={btn.title}
+                  onClick={() => fireSkill(btn.command)}
+                >
+                  {btn.label}
+                </button>
+              </Fragment>
             ))}
             {/* M13 WP3 P3.1 — THE SIXTH AFFORDANCE. ⚠️ Rendered as a SIBLING of the mapped
                 skill buttons, NOT as a `SKILL_BUTTONS` member: that array holds slash commands

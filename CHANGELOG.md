@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-03
+
+- **Task closed:** The workspace header gained a one-click `clear` button that runs Claude Code's `/clear`, placed right before `restore` in the skill row; it is not workflow-gated, so it also shows alone in the header when workflow features are off.
+
 ## 2026-11-02
 
 - **Feature shipped:** M16.5 WP5 QoL batch: name and filter inputs (the picker filter first) turn off spellcheck, autocorrect, autocapitalize and autocomplete, a failed delete or trash shows an inline error above the file tree, the hotkey reference lists ⌘G / ⌘⇧L / ⌘⌥G, the Day view pans and zooms with ←/→/+/−/Home/End, and the project picker orders by last close with open workspaces in a marked "Open" group at the bottom; the VFR frame-step fault was measured but its fix not built, and the drive-mode-menu change was sent to mccc.

@@ -70,8 +70,12 @@ import type { AnnounceMap } from "../predictAction";
 //                   Added at M13 WP2 for the same reason arm 4 was:
 //                   a button row in the workspace header is none of the first four.
 //                   ⚠️ Unlike arm 4 this row has NO ungated half (every member is a
-//                   companion-workflow skill), so instead of "the ungated arm must
-//                   survive" the arm pins the PREMISE that licenses the wholesale gate —
+//                   companion-workflow skill). The header's `clear` button (2026-11-03) is
+//                   rendered inside the row but is NOT a member: it is a stock CC command,
+//                   split out ungated exactly as the premise below demands, and its
+//                   survive-while-OFF check lives in `clearButtonLive.test.tsx`. So instead
+//                   of "the ungated arm must survive" this arm pins the PREMISE that licenses
+//                   the wholesale gate —
 //                   every member is workflow-coupled — plus an emptiness meta-guard,
 //                   since a row emptied to zero members would satisfy the OFF assertion
 //                   vacuously.

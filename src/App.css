@@ -914,10 +914,11 @@ body,
   /* ⚠️ min-width:0 + the wrapper being shrinkable is what keeps the row's buttons from pushing
      the split control off the row at a narrow window. The buttons themselves do NOT
      shrink (they would become unreadable slivers); the row clips instead.
-     ⚠️ Count updated at M13 WP3: SIX affordances now (five skill commands + Recycle), so the
-     clip threshold is tighter than the "five buttons" this comment used to name. WP2 measured
-     the header truncating ~640px with the status dot overflowing ~600px and the operator
-     ACCEPTED that; the sixth button moves those numbers, which Phase 4 re-checks live. */
+     ⚠️ Count updated 2026-11-03: SEVEN affordances with the gate on (five skill commands, the
+     ungated `clear` button placed before `restore`, and Recycle). Each addition tightens the
+     clip threshold. WP2 measured the header truncating
+     ~640px with the status dot overflowing ~600px and the operator ACCEPTED that; M13 WP3's
+     sixth button and the 2026-11-03 `clear` button each move those numbers further. */
   min-width: 0;
   overflow: hidden;
 }
