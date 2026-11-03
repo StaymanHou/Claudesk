@@ -159,7 +159,8 @@ real chronology.
 
 ## pnpm tauri build
 
-- **Last:** 106s (2026-10-20, /release v0.8.0: cargo clean removed 41435 files / 17.5 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)
+- **Last:** 204s (2026-11-03, /release v0.8.1: cargo clean removed 69790 files / 25.6 GiB + cold build, Apple-signed + minisign-signed; notarization a separate 33s notarytool round-trip, not counted)
+- **Prior:** 106s (2026-10-20, /release v0.8.0: cargo clean removed 41435 files / 17.5 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)
 - **Prior:** 104s (2026-09-29, /release v0.7.1: cargo clean removed 54256 files / 21.6 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)
 - **Prior:** 129s (2026-09-24, /release v0.7.0: cargo clean removed 45843 files / 16.0 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)
 - **Prior:** 117s (2026-09-23, /release v0.6.1: cargo clean removed 68363 files / 20.4 GiB + cold build, Apple-signed + minisign-signed; notarization a separate 28s notarytool round-trip, not counted)
