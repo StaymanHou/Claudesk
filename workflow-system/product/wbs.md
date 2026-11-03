@@ -243,7 +243,7 @@ the 29 scorable records the +1 margin rested on?
   - Measure today's order for **A** (fresh launch) and **B** (some workspaces already open).
   - Present orders with a recommendation (mockup if the difference is spatial). Build what the
     operator picks.
-- [x] 5.8 ⚠️ **Claudesk half done; the mccc half and the live check are CARRIED** (message sent; mccc not landed as of 2026-11-02; the entry stays OPEN) — **Skip the drive-mode menu under a Claudesk mode; make the menu point-and-select**
+- [x] 5.8 ⚠️ **Claudesk half done; `/session-restore` live check PASSED 2026-11-03; the `/session-start` half is CARRIED** (mccc Phase 2–3 not landed; the entry stays OPEN) — **Skip the drive-mode menu under a Claudesk mode; make the menu point-and-select**
       (`SURFACE-2026-11-02-DRIVE-MODE-MENU-STILL-SHOWN-UNDER-A-CLAUDESK-MODE`; added by the operator
       2026-11-02). Mostly an mccc change:
   - Send one mccc inbox message: (a) use `AskUserQuestion` for the mode pick in `session-start` /
@@ -275,6 +275,14 @@ read-only synthetic tab (`SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE`).
 
 **Milestone:** M16.5
 **Dependencies:** WP3, WP4, and **a `/release` containing them** (operator-run; never auto-invoked).
+**Release gate — LIFTED (operator, 2026-11-03).** The 2026-11-02 gate made the `/release` wait for
+mccc's drive-mode picker change and 5.8's live check. On 2026-11-03 mccc landed Phase 1
+(`/session-restore`), and the restore live check PASSED (no menu under a Claudesk mode; the
+`AskUserQuestion` select when no mode is set). mccc's Phase 2–3 (`/session-start`,
+`/session-handoff`) is slower, so the operator released without it: the `/session-start` half of
+the live check runs when mccc ships, and any Claudesk follow-up goes out in a later patch/minor
+release. It was always an ordering choice, not a technical dependency (the skill change reaches
+sessions through the skill symlinks, not the Claudesk release).
 **Size:** S (calendar-bound)
 **Tasks:**
 - [ ] 7.1 On the installed build, verify the three on-screen checks
@@ -465,6 +473,3 @@ the alias pin loud). R027 stays SKIP. No mccc note is sent.
 **Evidence:** `workflow-system/product/wp2-adjudicator-set.json` (361 records; text only on
 claudesk rows) and `src/state/supervisor/__tests__/adjudicatorRemeasure.test.ts`, a replay with
 no live calls that pins the verdict.
-
-## Session Handoff — 2026-11-02 15:10
-Handed off. See `workflow-system/state/.session.md` to restore.
