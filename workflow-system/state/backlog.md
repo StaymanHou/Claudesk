@@ -107,20 +107,6 @@
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
-## Code-quality findings — analytics-week-export (2026-09-29)
-
-- **Pointer:** **2 MAJOR + 3 MINOR** from the review of `c7042af` (the `WeekProjectMs.path` MINOR was resolved 2026-11-04 by paydown WP2). The MAJORs:
-  - The `query.rs` week sort key's doc claims it is the `WEEK TOTAL` badge figure, but it sums 2 kinds and the badge sums 3.
-  - The export's view-matching figures are unguarded Rust copies of `weekMath.ts`, checked by a circular test, while the arch doc says they "cannot drift".
-  The MINORs:
-  - The `{sid}~{N}` life key is a stringly-typed round trip.
-  - `ExportError::Db` also carries build and serde failures.
-  - `dashboardState.ts` has a stale "three modes" header.
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# analytics-week-export — 2026-09-29`.
-- **Priority:** medium (the MAJORs) / low (the rest)
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-- **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
-
 ## Code-quality findings — silent-supervisor (2026-09-28)
 
 - **Pointer:** **3 MINOR** remain from the review of `778fe72` (the stale "last possible moment" comment + reason list was resolved 2026-11-04 by paydown WP2, the dedupe-store reset by paydown WP3). (The MAJOR, no alarm for a CC transcript-format change, was resolved at M16.5 WP3, 2026-10-27.) The MINORs: a "stripped once" claim with two strip sites, a "user prose" floor that also counts `isMeta` skill bodies, and an ad-hoc widened `onTurnEnd` param. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# silent-supervisor — 2026-09-28`.

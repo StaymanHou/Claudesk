@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1–WP4 done 2026-11-04
+status: in-progress  # WP1–WP5 done 2026-11-04
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -231,7 +231,7 @@ Test-only, so it runs before any code WP; a de-flaked gate helps every WP after 
 - `#4`: pin one branch of `the_async_command_resolves_to_a_rejection_through_its_worker`.
 - `#5`: port the TS `/timed? ?out/i` regex exactly into the timeout test.
 
-## WP5: Analytics export honesty  `[impact: Med–High (Neo contract) · effort: S · risk: Low–Med]` · task
+## WP5: Analytics export honesty  `[impact: Med–High (Neo contract) · effort: S · risk: Low–Med]` · task · ✅ DONE 2026-11-04 (export byte-identical; 9 mutants die; batch #4 folded in)
 
 ⭐ **WBS 8.2 priority input.** Files: `time_store/query.rs` and `export.rs`.
 - `09-29-QUALITY-EXPORT-VIEW-FIGURES-ARE-UNGUARDED-RUST-COPIES-OF-WEEKMATH` (MAJOR):
