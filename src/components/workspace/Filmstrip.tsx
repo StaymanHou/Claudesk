@@ -46,8 +46,6 @@ interface FilmstripProps {
   /** Reorder tiles LIVE: move from index → to index (fires on every pointermove that
    *  crosses a boundary — WYSIWYG, no persist). */
   onReorder: (from: number, to: number) => void;
-  /** Commit + persist the current order (fires once on pointerup). */
-  onReorderCommit: () => void;
   /** Open the ProjectPicker overlay to add another workspace (M4 WP2). */
   onAddWorkspace: () => void;
   /** Open the GLOBAL time-analytics dashboard (M9 WP6a — the analytics button;
@@ -76,7 +74,6 @@ export function Filmstrip({
   onToggleCollapsed,
   onPromote,
   onReorder,
-  onReorderCommit,
   onAddWorkspace,
   onOpenDashboard,
   onClose,
@@ -147,8 +144,7 @@ export function Filmstrip({
     }
     if (!drag) return;
     if (drag.started) {
-      setDraggingId(null);
-      onReorderCommit(); // persist the final arrangement once
+      setDraggingId(null); // the order is already live in App state; nothing to commit
     } else {
       onPromote(drag.id); // no drag → it was a click
     }

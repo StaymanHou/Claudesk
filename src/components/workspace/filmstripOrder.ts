@@ -1,16 +1,11 @@
-// M4 WP3 P4 — pure helpers for the user-arranged, persisted filmstrip order.
+// M4 WP3 P4 — pure helpers for the user-arranged filmstrip order: the move helper and the
+// drag hit-test.
 //
-// The order is a list of project_paths (NOT the per-session `ws-N` ids, which reset on
-// every launch — a path-keyed order survives a restart; resolved decision in the WIP
-// open-questions). It is the single source of truth for BOTH tile render order and the
-// ⌘⇧+digit index (`deriveTiles` consumes it via `orderWorkspaces`). This module is the
-// pure (no React/DOM beyond localStorage) core: the move helper + the load/save, same
-// posture + error-swallowing discipline as filetree/railWidth.ts.
-
-import { canonicalizeProjectPath } from "../../state/workspace";
-
-/** localStorage key for the persisted filmstrip order (app-global UI chrome). */
-export const FILMSTRIP_ORDER_KEY = "claudesk.filmstripOrder";
+// ⚠️ The order is NOT persisted (paydown 2026-11-04 WP6, reversing M4 WP3's localStorage
+// order). It lives in `App` state as workspace ids for the app run; see `filmstripTiles.ts`
+// for why (a path-keyed, persisted order slotted reopened projects into stale positions, and
+// the operator ruled that a newly opened workspace always appends on the right). The old
+// `claudesk.filmstripOrder` localStorage key may still sit on disk; nothing reads it.
 
 /**
  * Move the item at `from` to `to`, returning a NEW array (immutable). Out-of-range
@@ -55,36 +50,4 @@ export function insertionIndex(
     if (clientX > midpoints[i]) count++;
   }
   return count;
-}
-
-/**
- * Read the persisted order (a list of canonicalized project_paths). Returns [] when
- * nothing is stored, the value is unparseable, or localStorage is unavailable — never
- * throws. [] means "no user arrangement yet" → `orderWorkspaces` falls back to
- * WorkspaceList order.
- */
-export function loadOrder(): string[] {
-  try {
-    const raw = localStorage.getItem(FILMSTRIP_ORDER_KEY);
-    if (raw == null) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    // Keep only strings, canonicalized (trailing-slash normalized) for stable matching.
-    return parsed
-      .filter((p): p is string => typeof p === "string")
-      .map(canonicalizeProjectPath);
-  } catch {
-    return [];
-  }
-}
-
-/** Persist the order (a list of project_paths, canonicalized). Best-effort — swallows
- *  storage errors (quota / unavailable), same as railWidth.saveRailWidth. */
-export function saveOrder(projectPaths: readonly string[]): void {
-  try {
-    const canonical = projectPaths.map(canonicalizeProjectPath);
-    localStorage.setItem(FILMSTRIP_ORDER_KEY, JSON.stringify(canonical));
-  } catch {
-    /* storage unavailable / quota — a non-persisted order is acceptable */
-  }
 }

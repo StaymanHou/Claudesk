@@ -35,6 +35,10 @@ async function mount() {
       >
         <Readout />
         <input data-testid="typing" />
+        <select data-testid="picker">
+          <option>a</option>
+          <option>b</option>
+        </select>
       </ViewportProvider>,
     ),
   );
@@ -46,17 +50,17 @@ async function press(
   key: string,
   init: KeyboardEventInit = {},
   target: EventTarget = window,
-) {
-  await act(async () => {
-    target.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key,
-        bubbles: true,
-        cancelable: true,
-        ...init,
-      }),
-    );
+): Promise<KeyboardEvent> {
+  const ev = new KeyboardEvent("keydown", {
+    key,
+    bubbles: true,
+    cancelable: true,
+    ...init,
   });
+  await act(async () => {
+    target.dispatchEvent(ev);
+  });
+  return ev;
 }
 
 afterEach(async () => {
@@ -90,5 +94,19 @@ describe("ViewportProvider keyboard — live", () => {
     // Positive control: the same key, not from the input, does move it.
     await press("ArrowRight");
     expect(vp()).toBe("624:864");
+  });
+
+  it("leaves a focused <select> its own keys: no pan, and the default is not prevented", async () => {
+    await mount();
+    const select = host!.querySelector('[data-testid="picker"]')!;
+    for (const key of ["ArrowRight", "ArrowLeft", "End", "Home"]) {
+      const ev = await press(key, {}, select);
+      expect(vp(), key).toBe("600:840");
+      expect(ev.defaultPrevented, key).toBe(false);
+    }
+    // Positive control: the same key from the window does pan and does prevent the default.
+    const ev = await press("ArrowRight");
+    expect(vp()).toBe("624:864");
+    expect(ev.defaultPrevented).toBe(true);
   });
 });

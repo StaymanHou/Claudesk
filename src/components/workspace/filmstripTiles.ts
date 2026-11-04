@@ -3,17 +3,20 @@
 // The Filmstrip renders ONE tile per open workspace, INCLUDING the center-staged
 // one (marked active, not excluded — so the roster is complete and the ⌘⇧+digit
 // indices stay stable across switches). This module is the pure (no React/DOM/IPC)
-// core: WorkspaceList + focusedId + an optional persisted project_path order →
+// core: WorkspaceList + focusedId + an optional drag-arranged order of workspace ids →
 // an ordered FilmstripTile[]. Same vitest-testable posture as workspace.ts.
 //
-// ORDER (P4 wires `persistedOrder` in): when a persisted order of project_paths is
-// supplied, tiles render in that order. Any open workspace whose path is NOT in the
-// persisted order appends at the end (in WorkspaceList order) — newly-opened
-// projects show up without needing a stored entry. Persisted paths that are no
-// longer open are ignored. With no persisted order (P1), tiles follow WorkspaceList
-// order verbatim.
+// ORDER: tiles render in the dragged order, and any open workspace not in it appends at the
+// end (in WorkspaceList order). ⚠️ The order is keyed by workspace ID, not project path
+// (paydown 2026-11-04 WP6, operator ask: "the newly open workspace just always gets
+// appended to the right"). Every open mints a fresh id (`openWorkspace` → `makeWorkspace`),
+// so a newly opened workspace is never in the order and always lands on the RIGHT, even a
+// project that sat elsewhere earlier. The path-keyed, localStorage-persisted order that
+// M4 WP3 shipped slotted a reopened project back into its old dragged position, which read
+// as random. Ids no longer open are ignored. With no order, tiles follow WorkspaceList order.
 
-import { canonicalizeProjectPath, type Workspace } from "../../state/workspace";
+import type { Workspace } from "../../state/workspace";
+import { reorder } from "./filmstripOrder";
 
 /** A single filmstrip tile — the render-ready projection of a workspace. */
 export interface FilmstripTile {
@@ -29,15 +32,15 @@ export interface FilmstripTile {
  *
  * @param workspaces   the live WorkspaceList
  * @param focusedId    the center-staged workspace id (its tile is `active`)
- * @param persistedOrder  optional list of project_paths giving the user-arranged
- *                        order (P4); undefined/empty → WorkspaceList order.
+ * @param orderIds     optional workspace ids in the user's dragged order;
+ *                     undefined/empty → WorkspaceList order.
  */
 export function deriveTiles(
   workspaces: Workspace[],
   focusedId: string | null,
-  persistedOrder?: readonly string[],
+  orderIds?: readonly string[],
 ): FilmstripTile[] {
-  const ordered = orderWorkspaces(workspaces, persistedOrder);
+  const ordered = orderWorkspaces(workspaces, orderIds);
   return ordered.map((w) => ({
     id: w.id,
     project_path: w.project_path,
@@ -62,32 +65,44 @@ export function tileForSwitchIndex(
 }
 
 /**
- * Order workspaces by a persisted project_path order, appending any not-yet-ordered
- * open workspaces at the end (WorkspaceList order). Pure — used by deriveTiles and
- * reused by the ⌘⇧+digit index mapping so render order and switch index agree.
+ * The order a drag leaves behind: the tiles with `from` moved to `to`, as workspace IDS. The
+ * one place the order's key is chosen, so `App` and the tests cannot disagree on it. ⚠️ Ids,
+ * never paths: a path key puts a reopened project back into its old slot instead of on the
+ * right.
+ */
+export function orderAfterDrag(
+  tiles: readonly FilmstripTile[],
+  from: number,
+  to: number,
+): string[] {
+  return reorder(tiles, from, to).map((t) => t.id);
+}
+
+/**
+ * Order workspaces by a dragged order of workspace ids, appending any open workspace not in
+ * it at the end (WorkspaceList order), which is where every newly opened workspace lands.
+ * Pure — used by deriveTiles and reused by the ⌘⇧+digit index mapping so render order and
+ * switch index agree.
  */
 export function orderWorkspaces(
   workspaces: Workspace[],
-  persistedOrder?: readonly string[],
+  orderIds?: readonly string[],
 ): Workspace[] {
-  if (!persistedOrder || persistedOrder.length === 0) {
+  if (!orderIds || orderIds.length === 0) {
     return [...workspaces];
   }
-  const orderKeys = persistedOrder.map(canonicalizeProjectPath);
   const remaining = [...workspaces];
   const result: Workspace[] = [];
 
-  // First, emit workspaces in persisted order (skipping stored paths not open).
-  for (const key of orderKeys) {
-    const idx = remaining.findIndex(
-      (w) => canonicalizeProjectPath(w.project_path) === key,
-    );
+  // First, emit workspaces in the dragged order (skipping ids no longer open).
+  for (const id of orderIds) {
+    const idx = remaining.findIndex((w) => w.id === id);
     if (idx !== -1) {
       result.push(remaining[idx]);
       remaining.splice(idx, 1);
     }
   }
-  // Then append any open workspace not covered by the persisted order.
+  // Then append any open workspace not in the dragged order: every new open.
   result.push(...remaining);
   return result;
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   deriveTiles,
+  orderAfterDrag,
   orderWorkspaces,
   tileForSwitchIndex,
 } from "../filmstripTiles";
@@ -38,44 +39,65 @@ describe("deriveTiles", () => {
     expect(deriveTiles([], null)).toEqual([]);
   });
 
-  it("orders by persisted project_path order when supplied", () => {
+  it("orders by the dragged order of workspace ids when supplied", () => {
     const tiles = deriveTiles([wsA, wsB, wsC], wsA.id, [
-      wsC.project_path,
-      wsA.project_path,
-      wsB.project_path,
+      wsC.id,
+      wsA.id,
+      wsB.id,
     ]);
     expect(tiles.map((t) => t.id)).toEqual([wsC.id, wsA.id, wsB.id]);
   });
 });
 
 describe("orderWorkspaces", () => {
-  it("follows WorkspaceList order with no persisted order", () => {
+  it("follows WorkspaceList order with no dragged order", () => {
     expect(orderWorkspaces([wsA, wsB]).map((w) => w.id)).toEqual([
       wsA.id,
       wsB.id,
     ]);
   });
 
-  it("appends open workspaces missing from the persisted order at the end", () => {
-    // Only B is in the stored order; A and C append in WorkspaceList order.
-    const ordered = orderWorkspaces([wsA, wsB, wsC], [wsB.project_path]);
+  it("appends open workspaces missing from the dragged order at the end", () => {
+    // Only B was dragged; A and C append in WorkspaceList order.
+    const ordered = orderWorkspaces([wsA, wsB, wsC], [wsB.id]);
     expect(ordered.map((w) => w.id)).toEqual([wsB.id, wsA.id, wsC.id]);
   });
 
-  it("ignores persisted paths no longer open", () => {
-    const ordered = orderWorkspaces(
-      [wsA, wsB],
-      ["/Users/me/projects/closed", wsB.project_path, wsA.project_path],
-    );
+  it("ignores ids no longer open", () => {
+    const ordered = orderWorkspaces([wsA, wsB], ["ws-closed", wsB.id, wsA.id]);
     expect(ordered.map((w) => w.id)).toEqual([wsB.id, wsA.id]);
   });
+});
 
-  it("matches paths up to trailing-slash normalization", () => {
-    const ordered = orderWorkspaces(
-      [wsA, wsB],
-      [wsB.project_path + "/", wsA.project_path],
-    );
-    expect(ordered.map((w) => w.id)).toEqual([wsB.id, wsA.id]);
+describe("a newly opened workspace always appends on the RIGHT (paydown 2026-11-04 WP6)", () => {
+  // The operator's ask. `orderAfterDrag` is what App stores on a drag, so these drive the
+  // same two steps: arrange, then open.
+  const dragged = orderAfterDrag;
+
+  it("a new project opened after a drag lands last, not in WorkspaceList position", () => {
+    // Drag C to the front: [C, A, B]. Then open D.
+    const order = dragged(deriveTiles([wsA, wsB, wsC], wsA.id), 2, 0);
+    const wsD = makeWorkspace("/Users/me/projects/delta");
+    const tiles = deriveTiles([wsA, wsB, wsC, wsD], wsD.id, order);
+    expect(tiles.map((t) => t.id)).toEqual([wsC.id, wsA.id, wsB.id, wsD.id]);
+  });
+
+  it("a project closed and reopened lands last, not back in its old dragged slot", () => {
+    // Drag A to the front: [A, B, C]. Close A, then reopen the same path: a fresh
+    // workspace (new id). A path-keyed order put it back at the FRONT, which read as random.
+    const order = dragged(deriveTiles([wsB, wsC, wsA], wsA.id), 2, 0);
+    expect(order).toEqual([wsA.id, wsB.id, wsC.id]);
+    const reopened = makeWorkspace(wsA.project_path);
+    expect(reopened.id).not.toBe(wsA.id); // the premise: an open mints a fresh id
+    const tiles = deriveTiles([wsB, wsC, reopened], reopened.id, order);
+    expect(tiles.map((t) => t.id)).toEqual([wsB.id, wsC.id, reopened.id]);
+  });
+
+  it("an already-open workspace keeps its dragged slot (reopening an open path only focuses it)", () => {
+    const order = dragged(deriveTiles([wsA, wsB, wsC], wsA.id), 2, 0); // [C, A, B]
+    // `openWorkspace` on an open path returns the SAME workspace, focused: same id.
+    const tiles = deriveTiles([wsA, wsB, wsC], wsA.id, order);
+    expect(tiles.map((t) => t.id)).toEqual([wsC.id, wsA.id, wsB.id]);
   });
 });
 

@@ -131,22 +131,27 @@ export function ViewportProvider({
   // here would create a double-action.
   // M16.5 WP5 (5.5) — plus `←`/`→` pan, `+`/`=`/`-` zoom and `Home`/`End`, through the
   // pure `viewportForKey` and the same clamping setter as the drag/wheel gestures. Bare keys
-  // only (⌘/⌃/⌥ combos are left alone) and never while typing into an input. Torn down on
-  // unmount.
+  // only (⌘/⌃/⌥ combos are left alone), and never from a form control: typing into an input,
+  // or using a focused `<select>` (which needs its own arrow keys). Torn down on unmount.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const action = viewportKeyAction(e); // null for ⌘/⌃/⌥ combos and other keys
       if (action === null) return;
       const t = e.target as HTMLElement | null;
       const tag = t?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || (t && t.isContentEditable))
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        (t && t.isContentEditable)
+      )
         return;
       if (action === "reset") {
         reset();
         return;
       }
       e.preventDefault(); // Home/End/arrows would otherwise scroll the page
-      setViewport((prev) => viewportForKey(prev, action, dataWindow) ?? prev);
+      setViewport((prev) => viewportForKey(prev, action, dataWindow));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

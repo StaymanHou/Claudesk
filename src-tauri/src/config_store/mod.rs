@@ -360,15 +360,24 @@ pub fn add_or_touch(data_dir: &Path, path: PathBuf, now_ms: i64) -> Result<Proje
 
 /// M16.5 WP5 (5.7) — stamp `last_closed_at = now_ms` on every listed project, in ONE
 /// read-modify-write (a quit closes several workspaces at once). A path with no record is
-/// skipped, not added: closing a workspace must never create a project. Paths are compared
-/// verbatim, matching [`add_or_touch`].
+/// skipped, not added: closing a workspace must never create a project.
+///
+/// ⚠️ Compared through [`crate::status_broadcaster::canonical_key`] on BOTH sides, unlike
+/// [`add_or_touch`]'s verbatim match. The callers disagree on form: the quit teardown passes
+/// the registry's canonical keys (`open_project_paths`), the workspace close passes the
+/// frontend's string-normalized path, and the stored path is whatever the dialog gave. A
+/// verbatim compare silently skipped any project stored through a symlink on quit. Two
+/// records that resolve to the same directory are both stamped: both were closed.
 pub fn touch_closed(data_dir: &Path, paths: &[PathBuf], now_ms: i64) -> Result<(), ConfigError> {
+    use crate::status_broadcaster::canonical_key;
     if paths.is_empty() {
         return Ok(());
     }
+    let closed: std::collections::HashSet<String> =
+        paths.iter().map(|p| canonical_key(p)).collect();
     update_projects(data_dir, |projects| {
         for project in projects.iter_mut() {
-            if paths.contains(&project.path) {
+            if closed.contains(&canonical_key(&project.path)) {
                 project.last_closed_at = Some(now_ms);
             }
         }
@@ -2076,6 +2085,64 @@ mod tests {
                 .unwrap()
                 .last_opened_at,
             10
+        );
+    }
+
+    #[test]
+    fn touch_closed_matches_a_project_reached_through_a_symlink_on_either_side() {
+        // The quit path passes the registry's CANONICAL keys (`open_project_paths`), the close
+        // path the frontend's string-normalized path, and `projects.json` holds whatever the
+        // dialog gave. Real directories, because `canonicalize` falls back to the input for a
+        // path that does not exist, which is why the verbatim-compare test above cannot see this.
+        let data = TempDir::new().unwrap();
+        let tree = TempDir::new().unwrap();
+        let real = tree.path().join("proj");
+        let other = tree.path().join("other");
+        std::fs::create_dir(&real).unwrap();
+        std::fs::create_dir(&other).unwrap();
+        let link = tree.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        // Never assume the TempDir path is canonical: on macOS it sits under /var -> /private/var.
+        let real_canon = real.canonicalize().unwrap();
+        let other_str = other.to_string_lossy().into_owned();
+        let link_str = link.to_string_lossy().into_owned();
+        let real_canon_str = real_canon.to_string_lossy().into_owned();
+        let stamp_of = |path: &str| {
+            read_projects(data.path())
+                .unwrap()
+                .into_iter()
+                .find(|r| r.path == Path::new(path))
+                .unwrap()
+                .last_closed_at
+        };
+
+        // (a) Stored through the symlink; the quit path passes the realpath.
+        write_projects(data.path(), &[p(&link_str, 1), p(&other_str, 2)]).unwrap();
+        touch_closed(data.path(), std::slice::from_ref(&real_canon), 50).unwrap();
+        assert_eq!(
+            stamp_of(&link_str),
+            Some(50),
+            "stored via symlink, closed by realpath"
+        );
+        assert_eq!(
+            stamp_of(&other_str),
+            None,
+            "an unlisted real dir stays unstamped"
+        );
+
+        // (b) Stored as the realpath; the close path passes the symlink with a trailing slash.
+        write_projects(data.path(), &[p(&real_canon_str, 1), p(&other_str, 2)]).unwrap();
+        touch_closed(data.path(), &[PathBuf::from(format!("{link_str}/"))], 60).unwrap();
+        assert_eq!(
+            stamp_of(&real_canon_str),
+            Some(60),
+            "stored as realpath, closed via symlink"
+        );
+        assert_eq!(stamp_of(&other_str), None);
+        assert_eq!(
+            read_projects(data.path()).unwrap().len(),
+            2,
+            "closing never adds a project"
         );
     }
 

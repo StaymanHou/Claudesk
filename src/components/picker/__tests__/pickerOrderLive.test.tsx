@@ -103,6 +103,17 @@ describe("ProjectPicker order — live", () => {
       "[OPEN]",
       "open-now",
     ]);
+    // The "Open" label is a heading, not a row; the project rows stay plain list items.
+    const items = [
+      ...host!.querySelectorAll('[data-testid="picker-recents"] > li'),
+    ];
+    const label = items.find(
+      (li) => li.getAttribute("data-testid") === "picker-open-group",
+    )!;
+    expect(label.getAttribute("role")).toBe("presentation");
+    expect(
+      items.filter((li) => li !== label).map((li) => li.getAttribute("role")),
+    ).toEqual([null, null, null]);
     const open = rowFor("open-now");
     expect(open.getAttribute("data-open")).toBe("true");
     expect(

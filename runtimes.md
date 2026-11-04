@@ -31,13 +31,14 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 49s (2026-11-04, paydown-2026-11-04 WP5, EXIT=0)
+- **Last:** 47s (2026-11-04, paydown-2026-11-04 WP6, EXIT=0)
 - **Use timeout:** 207000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 47s — 2026-11-04 (paydown WP6, EXIT=0; one earlier run that day exited 101 on a clippy lint in the new test, fixed)
   - 49s — 2026-11-04 (paydown WP5, EXIT=0; timeout kept at 207000)
   - 54s — 2026-11-04 (paydown WP4, EXIT=0; timeout kept at 207000)
   - 52s — 2026-11-04 (paydown WP3, EXIT=0; timeout kept at 207000, the cold 98s is the worst case)

@@ -1,11 +1,5 @@
-import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  reorder,
-  insertionIndex,
-  loadOrder,
-  saveOrder,
-  FILMSTRIP_ORDER_KEY,
-} from "../filmstripOrder";
+import { describe, it, expect } from "vitest";
+import { reorder, insertionIndex } from "../filmstripOrder";
 
 describe("reorder", () => {
   it("moves an item earlier", () => {
@@ -58,79 +52,5 @@ describe("insertionIndex (symmetric drag hit-test)", () => {
     expect(insertionIndex(mids, 2, 150)).toBe(1);
     // Drag B (index 1) right past C's midpoint (x=330): A + C left of x → 2.
     expect(insertionIndex(mids, 1, 330)).toBe(2);
-  });
-});
-
-describe("loadOrder / saveOrder", () => {
-  // The vitest env has no DOM, so stub a minimal in-memory localStorage (the repo
-  // pattern — see filetree/__tests__/railWidth.test.ts).
-  let store: Record<string, string>;
-
-  beforeEach(() => {
-    store = {};
-    vi.stubGlobal("localStorage", {
-      getItem: (k: string) => (k in store ? store[k] : null),
-      setItem: (k: string, v: string) => {
-        store[k] = v;
-      },
-      removeItem: (k: string) => {
-        delete store[k];
-      },
-    });
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("returns [] when nothing is stored", () => {
-    expect(loadOrder()).toEqual([]);
-  });
-
-  it("round-trips a saved order", () => {
-    saveOrder(["/Users/me/a", "/Users/me/b"]);
-    expect(loadOrder()).toEqual(["/Users/me/a", "/Users/me/b"]);
-  });
-
-  it("canonicalizes trailing slashes on save and load", () => {
-    saveOrder(["/Users/me/a/", "/Users/me/b"]);
-    expect(loadOrder()).toEqual(["/Users/me/a", "/Users/me/b"]);
-  });
-
-  it("returns [] for a non-array stored value", () => {
-    store[FILMSTRIP_ORDER_KEY] = JSON.stringify({ not: "an array" });
-    expect(loadOrder()).toEqual([]);
-  });
-
-  it("returns [] for unparseable JSON (never throws)", () => {
-    store[FILMSTRIP_ORDER_KEY] = "{not json";
-    expect(loadOrder()).toEqual([]);
-  });
-
-  it("filters out non-string entries", () => {
-    store[FILMSTRIP_ORDER_KEY] = JSON.stringify([
-      "/Users/me/a",
-      42,
-      null,
-      "/Users/me/b",
-    ]);
-    expect(loadOrder()).toEqual(["/Users/me/a", "/Users/me/b"]);
-  });
-
-  it("falls back to [] without throwing when localStorage is unavailable", () => {
-    vi.stubGlobal("localStorage", undefined);
-    expect(() => loadOrder()).not.toThrow();
-    expect(loadOrder()).toEqual([]);
-  });
-
-  it("swallows storage errors on save (best-effort)", () => {
-    vi.stubGlobal("localStorage", {
-      getItem: () => null,
-      setItem: () => {
-        throw new Error("quota exceeded");
-      },
-      removeItem: () => {},
-    });
-    expect(() => saveOrder(["/Users/me/a"])).not.toThrow();
   });
 });

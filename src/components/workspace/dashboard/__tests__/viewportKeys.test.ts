@@ -3,6 +3,7 @@ import {
   KEY_PAN_FRACTION,
   KEY_ZOOM_FACTOR,
   VIEWPORT_KEYS,
+  isViewportKey,
   viewportForKey,
   viewportKeyAction,
   type DataWindow,
@@ -31,7 +32,7 @@ describe("viewportForKey", () => {
   it("+ and = zoom IN around the centre; - zooms OUT around the centre", () => {
     expect(KEY_ZOOM_FACTOR).toBe(1.25);
     const centre = 720;
-    for (const key of ["+", "="]) {
+    for (const key of ["+", "="] as const) {
       const z = viewportForKey(vp, key, win)!;
       expect(z.visible_end_min - z.visible_start_min).toBeCloseTo(240 / 1.25);
       expect((z.visible_start_min + z.visible_end_min) / 2).toBeCloseTo(centre);
@@ -54,13 +55,19 @@ describe("viewportForKey", () => {
     });
   });
 
-  it("returns null for any other key, and VIEWPORT_KEYS names exactly the handled ones", () => {
-    for (const key of ["0", "a", "Escape", "ArrowUp", "Enter", " "]) {
-      expect(viewportForKey(vp, key, win)).toBeNull();
-    }
+  it("accepts only ViewportKey, and every VIEWPORT_KEYS key moves the viewport", () => {
+    // Compile-time: a key outside the closed type is a type error. If the parameter were
+    // widened back to `string`, these directives would go unused and `tsc` would fail.
+    // @ts-expect-error — "a" is not a ViewportKey
+    void (() => viewportForKey(vp, "a", win));
+    // @ts-expect-error — ArrowUp is not handled (the Day view pans horizontally only)
+    void (() => viewportForKey(vp, "ArrowUp", win));
     for (const key of VIEWPORT_KEYS) {
-      expect(viewportForKey(vp, key, win), key).not.toBeNull();
+      expect(viewportForKey(vp, key, win), key).not.toEqual(vp);
     }
+    expect(isViewportKey("Home")).toBe(true);
+    expect(isViewportKey("0")).toBe(false);
+    expect(isViewportKey("ArrowUp")).toBe(false);
   });
 });
 

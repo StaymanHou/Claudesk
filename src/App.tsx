@@ -17,6 +17,7 @@ import { CenterStage } from "./components/workspace/CenterStage";
 import { Filmstrip } from "./components/workspace/Filmstrip";
 import {
   deriveTiles,
+  orderAfterDrag,
   tileForSwitchIndex,
 } from "./components/workspace/filmstripTiles";
 import { workspaceSwitchIndex } from "./components/workspace/workspaceSwitchChord";
@@ -33,11 +34,6 @@ import {
 } from "./state/workflowSubstrate";
 import { useWorkflowFeaturesEnabled } from "./state/useWorkflowFeaturesEnabled";
 import { useClearAttentionOnGateOff } from "./state/useClearAttentionOnGateOff";
-import {
-  loadOrder,
-  reorder,
-  saveOrder,
-} from "./components/workspace/filmstripOrder";
 import {
   loadCollapsed,
   saveCollapsed,
@@ -121,15 +117,16 @@ function App() {
   const { stateFor, displayStateFor, snippetFor } =
     useWorkspaceStatus(workspaces);
 
-  // M4 WP3 P4 — the user-arranged, persisted filmstrip order (a list of project_paths,
-  // localStorage-backed). Read once on mount; a drag-drop updates it + persists. It's the
-  // single source of truth for both tile render order and the ⌘⇧+digit index.
-  const [order, setOrder] = useState<string[]>(() => loadOrder());
+  // M4 WP3 P4 — the user-arranged filmstrip order: workspace IDS, in memory for the app
+  // run. It's the single source of truth for both tile render order and the ⌘⇧+digit index.
+  // ⚠️ Not persisted and not path-keyed (paydown 2026-11-04 WP6): every open mints a fresh
+  // id, so a newly opened workspace is never in this list and always appends on the RIGHT.
+  const [order, setOrder] = useState<string[]>([]);
 
   // M4 WP3 — the ordered filmstrip tiles, derived ONCE here so the render order
   // (Filmstrip) and the ⌘⇧+digit index (the chord handler below) share one source of
-  // truth. `order` (persisted project_paths) is deriveTiles' 3rd arg; open workspaces not
-  // in the stored order append at the end (orderWorkspaces handles the merge).
+  // truth. `order` (dragged workspace ids) is deriveTiles' 3rd arg; open workspaces not
+  // in it append at the end (orderWorkspaces handles the merge).
   const tiles = useMemo(
     () => deriveTiles(workspaces, focusedId, order),
     [workspaces, focusedId, order],
@@ -137,11 +134,10 @@ function App() {
 
   // M4 WP3 P4 — LIVE pointer-drag reorder (WYSIWYG). `reorderTiles` fires on every
   // pointermove that crosses a tile boundary, so tiles shuffle in real time as the user
-  // drags — it updates the order state but does NOT persist (avoids a localStorage write
-  // per move). `commitOrder` persists the current arrangement once on pointerup.
+  // drags. The order is in-memory state only, so there is nothing to commit on pointerup.
   const reorderTiles = useCallback(
     (from: number, to: number) => {
-      setOrder(reorder(tiles, from, to).map((t) => t.project_path));
+      setOrder(orderAfterDrag(tiles, from, to));
     },
     [tiles],
   );
@@ -158,9 +154,6 @@ function App() {
     [tiles],
   );
   usePipFanout(pipRoster);
-  const commitOrder = useCallback(() => {
-    saveOrder(tiles.map((t) => t.project_path));
-  }, [tiles]);
 
   // M4 WP3 P2 — ⌘⇧1..⌘⇧9 promotes the Nth tile to center stage (the keyboard
   // equivalent of clicking it). APP-LEVEL capture-phase listener (the WP1-proven
@@ -850,7 +843,6 @@ function App() {
               onToggleCollapsed={toggleCollapsed}
               onPromote={focusWorkspace}
               onReorder={reorderTiles}
-              onReorderCommit={commitOrder}
               onAddWorkspace={() => setShowPicker(true)}
               onOpenDashboard={() => setShowDashboard(true)}
               onClose={requestClose}

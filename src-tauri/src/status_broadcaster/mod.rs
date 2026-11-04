@@ -590,9 +590,12 @@ impl WorkspaceRegistry {
     /// place that already holds the open-workspace path set, so app-quit reads it here
     /// rather than a second path map being introduced to duplicate it.
     ///
-    /// Returns canonicalized keys — the same form `register` stored and therefore the
-    /// same form the flag was keyed under at spawn (both derive from the frontend's
-    /// canonicalized project path).
+    /// Returns [`canonical_key`] forms: the same form `register` stored, and the same form
+    /// the flag was keyed under at spawn. That agreement holds because the flag store
+    /// canonicalizes too (`session_state::key_for`), NOT because the frontend does: its
+    /// `canonicalizeProjectPath` only normalizes the string (no symlink resolution). A
+    /// consumer that compares these keys against stored or frontend paths must canonicalize
+    /// its side as well (`config_store::touch_closed` does).
     pub fn open_project_paths(&self) -> Vec<String> {
         self.by_path.keys().cloned().collect()
     }

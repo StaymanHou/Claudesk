@@ -490,8 +490,8 @@ export function zoomViewport(
 export const KEY_PAN_FRACTION = 0.1;
 /** M16.5 WP5 (5.5) — span factor per `+` / `-` press (the source `claude-time` set). */
 export const KEY_ZOOM_FACTOR = 1.25;
-/** M16.5 WP5 (5.5) — the bare keys {@link viewportForKey} handles. */
-export const VIEWPORT_KEYS: ReadonlySet<string> = new Set([
+/** M16.5 WP5 (5.5) — the bare keys {@link viewportForKey} handles, as a closed type. */
+const VIEWPORT_KEY_LIST = [
   "ArrowLeft",
   "ArrowRight",
   "+",
@@ -499,7 +499,20 @@ export const VIEWPORT_KEYS: ReadonlySet<string> = new Set([
   "-",
   "Home",
   "End",
-]);
+] as const;
+
+/** One of the bare keys the Day-view viewport handles. */
+export type ViewportKey = (typeof VIEWPORT_KEY_LIST)[number];
+
+/** {@link VIEWPORT_KEY_LIST} as a set, for membership tests. */
+export const VIEWPORT_KEYS: ReadonlySet<ViewportKey> = new Set(
+  VIEWPORT_KEY_LIST,
+);
+
+/** Narrow a raw `KeyboardEvent.key` to a {@link ViewportKey} (the one place it widens). */
+export function isViewportKey(key: string): key is ViewportKey {
+  return (VIEWPORT_KEYS as ReadonlySet<string>).has(key);
+}
 
 /** The keydown fields {@link viewportKeyAction} reads (a structural `KeyboardEvent` subset). */
 export interface ViewportKeyEvent {
@@ -518,24 +531,25 @@ export interface ViewportKeyEvent {
  */
 export function viewportKeyAction(
   e: ViewportKeyEvent,
-): "reset" | string | null {
+): "reset" | ViewportKey | null {
   if (e.metaKey || e.ctrlKey || e.altKey) return null;
   if (e.key === "0") return "reset";
-  return VIEWPORT_KEYS.has(e.key) ? e.key : null;
+  return isViewportKey(e.key) ? e.key : null;
 }
 
 /**
- * M16.5 WP5 (5.5) — the viewport a bare key moves to, or `null` if the key is not a
- * viewport key. `←`/`→` pan by {@link KEY_PAN_FRACTION} of the span, `+`/`=` zoom in and
+ * M16.5 WP5 (5.5) — the viewport a bare key moves to. The switch is exhaustive over
+ * {@link ViewportKey} with no `default`, so a key added to the list without a case here is a
+ * compile error, not a silent no-op. `←`/`→` pan by {@link KEY_PAN_FRACTION} of the span, `+`/`=` zoom in and
  * `-` zoom out by {@link KEY_ZOOM_FACTOR} around the centre, `Home`/`End` jump to the
  * start/end of `dataWindow` keeping the span. (`0` = reset stays in `ViewportProvider`.)
  * The caller clamps, exactly as for the drag and wheel gestures.
  */
 export function viewportForKey(
   vp: Viewport,
-  key: string,
+  key: ViewportKey,
   dataWindow: DataWindow,
-): Viewport | null {
+): Viewport {
   const span = vp.visible_end_min - vp.visible_start_min;
   const shift = (deltaMin: number): Viewport => ({
     visible_start_min: vp.visible_start_min + deltaMin,
@@ -561,8 +575,6 @@ export function viewportForKey(
         visible_start_min: dataWindow[1] - span,
         visible_end_min: dataWindow[1],
       };
-    default:
-      return null;
   }
 }
 

@@ -550,10 +550,13 @@ export function ProjectPicker({
         {pickerItems.map((item) => {
           if (item.kind === "open-label") {
             return (
+              // A group heading, not a project: `presentation` keeps it out of the list
+              // items a screen reader counts and announces.
               <li
                 key="picker-open-group"
                 className="picker-group-label"
                 data-testid="picker-open-group"
+                role="presentation"
               >
                 Open
               </li>
