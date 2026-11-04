@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-02  # WP6 shipped (per-result + per-file replace from Find Results; overlay z-order + CM6 find-bar autocorrect side fixes)
+updated: 2026-11-04  # WP8 sweep emitted (backlog-paydown-wbs.md); was: WP6 shipped (per-result + per-file replace from Find Results; overlay z-order + CM6 find-bar autocorrect side fixes)
 cycle: milestone-16-5-supervisor-hardening-qol-and-paydown
 ---
 
@@ -311,12 +311,13 @@ sessions through the skill symlinks, not the Claudesk release).
 MINOR across the `## Code-quality findings` batches in `backlog.md`. The sweep scores and orders
 them, and its temporary WBS lives inside this WP.
 **Tasks:**
-- [ ] 8.1 Run `/util-backlog-paydown`. Exclude what WP3.2 already took (the silent-supervisor
+- [x] 8.1 Run `/util-backlog-paydown`. Exclude what WP3.2 already took (the silent-supervisor
       MAJOR). Carry the `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED` routings in as
       one decision, not N per-batch trims.
-- [ ] 8.2 ⚠️ Priority inputs the sweep must see:
+- [x] 8.2 ⚠️ Priority inputs the sweep must see:
   - `paydown-wp9` MAJOR 1 (a real defect that can leave the single-run lock stuck; medium-high)
   - the `analytics-week-export` MAJORs
+  - ✅ **Swept 2026-11-04 → `workflow-system/product/backlog-paydown-wbs.md`** (14 WPs, Mode 3). 0 GONE of 91 findings. Operator rulings R1–R4 there: Replace All per-line + shown query; the failure alarm stays per-project (closed by design); the comment pass is the sweep's last WP; all four extractions in. Both priority inputs are WP4 (the single-run lock: real, never observed; needs a deadline + group kill, not `spawn_blocking` alone) and WP5 (analytics export).
 - [ ] 8.3 Execute the sweep's plan. Each resolved finding is deleted from both backlog files with
       a `**Backlog resolved:**` line.
 
@@ -480,6 +481,3 @@ the alias pin loud). R027 stays SKIP. No mccc note is sent.
 **Evidence:** `workflow-system/product/wp2-adjudicator-set.json` (361 records; text only on
 claudesk rows) and `src/state/supervisor/__tests__/adjudicatorRemeasure.test.ts`, a replay with
 no live calls that pins the verdict.
-
-## Session Handoff — 2026-11-04 09:09
-Handed off. See `workflow-system/state/.session.md` to restore.
