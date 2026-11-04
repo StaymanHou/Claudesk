@@ -4,6 +4,55 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# paydown-2026-11-04-wp4-run-lock-and-sync-guard — 2026-11-04
+
+*(feature-review-quality on ship commit `190b3a2`, window `00ebf92..190b3a2`; drive_mode=autopilot. 1 MAJOR + 4 MINOR auto-backlogged.)*
+
+## SURFACE-2026-11-04-QUALITY-WP4-PROCESS-GROUP-PRIMITIVES-DUPLICATED
+- **Severity:** MAJOR
+- **Location:** `src-tauri/src/workflow_install/runner.rs` (`StopOnDrop`, `DRAIN_GRACE`, `kill_group`, `kill_and_reap`) vs `src-tauri/src/adjudicator/mod.rs` (`StopOnDrop`, `DRAIN_GRACE`, `kill_tree`).
+- **Finding:** The process-group primitives are copied rather than shared: an identical `StopOnDrop` struct and Drop body, the same 250 ms grace, and the same group-SIGKILL → kill → reap sequence. Not reusing `Drain` itself is justified, because `Drain` is a capped byte buffer and `run_streaming` needs live per-line delivery to a sink. The primitives beneath it are not.
+- **Why it matters:** There are two kill-and-reap implementations, and only the adjudicator documents its limits. Its "does NOT do" list (a grandchild that `setsid`s or uses job control escapes the group kill) applies to the runner too, unstated. A future fix, such as descendant tracking, will land in one copy only.
+- **Suggested action:** A small shared module (process-group spawn, `kill_group`, `kill_and_reap`, `StopOnDrop`, the grace constant, and the limits doc). Do it before a third subprocess runner appears.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-04-QUALITY-WP4-GRACE-PATH-DROPS-QUEUED-OUTPUT
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/workflow_install/runner.rs`, `run_streaming`, the grace-expiry arm.
+- **Finding:** The grace-expiry arm calls `kill_group` and breaks without draining lines still queued in `rx`, while the deadline arm drains with `try_recv`. Each loop pass consumes one line, so a burst still in the channel when the grace ends is lost.
+- **Why it matters:** The two kill exits handle in-flight output differently.
+- **Suggested action:** The same three-line `try_recv` drain before the break, with a test that emits a burst then backgrounds a pipe holder.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-04-QUALITY-WP4-RUN-STREAMING-OUTPUT-UNCAPPED
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/workflow_install/runner.rs`, `run_streaming` (`combined`, `stderr`, the unbounded channel, `BufReader::lines()`).
+- **Finding:** No output cap. The adjudicator added `MAX_OUTPUT` after a pipe flood produced a measured 1.9 GB allocation (paydown 2026-09-23 WP9 probe P4). The gap pre-dates WP4, but the 600 s deadline now bounds how much can pile up.
+- **Why it matters:** A lesson already learned next door was not carried over. The risk is low, because the script is the managed clone's own `install.sh`.
+- **Suggested action:** Cap the accumulated output (discard past N bytes and append a truncation note), never by backpressure on the pipe. Fold this into the shared module above.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-04-QUALITY-WP4-THREE-WAYS-TO-RELEASE-THE-RUN-LOCK
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/workflow_install/commands.rs`: `RunGuard` (the workers), `HeldRunLock` (the dry run), and manual `running.store(false)` on the early-error returns of `workflow_install_start` / `workflow_uninstall_start`.
+- **Finding:** The single-run lock is released three different ways, and `HeldRunLock` can be built without acquiring the lock, so taking and releasing it are still separate statements.
+- **Why it matters:** The manual releases on early returns are the shape a panic or an early `?` has wedged before.
+- **Suggested action:** `HeldRunLock::try_acquire(&control) -> Option<Self>`, used by all three commands and held by `RunGuard`, removes the four manual releases. ⚠️ `every_substrate_touching_command_takes_the_single_run_lock` greps `running.swap(true` within 400 chars of each command, so it must move with this change.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-04-QUALITY-WP4-SPAWN-BLOCKING-HOP-REPEATED
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/editor_fs/commands.rs` (`trash_path`), `src-tauri/src/adjudicator/commands.rs` (`on_worker`), `src-tauri/src/workflow_install/commands.rs` (`finish_on_worker`).
+- **Finding:** `spawn_blocking(...).await.map_err(|e| format!("… stopped unexpectedly: {e}"))?` appears three times, each worded differently.
+- **Why it matters:** It is the remedy `ASYNC_COMMANDS` reasons point to, so it will spread as more commands move off the main thread.
+- **Suggested action:** A shared helper. Low cost either way.
+- **Priority:** low
+- **Status:** pending
+
 # m16-5-wp6-per-result-replace — 2026-11-02
 
 *(feature-review-quality on ship commit `6c97b1a`, window `6c97b1a^..6c97b1a`; drive_mode=autopilot. 1 CRITICAL + 1 MAJOR fixed by `/feature-refactor` (F40, `390512f`); 5 MINOR auto-backlogged, 1 of them since fixed by that refactor — 4 remain below.)*
@@ -387,31 +436,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # paydown-wp9-sync-command-blocking-guard — 2026-09-23
 
-*(feature-review-quality on ship commit `17f90e5`; drive_mode=autopilot. 0 CRITICAL, 4 MAJOR, 5 MINOR, all auto-backlogged. The reviewer found no dead code, stale branches or superseded helpers left over from `run_command`'s three rebuilds. The leftover scaffolding is almost entirely comment provenance.)*
-
-## SURFACE-2026-09-23-QUALITY-DRY-RUN-ASYNC-ATTR-STILL-BLOCKS-A-RUNTIME-WORKER
-- **Severity:** MAJOR
-- **Location:** `src-tauri/src/workflow_install/commands.rs`, `workflow_uninstall_dry_run` (`#[tauri::command(async)]`)
-- **Finding:** Tauri's `(async)` form wraps the sync body in an `async move` on the async runtime, so a hung `uninstall.sh` now permanently occupies a runtime WORKER instead of the main thread. The command's own doc says there is no timeout on the wait. This contradicts the rule the same commit wrote down twice: `adjudicator/commands.rs` says "`spawn_blocking` rather than a bare `async fn` body, because the wait is long enough to starve an async-runtime worker", and the lesson doc says "`spawn_blocking` for long waits, `(async)` for short ones". A hang also leaves `control.running` set, which locks out every later install and uninstall.
-- **Suggested action:** move the body into `tauri::async_runtime::spawn_blocking`, cloning the `Arc<InstallControl>` out of `State`. ⚠️ Keep the `pub fn workflow_uninstall_dry_run` text anchor that `every_substrate_touching_command_takes_the_single_run_lock` greps, or update that guard in the same change. Consider a timeout on `run_dry_run` too, so the single-run lock cannot stick.
-- **Priority:** medium-high *(raised 2026-09-23 at the paydown fold-back: it is a real, shipped defect, not a nit. A hung `uninstall.sh` leaves the single-run lock set, which blocks every later install/uninstall until relaunch. It is also task-sized.)*
-- **Status:** pending
-
-## SURFACE-2026-09-23-QUALITY-GUARD-EXEMPTS-EVERY-ASYNC-COMMAND-UNLISTED
-- **Severity:** MAJOR
-- **Location:** `src-tauri/tests/sync_commands_do_not_block.rs`, the async exemption in `Crate::add_items`
-- **Finding:** every `async fn` / `(async)` command is exempt whatever its body does. An `async fn` command that calls `thread::sleep` or `child.wait()` directly on a runtime worker, or an `(async)` sync body (the finding above), passes. The gap is missing from the module doc's "does NOT cover" list and from the lesson doc, and it is exactly why the finding above went green.
-- **Suggested action:** at minimum, list it in both docs. Better: flag an `async` command whose body reaches a seed OUTSIDE a `spawn_blocking` closure (a second, weaker rule), or require `(async)` commands to appear in a small allowlist with a reason.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-09-23-QUALITY-GUARD-CFG-TEST-MATCH-DROPS-NOT-TEST-ITEMS
-- **Severity:** MAJOR
-- **Location:** `src-tauri/tests/sync_commands_do_not_block.rs`, `is_cfg_test`
-- **Finding:** an item counts as test-only if ANY whitespace token of its `cfg(...)` is `test`. So `#[cfg(not(test))]` and `#[cfg(any(test, feature = ".."))]` production items are dropped from the call graph. The anti-vacuity check counts only commands, so a dropped helper containing a seed would go unnoticed. There are no instances in `src/` today, so this is latent.
-- **Suggested action:** parse the cfg meta and treat an item as test-only only when its predicate is exactly `test` (optionally `all(test, …)`). Add a fixture test with a `cfg(not(test))` blocking helper that must flag.
-- **Priority:** medium
-- **Status:** pending
+*(feature-review-quality on ship commit `17f90e5`; drive_mode=autopilot. 0 CRITICAL, 4 MAJOR, 5 MINOR, all auto-backlogged. **Paydown 2026-11-04 WP4 resolved MAJORs 1–3 and MINORs 2–5; 1 MAJOR (provenance labels) + 1 MINOR remain below.** The reviewer found no dead code, stale branches or superseded helpers left over from `run_command`'s three rebuilds. The leftover scaffolding is almost entirely comment provenance.)*
 
 ## SURFACE-2026-09-23-QUALITY-WP9-COMMENTS-CARRY-WIP-PROVENANCE-LABELS
 - **Severity:** MAJOR
@@ -422,13 +447,10 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Status:** pending
 
 ## SURFACE-2026-09-23-QUALITY-WP9-MINOR-BATCH
-- **Severity:** MINOR ×5
-- **Location / findings:**
-  1. `docs/lessons/pip-nspanel-main-thread.md`: the main-thread rationale and the cc_kill chain are restated across the lesson, the guard doc, both command docs and CLAUDE.md. The lesson lists only 2 of the guard's 5 limits. Make the guard doc canonical and the lesson a pointer.
-  2. The guard: nested `fn` items inside impl methods and trait default bodies are never registered (`visit_item_fn` suppresses them, and `add_nested` runs for free fns only), so a call to one resolves to nothing.
-  3. The guard: `SPAWN_BOUNDARIES` skips ALL arguments of any call named `spawn`, including the crate-local `Drain::spawn(pipe, &stop)` and non-closure arguments evaluated on the caller. Restrict the cut to `Expr::Closure` / `Expr::Async` arguments, as the doc says.
-  4. `adjudicator/commands.rs`: `the_async_command_resolves_to_a_rejection_through_its_worker` forks the real `claude` whenever it is on `PATH`, and accepts either of two outcomes. It is environment-dependent and pins neither branch.
-  5. `adjudicator/mod.rs`: the OutputTooLarge Display comment says "Must not contain 'timed out'", but the TS classifier `/timed? ?out/i` also matches "time out" and "timedout". The test re-implements a subset of that regex.
+- **Severity:** MINOR (1 of the original 5 remains; items 2–5 were resolved by paydown 2026-11-04 WP4, see CHANGELOG)
+- **Location:** `docs/lessons/pip-nspanel-main-thread.md`, the guard's module doc (`src-tauri/tests/sync_commands_do_not_block.rs`), the `cc_kill` / `supervisor_adjudicate` command docs, `CLAUDE.md`.
+- **Finding:** The main-thread rationale and the `cc_kill → poll_reaped → thread::sleep` chain are restated across all five places. (Its other half is done: since WP4 the lesson names the guard's "What this does NOT cover" as the canonical limits list instead of carrying its own short copy.)
+- **Suggested action:** Keep the full rationale in the guard doc and the lesson; reduce the command docs and the CLAUDE.md bullet to one line plus a pointer. A natural fit for WP14's comment-convention pass.
 - **Priority:** low
 - **Status:** pending
 

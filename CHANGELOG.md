@@ -30,6 +30,12 @@
 - **Backlog resolved:** SURFACE-2026-10-20-QUALITY-WP1-REDUNDANT-NONE-FIELDS-IN-SPREAD-LITERALS — three status-broadcaster test literals no longer repeat a field their spread already supplies.
 - **Backlog resolved:** SURFACE-2026-09-28-QUALITY-SILENT-SUPERVISOR-MINOR-BATCH (partial: item 4) — the two supervisor test files that drive turn ends now reset the turn-end claim store after each test.
 - **Task closed:** Paydown sweep WP3 de-flaked the test gate (two lazy-chunk races and a respawn timer that outlived its test) and made the live-mount harness and four guards honest, each change carrying a killed mutant or a positive control.
+- **Feature shipped:** Paydown WP4 made the workflow-install single-run lock always clear (every install/uninstall subprocess now has a deadline and a process-group kill, and the dry run holds its lock on a blocking worker), moved Delete-to-Trash off the main thread, and made the sync-blocking guard account for every async command, parse `#[cfg]`, see nested fns and cut only closure arguments of `spawn`.
+- **Backlog resolved:** SURFACE-2026-09-23-QUALITY-DRY-RUN-ASYNC-ATTR-STILL-BLOCKS-A-RUNTIME-WORKER — `run_streaming` now kills the process group at a per-call deadline (dry run 60 s), and `workflow_uninstall_dry_run` is `async` with its lock moved into a `spawn_blocking` worker.
+- **Backlog resolved:** SURFACE-2026-11-02-TRASH-PATH-BLOCKS-THE-MAIN-THREAD — `trash_path` is `async` + `spawn_blocking`; a live `sample` showed its Finder frames on the main thread in 2110/2491 samples before the fix and 0/2597 after.
+- **Backlog resolved:** SURFACE-2026-09-23-QUALITY-GUARD-EXEMPTS-EVERY-ASYNC-COMMAND-UNLISTED — every async command must now appear in the guard's `ASYNC_COMMANDS` table with a reason (guarded both ways), and the remaining "async bodies are not scanned" gap is named in the guard and lesson docs.
+- **Backlog resolved:** SURFACE-2026-09-23-QUALITY-GUARD-CFG-TEST-MATCH-DROPS-NOT-TEST-ITEMS — `is_cfg_test` now parses the `cfg` meta (only `test` and `all(test, …)` are test-only); the stated `not(test)` drop never actually occurred, but `all(test, …)` items had been counted as production.
+- **Backlog resolved:** SURFACE-2026-09-23-QUALITY-WP9-MINOR-BATCH (partial: items 2–5) — fns nested in impl methods and trait default bodies are registered, only closure/async arguments of `spawn` are cut, the adjudicator worker-hop test is deterministic, and the timeout tests use an exact port of the TS `/timed? ?out/i` regex; item 1 (the duplicated main-thread rationale) stays open.
 
 ## 2026-11-03
 

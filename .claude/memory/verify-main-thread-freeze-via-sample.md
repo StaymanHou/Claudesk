@@ -18,4 +18,18 @@ metadata:
 
 **Measured (paydown 2026-09-23 WP9, `supervisor_adjudicate`):** pre-fix `supervisor_adjudicate → run_command` under `com.apple.main-thread` in **2327/2327** samples; post-fix (async + `spawn_blocking`) **0** — the frames sat on a `tokio-rt-worker` thread. A clean discriminator.
 
+**⚠️ A command that finishes fast cannot be sampled one call at a time** (added 2026-11-04, paydown WP4,
+`trash_path`). The `webview_execute_js` call that fires the invoke itself holds until the bridge's
+timeout, so a single ~150 ms call (or one delayed with `setTimeout`) is over before `sample` attaches,
+and the sample shows no frames at all. That reads like a pass but proves nothing. Fix: chain N calls
+inside the webview (`for … await invoke(…)` in an async IIFE, recording start/end/done on `window`),
+sample while it runs, then check that the chain was still going (work left over when the sample ended,
+or the chain's `end` later than the sample's end). 80 chained `trash_path` calls ran ~12 s and gave
+2110/2491 main-thread samples pre-fix vs 0/2597 post-fix.
+
+**The main thread's label varies between samples:** `Thread_N: main` in one run and
+`Thread_N   DispatchQueue_1: com.apple.main-thread  (serial)` in another. Locate it with
+`grep -n "^ \+[0-9]\+ Thread_"` and take the first section, rather than grepping one fixed label (a
+miss there yields an empty range, which reads as "0 frames on main").
+
 The static counterpart is `src-tauri/tests/sync_commands_do_not_block.rs` (the guard); this recipe is for the live UI-freeze half it cannot observe. See [[verify-native-pty-via-ps-screencapture-stderr]] for adjacent native-verification techniques.

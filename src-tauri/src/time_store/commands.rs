@@ -658,7 +658,7 @@ pub enum TimeAnalyticsResult {
 /// for as long as the read + build took. That was 600+ ms for the Day view's 14-day window before
 /// the 2026-09-28 interval hoist, and it grows with the window and the DB. The work is CPU-bound,
 /// not a sleep or poll, so `tests/sync_commands_do_not_block.rs`'s seed scan cannot see it; its
-/// `MUST_STAY_ASYNC` table pins this command async instead.
+/// `ASYNC_COMMANDS` table pins this command async instead.
 #[tauri::command]
 pub async fn time_analytics_query(
     app: AppHandle,

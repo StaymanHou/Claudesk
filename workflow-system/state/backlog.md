@@ -25,6 +25,14 @@
 - **Priority:** medium
 - **Status:** pending
 
+## Code-quality findings — paydown-2026-11-04-wp4-run-lock-and-sync-guard (2026-11-04)
+
+- **Pointer:** **1 MAJOR + 4 MINOR** from the review of `190b3a2`. MAJOR: the process-group primitives (`StopOnDrop`, the grace constant, group kill + reap) are copied between `workflow_install::runner` and `adjudicator`, not shared, and only one copy documents its limits. MINOR: the grace path drops queued output; `run_streaming` has no output cap; there are three ways to release the run lock; the `spawn_blocking` hop is repeated.
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp4-run-lock-and-sync-guard — 2026-11-04`.
+- **Priority:** medium (MAJOR) / low (the rest)
+- **Status:** pending
+- **Pickup shape:** one small task: a shared `subprocess` module (group spawn, kill + reap, stop-on-drop, grace, output cap, limits doc) that both runners use, plus the grace-path drain. The lock-release unification and the hop helper are independent one-liners.
+
 ## Code-quality findings — m16-5-wp6-per-result-replace (2026-11-02)
 
 - **Pointer:** **2 MINOR** open from the review of `6c97b1a` (the 1 CRITICAL + 1 MAJOR, and a 5th MINOR, were fixed by the same feature's refactor `390512f`; "line actions rebuilt per keystroke" was Buried 2026-11-04, paydown WP1; the copied jsdom CM6 shims were resolved by paydown WP3). MINOR: the wire-query conversion at 4 sites; Replace All still uses the live query.
@@ -852,17 +860,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** pending — routed to the comment-convention pass (`SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, ruling R2)
 
 ## Code-quality findings — paydown-wp9-sync-command-blocking-guard (2026-09-23)
-- **Pointer:** **4 MAJOR + 5 MINOR** from review of ship commit `17f90e5`.
-  - MAJOR:
-    1. `workflow_uninstall_dry_run`'s `(async)` form still pins an async-runtime WORKER on a hung `uninstall.sh` and can leave the single-run lock set. The commit's own rule says `spawn_blocking`.
-    2. The guard exempts every async command, and that gap is undocumented.
-    3. `is_cfg_test` drops `cfg(not(test))` production items (latent).
-    4. WIP-provenance labels in comments; route to the comment-convention pass.
-  - MINORs: a duplicated rationale in the lesson doc; nested fns in impls are not registered; the spawn cut is wider than closures; the command test forks the real `claude`; a Display comment is looser than the TS regex.
+- **Pointer:** **1 MAJOR + 1 MINOR** remain from the review of `17f90e5` (MAJORs 1–3 and MINORs 2–5 were resolved by paydown 2026-11-04 WP4; see CHANGELOG).
+  - MAJOR: WIP-provenance labels in the adjudicator and guard comments ("re-verify 3/4", "probe P4", "mutant R1"); route to the comment-convention pass.
+  - MINOR: the main-thread rationale and the `cc_kill` chain are restated in five places; keep the guard doc and lesson canonical and reduce the rest to pointers.
   - Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# paydown-wp9-sync-command-blocking-guard — 2026-09-23`.
-- **Priority:** medium-high (MAJOR 1, a real defect that can leave the single-run lock stuck) / medium (MAJORs 2–3) / low (the rest)
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-- **Pickup shape:** one small task. Do `spawn_blocking` for the dry run, keeping the lock-guard anchor, together with the guard's async-exemption rule and the `cfg` predicate fix, each with a fixture test and a mutant. The provenance labels go to the T1/T2 comment pass.
+- **Priority:** medium (MAJOR) / low (MINOR)
+- **Status:** pending
+- **Pickup shape:** both go to paydown 2026-11-04 WP14 (the comment-convention pass).
 
 ## SURFACE-2026-09-18-DOC-COUNT-NEEDS-A-GENERATOR-NOT-A-DETECTOR
 - **Source:** feature:verify-codify (M14 WP4 Phase 4)
@@ -873,16 +877,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** If this drifts again, invert the mechanism: make the count a **generated artifact** rather than something to detect. Options: (a) a single source-of-truth line emitted by a script that docs `include`, (b) an HTML-comment marker (`<!-- guard-count -->…<!-- /guard-count -->`) whose content a test REGENERATES from `armSubjects` and fails on diff — a generator's output is unambiguous where prose intent is not. ⚠️ **Do not re-attempt the detector shape** without reading why it failed first.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-
-## SURFACE-2026-11-02-TRASH-PATH-BLOCKS-THE-MAIN-THREAD
-- **Source:** feature:verify-self (M16.5 WP5 Phase 2)
-- **Target level:** task
-- **Type:** bug
-- **Summary:** Trashing a folder from the file tree froze the UI for more than 7 seconds: the MCP bridge's `webview_execute_js` timed out ("Request timeout after 7000ms") while the trash ran.
-- **Context:** `editor_fs::commands::trash_path` is a SYNC `#[tauri::command]`, so it runs on the main thread. It calls `trash::delete`, which on macOS defaults to the Finder (AppleScript) method, which takes seconds. That is the blocking-on-main-thread class CLAUDE.md warns about (a sync `cc_kill` hung the app the same way). `src-tauri/tests/sync_commands_do_not_block.rs` does not catch it: the guard looks for sleeps and polls, not an AppleScript round-trip inside a crate call. A side observation: Finder moved `wp5-ro/sub` to the Trash even though its parent was `chmod 555`, so the "trash failed" path is hard to reach in practice.
-- **Suggested action:** Make `trash_path` an `async` command (or `spawn_blocking`), the remedy CLAUDE.md names. Add the `trash` call to the guard's notion of blocking if it can be expressed. Measure the freeze before and after with `sample` (memory `verify-main-thread-freeze-via-sample`).
-- **Priority:** medium
-- **Status:** pending
 
 ## SURFACE-2026-11-03-AUTO-RESUME-FIRES-INTO-THE-FOLDER-TRUST-PROMPT
 - **Source:** inbox live check (drive-mode picker, 2026-11-03), dev build

@@ -5,7 +5,8 @@ drive_mode: autopilot
 # Feature: Paydown 2026-11-04 WP4: the single-run lock, main-thread commands and the sync guard
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete)
+**Completed:** 2026-11-04
 **Created:** 2026-11-04
 **Source:** `workflow-system/product/backlog-paydown-wbs.md` → WP4 (M16.5 WP8, a WBS 8.2 priority input)
 
@@ -255,8 +256,8 @@ adjudicator tests are environment-dependent or approximate (#4, #5).
   edit fully satisfies it. Re-check at finalize.
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality
+- **Path:** Feature > complete (archived)
+- **Active scope:** finalize (review-quality complete: 1 MAJOR + 4 MINOR auto-backlogged, F39)
 - **Build notes (Phase 2):** each mutant was run individually and restored with `cp` + `shasum`. Results:
   - the tokenized `is_cfg_test` (the original code) → `only_cfg_test_and_cfg_all_test…` FAILED;
   - a substring `.contains("test")` matcher → both cfg tests FAILED;
@@ -270,8 +271,58 @@ adjudicator tests are environment-dependent or approximate (#4, #5).
   The first cfg mutant attempt did not compile (an invalid probe); it was redone with the original code verbatim. The widened graph: 31 → 32 crate fns reach a seed, with no new flagged command. Live guard: "scanned 95 commands (86 sync, 9 async)".
 - **Build notes (Phase 1):** all five runner/lock mutants were run individually and each made its test FAIL (deadline kill, deadline check, grace kill, `HeldRunLock` Drop body, dry-run `running.swap`); the file was restored by `cp` and checked with `shasum`. A watchdog-failed mutant leaked two `sleep 600` processes (they were killed). `output_produced_before_the_deadline_is_kept` now records its PID, so a failure cannot leak again. The sync guard now reports 8 async commands.
 - **Blocked:** none
-- **Unvisited:** review-quality, finalize
+- **Unvisited:** none
 - **Open discoveries:** none
+
+## Retrospect
+- **What changed in our understanding:**
+  - `GUARD-CFG-TEST-MATCH`'s stated failure (`cfg(not(test))` dropped) never happened. proc_macro2 renders it `not (test)`, so the whitespace token is `(test)`. The real latent flaw was the reverse: `cfg(all(test, …))` code counted as production, and the result depended on Display formatting.
+  - The old Rust copy of the TS timeout classifier missed `timeout`.
+  - `trash::delete` ran ~150 ms per call warm, not the 7 s first observed, so a single call is too short to `sample`. An 80-call chain made the freeze discriminator decisive (2110/2491 on the main thread pre-fix vs 0/2597 post-fix).
+- **Assumptions that held:**
+  - `spawn_blocking` alone does not unstick the lock; the deadline must live inside `run_streaming`.
+  - D-2's non-zero-exit report needed no reducer or TS change.
+  - `trash::delete` shells out to `osascript`, so it is safe off the main thread.
+  - The widened guard graph flagged no new command.
+- **Assumptions that were wrong:**
+  - "Keep the `pub fn workflow_uninstall_dry_run` text" could not hold: a `(async)` sync body cannot await `spawn_blocking`, so the anchor moved (D-1, disclosed).
+  - The plan's Phase 1 lock test (Drop releases) could not see a lock dropped before the worker ran. verify-codify had to extract `finish_on_worker` to drive the command's own path.
+- **Approach delta:**
+  - The plan said to reuse the adjudicator's `Drain`. The runner instead uses a line-channel reader, because `run_streaming` needs live per-line delivery, and it re-creates the group-kill primitives rather than extracting them (the review's MAJOR).
+  - The two-table WBS wording became one `ASYNC_COMMANDS` table (D-5, operator-approved).
+  - One F9 back-loop, for a clippy `needless_lifetimes` in new test code.
+- **Closure (Communicate):** Requester = operator — closure notice for self-record.
+  > **Feature complete:** paydown WP4 has shipped. The workflow-install wizard's single-run lock now always clears (every subprocess has a deadline and a process-group kill), Delete-to-Trash no longer freezes the UI, and the sync-blocking guard accounts for every async command instead of exempting them silently. To see it: `cargo test --test sync_commands_do_not_block -- --nocapture` reports 9 async commands, all ledgered; deleting a folder from the file tree leaves the window responsive.
+
+## Code-Quality Review — paydown-2026-11-04-wp4-run-lock-and-sync-guard
+
+*(ship commit `190b3a2`, window `00ebf92..190b3a2`, drive_mode=autopilot → MAJOR and MINOR findings auto-backlogged, F39)*
+
+### Strengths
+- `run_streaming` now always returns by its deadline: one process group, and both reader threads feed a single tagged unbounded channel, so neither pipe stops draining while the loop polls. The watchdog harness and `KillPidsOnDrop` make a regression fail rather than hang, and leave no orphan behind.
+- D-2 reports a timeout as exit -1 plus a note, reusing every caller's existing non-zero-exit path, so `terminal.rs` and the TS mirror needed no change.
+- `HeldRunLock` moves into the `spawn_blocking` closure, so the lock lives exactly as long as the work. The codify test asserts the lock is still held mid-run (an identity check, not a length check) and covers the panic path.
+- `ASYNC_COMMANDS` closes the entry-13 one-directional gap: one table, guarded both ways, with a fixture per direction. `is_cfg_test` parses `syn::Meta`.
+- The docs are honest about the remaining async-body gap, and the lesson points to the guard doc as canonical. The adjudicator tests are deterministic, and the TS regex is ported exactly.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`workflow_install/runner.rs` `StopOnDrop` / `DRAIN_GRACE` / `kill_group` / `kill_and_reap` vs `adjudicator/mod.rs` `StopOnDrop` / `DRAIN_GRACE` / `kill_tree`] The process-group primitives are copied, not shared. Not reusing `Drain` is justified, but the primitives beneath it are not. — two kill-and-reap implementations, only one of which documents its limits (a `setsid` grandchild escapes), so a future fix lands in one copy only. → `SURFACE-2026-11-04-QUALITY-WP4-PROCESS-GROUP-PRIMITIVES-DUPLICATED`
+
+**MINOR**
+- [`runner.rs` grace-expiry arm] breaks without the `try_recv` drain the deadline arm does, so a queued burst can be lost. → `…-WP4-GRACE-PATH-DROPS-QUEUED-OUTPUT`
+- [`runner.rs` `run_streaming`] no output cap; the adjudicator's `MAX_OUTPUT` lesson was not carried over (pre-existing; low risk). → `…-WP4-RUN-STREAMING-OUTPUT-UNCAPPED`
+- [`workflow_install/commands.rs`] three ways to release the run lock (`RunGuard`, `HeldRunLock`, manual early-return stores), and `HeldRunLock` can be built without acquiring. → `…-WP4-THREE-WAYS-TO-RELEASE-THE-RUN-LOCK`
+- [`editor_fs`, `adjudicator`, `workflow_install` commands] the `spawn_blocking(...).await.map_err(...)` hop is repeated 3×, each worded differently. → `…-WP4-SPAWN-BLOCKING-HOP-REPEATED`
+
+### Assessment
+The WP is well built and pays down debt instead of adding it. Each of the five target findings is fixed at its cause, each backed by an identity-asserting test that was mutation-proven individually, and the tests and docs follow the repo's own lessons. The main cost is structural: the runner re-creates the adjudicator's process-group machinery instead of extracting it. Alongside that are smaller inconsistencies (the grace path drops queued output, three ways to release the lock, no output cap). None is a correctness bug in the shipped paths. Extract a shared process-group module before a third subprocess runner appears.
+
+### If you disagree
+Mark any finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

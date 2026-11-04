@@ -16,6 +16,14 @@ the final restore, too close to be sure it was built from the restored file.
 **How to apply:** before any live verify-self that follows a mutation run, compare
 `ps -o lstart= -p <pid>` (from `pgrep -f target/debug/claudesk`) and
 `stat -f %Sm src-tauri/target/debug/claudesk` against the time of the last restore. If either is not
-clearly later, `touch` a source file and wait for a NEW PID before observing. Related:
+clearly later, `touch` a source file and wait for a NEW PID before observing.
+
+⚠️ **The PID start time is when `cargo run` STARTED, not when the binary was built** (added 2026-11-04,
+paydown WP4). `cargo run` exec-replaces itself with the binary, keeping its PID, so a fresh rebuild
+shows a start time BEFORE the binary's mtime (observed: start 11:23:21, binary 11:23:26, file swap
+11:23:20). Read that as "the build ran after cargo started", not as stale code. The decisive signal is
+the dev log: after the watcher's `File … changed. Rebuilding application...`, a `Finished` line followed
+by `Running \`target/debug/claudesk\`` (strip ANSI before grepping; the cargo progress bar can put
+`Finished` on the same line as `Building`). Related:
 [[verify-the-mutation-landed]] (the mutant must land) and [[hmr-stale-across-file-rename]] (the
 frontend twin: a stale HMR module).

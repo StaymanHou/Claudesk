@@ -275,8 +275,8 @@ struct Command {
 struct Crate {
     fns: HashMap<String, Vec<FnFacts>>,
     commands: Vec<Command>,
-    /// Commands exempted because they are `async` (for the anti-vacuity total and
-    /// [`MUST_STAY_ASYNC`]).
+    /// Commands exempted from the seed scan because they are `async` (for the anti-vacuity total
+    /// and [`ASYNC_COMMANDS`]).
     async_commands: Vec<String>,
 }
 

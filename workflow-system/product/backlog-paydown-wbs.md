@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1–WP3 done 2026-11-04
+status: in-progress  # WP1–WP4 done 2026-11-04
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -192,7 +192,7 @@ Test-only, so it runs before any code WP; a de-flaked gate helps every WP after 
 - `10-20-QUALITY-WP1-REDUNDANT-NONE-FIELDS-IN-SPREAD-LITERALS`: 3 sites in the
   `status_broadcaster/mod.rs` tests.
 
-## WP4: The single-run lock, main-thread commands and the sync guard  `[impact: High · effort: M · risk: Low–Med]` · feature
+## WP4: The single-run lock, main-thread commands and the sync guard  `[impact: High · effort: M · risk: Low–Med]` · feature · ✅ DONE 2026-11-04 (`190b3a2`; review: 1 MAJOR + 4 MINOR auto-backlogged)
 
 ⭐ **WBS 8.2 priority input.** All of these touch `workflow_install/`, `editor_fs::commands`, or
 `tests/sync_commands_do_not_block.rs` / `MUST_STAY_ASYNC`.
