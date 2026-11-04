@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1–WP6 done 2026-11-04
+status: in-progress  # WP1–WP6b done 2026-11-04
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -247,7 +247,7 @@ Test-only, so it runs before any code WP; a de-flaked gate helps every WP after 
   first.
 - `#3`: add an `ExportError::Internal` variant for the serde failure.
 
-## WP6: Picker quit-path stamp and Day-view keys  `[impact: Med · effort: S · risk: Low]` · task · ✅ DONE 2026-11-04 (incl. the operator's filmstrip append-right insert; verified live)
+## WP6: Picker quit-path stamp and Day-view keys  `[impact: Med · effort: S · risk: Low]` · task · ✅ DONE 2026-11-04
 
 - `11-02-QUALITY-WP5-QUIT-PATH-STAMPS-CANONICAL-KEYS-AGAINST-RAW-STORED-PATHS` (MAJOR, latent: 0
   of the operator's 27 paths differ from their realpath today):
@@ -264,10 +264,17 @@ Test-only, so it runs before any code WP; a de-flaked gate helps every WP after 
   compile, because `VIEWPORT_KEYS` is a `ReadonlySet<string>`. Build the Set from an `as const`
   tuple first.
 - `11-02-QUALITY-WP5-OPEN-GROUP-LABEL-IS-A-LIST-ROW`: add `role="presentation"`.
-- ⭐ **Operator insert (2026-11-04), not a backlog finding:** a newly opened workspace always
-  appends to the RIGHT of the filmstrip. The order is keyed by workspace id in memory, so the
-  localStorage path order that slotted reopened projects into stale positions is dropped. This
-  reverses M4 WP3's persisted order. Details in the WP6 WIP, T5.
+
+## WP6b: Filmstrip append-right  `[impact: Med · effort: S · risk: Low]` · task · ✅ DONE 2026-11-04 (operator insert, not a backlog finding)
+
+- A newly opened or reopened workspace always appends to the RIGHT of the filmstrip. Operator
+  ask: "the newly open workspace just always gets appended to the right".
+- The dragged order is keyed by workspace id, in memory for the app run (`orderAfterDrag` →
+  `orderWorkspaces`). The localStorage path order, which slotted reopened projects into stale
+  positions, is dropped. This reverses M4 WP3's persisted order; see
+  `arch/status-channel-and-surfaces.md` → "Filmstrip order".
+- It was built and verified live in the same run as WP6: the archived WIP
+  `paydown-2026-11-04-wp6-…`, T5, and commit `18d4d58`.
 
 ## WP7: Find and replace rule  `[impact: Med · effort: S · risk: Low–Med]` · task
 
