@@ -27,7 +27,7 @@
 
 ## Code-quality findings — m16-5-wp6-per-result-replace (2026-11-02)
 
-- **Pointer:** **3 MINOR** open from the review of `6c97b1a` (the 1 CRITICAL + 1 MAJOR, and a 5th MINOR, were fixed by the same feature's refactor `390512f`; "line actions rebuilt per keystroke" was Buried 2026-11-04, paydown WP1). MINOR: the wire-query conversion at 4 sites; Replace All still uses the live query; jsdom CM6 shims copied into 5 tests.
+- **Pointer:** **2 MINOR** open from the review of `6c97b1a` (the 1 CRITICAL + 1 MAJOR, and a 5th MINOR, were fixed by the same feature's refactor `390512f`; "line actions rebuilt per keystroke" was Buried 2026-11-04, paydown WP1; the copied jsdom CM6 shims were resolved by paydown WP3). MINOR: the wire-query conversion at 4 sites; Replace All still uses the live query.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp6-per-result-replace — 2026-11-02`.
 - **Priority:** low (all)
 - **Status:** pending
@@ -73,15 +73,6 @@
 - **Status:** pending
 - **Pickup shape:** fold into WP3 task 3.5 (the three MAJORs plus the repeated-numbers and `TAIL_CHARS` MINORs) and WP3 3.4 (the policy-rule MINOR); the rest go to WP8's paydown.
 
-## Code-quality findings — m16-5-wp1-hook-payload-probe (2026-10-20)
-
-- **Pointer:** **1 MINOR remainder** from the review of `e63831b`. M16.5 WP4 resolved the MAJOR and three MINORs (2026-10-26). What remains: three test struct-update literals still set `background_task_types: None` explicitly, although the `..ev(...)` spread already supplies it.
-
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp1-hook-payload-probe — 2026-10-20`.
-- **Priority:** low
-- **Status:** pending
-- **Pickup shape:** a one-minute tidy in WP8's paydown.
-
 ## Code-quality findings — m16-wp3-review-player (2026-10-20)
 
 - **Pointer:** **4 MINOR** from the review of `cd0f204`, all in the review player (two more, the two `timeupdate` subscription paths and the per-frame re-render, were Buried 2026-11-04, paydown WP1):
@@ -124,17 +115,17 @@
 
 ## Code-quality findings — silent-supervisor (2026-09-28)
 
-- **Pointer:** **4 MINOR** remain from the review of `778fe72` (the stale "last possible moment" comment + reason list was resolved 2026-11-04 by paydown WP2). (The MAJOR, no alarm for a CC transcript-format change, was resolved at M16.5 WP3, 2026-10-27.) The MINORs: a "stripped once" claim with two strip sites, a "user prose" floor that also counts `isMeta` skill bodies, a dedupe store only one test file resets, and an ad-hoc widened `onTurnEnd` param. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# silent-supervisor — 2026-09-28`.
+- **Pointer:** **3 MINOR** remain from the review of `778fe72` (the stale "last possible moment" comment + reason list was resolved 2026-11-04 by paydown WP2, the dedupe-store reset by paydown WP3). (The MAJOR, no alarm for a CC transcript-format change, was resolved at M16.5 WP3, 2026-10-27.) The MINORs: a "stripped once" claim with two strip sites, a "user prose" floor that also counts `isMeta` skill bodies, and an ad-hoc widened `onTurnEnd` param. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# silent-supervisor — 2026-09-28`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
 ## Code-quality findings — supervisor-activity-record (2026-09-28)
 
-- **Pointer:** **1 MAJOR + 8 MINOR remain** from the review of `dece979` (rewritten 2026-09-28: the torn-append MAJOR was resolved by task `activity-log-append-tear`). The MAJOR that remains: the §B arch-doc enumeration guard scans a hand-kept file list. The MINORs: two stale comments, an ambiguous `sweep-threw` reason, a layering import, a 6-positional-param readout, a thrice-duplicated `2000` read limit, a `Workspace.tsx` extraction, and a popover Esc that may reach CC. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-activity-record — 2026-09-28`.
-- **Priority:** medium (the MAJOR) / low (the rest)
+- **Pointer:** **8 MINOR remain** from the review of `dece979` (the torn-append MAJOR was resolved by task `activity-log-append-tear`, 2026-09-28; the hand-kept-file-list guard MAJOR by paydown WP3, 2026-11-04). The MINORs: two stale comments, an ambiguous `sweep-threw` reason, a layering import, a 6-positional-param readout, a thrice-duplicated `2000` read limit, a `Workspace.tsx` extraction, and a popover Esc that may reach CC. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-activity-record — 2026-09-28`.
+- **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-- **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
+- **Pickup shape:** the 2026-11-04 paydown sweep (`backlog-paydown-wbs.md` WP8, WP12, WP14).
 
 ## Code-quality findings — paydown-wp3-boot-smoke-test (2026-09-23)
 
@@ -860,12 +851,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** pending — routed to the comment-convention pass (`SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, ruling R2)
 
-## Code-quality findings — paydown-wp7-render-instead-of-raw (2026-09-23)
-- **Pointer:** **1 MAJOR + 4 MINOR** from review of ship commit `a26b514` (the pipe-draining MINOR was resolved at paydown WP9). MAJOR: the WP7 live-mount harness's lifecycle is forked by `closeWiring`, and its `pane` stub is single-instance while two `Workspace`s mount. MINORs: dead harness options; the Submit button not driven; a warn spy that leaks on failure; the gate-OFF proof lacks a positive control. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# paydown-wp7-render-instead-of-raw — 2026-09-23`.
-- **Priority:** medium (MAJOR) / low (MINORs)
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-- **Pickup shape:** one small test-only task. Consolidate the harness (the MAJOR plus the dead options), then add the three one-assertion tests.
-
 ## Code-quality findings — paydown-wp9-sync-command-blocking-guard (2026-09-23)
 - **Pointer:** **4 MAJOR + 5 MINOR** from review of ship commit `17f90e5`.
   - MAJOR:
@@ -888,16 +873,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** If this drifts again, invert the mechanism: make the count a **generated artifact** rather than something to detect. Options: (a) a single source-of-truth line emitted by a script that docs `include`, (b) an HTML-comment marker (`<!-- guard-count -->…<!-- /guard-count -->`) whose content a test REGENERATES from `armSubjects` and fails on diff — a generator's output is unambiguous where prose intent is not. ⚠️ **Do not re-attempt the detector shape** without reading why it failed first.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-
-## SURFACE-2026-10-26-MEDIATABLIVE-FLAKES-UNDER-FULL-SUITE-LOAD
-- **Source:** feature:build (M16.5 WP3 Phase 2)
-- **Target level:** product:wbs (WP8 paydown)
-- **Type:** tech-debt
-- **Summary:** `src/components/workspace/editor/__tests__/mediaTabLive.test.tsx` → "an image issues ZERO read_file calls and renders from the canonical asset URL" failed once in a full `vitest run src`, then passed 42/42 in three isolated runs.
-- **Context:** Seen 2026-10-26 during WP3 Phase 2 while unrelated supervisor tests were failing in the same run, so load or timing is the likely trigger. It is unrelated to WP3. ⚠️ **2026-11-03 (task `skill-row-clear-button`): it failed 2 of 6 runs — once in a full `pnpm verify:auto`, and once run ISOLATED** (then 3/3 isolated passes), so full-suite load is not required; the trigger is timing inside the test itself. A flaky test trains readers to rerun instead of reading.
-- **Suggested action:** Run the full suite a few times to measure the rate. Look for a timing-dependent wait (a fixed frame count, or a `setTimeout` race with the asset-URL resolution).
-- **Priority:** low
-- **Status:** pending
 
 ## SURFACE-2026-11-02-TRASH-PATH-BLOCKS-THE-MAIN-THREAD
 - **Source:** feature:verify-self (M16.5 WP5 Phase 2)

@@ -26,15 +26,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-02-QUALITY-WP6-JSDOM-CM6-SHIMS-COPIED
-- **Severity:** MINOR
-- **Location:** `findResultsReplaceLive`, `overlaysOutsideEditorSplitLive`, `syntheticLineActions`, `searchPanelTextAssist` tests (+ WP5's `fileOpErrorLive`).
-- **Finding:** The ResizeObserver / matchMedia / Range-rect shim block is copied into 5 test files.
-- **Why it matters:** The next jsdom gap gets patched in one copy only.
-- **Suggested action:** A shared `src/test-support/cm6JsdomShims.ts` (beside `cssRule.ts`).
-- **Priority:** low
-- **Status:** pending
-
 # m16-5-wp5-qol-batch — 2026-11-02
 
 *(feature-review-quality on ship commit `df52ce7`, window `29c3395..df52ce7`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*
@@ -249,19 +240,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-# m16-5-wp1-hook-payload-probe — 2026-10-20
-
-*(feature-review-quality on ship commit `e63831b` (feature `d9f13ab`), window `d9f13ab^..e63831b`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged. M16.5 WP4 resolved all but the one below, 2026-10-26.)*
-
-## SURFACE-2026-10-20-QUALITY-WP1-REDUNDANT-NONE-FIELDS-IN-SPREAD-LITERALS
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/status_broadcaster/mod.rs` tests → `stop_with_bg` and two inline `HookEvent { …, ..ev(...) }` literals
-- **Finding:** *(Rewritten 2026-10-26: the `payload_keys: None` half went with the field in M16.5 WP4.)* They still set `background_task_types: None` explicitly although the `..ev(...)` spread already supplies it.
-- **Why it matters:** noise; a reader wonders whether `None` is being forced over a different default.
-- **Suggested action:** drop the explicit field from the spread literals; keep it only in full literals.
-- **Priority:** low
-- **Status:** pending
-
 # m16-wp3-review-player — 2026-10-20
 
 *(feature-review-quality on ship commit `cd0f204` (feature `b450287`), window `b450287^..cd0f204`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 6 MINOR, all auto-backlogged.)*
@@ -379,12 +357,12 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 *(feature-review-quality on ship commit `778fe72`, window `778fe72^..778fe72`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged.)*
 
 ## SURFACE-2026-09-28-QUALITY-SILENT-SUPERVISOR-MINOR-BATCH
-- **Severity:** MINOR ×4 (item 3, the stale "last possible moment" comment + withhold-reason list, was resolved 2026-11-04 by paydown WP2; the numbering is kept)
+- **Severity:** MINOR ×3 (item 3 was resolved 2026-11-04 by paydown WP2 and item 4 by paydown WP3; the numbering is kept)
 - **Findings:**
   1. `ccInputRouting.ts` header, the `Workspace.tsx` comment and the commit message say terminal reports are stripped "here, once, for BOTH readers", but `foldInput` (`unsentInput.ts`) strips them again and its header says it "now strips them first". Two strip sites, two docs that disagree on the owner. Pick one owner, or document the second as defense in depth.
   2. `transcript.ts`: `lastUserProseIndex` / `isUserProseTurn` also count `isMeta` skill-body lines, so the `readTurn` floor can sit mid-turn after a chained `Skill` call, while the `readTurn` header says the boundary is "the last user prose line" and "tool results never … move the boundary". Rename (e.g. `lastTurnBoundaryIndex`) or state the `isMeta` case in the `readTurn` doc.
   3. *(resolved 2026-11-04, paydown WP2)*
-  4. `turnEndDedupe.ts`: the claim store is module-level and only `activityFunnel.test.tsx` calls `resetTurnEnds()`. `useSupervisor.test.ts` and `supervisorActivityLive.test.tsx` also drive `onTurnEnd` and are safe only because they pass no `last_event_at`. Reset in a shared setup file.
+  4. *(resolved 2026-11-04, paydown WP3: both files reset the claim store after each test)*
   5. `useSupervisor.ts` `onTurnEnd`: the parameter is widened ad hoc to `TurnEndSignal & Pick<WorkspaceStatusUpdate, "last_event_at">` instead of adding `last_event_at` to `TurnEndSignal`, whose doc calls it "the slice the turn-end decision reads".
 - **Priority:** low
 - **Status:** pending
@@ -392,14 +370,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 # supervisor-activity-record — 2026-09-28
 
 *(feature-review-quality on ship commit `dece979`, window `dece979^..dece979`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 8 MINOR, all auto-backlogged. The torn-append MAJOR was resolved 2026-09-28 by task `activity-log-append-tear`; 1 MAJOR + 8 MINOR remain.)*
-
-## SURFACE-2026-09-28-QUALITY-ARCH-DOC-ENUMERATION-GUARD-USES-A-HAND-KEPT-FILE-LIST
-- **Severity:** MAJOR
-- **Location:** `src/state/supervisor/__tests__/archDocEnumeration.test.ts`, `hostSrc`
-- **Finding:** the guard that checks that §B names every command the supervisor invokes scans a HAND-KEPT file list (`useSupervisor.ts` + `activityRecorder.ts`), backed only by an "add it here" comment. An `invoke` in any other supervisor module is invisible to it. This is `docs/lessons/source-text-guards.md` entry 13 (a one-directional guard cannot see omissions), and this feature itself had to extend the list by hand.
-- **Suggested action:** build the list from a glob of the non-test `src/state/supervisor/*.ts` files (e.g. `import.meta.glob(…, { query: "?raw" })`), keep a non-vacuity floor on the count, and positive-control it with a throwaway module that invokes an undocumented command.
-- **Priority:** medium
-- **Status:** pending
 
 ## SURFACE-2026-09-28-QUALITY-SUPERVISOR-ACTIVITY-MINOR-BATCH
 - **Severity:** MINOR ×8
@@ -459,51 +429,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
   3. The guard: `SPAWN_BOUNDARIES` skips ALL arguments of any call named `spawn`, including the crate-local `Drain::spawn(pipe, &stop)` and non-closure arguments evaluated on the caller. Restrict the cut to `Expr::Closure` / `Expr::Async` arguments, as the doc says.
   4. `adjudicator/commands.rs`: `the_async_command_resolves_to_a_rejection_through_its_worker` forks the real `claude` whenever it is on `PATH`, and accepts either of two outcomes. It is environment-dependent and pins neither branch.
   5. `adjudicator/mod.rs`: the OutputTooLarge Display comment says "Must not contain 'timed out'", but the TS classifier `/timed? ?out/i` also matches "time out" and "timedout". The test re-implements a subset of that regex.
-- **Priority:** low
-- **Status:** pending
-
-# paydown-wp7-render-instead-of-raw — 2026-09-23
-
-*(feature-review-quality on ship commit `a26b514`; 0 CRITICAL / 1 MAJOR / 6 MINOR; MINOR-6 was fixed in the WIP before archive.)*
-
-## SURFACE-2026-09-23-QUALITY-LIVE-HARNESS-LIFECYCLE-FORKED-AND-SINGLE-PANE
-- **Severity:** MAJOR
-- **Location:** `src/__tests__/closeWiring.test.tsx` (its own IPC log, `uncaught` tap, `settle`/`click`, mockIPC boot, teardown); `src/components/workspace/__tests__/liveWorkspace.tsx` (the module-level `pane`)
-- **Finding:** `closeWiring` is the first App-level user of the WP7 live-mount harness, and it re-implements the harness lifecycle instead of reusing it. That includes the settle-before-`clearMocks` teardown order found in the P3.1 spike. It also gets `IS_REACT_ACT_ENVIRONMENT` only as a side effect of a `vi.mock` factory importing `liveWorkspace.tsx`. And it mounts two `Workspace`s against a stub whose `pane` is ONE module-level object, so `pane.props` belongs to whichever pane rendered last.
-- **Why it matters:** the harness is what the next render-instead-of-`?raw` test will copy, and two copies of the teardown rule will drift. A future App-level test calling `pushTurnStart` would silently reach an arbitrary workspace.
-- **Suggested action:** export a `bootIpc(handler)` / `teardownIpc()` pair from `liveWorkspace.tsx`, and a per-workspace pane registry keyed by `workspaceId` (the stub receives it as a prop). Move `closeWiring` onto both, and set `IS_REACT_ACT_ENVIRONMENT` explicitly in each file.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-09-23-QUALITY-LIVE-HARNESS-DEAD-OPTIONS
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/__tests__/liveWorkspace.tsx` (`MountOptions`, `rerender`, `mountWorkspace`)
-- **Finding:** `MountOptions.statusState` and `projectPath` have no caller, and the module-level `rerender` closure is never exported. They suggest a re-render API that doesn't exist. `mountWorkspace` doesn't guard against a still-mounted previous root.
-- **Suggested action:** delete the unused options (or export `rerender` if a test needs it), and throw if `root` is non-null on entry. Fold this into the MAJOR above.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-23-QUALITY-SUBMIT-BUTTON-NOT-DRIVEN
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/prompt/__tests__/promptSendWiring.test.tsx` (the "Stage BUTTON reaches the same send" test)
-- **Finding:** only the Stage button is clicked. A mutant wiring the Send (submit) button to `send("stage-only")`, or to nothing, passes the file.
-- **Suggested action:** add the mirror test: click `prompt-send-submit` and assert the envelope WITH the trailing `\r`. This is the paired-affordances prior applied to tests.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-23-QUALITY-WARN-SPY-LEAKS-ON-FAILURE
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/prompt/__tests__/promptSendWiring.test.tsx` (the two failure-diagnostic tests)
-- **Finding:** `warn.mockRestore()` runs after the assertions, so a failing assertion leaves the `console.warn` spy installed and hides later tests' diagnostics.
-- **Suggested action:** add `afterEach(() => vi.restoreAllMocks())`, or use try/finally.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-23-QUALITY-GATE-OFF-PROOF-HAS-NO-POSITIVE-CONTROL
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/__tests__/turnNavControls.test.tsx` (the AC-10 gate-OFF test)
-- **Finding:** the test proves the gate is OFF by the ABSENCE of `workspace-skill-row`. No test in the file shows the row is PRESENT with `gate: true`, so a renamed testid would make the proof vacuous.
-- **Suggested action:** add `expect(q(el, "workspace-skill-row")).not.toBeNull()` to a `gate: true` test in the same file.
 - **Priority:** low
 - **Status:** pending
 

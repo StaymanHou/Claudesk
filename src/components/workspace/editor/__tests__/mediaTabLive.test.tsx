@@ -97,13 +97,37 @@ async function mount() {
   await settle();
 }
 
+/** Whether the active tab body has finished loading: the shared Suspense fallback
+ *  (`editor-loading`, the lazy MediaView / EditorPanel chunk) is gone, and the body holds no
+ *  `.media-loading` (MediaView's pending stat, or the SVG-as-text read). */
+function activeBodySettled(): boolean {
+  if (host!.querySelector('[data-testid="editor-loading"]')) return false;
+  const visible = [
+    ...host!.querySelectorAll<HTMLElement>(".editor-tab-body"),
+  ].filter((b) => b.style.display === "flex");
+  if (visible.length !== 1) return false;
+  return (
+    visible[0].childElementCount > 0 &&
+    !visible[0].querySelector(".media-loading")
+  );
+}
+
 async function open(path: string) {
   await act(async () => {
     split.current!.openFile(path);
   });
-  // Lazy chunks (MediaView / EditorPanel) + the stat round trip.
+  // Lazy chunks (MediaView / EditorPanel) + the stat round trip. Two settles were the whole
+  // wait until 2026-11-04, and on a COLD first test the lazy chunk could take longer than
+  // that, so `stat_media` had not been called yet (2 of 20 isolated runs failed). The two
+  // settles stay as the minimum; then wait on the CONDITION, bounded, never on more time.
   await settle();
   await settle();
+  const deadline = Date.now() + 2000;
+  while (!activeBodySettled()) {
+    if (Date.now() > deadline)
+      throw new Error(`open(${path}): the tab body never finished loading`);
+    await settle();
+  }
 }
 
 /** The visible tab body (all tabs stay mounted; only the active one is display:flex). */

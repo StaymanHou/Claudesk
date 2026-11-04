@@ -12,6 +12,11 @@
 //     command (the seam's own seeding is covered by its own tests).
 // `Workspace` itself, its other hooks, and every other IPC call run for real against `mockIPC`.
 //
+// The IPC lifecycle lives here ONCE (`bootIpc` / `teardownIpc`), including the teardown order
+// (unmount → settle → clearMocks) that an App-level test would otherwise copy and let drift.
+// The pane stub records per WORKSPACE (`paneFor(id)`), so a tree with several workspaces never
+// reads whichever pane rendered last.
+//
 // Each test file must register the three mocks itself (`vi.mock` is hoisted per file):
 //   vi.mock("../XtermPane", async () => (await import("./liveWorkspace")).xtermPaneModule);
 //   vi.mock("../RightPanelHost", async () => (await import("./liveWorkspace")).rightPanelModule);
@@ -30,6 +35,7 @@ import type { TurnNavState } from "../turnMarkers";
 import type { TurnNavView } from "../XtermPane";
 import type { SupervisorOrigin } from "../../../state/supervisor/turnOrigin";
 import type { Workspace as WorkspaceModel } from "../../../state/workspace";
+import { RESPAWN_INTENT_HOLD_MS } from "../applyDriveMode";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -45,33 +51,75 @@ export const AT_REST: TurnNavView = {
 
 /** The props the stub pane records: the callbacks `Workspace` hands the real pane. */
 interface StubPaneProps {
+  workspaceId?: string;
   onTurnStartRecorded?: (nav: TurnNavView) => void;
   onInputForwarded?: (chunk: string) => void;
   claimTurnOrigin?: () => SupervisorOrigin | null;
 }
 
-/** What the stub pane saw and what it will answer. Reset by `mountWorkspace`. */
-export const pane = {
-  steps: [] as ("prev" | "next")[],
+/** What one workspace's stub pane saw and what it will answer. */
+export interface PaneRecord {
+  steps: ("prev" | "next")[];
   /** Returned by `turnNavState()`, i.e. what the pane reports after a step. */
-  navAfterStep: AT_REST as TurnNavView,
-  props: null as null | StubPaneProps,
+  navAfterStep: TurnNavView;
+  props: null | StubPaneProps;
+  /** How many times `Workspace` called `relaunch()` (a drive-mode apply's respawn). */
+  relaunches: number;
+}
+
+/** The workspace id `mountWorkspace` mounts. */
+export const MOUNTED_ID = "ws-1";
+
+/** Every stub pane's record, keyed by the `workspaceId` prop `Workspace` passes it. */
+const panes = new Map<string, PaneRecord>();
+
+function recordFor(workspaceId: string): PaneRecord {
+  let rec = panes.get(workspaceId);
+  if (!rec) {
+    rec = { steps: [], navAfterStep: AT_REST, props: null, relaunches: 0 };
+    panes.set(workspaceId, rec);
+  }
+  return rec;
+}
+
+/** The record of the pane `Workspace` rendered for `workspaceId`. Throws if none rendered. */
+export function paneFor(workspaceId: string): PaneRecord {
+  const rec = panes.get(workspaceId);
+  if (!rec)
+    throw new Error(`no stub pane rendered for workspace ${workspaceId}`);
+  return rec;
+}
+
+/**
+ * The single mounted workspace's pane (`MOUNTED_ID`), for `mountWorkspace` tests. It is the same
+ * object `paneFor(MOUNTED_ID)` returns: `mountWorkspace` resets it and registers it before render.
+ */
+export const pane: PaneRecord = {
+  steps: [],
+  navAfterStep: AT_REST,
+  props: null,
+  relaunches: 0,
 };
 
 function XtermPaneStub(props: StubPaneProps, ref: Ref<unknown>) {
+  const id = props.workspaceId ?? "(no workspaceId prop)";
   // In an effect, not during render: react-hooks rejects a render-time write to shared state.
+  // The record is looked up by id at each use rather than held in a local, which the
+  // react-hooks immutability rule would reject as a post-render mutation.
   useEffect(() => {
-    pane.props = props;
+    recordFor(id).props = props;
   });
   useImperativeHandle(ref, () => ({
     focus() {},
     refit() {},
     setFontSize() {},
-    relaunch() {},
-    stepTurn(dir: "prev" | "next") {
-      pane.steps.push(dir);
+    relaunch() {
+      recordFor(id).relaunches += 1;
     },
-    turnNavState: () => pane.navAfterStep,
+    stepTurn(dir: "prev" | "next") {
+      recordFor(id).steps.push(dir);
+    },
+    turnNavState: () => recordFor(id).navAfterStep,
   }));
   return <div data-testid="xterm-stub" />;
 }
@@ -101,10 +149,54 @@ export const ipcCalls: { cmd: string; args: Record<string, unknown> }[] = [];
 export const uncaught: unknown[] = [];
 const onError = (e: ErrorEvent) => uncaught.push(e.error ?? e.message);
 
+/**
+ * Install the IPC mocks for one test: the call log, the listener-throw tap, the window and
+ * `mockIPC` with events. `handler` answers each command; `null` for anything it does not know.
+ * Pair every call with `teardownIpc`.
+ */
+export function bootIpc(
+  handler: (cmd: string, args: Record<string, unknown>) => unknown,
+) {
+  panes.clear();
+  ipcCalls.length = 0;
+  uncaught.length = 0;
+  window.addEventListener("error", onError);
+  mockWindows("main");
+  mockIPC(
+    (cmd, args) => {
+      const a = (args ?? {}) as Record<string, unknown>;
+      ipcCalls.push({ cmd, args: a });
+      return handler(cmd, a);
+    },
+    { shouldMockEvents: true },
+  );
+}
+
+/**
+ * Unmount `root`, then drop the mocks, in the ONE order that works: the listeners' unlisten runs
+ * on a resolved promise, so it must land (the settle) before `clearMocks` removes the event
+ * plumbing it calls into.
+ */
+export async function teardownIpc(r: Root | null, h: HTMLElement | null) {
+  // ⚠️ A drive-mode apply's respawn ends in a fire-and-forget `RESPAWN_INTENT_HOLD_MS` sleep
+  // that then sets state. Unmounting before it fires leaks the timer past the test, and under a
+  // loaded full-suite run it fired after the file's jsdom was gone ("window is not defined",
+  // an unhandled rejection; paydown 2026-11-04 WP3). Wait it out while still mounted. The
+  // production fix (a ref instead of the sleep) is sweep WP12.
+  if ([...panes.values()].some((p) => p.relaunches > 0))
+    await act(async () => {
+      await new Promise((res) => setTimeout(res, RESPAWN_INTENT_HOLD_MS + 50));
+    });
+  await act(async () => r?.unmount());
+  await settle();
+  h?.remove();
+  window.removeEventListener("error", onError);
+  clearMocks();
+}
+
 export interface MountOptions {
   gate: boolean;
   storedDriveMode?: string | null;
-  projectPath?: string;
   statusState?: "idle" | "running" | "unknown";
   /** M16.5 WP4 — the header dot's display state (the verify-human overlay), if any. */
   statusDisplayState?: "awaiting_input";
@@ -116,37 +208,32 @@ export interface MountOptions {
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
-let rerender: ((opts: MountOptions) => void) | null = null;
 
 export async function mountWorkspace(opts: MountOptions) {
+  if (root)
+    throw new Error(
+      "mountWorkspace: a previous mount is still live (missing unmountWorkspace?)",
+    );
   const { Workspace } = await import("../Workspace");
+  rightPanel.props = null;
+  gate.enabled = opts.gate;
+  bootIpc((cmd) => {
+    if (cmd === "project_get_default_drive_mode")
+      return opts.storedDriveMode ?? null;
+    if (cmd === "picker_announce_actions") return {};
+    if (cmd === "project_get_profile" || cmd === "cc_session_profile")
+      return opts.profile ?? null;
+    if (opts.ipcAnswers && cmd in opts.ipcAnswers) return opts.ipcAnswers[cmd];
+    return null;
+  });
   pane.steps = [];
   pane.navAfterStep = AT_REST;
   pane.props = null;
-  rightPanel.props = null;
-  ipcCalls.length = 0;
-  uncaught.length = 0;
-  gate.enabled = opts.gate;
-  window.addEventListener("error", onError);
-  mockWindows("main");
-  mockIPC(
-    (cmd, args) => {
-      ipcCalls.push({ cmd, args: (args ?? {}) as Record<string, unknown> });
-      if (cmd === "project_get_default_drive_mode")
-        return opts.storedDriveMode ?? null;
-      if (cmd === "picker_announce_actions") return {};
-      if (cmd === "project_get_profile" || cmd === "cc_session_profile")
-        return opts.profile ?? null;
-      if (opts.ipcAnswers && cmd in opts.ipcAnswers)
-        return opts.ipcAnswers[cmd];
-      return null;
-    },
-    { shouldMockEvents: true },
-  );
-  const projectPath = opts.projectPath ?? "/tmp/scratch/scratch-a";
+  pane.relaunches = 0;
+  panes.set(MOUNTED_ID, pane);
   const model = {
-    id: "ws-1",
-    project_path: projectPath,
+    id: MOUNTED_ID,
+    project_path: "/tmp/scratch/scratch-a",
     cc_session_id: "cc-1",
     display_name: "scratch-a",
     pending_action: null,
@@ -155,16 +242,16 @@ export async function mountWorkspace(opts: MountOptions) {
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
-  rerender = (o) =>
+  await act(async () =>
     root!.render(
       <Workspace
         workspace={model}
         visible
-        statusState={o.statusState ?? "idle"}
-        statusDisplayState={o.statusDisplayState}
+        statusState={opts.statusState ?? "idle"}
+        statusDisplayState={opts.statusDisplayState}
       />,
-    );
-  await act(async () => rerender!(opts));
+    ),
+  );
   await settle();
   return host;
 }
@@ -177,15 +264,9 @@ export async function settle() {
 }
 
 export async function unmountWorkspace() {
-  await act(async () => root?.unmount());
-  // The listeners' unlisten runs on a resolved promise, so it must land before the mocks go.
-  await settle();
-  host?.remove();
+  await teardownIpc(root, host);
   root = null;
   host = null;
-  rerender = null;
-  window.removeEventListener("error", onError);
-  clearMocks();
 }
 
 export async function click(el: Element | null | undefined) {
@@ -197,8 +278,11 @@ export async function click(el: Element | null | undefined) {
 }
 
 /** Push a turn-start from the pane, the way the real `XtermPane` does on every recorded turn. */
-export async function pushTurnStart(nav: TurnNavState) {
-  const cb = pane.props?.onTurnStartRecorded;
+export async function pushTurnStart(
+  nav: TurnNavState,
+  workspaceId: string = MOUNTED_ID,
+) {
+  const cb = paneFor(workspaceId).props?.onTurnStartRecorded;
   if (!cb)
     throw new Error("Workspace passed no onTurnStartRecorded to the pane");
   await act(async () => cb({ origin: null, ...nav }));
@@ -210,19 +294,26 @@ export async function pushTurnStart(nav: TurnNavState) {
  * whatever came back. ⚠️ The pane side of this contract (claim at the marker, one builder for push
  * and pull) is pinned structurally in `turnNavWiring.test.ts`; this helper drives the PARENT side.
  */
-export async function pushClaimedTurnStart(nav: TurnNavState) {
-  const claim = pane.props?.claimTurnOrigin;
+export async function pushClaimedTurnStart(
+  nav: TurnNavState,
+  workspaceId: string = MOUNTED_ID,
+) {
+  const p = paneFor(workspaceId);
+  const claim = p.props?.claimTurnOrigin;
   if (!claim)
     throw new Error("Workspace passed no claimTurnOrigin to the pane");
-  const cb = pane.props?.onTurnStartRecorded;
+  const cb = p.props?.onTurnStartRecorded;
   if (!cb)
     throw new Error("Workspace passed no onTurnStartRecorded to the pane");
   await act(async () => cb({ ...nav, origin: claim() }));
 }
 
 /** Forward a chunk from the pane, as the real pane does for every `onData`. */
-export async function forwardInput(chunk: string) {
-  const cb = pane.props?.onInputForwarded;
+export async function forwardInput(
+  chunk: string,
+  workspaceId: string = MOUNTED_ID,
+) {
+  const cb = paneFor(workspaceId).props?.onInputForwarded;
   if (!cb) throw new Error("Workspace passed no onInputForwarded to the pane");
   await act(async () => cb(chunk));
 }

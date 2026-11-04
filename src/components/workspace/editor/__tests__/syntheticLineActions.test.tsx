@@ -6,32 +6,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { SyntheticView, type SyntheticLineAction } from "../SyntheticView";
+import "../../../../test-support/cm6JsdomShims";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-// jsdom has no layout; CM6 measures through these.
-class NoopResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??=
-  NoopResizeObserver;
-const zeroRect = () =>
-  ({
-    x: 0,
-    y: 0,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: 0,
-    height: 0,
-  }) as DOMRect;
-Range.prototype.getClientRects ??= () => [] as unknown as DOMRectList;
-Range.prototype.getBoundingClientRect ??= zeroRect;
+// jsdom gaps (ResizeObserver, matchMedia, Range rects) are patched by the shared shim module.
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;

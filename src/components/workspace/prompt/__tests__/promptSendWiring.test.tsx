@@ -121,6 +121,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Restores any `console.warn` spy even when the test that installed it failed mid-way, so a
+  // leaked spy cannot hide a later test's diagnostics.
+  vi.restoreAllMocks();
   act(() => root?.unmount());
   host?.remove();
   root = null;
@@ -192,6 +195,18 @@ describe("stage-only send", () => {
       )!.click();
     });
     expect(lastInvoke().text).toBe(wrapped("clicked"));
+  });
+
+  it("the Send BUTTON reaches the auto-submit send, trailing CR included", async () => {
+    // The mirror of the Stage button: without it, a Send button wired to the stage-only send
+    // (or to nothing) passed this file.
+    const el = mount("clicked to send");
+    await act(async () => {
+      el.querySelector<HTMLButtonElement>(
+        '[data-testid="prompt-send-submit"]',
+      )!.click();
+    });
+    expect(lastInvoke().text).toBe(`${wrapped("clicked to send")}\r`);
   });
 });
 

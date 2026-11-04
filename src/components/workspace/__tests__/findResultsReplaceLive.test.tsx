@@ -11,39 +11,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { RightPanelHost } from "../RightPanelHost";
+import "../../../test-support/cm6JsdomShims";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
-class NoopResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??=
-  NoopResizeObserver;
-window.matchMedia ??= ((query: string) => ({
-  matches: false,
-  media: query,
-  onchange: null,
-  addListener: () => {},
-  removeListener: () => {},
-  addEventListener: () => {},
-  removeEventListener: () => {},
-  dispatchEvent: () => false,
-})) as typeof window.matchMedia;
-Range.prototype.getClientRects ??= () => [] as unknown as DOMRectList;
-Range.prototype.getBoundingClientRect ??= () =>
-  ({
-    x: 0,
-    y: 0,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: 0,
-    height: 0,
-  }) as DOMRect;
+// jsdom gaps (ResizeObserver, matchMedia, Range rects) are patched by the shared shim module.
 
 const PROJECT = "/tmp/scratch/replace-fixture";
 const RESULTS = [

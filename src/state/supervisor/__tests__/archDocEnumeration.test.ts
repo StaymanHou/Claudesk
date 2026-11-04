@@ -22,7 +22,7 @@
 // drive-mode wire string"), including its head/tail truncation anchors.
 
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ROOT = resolve(__dirname, "../../../..");
@@ -33,15 +33,28 @@ const archDoc = readFileSync(
 );
 
 /**
- * Every module that makes a supervisor-owned `invoke`: the host, plus (2026-09-25) the activity
- * recorder, which appends and reads `supervisor-activity.log`. ⚠️ When a supervisor module gains
- * an `invoke`, add it here, or this guard cannot see the command.
+ * EVERY non-test module in `src/state/supervisor/`, derived from the directory, never listed by
+ * hand (paydown 2026-11-04 WP3). The old hand-kept list (`useSupervisor.ts` +
+ * `activityRecorder.ts`) could not see an `invoke` added to any other module: a one-directional
+ * guard is blind to omissions (`source-text-guards.md` entry 13). The new set is a strict
+ * superset of the old one.
  */
-const hostSrc = [
-  "src/state/supervisor/useSupervisor.ts",
-  "src/state/supervisor/activityRecorder.ts",
-]
-  .map((f) => readFileSync(resolve(ROOT, f), "utf8"))
+const SUPERVISOR_DIR = resolve(ROOT, "src/state/supervisor");
+const supervisorModules = readdirSync(SUPERVISOR_DIR)
+  .filter((f) => f.endsWith(".ts") && !f.endsWith(".d.ts"))
+  .sort();
+
+/**
+ * Comments are stripped before extraction: `unsentInput.ts` mentions `invoke("cc_input")` in a
+ * comment, and a guard that counts a comment as a call is satisfied by prose
+ * (`[[raw-guard-identifier-satisfied-by-own-comments]]`). Full-line `//` comments and block
+ * comments only; a trailing `//` is left alone so a string containing `//` is never cut.
+ */
+const stripComments = (src: string) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+const hostSrc = supervisorModules
+  .map((f) => stripComments(readFileSync(resolve(SUPERVISOR_DIR, f), "utf8")))
   .join("\n");
 
 const policySrc = readFileSync(
@@ -73,13 +86,20 @@ describe("⚠️ §B names EVERY Tauri command the supervisor invokes", () => {
     ...hostSrc.matchAll(/invoke(?:<[^>]*>)?\(\s*"([a-z_]+)"/g),
   ].map((m) => m[1]);
 
+  it("⚠️ scans the whole supervisor directory, including the two modules the old list named", () => {
+    // A floor on the population, so a broken path or filter cannot shrink the scan to nothing.
+    expect(supervisorModules.length).toBeGreaterThanOrEqual(15);
+    expect(supervisorModules).toContain("useSupervisor.ts");
+    expect(supervisorModules).toContain("activityRecorder.ts");
+  });
+
   it("⚠️ is not vacuous — the extraction actually found commands", () => {
     // Without this, an `invoke(` syntax change silently empties the set and every arm below
     // passes over nothing. This is the `[[guard-predicate-completeness-vs-mutation-landing]]`
     // shape: "0 findings" is under-determined unless you pin the population.
     expect(
       invoked.length,
-      'no `invoke<...>("name")` calls were extracted from useSupervisor.ts — the call shape ' +
+      'no `invoke<...>("name")` calls were extracted from src/state/supervisor/ — the call shape ' +
         "changed and this guard is now scanning nothing",
     ).toBeGreaterThanOrEqual(5);
   });
@@ -104,7 +124,7 @@ describe("⚠️ §B names EVERY Tauri command the supervisor invokes", () => {
       expect(
         archDoc,
         `arch/workflow-supervisor.md does not name the Tauri command \`${cmd}\`, which ` +
-          `useSupervisor.ts invokes. The doc is the AS-BUILT AUTHORITY — an unnamed command ` +
+          `a module in src/state/supervisor/ invokes. The doc is the AS-BUILT AUTHORITY — an unnamed command ` +
           `means a reader auditing "what crosses into Rust?" gets a wrong answer.`,
       ).toContain(cmd);
     }

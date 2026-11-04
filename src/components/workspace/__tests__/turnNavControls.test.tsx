@@ -146,6 +146,13 @@ describe("turn-nav controls — the surface the operator touches", () => {
     expect(pane.steps).toEqual(["prev"]);
     expect(q(el, "workspace-turn-readout")?.textContent).toBe("1/1");
   });
+
+  it("positive control for AC-10: with the gate ON the skill row IS present", async () => {
+    // The gate-OFF proof above rests on the ABSENCE of `workspace-skill-row`. Without this, a
+    // renamed testid would make that absence vacuous.
+    const el = await mountWorkspace({ gate: true });
+    expect(q(el, "workspace-skill-row")).not.toBeNull();
+  });
 });
 
 // ⚠️ CSS is read via node:fs, NOT a Vitest `?raw` import — Vite's CSS plugin intercepts `?raw`

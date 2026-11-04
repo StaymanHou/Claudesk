@@ -2,10 +2,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 import { FILMSTRIP_COLLAPSED_KEY } from "../components/workspace/filmstripCollapse";
 import { WORKSPACE_STATUS_EVENT } from "../state/workspaceStatus";
+import {
+  bootIpc,
+  ipcCalls as calls,
+  paneFor,
+  settle,
+  teardownIpc,
+  uncaught,
+} from "../components/workspace/__tests__/liveWorkspace";
+
+// Set here explicitly, not left to the side effect of importing the harness.
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 // The × / ⏸ close wiring, driven through the REAL `App` (paydown 2026-09-23 WP7, AA1).
 //
@@ -22,7 +34,8 @@ import { WORKSPACE_STATUS_EVENT } from "../state/workspaceStatus";
 // issues. Its absence is what a ⏸ close must leave behind.
 //
 // Stubbed, and nothing else: `XtermPane` and `RightPanelHost` (see `liveWorkspace.tsx`), and the
-// workflow gate seam (held OFF). The dirty-editor arm of the gate is not reachable here, because
+// workflow gate seam (held OFF). The IPC lifecycle (call log, listener-throw tap, teardown order)
+// is the harness's `bootIpc` / `teardownIpc`, not a copy. The dirty-editor arm of the gate is not reachable here, because
 // the editor panel is stubbed; `dirtyDocCount` and `closeWorkspaceSpec` cover it as pure functions.
 
 vi.mock(
@@ -52,46 +65,24 @@ const B = "/tmp/scratch/scratch-b"; // opened second, so it is focused
 // label.
 let ids: Record<"a" | "b", string> = { a: "", b: "" };
 
-const calls: { cmd: string; args: Record<string, unknown> }[] = [];
-const uncaught: unknown[] = [];
-const onError = (e: ErrorEvent) => uncaught.push(e.error ?? e.message);
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 
 beforeEach(() => {
   localStorage.clear();
-  calls.length = 0;
-  uncaught.length = 0;
-  window.addEventListener("error", onError);
-  mockWindows("main");
-  mockIPC(
-    (cmd, args) => {
-      calls.push({ cmd, args: (args ?? {}) as Record<string, unknown> });
-      if (cmd === "list_projects" || cmd === "prune_missing_projects")
-        return [];
-      if (cmd === "picker_announce_actions") return {};
-      return null;
-    },
-    { shouldMockEvents: true },
-  );
+  bootIpc((cmd) => {
+    if (cmd === "list_projects" || cmd === "prune_missing_projects") return [];
+    if (cmd === "picker_announce_actions") return {};
+    return null;
+  });
 });
 
 afterEach(async () => {
-  await act(async () => root?.unmount());
-  await settle();
-  host?.remove();
+  await teardownIpc(root, host);
   root = null;
   host = null;
-  window.removeEventListener("error", onError);
-  clearMocks();
   expect(uncaught).toEqual([]);
 });
-
-async function settle() {
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 20));
-  });
-}
 
 /** Mount the real App and open A then B through the seed seam. */
 async function mountWithTwo({ collapsed = false } = {}) {
@@ -178,6 +169,16 @@ const markedClean = () =>
   calls
     .filter((c) => c.cmd === "session_state_mark_clean")
     .map((c) => c.args.projectPath);
+
+describe("the harness keeps each workspace's pane apart", () => {
+  it("each open workspace's stub pane records ITS OWN props, not the last one rendered", async () => {
+    // Two Workspaces mount here. A single shared pane record would hold whichever rendered last,
+    // so a `pushTurnStart` aimed at A would silently reach B.
+    await mountWithTwo();
+    expect(paneFor(ids.a).props?.workspaceId).toBe(ids.a);
+    expect(paneFor(ids.b).props?.workspaceId).toBe(ids.b);
+  });
+});
 
 describe("× on an IDLE workspace closes it at once", () => {
   it("closes a background workspace, marks it clean, and leaves the focus alone", async () => {

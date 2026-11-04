@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1–WP2 done 2026-11-04
+status: in-progress  # WP1–WP3 done 2026-11-04
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -169,7 +169,7 @@ Each item is a lying doc or string; no behaviour changes. The one rename (WP5) i
   "4 GiB or larger".
 - `10-27-QUALITY-WP3-ADJUDICATOR-ALARM-TOOLTIP-OMITS-UNPARSEABLE`: add "an unreadable reply".
 
-## WP3: Test-harness hygiene and the `mediaTabLive` flake  `[impact: Med · effort: S–M · risk: Low (test-only)]` · task
+## WP3: Test-harness hygiene and the `mediaTabLive` flake  `[impact: Med · effort: S–M · risk: Low (test-only)]` · task · ✅ DONE 2026-11-04
 
 Test-only, so it runs before any code WP; a de-flaked gate helps every WP after it.
 - `10-26-MEDIATABLIVE-FLAKES-UNDER-FULL-SUITE-LOAD` (BL): replace the fixed 2×30 ms `settle` in
@@ -375,6 +375,10 @@ R4. Runs after WP8, so it moves already-fixed code.
   - extract `useDriveModeApply`
   - replace the `RESPAWN_INTENT_HOLD_MS = 400` sleep with a ref the spawn effect reads at spawn time
   - keep the 2026-09-23 R1 "disable while queued" behaviour byte-identical
+  - ⚠️ (added at WP3) the apply chain does NOT abort on unmount: a queued apply's `waitForIdle`
+    keeps polling for up to 10 min after the workspace is gone, and the hold's `setState` can fire
+    after a test's jsdom is torn down. Abort the chain on unmount. Then delete the relaunch wait
+    in `liveWorkspace.tsx`'s `teardownIpc`, which exists only to absorb that timer.
 - **Proof:**
   - render-unchanged against a HEAD worktree (`[[prove-render-unchanged-via-head-worktree]]`)
   - the `liveWorkspace.tsx` interaction harness for the apply path

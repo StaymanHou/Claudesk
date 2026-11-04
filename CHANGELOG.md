@@ -19,6 +19,17 @@
 - **Backlog resolved:** SURFACE-2026-09-28-QUALITY-SILENT-SUPERVISOR-MINOR-BATCH (partial: item 3) — `decideTurn` no longer claims the toggle is read at the last possible moment, and its stale withhold-reason list now points at `FanOutReason`.
 - **Backlog resolved:** SURFACE-2026-09-29-QUALITY-ANALYTICS-WEEK-EXPORT-MINOR-BATCH (partial: item 1) — `WeekProjectMs.path` now documents the earliest-day rule that `export-week` publishes, instead of claiming the week's heaviest cwd.
 - **Task closed:** Paydown sweep WP2 made six docs and user-visible strings say what the code does (clause boundaries, overlay emit order, the supervisor toggle read, the week export's path, the media-limit card, and the adjudicator alarm tooltip), with no behavior change.
+- **Backlog resolved:** SURFACE-2026-10-26-MEDIATABLIVE-FLAKES-UNDER-FULL-SUITE-LOAD — `mediaTabLive` now waits for the tab body to finish loading instead of a fixed 60 ms, going from 18/20 to 20/20 isolated and 3/3 full-suite runs.
+- **Backlog resolved:** SURFACE-2026-09-23-QUALITY-LIVE-HARNESS-LIFECYCLE-FORKED-AND-SINGLE-PANE — the live-mount harness owns the IPC lifecycle once (`bootIpc`/`teardownIpc`), `closeWiring` uses it, and stub panes are recorded per workspace.
+- **Backlog resolved:** SURFACE-2026-09-23-QUALITY-LIVE-HARNESS-DEAD-OPTIONS — the harness dropped the unused `projectPath` option and `rerender` closure, and refuses a mount while a previous one is still live.
+- **Backlog resolved:** SURFACE-2026-09-23-QUALITY-SUBMIT-BUTTON-NOT-DRIVEN — a test now clicks the prompt panel's Send button and asserts the submitting CR, killing a Send-wired-to-stage mutant.
+- **Backlog resolved:** SURFACE-2026-09-23-QUALITY-WARN-SPY-LEAKS-ON-FAILURE — `promptSendWiring` restores every spy in `afterEach`, so a failing test can no longer leave `console.warn` muted.
+- **Backlog resolved:** SURFACE-2026-09-23-QUALITY-GATE-OFF-PROOF-HAS-NO-POSITIVE-CONTROL — a gate-ON test now asserts the skill row is present, so the gate-OFF absence proof cannot pass on a renamed testid.
+- **Backlog resolved:** SURFACE-2026-11-02-QUALITY-WP6-JSDOM-CM6-SHIMS-COPIED — the five copied CodeMirror jsdom shim blocks became one shared `src/test-support/cm6JsdomShims.ts`.
+- **Backlog resolved:** SURFACE-2026-09-28-QUALITY-ARCH-DOC-ENUMERATION-GUARD-USES-A-HAND-KEPT-FILE-LIST — the supervisor arch-doc guard now scans every module in `src/state/supervisor/` (comments stripped), proven by a throwaway undocumented-invoke probe.
+- **Backlog resolved:** SURFACE-2026-10-20-QUALITY-WP1-REDUNDANT-NONE-FIELDS-IN-SPREAD-LITERALS — three status-broadcaster test literals no longer repeat a field their spread already supplies.
+- **Backlog resolved:** SURFACE-2026-09-28-QUALITY-SILENT-SUPERVISOR-MINOR-BATCH (partial: item 4) — the two supervisor test files that drive turn ends now reset the turn-end claim store after each test.
+- **Task closed:** Paydown sweep WP3 de-flaked the test gate (two lazy-chunk races and a respawn timer that outlived its test) and made the live-mount harness and four guards honest, each change carrying a killed mutant or a positive control.
 
 ## 2026-11-03
 

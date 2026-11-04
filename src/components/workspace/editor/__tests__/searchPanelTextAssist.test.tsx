@@ -16,30 +16,12 @@ import {
   NO_TEXT_ASSIST_ATTRS,
   searchPanelNoTextAssist,
 } from "../searchPanelTextAssist";
+import "../../../../test-support/cm6JsdomShims";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
-class NoopResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??=
-  NoopResizeObserver;
-// jsdom has no layout; CM6 measures text ranges through these.
-Range.prototype.getClientRects ??= () => [] as unknown as DOMRectList;
-Range.prototype.getBoundingClientRect ??= () =>
-  ({
-    x: 0,
-    y: 0,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: 0,
-    height: 0,
-  }) as DOMRect;
+// jsdom gaps (ResizeObserver, matchMedia, Range rects) are patched by the shared shim module.
 
 const views: EditorView[] = [];
 let root: Root | null = null;

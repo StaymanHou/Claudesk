@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { RightPanelHost } from "../RightPanelHost";
+import "../../../test-support/cm6JsdomShims";
 
 // M16.5 WP5 (5.2) — a failed delete / trash is SHOWN, not only logged
 // (SURFACE-2026-06-30-FILE-OP-ERROR-SURFACE), and a create that collides with a gitignored
@@ -13,24 +14,7 @@ import { RightPanelHost } from "../RightPanelHost";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-// jsdom lacks these; the editor and terminal libraries RightPanelHost mounts read them.
-class NoopResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??=
-  NoopResizeObserver;
-window.matchMedia ??= ((query: string) => ({
-  matches: false,
-  media: query,
-  onchange: null,
-  addListener: () => {},
-  removeListener: () => {},
-  addEventListener: () => {},
-  removeEventListener: () => {},
-  dispatchEvent: () => false,
-})) as typeof window.matchMedia;
+// jsdom gaps (ResizeObserver, matchMedia, Range rects) are patched by the shared shim module.
 
 const PROJECT = "/tmp/scratch/file-op-fixture";
 const calls: string[] = [];

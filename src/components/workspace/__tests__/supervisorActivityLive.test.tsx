@@ -16,6 +16,7 @@ import {
   resetActivityFeed,
 } from "../../../state/supervisor/activityFeed";
 import { buildRecord } from "../../../state/supervisor/activityRecord";
+import { resetTurnEnds } from "../../../state/supervisor/turnEndDedupe";
 
 vi.mock(
   "../XtermPane",
@@ -54,6 +55,8 @@ async function turnEnd() {
 afterEach(async () => {
   await unmountWorkspace();
   resetActivityFeed();
+  // Module-level claim store: without this, a claim from one test could dedupe the next.
+  resetTurnEnds();
 });
 
 const OWN = "/tmp/scratch/scratch-a";

@@ -13,11 +13,16 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { resetTurnEnds } from "../turnEndDedupe";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
+
+// The turn-end claim store is module-level: reset it after every test, so a test that passes a
+// `last_event_at` can never leave a claim that silently dedupes the next test's turn end.
+afterEach(() => resetTurnEnds());
 
 const SRC = resolve(__dirname, "../useSupervisor.ts");
 const source = readFileSync(SRC, "utf8");

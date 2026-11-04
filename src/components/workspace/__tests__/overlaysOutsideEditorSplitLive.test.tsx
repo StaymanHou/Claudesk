@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { RightPanelHost } from "../RightPanelHost";
+import "../../../test-support/cm6JsdomShims";
 
 // M16.5 WP6 Phase 1 — app overlays draw above CodeMirror's find bar.
 //
@@ -19,23 +20,7 @@ import { RightPanelHost } from "../RightPanelHost";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-class NoopResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??=
-  NoopResizeObserver;
-window.matchMedia ??= ((query: string) => ({
-  matches: false,
-  media: query,
-  onchange: null,
-  addListener: () => {},
-  removeListener: () => {},
-  addEventListener: () => {},
-  removeEventListener: () => {},
-  dispatchEvent: () => false,
-})) as typeof window.matchMedia;
+// jsdom gaps (ResizeObserver, matchMedia, Range rects) are patched by the shared shim module.
 
 const PROJECT = "/tmp/scratch/overlay-fixture";
 let root: Root | null = null;
@@ -88,9 +73,18 @@ async function mount() {
     ...host!.querySelectorAll('[data-testid="file-tree-file"]'),
   ].find((r) => r.textContent?.includes("main.ts"));
   await click(file);
-  // The lazy EditorPanel chunk + the read round trip.
+  // The lazy EditorPanel chunk + the read round trip. Two settles were the whole wait until
+  // 2026-11-04, and under a loaded run the chunk could take longer, so `.cm-content` was not
+  // there yet (2 of 3 harness runs failed at paydown WP3). The two settles stay as the minimum;
+  // then wait on the CONDITION, bounded.
   await settle();
   await settle();
+  const deadline = Date.now() + 2000;
+  while (!host!.querySelector(".editor-split .cm-content")) {
+    if (Date.now() > deadline)
+      throw new Error("mount(): the editor never rendered .cm-content");
+    await settle();
+  }
 }
 
 async function click(el: Element | null | undefined) {
