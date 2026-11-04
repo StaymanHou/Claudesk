@@ -1,13 +1,13 @@
 // M9 WP6a — pure core for the GlobalDashboard's render-mode decision.
 //
-// The GLOBAL time-analytics view has three mutually-exclusive display modes,
-// decided from two inputs the view already holds:
+// The GLOBAL time-analytics view has four mutually-exclusive display modes
+// (`pending` / `off` / `empty` / `data`), decided from two inputs the view already holds:
 //   - `enabled`  — the WP5 tracking toggle (`time_get_tracking_enabled`), default OFF, or
 //                  `null` while that seed has not resolved yet.
 //   - `hasData`  — whether the queried window returned any project rows.
 //
 // Repo posture (pure logic → vitest, live DOM → the MCP bridge): this predicate is
-// vitest-testable in isolation so the three-way branch is pinned without a running
+// vitest-testable in isolation so the four-way branch is pinned without a running
 // app. The view component (GlobalDashboard.tsx) is the wiring layer that feeds it the
 // live flag + payload and renders the matching subtree.
 

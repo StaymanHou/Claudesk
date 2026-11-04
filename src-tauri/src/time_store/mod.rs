@@ -36,6 +36,8 @@
 pub mod commands;
 // `claudesk export-week` (2026-09-28): the Week view's data as JSON on stdout, read-only, no GUI.
 pub mod export;
+#[cfg(test)]
+mod kinds_ts;
 // M9 WP4: the segment-model query layer — reads `events` rows for a window, runs the
 // WP3 reclassifier, emits the DayPayload/WeekPayload/RangePayload segment-model DTOs.
 pub mod query;

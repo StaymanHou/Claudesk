@@ -213,21 +213,38 @@ fn the_export_is_read_only_and_carries_the_week_view_figures() {
     assert_eq!(wed["date"], "2026-05-13");
     assert_eq!(wed["ai_doing_ms"], 21 * 60_000);
     assert_eq!(wed["minutes"]["ai_doing"], 21);
-    // WEEK TOTAL = the AI family over the rounded cells, reasoning INCLUDED.
-    let family: i64 = p["cells"]
+    // The view-matching figures, against the kind lists the Week view renders from
+    // (`kinds.ts`, read from disk), never against a Rust copy of them. `kinds.ts` names kinds
+    // in kebab case; the export's `minutes` object is snake case.
+    use crate::time_store::kinds_ts::{kind_list, painted_kinds};
+    let cell_sum = |c: &serde_json::Value, kinds: &[crate::reclassify::Kind]| -> i64 {
+        kinds
+            .iter()
+            .map(|k| c["minutes"][k.as_str().replace('-', "_")].as_i64().unwrap())
+            .sum()
+    };
+    let ai_kinds = kind_list("AI_KINDS");
+    // WEEK TOTAL = `projectWeekActive`: the AI family over the 7 rounded cells.
+    let week_total: i64 = p["cells"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|c| {
-            c["minutes"]["ai_doing"].as_i64().unwrap()
-                + c["minutes"]["subagent"].as_i64().unwrap()
-                + c["minutes"]["ai_reasoning"].as_i64().unwrap()
-        })
+        .map(|c| cell_sum(c, &ai_kinds))
         .sum();
-    assert_eq!(p["week_total_min"].as_i64().unwrap(), family);
+    assert_eq!(p["week_total_min"].as_i64().unwrap(), week_total);
+    // The day label = `cellTotal`: every painted kind of the rounded cell.
+    assert_eq!(
+        wed["painted_min"].as_i64().unwrap(),
+        cell_sum(wed, &painted_kinds())
+    );
     assert!(
         wed["minutes"]["ai_reasoning"].as_i64().unwrap() > 0,
         "fixture exercises reasoning"
+    );
+    assert!(
+        wed["minutes"]["typing"].as_i64().unwrap() + wed["minutes"]["reviewing"].as_i64().unwrap()
+            > 0,
+        "fixture exercises a human painted kind"
     );
     assert!(v["engaged"]["wallclock_ms"].as_i64().unwrap() > 0);
 }
@@ -254,4 +271,13 @@ fn the_export_runs_while_the_app_holds_a_writer_open_and_sees_its_rows() {
     writer
         .write_gated(&hook("Stop", "sess-2", "/p", 1, None), true)
         .unwrap();
+}
+
+#[test]
+fn an_internal_error_keeps_the_db_failure_exit_code() {
+    // `Internal` is a separate stderr category, not a new exit code: an unattended consumer
+    // branches on 0 / 1 / 2 (module doc), so both runtime failures stay 1.
+    assert_eq!(ExportError::Internal("x".into()).exit_code(), 1);
+    assert_eq!(ExportError::Db("x".into()).exit_code(), 1);
+    assert_eq!(ExportError::Usage("x".into()).exit_code(), 2);
 }

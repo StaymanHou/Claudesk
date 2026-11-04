@@ -13,8 +13,9 @@
 //!   ones included. The consumer filters.
 //! - `--monday` accepts any date and snaps it to its Monday, as the Week view does; omitted, it
 //!   exports the current week. `--json` is accepted and ignored (JSON is the only format).
-//! - Exit codes: `0` success · `1` the DB is missing or unreadable · `2` usage error. On any
-//!   non-zero exit stdout is EMPTY and the reason is on stderr.
+//! - Exit codes: `0` success · `1` the DB is missing or unreadable, or the export could not be
+//!   built from it · `2` usage error. On any non-zero exit stdout is EMPTY and the reason is on
+//!   stderr.
 
 use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
@@ -43,13 +44,17 @@ pub enum ExportError {
     Usage(String),
     /// The DB is missing or unreadable → exit 1.
     Db(String),
+    /// The DB was read but the export could not be built or serialized → exit 1. A separate
+    /// variant so the stderr category stays honest; it shares `Db`'s exit code because the
+    /// 0 / 1 / 2 contract is what an unattended consumer branches on.
+    Internal(String),
 }
 
 impl ExportError {
     fn exit_code(&self) -> i32 {
         match self {
             ExportError::Usage(_) => 2,
-            ExportError::Db(_) => 1,
+            ExportError::Db(_) | ExportError::Internal(_) => 1,
         }
     }
 }
@@ -230,11 +235,7 @@ fn definitions() -> BTreeMap<&'static str, &'static str> {
 
 fn cell_export(date: NaiveDate, c: RollupCellMs) -> CellExport {
     let minutes = c.into_rollup_cell();
-    let painted_min = minutes.ai_doing
-        + minutes.subagent
-        + minutes.ai_reasoning
-        + minutes.typing
-        + minutes.reviewing;
+    let painted_min = minutes.painted();
     CellExport {
         date: date.format("%Y-%m-%d").to_string(),
         ai_doing_ms: c.ai_doing_ms,
@@ -278,22 +279,9 @@ pub fn build_export(
                 .zip(p.cells.iter())
                 .map(|(d, c)| cell_export(*d, *c))
                 .collect();
-            let week_total_min = cells
-                .iter()
-                .map(|c| c.minutes.ai_doing + c.minutes.subagent + c.minutes.ai_reasoning)
-                .sum();
-            let ai_family_ms = p
-                .cells
-                .iter()
-                .map(|c| c.ai_doing_ms + c.subagent_ms + c.ai_reasoning_ms)
-                .sum();
-            let painted_non_away_ms = p
-                .cells
-                .iter()
-                .map(|c| {
-                    c.ai_doing_ms + c.subagent_ms + c.ai_reasoning_ms + c.typing_ms + c.reviewing_ms
-                })
-                .sum();
+            let week_total_min = cells.iter().map(|c| c.minutes.ai_family()).sum();
+            let ai_family_ms = p.cells.iter().map(RollupCellMs::ai_family_ms).sum();
+            let painted_non_away_ms = p.cells.iter().map(RollupCellMs::painted_ms).sum();
             ProjectExport {
                 id: p.alias.clone(),
                 alias: p.alias,
@@ -348,10 +336,10 @@ fn export_json(rest: &[String], db: &Path) -> Result<Option<String>, ExportError
         Local::now().to_rfc3339(),
         iana_time_zone::get_timezone().ok(),
     )
-    .map_err(ExportError::Db)?;
+    .map_err(ExportError::Internal)?;
     serde_json::to_string_pretty(&export)
         .map(Some)
-        .map_err(|e| ExportError::Db(format!("could not serialize the export: {e}")))
+        .map_err(|e| ExportError::Internal(format!("could not serialize the export: {e}")))
 }
 
 /// Run the subcommand: `rest` is the arguments after `export-week`, `db` the analytics DB.
@@ -373,6 +361,7 @@ pub fn run_cli(rest: &[String], db: &Path, out: &mut dyn Write, err: &mut dyn Wr
         Err(e) => {
             let msg = match &e {
                 ExportError::Usage(m) | ExportError::Db(m) => m.clone(),
+                ExportError::Internal(m) => format!("internal error: {m}"),
             };
             let _ = writeln!(err, "claudesk export-week: {msg}");
             e.exit_code()

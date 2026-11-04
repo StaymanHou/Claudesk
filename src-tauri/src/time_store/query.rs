@@ -178,7 +178,80 @@ pub(crate) struct RollupCellMs {
     pub(crate) prompts: i64,
 }
 
+/// The AI-execution family: the Week view's `WEEK TOTAL` badge (`weekMath.ts`
+/// `projectWeekActive`). Mirrors `kinds.ts` `AI_KINDS`; a test reads that file to hold the two
+/// together (`family_sums_match_the_kind_lists_in_kinds_ts`).
+pub(crate) const AI_FAMILY: [Kind; 3] = [Kind::AiDoing, Kind::Subagent, Kind::AiReasoning];
+
+/// Every painted kind, i.e. all but `away`: the Week view's day label (`weekMath.ts`
+/// `cellTotal`). Mirrors `kinds.ts` `RENDER_ORDER` minus `away`, held by the same test.
+pub(crate) const PAINTED: [Kind; 5] = [
+    Kind::AiDoing,
+    Kind::Subagent,
+    Kind::AiReasoning,
+    Kind::Typing,
+    Kind::Reviewing,
+];
+
+/// The Week view's ROW-ORDER kinds (see [`week_exec_minutes`]). Deliberately NOT
+/// [`AI_FAMILY`]: the order leaves out `ai_reasoning`.
+const EXEC: [Kind; 2] = [Kind::AiDoing, Kind::Subagent];
+
+impl RollupCell {
+    /// One kind's rounded minutes.
+    pub(crate) fn minutes_of(&self, kind: Kind) -> i64 {
+        match kind {
+            Kind::AiDoing => self.ai_doing,
+            Kind::Subagent => self.subagent,
+            Kind::AiReasoning => self.ai_reasoning,
+            Kind::Typing => self.typing,
+            Kind::Reviewing => self.reviewing,
+            Kind::Away => self.away,
+        }
+    }
+
+    fn sum_of(&self, kinds: &[Kind]) -> i64 {
+        kinds.iter().map(|&k| self.minutes_of(k)).sum()
+    }
+
+    /// [`AI_FAMILY`] minutes in this cell, summed from the rounded kinds as the view does.
+    pub(crate) fn ai_family(&self) -> i64 {
+        self.sum_of(&AI_FAMILY)
+    }
+
+    /// [`PAINTED`] minutes in this cell: the Week view's day label.
+    pub(crate) fn painted(&self) -> i64 {
+        self.sum_of(&PAINTED)
+    }
+}
+
 impl RollupCellMs {
+    /// One kind's exact milliseconds.
+    pub(crate) fn ms_of(&self, kind: Kind) -> i64 {
+        match kind {
+            Kind::AiDoing => self.ai_doing_ms,
+            Kind::Subagent => self.subagent_ms,
+            Kind::AiReasoning => self.ai_reasoning_ms,
+            Kind::Typing => self.typing_ms,
+            Kind::Reviewing => self.reviewing_ms,
+            Kind::Away => self.away_ms,
+        }
+    }
+
+    fn sum_of(&self, kinds: &[Kind]) -> i64 {
+        kinds.iter().map(|&k| self.ms_of(k)).sum()
+    }
+
+    /// [`AI_FAMILY`] at exact milliseconds.
+    pub(crate) fn ai_family_ms(&self) -> i64 {
+        self.sum_of(&AI_FAMILY)
+    }
+
+    /// [`PAINTED`] at exact milliseconds.
+    pub(crate) fn painted_ms(&self) -> i64 {
+        self.sum_of(&PAINTED)
+    }
+
     pub(crate) fn into_rollup_cell(self) -> RollupCell {
         RollupCell {
             ai_doing: ms_to_minutes_round(self.ai_doing_ms),
@@ -459,9 +532,9 @@ const UNKNOWN_SID: &str = "<unknown>";
 ///
 /// ⚠️ **Keyed by LIFE, not by bare id.** Each id is expanded through
 /// [`crate::reclassify::split_lives`], so a session resumed under the same id yields one bucket
-/// per life: life 1 keeps the bare id, life N≥2 is keyed `<id>~N` ([`LIFE_SEP`]). Every builder
-/// reading this therefore tiles, caps and totals each life on its own.
-fn group_events_by_sid(events: &[EventRow]) -> HashMap<String, Vec<EventRow>> {
+/// per life ([`LifeKey`]). Every builder reading this therefore tiles, caps and totals each
+/// life on its own.
+fn group_events_by_sid(events: &[EventRow]) -> HashMap<LifeKey, Vec<EventRow>> {
     let mut by_sid: HashMap<String, Vec<EventRow>> = HashMap::new();
     for e in events {
         let sid = if e.session_id.is_empty() {
@@ -471,13 +544,12 @@ fn group_events_by_sid(events: &[EventRow]) -> HashMap<String, Vec<EventRow>> {
         };
         by_sid.entry(sid).or_default().push(e.clone());
     }
-    let mut by_life: HashMap<String, Vec<EventRow>> = HashMap::with_capacity(by_sid.len());
+    let mut by_life: HashMap<LifeKey, Vec<EventRow>> = HashMap::with_capacity(by_sid.len());
     for (sid, sid_events) in by_sid {
         for (i, life) in split_lives(sid_events).into_iter().enumerate() {
-            let key = if i == 0 {
-                sid.clone()
-            } else {
-                format!("{sid}{LIFE_SEP}{}", i + 1)
+            let key = LifeKey {
+                sid: sid.clone(),
+                life: i + 1,
             };
             by_life.insert(key, life);
         }
@@ -485,22 +557,29 @@ fn group_events_by_sid(events: &[EventRow]) -> HashMap<String, Vec<EventRow>> {
     by_life
 }
 
-/// Separates a session id from its life number in a [`group_events_by_sid`] key and in the
-/// payload's session `id`. ⚠️ Must never be `:` — the frontend's seg id is
-/// `` `${session.id}:${segIndex}` `` (`sidePanelMath.ts`).
+/// One life of one session: a [`group_events_by_sid`] key. The life number is carried BESIDE
+/// the id, never encoded into it, so no raw id can be mistaken for a later life.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+struct LifeKey {
+    /// The raw session id (or [`UNKNOWN_SID`]).
+    sid: String,
+    /// 1-based: life 1 is the session as first started, N≥2 its Nth resume under the same id.
+    life: usize,
+}
+
+/// Separates the short id from the life number in the payload's session `id` (display only).
+/// ⚠️ Must never be `:` — the frontend's seg id is `` `${session.id}:${segIndex}` ``
+/// (`sidePanelMath.ts`).
 const LIFE_SEP: char = '~';
 
-/// The payload `id` for a [`group_events_by_sid`] key: the id's first 8 chars, plus the life
-/// suffix for life N≥2 so the lives of one session never share an id.
-fn session_display_id(key: &str) -> String {
-    let (base, life) = match key.rsplit_once(LIFE_SEP) {
-        Some((base, n)) if n.parse::<usize>().is_ok() => (base, Some(n)),
-        _ => (key, None),
-    };
-    let short: String = base.chars().take(8).collect();
-    match life {
-        Some(n) => format!("{short}{LIFE_SEP}{n}"),
-        None => short,
+/// The payload `id` for a [`LifeKey`]: the id's first 8 chars, plus the life suffix for life
+/// N≥2 so the lives of one session never share an id.
+fn session_display_id(key: &LifeKey) -> String {
+    let short: String = key.sid.chars().take(8).collect();
+    if key.life >= 2 {
+        format!("{short}{LIFE_SEP}{}", key.life)
+    } else {
+        short
     }
 }
 
@@ -594,7 +673,7 @@ fn segments_for_window(events: &[EventRow], window_start: i64, window_end: i64) 
 /// Build one [`SessionPayload`] from one session's events, in local-day coordinates.
 /// Returns `None` if the session has no time span (no events, or a zero-width window).
 fn build_viz_session(
-    sid: &str,
+    key: &LifeKey,
     sid_events: &[EventRow],
     day_start_ms: i64,
 ) -> Option<SessionPayload> {
@@ -656,7 +735,7 @@ fn build_viz_session(
     }
 
     Some(SessionPayload {
-        id: session_display_id(sid),
+        id: session_display_id(key),
         start: ts_to_minutes(s_start_ts, day_start_ms),
         end: ts_to_minutes(s_end_ts, day_start_ms),
         prompts,
@@ -666,9 +745,10 @@ fn build_viz_session(
     })
 }
 
-/// The minutes credited to a project for sort ordering: AI-execution + subagent time
-/// (the "was the machine working for this project" signal — matches `viz_data`'s
-/// active+subagent sort key, remapped to the AI family).
+/// The minutes credited to a project for the DAY view's sort ordering: the whole AI family
+/// (`ai_doing + subagent + ai_reasoning`, the "was the machine working for this project"
+/// signal, remapped from `viz_data`'s active+subagent key). ⚠️ The Week view's order is a
+/// different key that leaves out `ai_reasoning` ([`week_exec_minutes`]).
 fn project_ai_minutes(p: &ProjectPayload) -> i64 {
     // Sum TRUE ms duration (not the minute-quantized `end - start`, which zeroes
     // sub-minute AI work), then convert the total to minutes once.
@@ -722,7 +802,7 @@ pub fn build_day(
     let mut by_alias: HashMap<String, AliasBucket> = HashMap::new();
 
     // Deterministic session iteration order (BTreeMap-like: sort sids).
-    let mut sids: Vec<&String> = events_by_sid.keys().collect();
+    let mut sids: Vec<&LifeKey> = events_by_sid.keys().collect();
     sids.sort();
     for sid in sids {
         let sid_events = &events_by_sid[sid];
@@ -1012,17 +1092,22 @@ pub(crate) struct WeekMs {
     pub(crate) label: String,
     /// 7 day labels (`"MON 11"` …).
     pub(crate) day_labels: Vec<String>,
-    /// Projects in the Week view's own order: AI-family minutes desc, then alias asc.
+    /// Projects in the Week view's own order: [`week_exec_minutes`] desc, then alias asc.
     pub(crate) projects: Vec<WeekProjectMs>,
 }
 
-/// The Week view's sort key: AI-family (`ai_doing + subagent`) minutes, summed over the
-/// ROUNDED cells — the `WEEK TOTAL` badge's figure — so the export and the view agree on order.
-fn week_ai_minutes(cells: &[RollupCellMs]) -> i64 {
+/// The Week view's ROW-ORDER key: [`EXEC`] (`ai_doing + subagent`) minutes, summed over the
+/// ROUNDED cells. The view renders projects in this backend order, so the export and the view
+/// agree on order by construction.
+///
+/// ⚠️ This is NOT the `WEEK TOTAL` badge, which also counts `ai_reasoning`
+/// ([`RollupCell::ai_family`]). The export publishes this order to Neo
+/// (`definitions()["row_order"]` in `export.rs`), so changing the weighting changes a contract,
+/// not just a sort.
+fn week_exec_minutes(cells: &[RollupCellMs]) -> i64 {
     cells
         .iter()
-        .map(|c| c.into_rollup_cell())
-        .map(|c| c.ai_doing + c.subagent)
+        .map(|c| c.into_rollup_cell().sum_of(&EXEC))
         .sum()
 }
 
@@ -1081,8 +1166,8 @@ pub(crate) fn build_week_ms(
         .map(|(alias, (path, cells))| WeekProjectMs { alias, path, cells })
         .collect();
     projects.sort_by(|a, b| {
-        week_ai_minutes(&b.cells)
-            .cmp(&week_ai_minutes(&a.cells))
+        week_exec_minutes(&b.cells)
+            .cmp(&week_exec_minutes(&a.cells))
             .then_with(|| a.alias.cmp(&b.alias))
     });
 
@@ -1194,7 +1279,7 @@ fn capped_events(events: &[EventRow]) -> Vec<EventRow> {
     let by_sid = group_events_by_sid(events);
     let mut out: Vec<EventRow> = Vec::with_capacity(events.len());
     // Deterministic order (sort sids) so any downstream ordering is stable.
-    let mut sids: Vec<&String> = by_sid.keys().collect();
+    let mut sids: Vec<&LifeKey> = by_sid.keys().collect();
     sids.sort();
     for sid in sids {
         let sid_events = &by_sid[sid];

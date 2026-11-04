@@ -1635,3 +1635,133 @@ fn time_analytics_result_compare_tag_serializes() {
         "result tagged compare; got {json}"
     );
 }
+
+/// Two lives of `sid` on day `d`: one at `start`, resumed under the same id 20 minutes later.
+fn two_lives(d: NaiveDate, sid: &str, cwd: &str, start: i64) -> Vec<EventRow> {
+    let mut out = Vec::new();
+    for (life, base) in [(1, start), (2, start + 20)] {
+        let tuid = format!("{sid}-t{life}");
+        out.extend([
+            ev(at_minute(d, base), sid, cwd, "SessionStart"),
+            ev(at_minute(d, base + 1), sid, cwd, "UserPromptSubmit"),
+            with_tool(
+                ev(at_minute(d, base + 2), sid, cwd, "PreToolUse"),
+                "Bash",
+                &tuid,
+            ),
+            with_tool(
+                ev(at_minute(d, base + 5), sid, cwd, "PostToolUse"),
+                "Bash",
+                &tuid,
+            ),
+            ev(at_minute(d, base + 6), sid, cwd, "Stop"),
+            ev(at_minute(d, base + 8), sid, cwd, "SessionEnd"),
+        ]);
+    }
+    out
+}
+
+/// The session ids `build_day` publishes, in start order.
+fn day_session_ids(d: NaiveDate, events: &[EventRow]) -> Vec<String> {
+    let payload = build_day(d, events, &no_names());
+    let mut sessions: Vec<_> = payload
+        .projects
+        .iter()
+        .flat_map(|p| p.sessions.iter())
+        .collect();
+    sessions.sort_by_key(|s| s.start);
+    sessions.iter().map(|s| s.id.clone()).collect()
+}
+
+#[test]
+fn display_ids_of_sids_with_dashes_keep_their_shape_across_lives() {
+    // A characterization pin: the frontend's seg id is `${session.id}:${segIndex}`
+    // (`sidePanelMath.ts`), so the display id of a real-shaped sid must not change. Real sids
+    // are UUIDs or native `cc-N`; both carry `-`, and `cc-N` carries it inside the first 8.
+    let d = day(2026, 5, 13);
+    let mut events = two_lives(d, "8f3a2c1e-9b7d-4e2a-a1b2-c3d4e5f60718", "/repo/p", 600);
+    events.extend(two_lives(d, "cc-12", "/repo/p", 700));
+    events.extend(two_lives(d, "a1-b2-c3-d4e5", "/repo/p", 800));
+    assert_eq!(
+        day_session_ids(d, &events),
+        [
+            "8f3a2c1e",
+            "8f3a2c1e~2",
+            "cc-12",
+            "cc-12~2",
+            "a1-b2-c3",
+            "a1-b2-c3~2"
+        ]
+    );
+}
+
+#[test]
+fn a_raw_sid_that_already_ends_in_a_life_suffix_is_not_read_as_a_later_life() {
+    // The life number is carried beside the sid, never parsed back out of a string. A raw sid
+    // ending in `~<digits>` used to be re-split by `rsplit_once`, so this ONE-life session was
+    // shown as `abcdefgh~3`: the display id of a third life that does not exist.
+    let d = day(2026, 5, 13);
+    let sid = "abcdefghij~3";
+    let events = [
+        ev(at_minute(d, 600), sid, "/repo/p", "SessionStart"),
+        ev(at_minute(d, 601), sid, "/repo/p", "UserPromptSubmit"),
+        ev(at_minute(d, 604), sid, "/repo/p", "Stop"),
+    ];
+    assert_eq!(day_session_ids(d, &events), ["abcdefgh"]);
+}
+
+#[test]
+fn the_kinds_ts_reader_finds_the_lists_the_week_view_uses() {
+    // Positive control for the reader below: a vacuous parse would make the sum test pass on
+    // an empty list.
+    use crate::time_store::kinds_ts::{kind_list, painted_kinds};
+    assert_eq!(kind_list("AI_KINDS").len(), 3);
+    assert_eq!(kind_list("RENDER_ORDER").len(), 6);
+    assert_eq!(painted_kinds().len(), 5);
+}
+
+#[test]
+fn family_sums_match_the_kind_lists_in_kinds_ts() {
+    // The expected sums are built from `kinds.ts` (`AI_KINDS`, `RENDER_ORDER` minus `away`),
+    // never from a Rust list, so a drift on EITHER side fails here. Each kind carries a
+    // distinct power of two, so every subset of kinds has a different sum.
+    use crate::time_store::kinds_ts::{kind_list, painted_kinds};
+    let ms = RollupCellMs {
+        ai_doing_ms: 1,
+        subagent_ms: 2,
+        ai_reasoning_ms: 4,
+        typing_ms: 8,
+        reviewing_ms: 16,
+        away_ms: 32,
+        prompts: 0,
+    };
+    let ts_sum_ms = |kinds: Vec<Kind>| kinds.into_iter().map(|k| ms.ms_of(k)).sum::<i64>();
+    assert_eq!(ms.ai_family_ms(), ts_sum_ms(kind_list("AI_KINDS")));
+    assert_eq!(ms.painted_ms(), ts_sum_ms(painted_kinds()));
+
+    let min = RollupCell {
+        ai_doing: 1,
+        subagent: 2,
+        ai_reasoning: 4,
+        typing: 8,
+        reviewing: 16,
+        away: 32,
+        prompts: 0,
+    };
+    let ts_sum_min = |kinds: Vec<Kind>| kinds.into_iter().map(|k| min.minutes_of(k)).sum::<i64>();
+    assert_eq!(min.ai_family(), ts_sum_min(kind_list("AI_KINDS")));
+    assert_eq!(min.painted(), ts_sum_min(painted_kinds()));
+
+    // The accessors themselves: each kind reads its own field (a swapped arm would make the
+    // TS-side sums above wrong in the same way as the method under test).
+    for (k, want) in [
+        (Kind::AiDoing, 1),
+        (Kind::Subagent, 2),
+        (Kind::AiReasoning, 4),
+        (Kind::Typing, 8),
+        (Kind::Reviewing, 16),
+        (Kind::Away, 32),
+    ] {
+        assert_eq!((ms.ms_of(k), min.minutes_of(k)), (want, want), "{k:?}");
+    }
+}
