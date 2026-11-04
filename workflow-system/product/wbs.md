@@ -243,7 +243,7 @@ the 29 scorable records the +1 margin rested on?
   - Measure today's order for **A** (fresh launch) and **B** (some workspaces already open).
   - Present orders with a recommendation (mockup if the difference is spatial). Build what the
     operator picks.
-- [x] 5.8 ⚠️ **Claudesk half done; `/session-restore` live check PASSED 2026-11-03; the `/session-start` half is CARRIED** (mccc Phase 2–3 not landed; the entry stays OPEN) — **Skip the drive-mode menu under a Claudesk mode; make the menu point-and-select**
+- [x] 5.8 ✅ **DONE 2026-11-04: both live-check halves PASSED** (`/session-restore` 2026-11-03; `/session-start` + the `/session-handoff` marker 2026-11-04, after mccc shipped Phase 2–3; results in `workflow-system/outbox/HANDOFF-to-mccc-2026-11-04-drive-mode-picker-session-start-check.md`; the SURFACE is resolved) — **Skip the drive-mode menu under a Claudesk mode; make the menu point-and-select**
       (`SURFACE-2026-11-02-DRIVE-MODE-MENU-STILL-SHOWN-UNDER-A-CLAUDESK-MODE`; added by the operator
       2026-11-02). Mostly an mccc change:
   - Send one mccc inbox message: (a) use `AskUserQuestion` for the mode pick in `session-start` /
@@ -271,7 +271,7 @@ read-only synthetic tab (`SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE`).
       buffers keep the disk-conflict path.
 **Outcome (2026-11-02):** 6.1 ruled **hover-revealed buttons in the existing Find Results tab** (`Replace` per row, `Replace in file` per header; no new panel, no confirm; an empty field deletes). 6.2: `project_replace` takes an optional `kind`-tagged `scope` (`all` / `file` / `match`; absent = Replace All); the match scope re-checks the row's text + offset on disk and refuses as `StaleResult`; per-file and per-row replace match PER LINE like search (review-quality CRITICAL, fixed in the refactor). 6.3: every replace re-runs the search with the results' own query; a failure opens the ⌘⇧F overlay with "Replace failed: …". **Folded in (operator-reported):** app overlays draw above CodeMirror's find bar (`isolation: isolate` on `.editor-split`), and CodeMirror's find/replace fields no longer autocorrect (all three CM surfaces). Left open: Replace All's own whole-file matching (`SURFACE-2026-11-02-REPLACE-ALL-MATCHES-WHOLE-FILE-WHILE-SEARCH-MATCHES-PER-LINE`) + 4 MINORs → WP8.
 
-### WP7: Installed-build acceptance — close the supervisor's live checks
+### WP7: Installed-build acceptance — close the supervisor's live checks ✅ CLOSED 2026-11-04 (checks DEFERRED to dogfooding, not passed)
 
 **Milestone:** M16.5
 **Dependencies:** WP3, WP4, and **a `/release` containing them** (operator-run; never auto-invoked).
@@ -285,15 +285,22 @@ release. It was always an ordering choice, not a technical dependency (the skill
 sessions through the skill symlinks, not the Claudesk release).
 **Size:** S (calendar-bound)
 **Tasks:**
-- [ ] 7.1 On the installed build, verify the three on-screen checks
+- [x] 7.1 ⚠️ **DEFERRED to dogfooding, NOT passed (operator, 2026-11-04)** — on the installed
+      build, the three on-screen checks
       (`SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`):
   - a fire with its `⚙`
   - a fire while another app is focused
   - ⚠️ **Esc recovery**, which R-1's accepted cost rests on
-- [ ] 7.2 Also on the installed build: WP4's dot behavior, and the M16 hardened-runtime media
-      check if it has not been done yet.
-- [ ] 7.3 Close the SURFACE with a CHANGELOG line, or rewrite it to whatever stays unseen. ESCALATE
-      → no fire is the known straggler.
+  - Log evidence gathered instead: check 6 (adjudicator GUI PATH) PASSED on 8 installed verdicts;
+    0.8.1 has 0 plain fires so far; ESCALATE → no fire still unseen.
+- [x] 7.2 ⚠️ **DEFERRED to dogfooding, NOT passed (operator, 2026-11-04)** — WP4's dot behavior
+      (no `monitor`-type `Stop` has ever appeared in the installed log, so the artifact-watch-grey
+      rule is unexercised there) and the M16 hardened-runtime media check (0.8.1 is the first
+      installed build with the runtime flag; still unmeasured).
+- [x] 7.3 Rewrote the SURFACE to what stays unseen (2026-11-04). Side findings: the 0.8.0
+      `inject-failed` record is a benign race with a queued `/exit`; in-repo scratch workspaces
+      feed the operator's `claudesk` workspace foreign hook events (folded into
+      `SURFACE-2026-08-21-STATUS-PATH-KEYS-ON-CWD-ALONE-COLLAPSING-SESSIONS`, raised to medium).
 
 ### WP8: Code-quality paydown (LAST)
 
@@ -473,6 +480,3 @@ the alias pin loud). R027 stays SKIP. No mccc note is sent.
 **Evidence:** `workflow-system/product/wp2-adjudicator-set.json` (361 records; text only on
 claudesk rows) and `src/state/supervisor/__tests__/adjudicatorRemeasure.test.ts`, a replay with
 no live calls that pins the verdict.
-
-## Session Handoff — 2026-11-03 14:20
-Handed off. See `workflow-system/state/.session.md` to restore.

@@ -267,5 +267,6 @@ has focus. Variable-frame-rate frame-step is an open item
 
 - **Hardened runtime** for the media transport and player — a release-profile notarized build is
   unmeasured (the debug bundle was ad-hoc, linker-signed, no runtime flag). Deferred to `/release`.
-  Low risk: WebKit media is in-process, not a subprocess spawn.
+  Low risk: WebKit media is in-process, not a subprocess spawn. Still unmeasured on the installed 0.8.1, the first build with the runtime flag:
+  WP7 deferred it to dogfooding (operator, 2026-11-04).
 - **The `scripture-reading` dogfood review pass (AC-21)** — deferred by the operator 2026-10-20.

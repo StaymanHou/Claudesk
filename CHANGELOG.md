@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-04
+
+- **Backlog resolved:** SURFACE-2026-11-02-DRIVE-MODE-MENU-STILL-SHOWN-UNDER-A-CLAUDESK-MODE — mccc shipped the drive-mode picker, and a live check confirmed that `/session-start` and `/session-restore` skip the mode pick under a Claudesk mode, still ask through a select with no mode, and `/session-handoff` writes `drive_mode: from-claudesk`.
+- **Task closed:** M16.5 WP7 installed-build acceptance closed with its on-screen supervisor, dot and hardened-runtime media checks deferred to dogfooding by the operator (not passed); the installed logs showed the adjudicator's GUI PATH working, a 0.8.0 `inject-failed` record that was a benign race with a queued `/exit`, and in-repo scratch workspaces feeding foreign hook events to the `claudesk` workspace.
+- **Backlog resolved:** SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION (partial: check 6) — eight real adjudicator verdicts from Finder-launched installed builds show the supervisor's `claude -p` spawn resolves on a GUI PATH; the on-screen checks stay open.
+
 ## 2026-11-03
 
 - **Task closed:** The workspace header gained a one-click `clear` button that runs Claude Code's `/clear`, placed right before `restore` in the skill row; it is not workflow-gated, so it also shows alone in the header when workflow features are off.
