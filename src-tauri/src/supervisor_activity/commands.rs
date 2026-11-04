@@ -5,8 +5,8 @@
 //! on read.
 //!
 //! ⚠️ **Both commands are `async`.** A sync `#[tauri::command]` runs on the main thread, and the
-//! read can load up to two 5 MiB generations. `tests/sync_commands_do_not_block.rs` exempts
-//! async commands.
+//! read can load up to two 5 MiB generations. Each is listed in `ASYNC_COMMANDS` in
+//! `tests/sync_commands_do_not_block.rs`, which does not scan async bodies.
 
 use super::{activity_log, append, read_last};
 use crate::config_store::commands::resolve_data_dir;

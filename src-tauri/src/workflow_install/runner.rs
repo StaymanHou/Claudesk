@@ -43,9 +43,13 @@
 //! `Cleanup::RemovePartialClone` remains a decision the caller surfaces — acting on it would
 //! need a guard-approved target, which a failed install by definition lacks a record for).
 
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
+use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
+use std::time::{Duration, Instant};
 
 use thiserror::Error;
 
@@ -189,71 +193,209 @@ impl OutputSink for NullSink {
     fn line(&self, _line: &str) {}
 }
 
-/// Run one command, streaming stdout+stderr into `sink`, and return `(exit_code, combined)`.
+/// How long a `git clone` may run before its process group is killed.
 ///
-/// ## Delivery timing differs per stream — corrected 2026-07-29 (Phase 2 verify-self)
-/// **stdout is streamed line-by-line as it arrives; stderr is NOT.** stderr is drained on its own
-/// thread (to avoid the ~64KB pipe-buffer deadlock a flooding script would otherwise cause) and
-/// its contents are replayed to the sink *after* `wait()` returns. So a long `install.sh` shows
-/// stdout progress live, then its warnings arrive in one batch at the end.
+/// Every deadline here is generous on purpose: it exists only to end a true hang, so that the
+/// single-run lock cannot stay set until relaunch. A slow network must not trip it.
+pub const CLONE_DEADLINE: Duration = Duration::from_secs(600);
+/// How long `install.sh` may run.
+pub const INSTALL_DEADLINE: Duration = Duration::from_secs(600);
+/// How long the real `uninstall.sh` may run.
+pub const UNINSTALL_DEADLINE: Duration = Duration::from_secs(300);
+/// How long `uninstall.sh --dry-run` may run. It normally finishes in well under a second.
+pub const DRY_RUN_DEADLINE: Duration = Duration::from_secs(60);
+
+/// How long after the child exits to keep reading output that is still in flight. Past it, the
+/// process group is killed, because something the child left behind is holding a pipe open.
+const DRAIN_GRACE: Duration = Duration::from_millis(250);
+
+/// How often the wait loop checks the child and the clock while no output arrives.
+const POLL: Duration = Duration::from_millis(20);
+
+/// Which pipe a line came from.
+#[derive(Clone, Copy)]
+enum Stream {
+    Out,
+    Err,
+}
+
+/// Set on drop, so every return path of [`run_streaming`] tells its readers to stop.
+#[derive(Default)]
+struct StopOnDrop(Arc<AtomicBool>);
+
+impl Drop for StopOnDrop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+
+/// Read `pipe` line by line on its own thread and send each line down `tx`.
 ///
-/// This comment previously claimed "one interleaved transcript in the order things actually
-/// happened." That was **wrong**, and verify-self caught it. Both streams do reach the sink
-/// verbatim — which is the property the WP actually requires — but their *ordering* is not
-/// preserved relative to each other.
+/// ⚠️ The thread never stops reading while the child runs: a pipe nobody empties fills at 64 KB
+/// and the child then blocks on its own write. The channel is unbounded for the same reason.
+/// The thread ends at EOF, when the receiver is gone, or at the next line after `stop` is set.
+fn start_line_reader<R: Read + Send + 'static>(
+    pipe: Option<R>,
+    stream: Stream,
+    tx: mpsc::Sender<(Stream, String)>,
+    stop: &StopOnDrop,
+) -> std::io::Result<()> {
+    let stop = Arc::clone(&stop.0);
+    std::thread::Builder::new().spawn(move || {
+        let Some(pipe) = pipe else { return };
+        for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+            if stop.load(Ordering::SeqCst) {
+                break;
+            }
+            if tx.send((stream, line)).is_err() {
+                break;
+            }
+        }
+    })?;
+    Ok(())
+}
+
+/// SIGKILL the process group `pgid` (the child leads it, via `process_group(0)`).
 ///
-/// Left as-is rather than "fixed" into true interleaving: a single merged pipe would lose the
-/// separate-drain deadlock protection, and interleaving matters far less than it sounds for this
-/// script (`install.sh`'s stderr is `set -euo pipefail` failure output, which lands at the end
-/// anyway because the script dies there). Revisit only if a real user reports confusion.
+/// Works after the leader has been reaped too: a group lives while any member does, and the
+/// members still alive are exactly what this is for.
+fn kill_group(pgid: u32) {
+    if let Ok(pgid) = libc::pid_t::try_from(pgid) {
+        // SAFETY: a negative pid addresses the process group `pgid`. A failure (the group is
+        // already gone) is harmless.
+        unsafe {
+            libc::kill(-pgid, libc::SIGKILL);
+        }
+    }
+}
+
+/// Kill the child's whole group, then reap the child.
+fn kill_and_reap(child: &mut Child) {
+    kill_group(child.id());
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Run one command, streaming its output into `sink`, and return `(exit_code, combined)`.
+///
+/// ## It always returns by `deadline`
+/// The child runs in its own process group. If it is still running at `deadline`, the whole
+/// group is SIGKILLed and the result is exit code `-1` with a `timed out` note appended to the
+/// output (and sent to the sink), so the callers' existing non-zero-exit errors carry it.
+///
+/// If the child exits but something it started still holds a pipe open, EOF never comes. The
+/// output is read for [`DRAIN_GRACE`] more, then the group is killed and the run returns with
+/// the child's own exit code.
+///
+/// Before this, the function read stdout until EOF with no deadline. A child that never exited,
+/// or a grandchild holding the pipe, hung the run forever, and the single-run lock stayed set
+/// until relaunch (`SURFACE-2026-09-23-QUALITY-DRY-RUN-ASYNC-ATTR-STILL-BLOCKS-A-RUNTIME-WORKER`).
+///
+/// ## Delivery timing differs per stream
+/// stdout reaches the sink line by line as it arrives. stderr is buffered and replayed to the
+/// sink after the child exits, so a long `install.sh` shows its progress live and its warnings
+/// in one batch at the end. Both streams reach the sink verbatim, but their relative order is
+/// not kept. That is deliberate: `install.sh`'s stderr is `set -euo pipefail` failure output,
+/// which lands at the end anyway. Revisit only if a real user reports confusion.
 fn run_streaming(
     program: &str,
     args: &[String],
     cwd: Option<&Path>,
     sink: &dyn OutputSink,
+    deadline: Duration,
 ) -> std::io::Result<(i32, String)> {
+    let started = Instant::now();
     let mut cmd = Command::new(program);
     cmd.args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .stdin(Stdio::null());
+        .stdin(Stdio::null())
+        .process_group(0);
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
 
     let mut child = cmd.spawn()?;
-
-    // Drain stderr on a thread so a chatty stderr cannot deadlock a full pipe buffer while we
-    // block reading stdout. Both feed the same sink.
-    let stderr_lines = child.stderr.take().map(|err| {
-        std::thread::spawn(move || {
-            let mut collected = Vec::new();
-            for line in BufReader::new(err).lines().map_while(Result::ok) {
-                collected.push(line);
-            }
-            collected
-        })
-    });
+    let stop = StopOnDrop::default();
+    let (tx, rx) = mpsc::channel();
+    // A reader that fails to start must not leave the child running.
+    let readers = start_line_reader(child.stdout.take(), Stream::Out, tx.clone(), &stop)
+        .and_then(|()| start_line_reader(child.stderr.take(), Stream::Err, tx, &stop));
+    if let Err(e) = readers {
+        kill_and_reap(&mut child);
+        return Err(e);
+    }
 
     let mut combined = Vec::new();
-    if let Some(out) = child.stdout.take() {
-        for line in BufReader::new(out).lines().map_while(Result::ok) {
-            sink.line(&line);
-            combined.push(line);
-        }
-    }
+    let mut stderr = Vec::new();
+    let mut readers_done = false;
+    let mut exited: Option<(std::process::ExitStatus, Instant)> = None;
 
-    let status = child.wait()?;
-
-    if let Some(handle) = stderr_lines {
-        if let Ok(lines) = handle.join() {
-            for line in lines {
-                sink.line(&line);
-                combined.push(line);
+    // `None` means the deadline passed and the group was killed.
+    let status: Option<std::process::ExitStatus> = loop {
+        if readers_done {
+            std::thread::sleep(POLL);
+        } else {
+            match rx.recv_timeout(POLL) {
+                Ok((Stream::Out, line)) => {
+                    sink.line(&line);
+                    combined.push(line);
+                }
+                Ok((Stream::Err, line)) => stderr.push(line),
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => readers_done = true,
             }
         }
-    }
 
+        if exited.is_none() {
+            match child.try_wait() {
+                Ok(Some(status)) => exited = Some((status, Instant::now() + DRAIN_GRACE)),
+                Ok(None) => {}
+                Err(e) => {
+                    kill_and_reap(&mut child);
+                    return Err(e);
+                }
+            }
+        }
+
+        match exited {
+            Some((status, _)) if readers_done => break Some(status),
+            Some((status, grace_end)) if Instant::now() >= grace_end => {
+                // The child is gone but a pipe is still held: kill what it left behind.
+                kill_group(child.id());
+                break Some(status);
+            }
+            None if started.elapsed() >= deadline => {
+                kill_and_reap(&mut child);
+                // The readers end once the group is dead; keep the lines they already sent.
+                while let Ok((stream, line)) = rx.try_recv() {
+                    match stream {
+                        Stream::Out => {
+                            sink.line(&line);
+                            combined.push(line);
+                        }
+                        Stream::Err => stderr.push(line),
+                    }
+                }
+                break None;
+            }
+            _ => {}
+        }
+    };
+
+    for line in stderr {
+        sink.line(&line);
+        combined.push(line);
+    }
+    let Some(status) = status else {
+        let note = format!(
+            "[timed out after {}s; the process group was killed]",
+            deadline.as_secs()
+        );
+        sink.line(&note);
+        combined.push(note);
+        return Ok((-1, combined.join("\n")));
+    };
     Ok((status.code().unwrap_or(-1), combined.join("\n")))
 }
 
@@ -281,7 +423,7 @@ pub fn run_install(
 
     // ── 1. Clone ────────────────────────────────────────────────────────────────────
     let (program, args) = clone_command(url, dest);
-    let (code, output) = run_streaming(&program, &args, None, sink)
+    let (code, output) = run_streaming(&program, &args, None, sink, CLONE_DEADLINE)
         .map_err(|e| InstallError::GitUnavailable(e.to_string()))?;
     if code != 0 {
         return Err(InstallError::CloneFailed { code, output });
@@ -317,7 +459,7 @@ pub fn run_install(
     }
 
     let (program, args) = install_command(dest);
-    let (code, output) = run_streaming(&program, &args, Some(dest), sink)
+    let (code, output) = run_streaming(&program, &args, Some(dest), sink, INSTALL_DEADLINE)
         .map_err(|e| InstallError::InstallUnavailable(e.to_string()))?;
     if code != 0 {
         return Err(InstallError::InstallFailed { code, output });
@@ -427,8 +569,14 @@ pub fn run_dry_run(
     sink: &dyn OutputSink,
 ) -> Result<String, UninstallError> {
     let (program, args) = dry_run_command(target);
-    let (code, output) = run_streaming(&program, &args, Some(target.clone_dir()), sink)
-        .map_err(|e| UninstallError::ScriptUnavailable(e.to_string()))?;
+    let (code, output) = run_streaming(
+        &program,
+        &args,
+        Some(target.clone_dir()),
+        sink,
+        DRY_RUN_DEADLINE,
+    )
+    .map_err(|e| UninstallError::ScriptUnavailable(e.to_string()))?;
     if code != 0 {
         return Err(UninstallError::ScriptFailed { code, output });
     }
@@ -460,8 +608,14 @@ pub fn run_uninstall(
 
     // ── 1. The script — the substrate-editing half, with its own into-repo-only guards ──
     let (program, args) = uninstall_command(target);
-    let (code, output) = run_streaming(&program, &args, Some(target.clone_dir()), sink)
-        .map_err(|e| UninstallError::ScriptUnavailable(e.to_string()))?;
+    let (code, output) = run_streaming(
+        &program,
+        &args,
+        Some(target.clone_dir()),
+        sink,
+        UNINSTALL_DEADLINE,
+    )
+    .map_err(|e| UninstallError::ScriptUnavailable(e.to_string()))?;
     if code != 0 {
         return Err(UninstallError::ScriptFailed { code, output });
     }
@@ -1165,6 +1319,151 @@ mod tests {
         let lines = sink.lines();
         assert!(lines.iter().any(|l| l == "to-stdout"), "got {lines:?}");
         assert!(lines.iter().any(|l| l == "to-stderr"), "got {lines:?}");
+    }
+
+    // ─── Paydown 2026-11-04 WP4: `run_streaming` always returns ─────────────────────────
+
+    /// Kills every PID a hang script wrote to its pid file, so a failing test leaves no
+    /// `sleep 600` behind.
+    struct KillPidsOnDrop(std::path::PathBuf);
+
+    impl KillPidsOnDrop {
+        fn pids(&self) -> Vec<libc::pid_t> {
+            std::fs::read_to_string(&self.0)
+                .unwrap_or_default()
+                .split_whitespace()
+                .filter_map(|p| p.parse().ok())
+                .collect()
+        }
+    }
+
+    impl Drop for KillPidsOnDrop {
+        fn drop(&mut self) {
+            for pid in self.pids() {
+                // SAFETY: signalling a PID this test's own script recorded.
+                unsafe {
+                    libc::kill(pid, libc::SIGKILL);
+                }
+            }
+        }
+    }
+
+    /// True once `pid` is gone. Polls briefly, because a killed orphan is reaped by launchd
+    /// asynchronously and reads as alive (a zombie) for a moment.
+    fn is_dead(pid: libc::pid_t) -> bool {
+        let until = Instant::now() + Duration::from_secs(2);
+        loop {
+            // SAFETY: signal 0 only checks that the process exists.
+            if unsafe { libc::kill(pid, 0) } != 0 {
+                return true;
+            }
+            if Instant::now() >= until {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// Run `script` under `run_streaming` on a worker thread, behind an outer watchdog, so a
+    /// regression FAILS the test instead of hanging the whole suite.
+    fn run_script_with_watchdog(
+        script: &str,
+        deadline: Duration,
+    ) -> ((i32, String), Vec<String>, Duration) {
+        let script = script.to_string();
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let sink = CollectingSink::new();
+            let start = Instant::now();
+            let result = run_streaming("/bin/sh", &["-c".into(), script], None, &sink, deadline);
+            let _ = tx.send((result, sink.lines(), start.elapsed()));
+        });
+        let (result, lines, elapsed) = rx
+            .recv_timeout(deadline + Duration::from_secs(10))
+            .expect("run_streaming did not return: the run (and the single-run lock) is wedged");
+        (result.expect("the script spawns"), lines, elapsed)
+    }
+
+    #[test]
+    fn a_child_that_never_exits_is_group_killed_at_the_deadline() {
+        // The wedge: a child that never exits, with a grandchild holding stdout too. Before the
+        // fix `run_streaming` read to EOF with no deadline, so this never returned and the
+        // install lock stayed set until relaunch.
+        let dir = tempfile::TempDir::new().unwrap();
+        let pids = KillPidsOnDrop(dir.path().join("pids"));
+        let script = format!(
+            "sleep 600 & echo $! >> '{p}'; echo $$ >> '{p}'; echo before; exec sleep 600",
+            p = pids.0.display()
+        );
+
+        let ((code, output), lines, elapsed) =
+            run_script_with_watchdog(&script, Duration::from_secs(1));
+
+        assert!(elapsed < Duration::from_secs(5), "took {elapsed:?}");
+        assert_eq!(code, -1, "a timeout reports as exit -1");
+        assert!(output.contains("timed out"), "got {output:?}");
+        assert!(
+            lines.iter().any(|l| l.contains("timed out")),
+            "the user must see why the run ended: {lines:?}"
+        );
+        let recorded = pids.pids();
+        assert_eq!(
+            recorded.len(),
+            2,
+            "the script records both PIDs: {recorded:?}"
+        );
+        for pid in recorded {
+            assert!(
+                is_dead(pid),
+                "PID {pid} outlived the deadline: the process group was not killed"
+            );
+        }
+    }
+
+    #[test]
+    fn a_grandchild_holding_stdout_after_the_child_exits_does_not_wedge_the_run() {
+        // The child exits, but `sleep 600 &` inherited the stdout pipe, so EOF never comes.
+        let dir = tempfile::TempDir::new().unwrap();
+        let pids = KillPidsOnDrop(dir.path().join("pids"));
+        let script = format!(
+            "sleep 600 & echo $! >> '{p}'; echo done; exit 3",
+            p = pids.0.display()
+        );
+
+        let ((code, output), _, elapsed) =
+            run_script_with_watchdog(&script, Duration::from_secs(60));
+
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "returned only after {elapsed:?}: it waited for an EOF the grandchild withholds"
+        );
+        assert_eq!(code, 3, "the child's own exit code is kept");
+        assert!(!output.contains("timed out"), "not a timeout: {output:?}");
+        let recorded = pids.pids();
+        assert_eq!(recorded.len(), 1, "got {recorded:?}");
+        assert!(
+            is_dead(recorded[0]),
+            "the grandchild holding the pipe was left running"
+        );
+    }
+
+    #[test]
+    fn output_produced_before_the_deadline_is_kept() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let _pids = KillPidsOnDrop(dir.path().join("pids"));
+        let script = format!(
+            "echo $$ >> '{}'; echo out-line; echo err-line >&2; exec sleep 600",
+            _pids.0.display()
+        );
+        let ((code, output), lines, _) = run_script_with_watchdog(&script, Duration::from_secs(1));
+        assert_eq!(code, -1);
+        for want in ["out-line", "err-line"] {
+            assert!(
+                lines.iter().any(|l| l == want),
+                "sink lost {want}: {lines:?}"
+            );
+            assert!(output.contains(want), "output lost {want}: {output:?}");
+        }
     }
 
     // ─── WP3.5b Phase 2: the uninstall engine, against the sandbox ─────────────────────

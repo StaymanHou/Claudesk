@@ -445,6 +445,3 @@ R3. `08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED` (BL) and its roster.
    findings named in §Scope.
 3. Rewrite anything left PARTIAL to its residual (WP11's two entries are expected).
 4. Tick `wbs.md` WP8 tasks 8.3 and the WP heading, then **delete this file.**
-
-## Session Handoff — 2026-11-04 10:42
-Handed off. See `workflow-system/state/.session.md` to restore.

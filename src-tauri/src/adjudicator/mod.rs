@@ -58,7 +58,7 @@ impl std::fmt::Display for AdjudicateError {
                 stderr.trim()
             ),
             Self::Spawn(e) => write!(f, "claude -p could not be spawned: {e}"),
-            // ⚠️ Must not contain "timed out": the TS diagnostic classifies on that phrase.
+            // ⚠️ Must not match the TS classifier `/timed? ?out/i` ("timeout", "time out", …).
             Self::OutputTooLarge(n) => write!(f, "claude -p wrote more than {n} bytes of output"),
         }
     }
@@ -344,15 +344,26 @@ mod tests {
         // but a reworded message would silently mislabel every timeout as a generic error.
         let msg = AdjudicateError::TimedOut(20_000).to_string();
         assert!(
-            regex_lite_timed_out(&msg),
+            ts_classifies_as_timeout(&msg),
             "message must match the TS classifier: {msg}"
         );
     }
 
-    /// Mirrors the TS `/timed? ?out/i` test without pulling in a regex crate.
-    fn regex_lite_timed_out(s: &str) -> bool {
-        let l = s.to_lowercase();
-        l.contains("timed out") || l.contains("timedout") || l.contains("time out")
+    /// The TS classifier in `supervisor/adjudicator.ts`, `/timed? ?out/i`, ported exactly.
+    fn ts_classifies_as_timeout(s: &str) -> bool {
+        regex::Regex::new(r"(?i)timed? ?out")
+            .expect("valid pattern")
+            .is_match(s)
+    }
+
+    #[test]
+    fn the_ported_classifier_matches_every_spelling_the_ts_one_does() {
+        for hit in ["timed out", "Timeout", "time out", "TIMEDOUT"] {
+            assert!(ts_classifies_as_timeout(hit), "{hit}");
+        }
+        for miss in ["output", "time-out", "timer"] {
+            assert!(!ts_classifies_as_timeout(miss), "{miss}");
+        }
     }
 
     #[test]
@@ -710,13 +721,8 @@ mod tests {
     #[test]
     fn the_too_large_message_cannot_be_classified_as_a_timeout() {
         // The TS diagnostic buckets an error as a timeout by matching /timed? ?out/i.
-        let msg = AdjudicateError::OutputTooLarge(MAX_OUTPUT)
-            .to_string()
-            .to_lowercase();
-        assert!(
-            !msg.contains("timed out") && !msg.contains("timeout"),
-            "{msg}"
-        );
+        let msg = AdjudicateError::OutputTooLarge(MAX_OUTPUT).to_string();
+        assert!(!ts_classifies_as_timeout(&msg), "{msg}");
     }
 
     #[test]

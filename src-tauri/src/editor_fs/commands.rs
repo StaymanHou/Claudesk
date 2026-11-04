@@ -97,10 +97,20 @@ pub fn delete_file(app: AppHandle, root: String, path: String) -> Result<(), Str
 /// hard `remove_file`, single-file only), this is recoverable from Finder — the choice
 /// for the folder-delete blast radius. Returns the error as a `String` so a failed
 /// trash is surfaced in the UI, never swallowed. WP5b wires it to directory rows.
+///
+/// ⚠️ **`async` + `spawn_blocking`, never a sync command.** On macOS `trash::delete` asks the
+/// Finder over `osascript`, which takes seconds, and as a sync command that froze the UI for more
+/// than 7 s (`SURFACE-2026-11-02-TRASH-PATH-BLOCKS-THE-MAIN-THREAD`). The sync-blocking guard
+/// cannot see it, because the subprocess is inside an external crate, so its `ASYNC_COMMANDS`
+/// entry is what keeps this async.
 #[tauri::command]
-pub fn trash_path(app: AppHandle, root: String, path: String) -> Result<(), String> {
-    let root = validate_frontend_root(&app, &root)?;
-    trash_path_core(&root, Path::new(&path)).map_err(|e| e.to_string())
+pub async fn trash_path(app: AppHandle, root: String, path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = validate_frontend_root(&app, &root)?;
+        trash_path_core(&root, Path::new(&path)).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("the trash worker stopped unexpectedly: {e}"))?
 }
 
 /// Create a directory (and any missing intermediate dirs) under the workspace `root`

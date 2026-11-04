@@ -28,11 +28,18 @@ pub async fn supervisor_adjudicate(
     prompt: String,
     timeout_ms: u64,
 ) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        run_adjudicator(&model, &prompt, timeout_ms).map_err(|e: AdjudicateError| e.to_string())
-    })
-    .await
-    .map_err(|e| format!("adjudicator worker failed: {e}"))?
+    on_worker(move || run_adjudicator(&model, &prompt, timeout_ms)).await
+}
+
+/// Run one adjudication on a blocking worker and turn every failure into the rejection string the
+/// TS side withholds on. Split out so a test drives this exact hop with a deterministic program.
+async fn on_worker<F>(work: F) -> Result<String, String>
+where
+    F: FnOnce() -> Result<String, AdjudicateError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || work().map_err(|e| e.to_string()))
+        .await
+        .map_err(|e| format!("adjudicator worker failed: {e}"))?
 }
 
 #[cfg(test)]
@@ -41,23 +48,28 @@ mod tests {
     use std::time::{Duration, Instant};
 
     #[test]
-    fn the_async_command_resolves_to_a_rejection_through_its_worker() {
-        // Drives the REAL command, including the `spawn_blocking` hop and its error mapping,
-        // which the `run_command` tests do not reach. A 1ms timeout means a real `claude` on PATH
-        // is group-killed before it does anything, and a missing one fails with NotFound. Either
-        // way the TS side must receive a rejection (every rejection withholds), and promptly.
+    fn the_worker_hop_turns_each_failure_into_a_rejection() {
+        // The command's own `spawn_blocking` hop and error mapping, driven with programs whose
+        // outcome does not depend on what is installed (the old test forked the real `claude`
+        // when it was on PATH, and accepted either of two outcomes).
+        let missing = tauri::async_runtime::block_on(on_worker(|| {
+            super::super::run_command(
+                std::process::Command::new("/nonexistent/claudesk-wp4-no-such-binary"),
+                "x",
+                1_000,
+            )
+        }));
+        let err = missing.expect_err("a missing binary cannot succeed");
+        assert!(err.contains("not found"), "got {err}");
+
         let start = Instant::now();
-        let result = tauri::async_runtime::block_on(supervisor_adjudicate(
-            "sonnet".into(),
-            "codify probe".into(),
-            1,
-        ));
-        let err = result.expect_err("a 1ms adjudication cannot succeed");
-        assert!(!err.is_empty());
-        assert!(
-            err.contains("timed out") || err.contains("not found"),
-            "unexpected rejection: {err}"
-        );
+        let slow = tauri::async_runtime::block_on(on_worker(|| {
+            let mut sleep = std::process::Command::new("/bin/sleep");
+            sleep.arg("5");
+            super::super::run_command(sleep, "x", 50)
+        }));
+        let err = slow.expect_err("a 50ms limit on a 5s sleep cannot succeed");
+        assert!(err.contains("timed out"), "got {err}");
         assert!(
             start.elapsed() < Duration::from_secs(3),
             "{:?}",

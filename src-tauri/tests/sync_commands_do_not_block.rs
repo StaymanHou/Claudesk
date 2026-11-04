@@ -25,8 +25,10 @@
 //!
 //! ## What is cut
 //!
-//! The arguments of the spawn calls in [`SPAWN_BOUNDARIES`] (in practice, their closures) are not
+//! The CLOSURE and `async` block arguments of the spawn calls in [`SPAWN_BOUNDARIES`] are not
 //! walked. Blocking work handed to a WORKER thread is the fix, so today's `cc_kill` must not flag.
+//! Every other argument, and the receiver, is evaluated on the caller's thread and IS walked: a
+//! crate fn that happens to be called `spawn` (`Drain::spawn(pipe, &stop)`) cuts nothing.
 //!
 //! ⚠️ `run_on_main_thread` is deliberately NOT a boundary. A sync command already runs on the
 //! main thread, so a closure it marshals there runs on the main thread too and freezes the UI
@@ -44,6 +46,13 @@
 //!   recorded with its measurement in the paydown-2026-09-23 WP9 archive, not an oversight.
 //! - **Trait-object and generic dispatch** resolve by method name like everything else, which
 //!   over-approximates. They are never "unknown, therefore safe".
+//! - **The body of an `async` command is NOT scanned.** It runs on an async-runtime worker, not the
+//!   main thread, so the seed rule does not apply to it. Instead every async command must appear in
+//!   [`ASYNC_COMMANDS`] with the reason its body may block a worker (or why it does not). That
+//!   reason is reviewed by a human, not checked: a blocking call added LATER to a listed async
+//!   command, outside its `spawn_blocking`, is not seen. A `#[tauri::command(async)]` sync body
+//!   that waits without a bound is the shape this gap shipped once
+//!   (`workflow_uninstall_dry_run`, fixed at paydown 2026-11-04 WP4).
 //! - **A fn passed as a VALUE** and called through a local name
 //!   (`let pause: fn(Duration) = thread::sleep; pause(..)`) is NOT seen. The call resolves to the
 //!   local name, not to the fn it holds.
@@ -90,16 +99,57 @@ const LEDGER: &[(&str, &str)] = &[
     ),
 ];
 
-/// Commands that MUST stay `async` because their main-thread cost is work this guard cannot see.
+/// Every `async` command, each with the reason it is async and what its body does on the
+/// runtime worker. Async bodies are exempt from the seed scan (see the module doc), so this table
+/// is where each one is accounted for.
 ///
-/// ⚠️ CPU-bound work is not a seed, so a sync command that computes for 600 ms freezes the UI
-/// and passes [`no_sync_tauri_command_reaches_a_blocking_call`]. Each entry here is one such
-/// command, already moved off the main thread. Reverting it to sync fails. Naming a command
-/// that does not exist also fails, so an entry cannot outlive its command.
-const MUST_STAY_ASYNC: &[(&str, &str)] = &[(
-    "time_analytics_query",
-    "CPU-bound: the Day build ran ~600 ms on a 14-day window (analytics-week-export P2.1c)",
-)];
+/// ⚠️ Guarded both ways (the one-directional-guard trap, `CLAUDE.md` entry 13):
+/// - an async command missing from the table fails, so a new one must state its reason;
+/// - an entry whose command is sync again, or does not exist, fails. That half keeps an async
+///   command async when its cost is work the seed scan cannot see: CPU-bound work, or a
+///   subprocess inside an external crate.
+const ASYNC_COMMANDS: &[(&str, &str)] = &[
+    (
+        "time_analytics_query",
+        "CPU-bound: the Day build ran ~600 ms on a 14-day window (analytics-week-export P2.1c); \
+         the work runs on `spawn_blocking`",
+    ),
+    (
+        "trash_path",
+        "`trash::delete` asks the Finder over `osascript` inside the crate, >7 s measured \
+         (M16.5 WP5); the work runs on `spawn_blocking`",
+    ),
+    (
+        "profile_delete",
+        "a Trash move through the Finder, unbounded; the work runs on `spawn_blocking`",
+    ),
+    (
+        "workflow_uninstall_dry_run",
+        "waits on `uninstall.sh --dry-run` up to `DRY_RUN_DEADLINE` (60 s); the work runs on \
+         `spawn_blocking`",
+    ),
+    (
+        "supervisor_adjudicate",
+        "waits on `claude -p` up to `timeout_ms`; the work runs on `spawn_blocking`",
+    ),
+    (
+        "supervisor_activity_append",
+        "one bounded local file append, on the worker directly",
+    ),
+    (
+        "supervisor_activity_read",
+        "reads up to two 5 MiB log generations, bounded, on the worker directly",
+    ),
+    (
+        "updater_check",
+        "awaits the updater plugin's async HTTP check; nothing blocks the worker",
+    ),
+    (
+        "updater_apply",
+        "awaits the async download; the bundle install that follows runs once, at the user's \
+         request, just before the relaunch",
+    ),
+];
 
 /// A call whose final segment is one of these, at one of these arities, is blocking.
 /// `None` means any arity. The arity is what tells `handle.join()` (0 args, blocks) apart from
@@ -145,6 +195,23 @@ impl CallCollector<'_> {
     }
 }
 
+/// Whether `arg` is code handed to another thread (a closure or an `async` block), as opposed to
+/// a value the caller evaluates before the call.
+fn runs_elsewhere(arg: &syn::Expr) -> bool {
+    matches!(arg, syn::Expr::Closure(_) | syn::Expr::Async(_))
+}
+
+impl CallCollector<'_> {
+    /// Walk a spawn call's arguments, skipping only the ones that run on the worker.
+    fn visit_spawn_args(&mut self, args: &syn::punctuated::Punctuated<syn::Expr, syn::Token![,]>) {
+        for arg in args {
+            if !runs_elsewhere(arg) {
+                self.visit_expr(arg);
+            }
+        }
+    }
+}
+
 impl<'ast> Visit<'ast> for CallCollector<'_> {
     fn visit_expr_call(&mut self, node: &'ast syn::ExprCall) {
         if let syn::Expr::Path(p) = &*node.func {
@@ -152,7 +219,7 @@ impl<'ast> Visit<'ast> for CallCollector<'_> {
                 let name = seg.ident.to_string();
                 self.record(name.clone(), node.args.len());
                 if SPAWN_BOUNDARIES.contains(&name.as_str()) {
-                    // The closure runs on another thread: do not walk it.
+                    self.visit_spawn_args(&node.args);
                     return;
                 }
             }
@@ -165,6 +232,7 @@ impl<'ast> Visit<'ast> for CallCollector<'_> {
         self.record(name.clone(), node.args.len());
         if SPAWN_BOUNDARIES.contains(&name.as_str()) {
             self.visit_expr(&node.receiver);
+            self.visit_spawn_args(&node.args);
             return;
         }
         syn::visit::visit_expr_method_call(self, node);
@@ -174,14 +242,28 @@ impl<'ast> Visit<'ast> for CallCollector<'_> {
     fn visit_item_fn(&mut self, _: &'ast syn::ItemFn) {}
 }
 
+/// Whether an item is compiled ONLY under test: `#[cfg(test)]`, or `#[cfg(all(test, …))]`.
+///
+/// ⚠️ Parsed, not tokenized. Matching any `test` token dropped `#[cfg(not(test))]` and
+/// `#[cfg(any(test, …))]` items, which are production code, from the call graph.
 fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|a| {
         a.path().is_ident("cfg")
-            && a.meta
-                .require_list()
-                .map(|l| l.tokens.to_string().split_whitespace().any(|t| t == "test"))
-                .unwrap_or(false)
+            && a.parse_args::<syn::Meta>()
+                .is_ok_and(|m| cfg_is_test_only(&m))
     })
+}
+
+fn cfg_is_test_only(meta: &syn::Meta) -> bool {
+    match meta {
+        syn::Meta::Path(p) => p.is_ident("test"),
+        syn::Meta::List(l) if l.path.is_ident("all") => l
+            .parse_args_with(
+                syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+            )
+            .is_ok_and(|parts| parts.iter().any(cfg_is_test_only)),
+        _ => false,
+    }
 }
 
 struct Command {
@@ -241,6 +323,7 @@ impl Crate {
                         if let syn::ImplItem::Fn(m) = ii {
                             if !is_cfg_test(&m.attrs) {
                                 self.add_fn(m.sig.ident.to_string(), &m.block);
+                                self.add_nested(file, &m.block, skip_files);
                             }
                         }
                     }
@@ -250,6 +333,7 @@ impl Crate {
                         if let syn::TraitItem::Fn(m) = ti {
                             if let Some(body) = &m.default {
                                 self.add_fn(m.sig.ident.to_string(), body);
+                                self.add_nested(file, body, skip_files);
                             }
                         }
                     }
@@ -419,6 +503,30 @@ fn stale_entries<'a>(found: &BTreeMap<String, String>, ledger: &[(&'a str, &str)
         .collect()
 }
 
+/// Every way `ledger` disagrees with the crate's async commands, one line each. Empty means in
+/// step: every async command is listed, and every entry names an async command.
+fn async_ledger_problems(krate: &Crate, ledger: &[(&str, &str)]) -> Vec<String> {
+    let listed: BTreeSet<&str> = ledger.iter().map(|(n, _)| *n).collect();
+    let mut problems: Vec<String> = krate
+        .async_commands
+        .iter()
+        .filter(|a| !listed.contains(a.as_str()))
+        .map(|a| format!("  {a} is async but not in ASYNC_COMMANDS (say why its body may block)"))
+        .collect();
+    for (n, why) in ledger {
+        if krate.async_commands.iter().any(|a| a == n) {
+            continue;
+        }
+        let state = if krate.commands.iter().any(|c| c.name == *n) {
+            "is SYNC again"
+        } else {
+            "names no command"
+        };
+        problems.push(format!("  {n} {state} ({why})"));
+    }
+    problems
+}
+
 #[test]
 fn no_sync_tauri_command_reaches_a_blocking_call() {
     let krate = parse_crate(&src_dir());
@@ -457,23 +565,13 @@ fn no_sync_tauri_command_reaches_a_blocking_call() {
         "no crate fn reaches a seed; the seed list or the call collector is broken"
     );
 
-    let not_async: Vec<String> = MUST_STAY_ASYNC
-        .iter()
-        .filter(|(n, _)| !krate.async_commands.iter().any(|a| a == n))
-        .map(|(n, why)| {
-            let state = if krate.commands.iter().any(|c| c.name == *n) {
-                "is SYNC again"
-            } else {
-                "names no command"
-            };
-            format!("  {n} {state} ({why})")
-        })
-        .collect();
+    let async_problems = async_ledger_problems(&krate, ASYNC_COMMANDS);
     assert!(
-        not_async.is_empty(),
-        "these commands must stay `async` (their cost is invisible to the seed scan); keep the \
-         work on `spawn_blocking`, or delete the entry if the command is gone:\n{}",
-        not_async.join("\n")
+        async_problems.is_empty(),
+        "ASYNC_COMMANDS is out of step with the source. An async command's body is not scanned, so \
+         each one must be listed with its reason; a listed command must stay async (its cost is \
+         invisible to the seed scan), and an entry for a deleted command must go:\n{}",
+        async_problems.join("\n")
     );
 
     let ledgered: BTreeSet<&str> = LEDGER.iter().map(|(n, _)| *n).collect();
@@ -509,11 +607,18 @@ fn no_sync_tauri_command_reaches_a_blocking_call() {
 // mutation proofs made permanent: the live test above can only say "today's tree is clean",
 // which a broken analyzer would also say.
 
-/// Parse a one-file fixture crate and return what the guard would flag.
-fn flag_fixture(src: &str) -> BTreeMap<String, String> {
+/// Parse a one-file fixture crate. The directory is returned so it outlives the parse.
+fn parse_fixture(src: &str) -> (tempfile::TempDir, Crate) {
     let dir = tempfile::TempDir::new().expect("tempdir");
     std::fs::write(dir.path().join("lib.rs"), src).expect("write fixture");
-    flagged(&parse_crate(dir.path()), dir.path())
+    let krate = parse_crate(dir.path());
+    (dir, krate)
+}
+
+/// Parse a one-file fixture crate and return what the guard would flag.
+fn flag_fixture(src: &str) -> BTreeMap<String, String> {
+    let (dir, krate) = parse_fixture(src);
+    flagged(&krate, dir.path())
 }
 
 #[test]
@@ -673,5 +778,144 @@ fn a_long_chain_is_resolved_to_a_fixpoint_not_a_single_pass() {
         found.get("cmd").map(String::as_str),
         Some("lib.rs: cmd → h1 → h2 → h3 → h4 → h5 → h6 → h7 → h8 → sleep"),
         "got {found:?}"
+    );
+}
+
+#[test]
+fn a_cfg_not_test_item_is_production_and_is_scanned() {
+    let found = flag_fixture(
+        r#"
+        #[cfg(not(test))]
+        fn helper() { std::thread::sleep(std::time::Duration::from_millis(1)); }
+        #[tauri::command]
+        pub fn cmd() { helper(); }
+        "#,
+    );
+    assert!(found.contains_key("cmd"), "got {found:?}");
+}
+
+#[test]
+fn only_cfg_test_and_cfg_all_test_are_test_only() {
+    // `any(test, …)` is compiled outside tests too, so it is production code.
+    let any = flag_fixture(
+        r#"
+        #[cfg(any(test, feature = "probe"))]
+        fn helper() { std::thread::sleep(std::time::Duration::from_millis(1)); }
+        #[tauri::command]
+        pub fn cmd() { helper(); }
+        "#,
+    );
+    assert!(any.contains_key("cmd"), "got {any:?}");
+    let all = flag_fixture(
+        r#"
+        fn helper() {}
+        #[tauri::command]
+        pub fn cmd() { helper(); }
+        #[cfg(all(test, unix))]
+        mod tests {
+            fn helper() { std::thread::sleep(std::time::Duration::from_millis(1)); }
+        }
+        "#,
+    );
+    assert!(all.is_empty(), "got {all:?}");
+}
+
+#[test]
+fn a_fn_nested_in_an_impl_method_or_trait_default_body_is_registered() {
+    for body in [
+        r#"
+        struct S;
+        impl S { fn run(&self) { fn inner_wait() { std::thread::sleep(std::time::Duration::from_millis(1)); } inner_wait() } }
+        #[tauri::command]
+        pub fn cmd() { S.run(); }
+        "#,
+        r#"
+        trait T { fn run(&self) { fn inner_wait() { std::thread::sleep(std::time::Duration::from_millis(1)); } inner_wait() } }
+        struct S; impl T for S {}
+        #[tauri::command]
+        pub fn cmd() { S.run(); }
+        "#,
+    ] {
+        let found = flag_fixture(body);
+        assert!(found.contains_key("cmd"), "got {found:?} for {body}");
+    }
+}
+
+#[test]
+fn only_closure_and_async_arguments_of_spawn_are_cut() {
+    // A crate fn named `spawn` takes a VALUE argument, evaluated on the caller's thread.
+    let value_arg = flag_fixture(
+        r#"
+        struct Helper;
+        impl Helper { fn spawn(_: ()) {} }
+        fn slow() { std::thread::sleep(std::time::Duration::from_millis(1)); }
+        #[tauri::command]
+        pub fn cmd() { Helper::spawn(slow()); }
+        "#,
+    );
+    assert!(value_arg.contains_key("cmd"), "got {value_arg:?}");
+    let method_value_arg = flag_fixture(
+        r#"
+        fn slow() -> u8 { std::thread::sleep(std::time::Duration::from_millis(1)); 0 }
+        #[tauri::command]
+        pub fn cmd(b: Builder) { b.spawn(slow()); }
+        "#,
+    );
+    assert!(
+        method_value_arg.contains_key("cmd"),
+        "got {method_value_arg:?}"
+    );
+    let worker = flag_fixture(
+        r#"
+        fn slow() { std::thread::sleep(std::time::Duration::from_millis(1)); }
+        #[tauri::command]
+        pub fn a() { std::thread::spawn(move || slow()); }
+        #[tauri::command]
+        pub fn b(rt: Runtime) { rt.spawn(async move { slow() }); }
+        "#,
+    );
+    assert!(worker.is_empty(), "got {worker:?}");
+}
+
+#[test]
+fn an_unlisted_async_command_fails_the_async_ledger() {
+    let (_dir, krate) = parse_fixture(
+        r#"
+        #[tauri::command]
+        pub async fn listed() {}
+        #[tauri::command(async)]
+        pub fn unlisted() {}
+        "#,
+    );
+    let problems = async_ledger_problems(&krate, &[("listed", "why")]);
+    assert_eq!(problems.len(), 1, "got {problems:?}");
+    assert!(
+        problems[0].contains("unlisted is async but not in"),
+        "got {problems:?}"
+    );
+}
+
+#[test]
+fn a_listed_command_that_is_sync_or_missing_fails_the_async_ledger() {
+    let (_dir, krate) = parse_fixture(
+        r#"
+        #[tauri::command]
+        pub async fn still_async() {}
+        #[tauri::command]
+        pub fn went_sync() {}
+        "#,
+    );
+    let problems = async_ledger_problems(
+        &krate,
+        &[("still_async", "a"), ("went_sync", "b"), ("deleted", "c")],
+    );
+    assert_eq!(problems.len(), 2, "got {problems:?}");
+    assert!(
+        problems[0].contains("went_sync is SYNC again"),
+        "got {problems:?}"
+    );
+    assert!(
+        problems[1].contains("deleted names no command"),
+        "got {problems:?}"
     );
 }

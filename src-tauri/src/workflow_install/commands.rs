@@ -337,6 +337,18 @@ pub fn workflow_install_cancel(control: State<'_, Arc<InstallControl>>) {
     control.cancelled.store(true, Ordering::SeqCst);
 }
 
+/// Holds the single-run lock and releases it when dropped, on every path including a panic.
+///
+/// The dry run takes the lock on the IPC side and moves this into its blocking worker, so the
+/// lock lives exactly as long as the work does, even if the IPC future is dropped first.
+struct HeldRunLock(Arc<InstallControl>);
+
+impl Drop for HeldRunLock {
+    fn drop(&mut self) {
+        self.0.running.store(false, Ordering::SeqCst);
+    }
+}
+
 /// Run `uninstall.sh --dry-run` against the recorded managed clone and return its real
 /// output — the 3-intent dialog's removal preview (operator decision, script finding 2:
 /// preview and action share one source of truth and cannot drift).
@@ -345,12 +357,12 @@ pub fn workflow_install_cancel(control: State<'_, Arc<InstallControl>>) {
 /// second (it iterates symlinks and prints). Refusals surface as the guard's own user-facing
 /// explanation.
 ///
-/// ⚠️ **`(async)`, so it runs OFF the main thread.** "Well under a second" describes a script
-/// that lives in another repo, not a bound Claudesk can enforce. There is no timeout on the
-/// wait, so as a sync command a hung `uninstall.sh` froze the UI for good (paydown
-/// 2026-09-23 WP9, `tests/sync_commands_do_not_block.rs`). The attribute form keeps the
-/// signature `pub fn …`, which `every_substrate_touching_command_takes_the_single_run_lock`
-/// anchors on.
+/// ⚠️ **`async` + `spawn_blocking`.** The script lives in another repo, so "well under a second"
+/// is not a bound Claudesk can enforce:
+/// - As a sync command, a hung script froze the UI (paydown 2026-09-23 WP9).
+/// - As a `(async)` sync body, it held an async-runtime worker for the same time instead
+///   (paydown 2026-11-04 WP4).
+/// The wait itself is bounded by `runner::DRY_RUN_DEADLINE`, so the lock cannot stick either.
 ///
 /// ## Refuses while a real run is in flight — exclusion, not just latency
 /// This takes the same single-run lock as the two mutating commands, even though it only
@@ -362,26 +374,39 @@ pub fn workflow_install_cancel(control: State<'_, Arc<InstallControl>>) {
 ///
 /// Held for the duration rather than released early: the lock's meaning is "one thing is
 /// touching the substrate", and a read racing a delete is exactly what it exists to prevent.
-#[tauri::command(async)]
-pub fn workflow_uninstall_dry_run(
+#[tauri::command]
+pub async fn workflow_uninstall_dry_run(
     control: State<'_, Arc<InstallControl>>,
 ) -> Result<String, String> {
     if control.running.swap(true, Ordering::SeqCst) {
         return Err("an install or uninstall is already running".to_string());
     }
-    // Every exit below must release the lock, including the early error returns — hence the
-    // closure-and-release shape rather than `?` straight through. (A `Drop` guard would also
-    // work; this command is short enough that the explicit release is easier to verify.)
-    let result = (|| {
+    finish_on_worker(HeldRunLock(Arc::clone(&control)), || {
         let home = dirs_home()?;
         let root = claudesk_root()?;
         let record = provenance::read_record(&root);
         let target =
             super::guard::refuse_guard(record.as_ref(), &home).map_err(|r| r.user_message())?;
         runner::run_dry_run(&target, &Discard).map_err(|e| e.to_string())
-    })();
-    control.running.store(false, Ordering::SeqCst);
-    result
+    })
+    .await
+}
+
+/// Run `work` on a blocking worker while holding `lock`, and release it only when `work` ends.
+///
+/// The lock moves INTO the worker, so it is held for exactly as long as the work runs, even if
+/// the caller's future is dropped first. A panic in `work` releases it too and comes back as an
+/// error string.
+async fn finish_on_worker<F>(lock: HeldRunLock, work: F) -> Result<String, String>
+where
+    F: FnOnce() -> Result<String, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || {
+        let _lock = lock;
+        work()
+    })
+    .await
+    .map_err(|e| format!("the removal preview stopped unexpectedly: {e}"))?
 }
 
 /// Start the real uninstall of the recorded managed clone.
@@ -649,6 +674,55 @@ mod tests {
     }
 
     #[test]
+    fn the_dry_run_holds_the_lock_until_its_worker_finishes() {
+        // The command's own path: the lock taken on the IPC side must stay held for the whole
+        // blocking run, not just until the worker is spawned, and a panicking run must release it.
+        use super::*;
+        let ctl = Arc::new(InstallControl::default());
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (finish_tx, finish_rx) = std::sync::mpsc::channel::<()>();
+
+        ctl.running.store(true, Ordering::SeqCst);
+        let lock = HeldRunLock(Arc::clone(&ctl));
+        let run = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(finish_on_worker(lock, move || {
+                started_tx.send(()).unwrap();
+                finish_rx.recv().unwrap();
+                Ok("preview".to_string())
+            }))
+        });
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("the worker starts");
+        assert!(
+            ctl.running.load(Ordering::SeqCst),
+            "the lock was released while the dry run was still running"
+        );
+        finish_tx.send(()).unwrap();
+        assert_eq!(run.join().unwrap(), Ok("preview".to_string()));
+        assert!(
+            !ctl.running.load(Ordering::SeqCst),
+            "released after the run"
+        );
+
+        ctl.running.store(true, Ordering::SeqCst);
+        let result =
+            tauri::async_runtime::block_on(finish_on_worker(HeldRunLock(Arc::clone(&ctl)), || {
+                panic!("script handling blew up")
+            }));
+        assert!(
+            result
+                .as_ref()
+                .is_err_and(|e| e.contains("stopped unexpectedly")),
+            "got {result:?}"
+        );
+        assert!(
+            !ctl.running.load(Ordering::SeqCst),
+            "a panic keeps the lock"
+        );
+    }
+
+    #[test]
     fn every_substrate_touching_command_takes_the_single_run_lock() {
         // Code review (2026-07-31) found `workflow_uninstall_dry_run` outside the module's
         // concurrency model: it spawned the script against the clone dir with no lock, so a
@@ -661,7 +735,7 @@ mod tests {
         for command in [
             "pub fn workflow_install_start",
             "pub fn workflow_uninstall_start",
-            "pub fn workflow_uninstall_dry_run",
+            "pub async fn workflow_uninstall_dry_run",
         ] {
             let at = code.find(command).unwrap_or_else(|| {
                 panic!("{command} must exist — did it get renamed?");
