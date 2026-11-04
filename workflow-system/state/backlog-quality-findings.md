@@ -79,48 +79,12 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit `df52ce7`, window `29c3395..df52ce7`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*
 
-## SURFACE-2026-11-02-QUALITY-WP5-QUIT-PATH-STAMPS-CANONICAL-KEYS-AGAINST-RAW-STORED-PATHS
-- **Severity:** MAJOR
-- **Location:** `src-tauri/src/lib.rs` (quit teardown: `record_closed_best_effort(reg.open_project_paths())`) + `config_store::touch_closed`.
-- **Finding:** `open_project_paths()` returns registry keys already run through `canonical_key` (`Path::canonicalize`: symlinks resolved, trailing slash dropped). `touch_closed` compares exactly against `projects.json` paths as the frontend stored them. The close path (`status_broadcaster/commands.rs`, workspace close) passes the frontend's own path and matches; the quit path misses any project whose stored path is not already its realpath.
-- **Why it matters:** Those projects silently get no `last_closed_at` on quit, so the next-launch picker order (5.7) is wrong for them with no report. `session_state` avoids this by canonicalizing both sides (`key_for`). The Rust test `touch_closed_stamps_only_the_listed_known_projects` uses non-existent paths, where `canonicalize` falls back to the input, so it cannot see the mismatch.
-- **Suggested action:** Canonicalize both sides inside `touch_closed` (compare `canonical_key(stored)` to `canonical_key(given)`), and add a test with a real temp dir reached through a symlink and a trailing slash.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-11-02-QUALITY-WP5-DAY-VIEW-KEYS-DO-NOT-SKIP-SELECT
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/dashboard/ViewportContext.tsx` (the window-wide key listener).
-- **Finding:** The listener now `preventDefault`s arrows/Home/End/`+`/`-`/`=` and skips only INPUT, TEXTAREA and contentEditable targets, not SELECT.
-- **Why it matters:** A focused `<select>` in a layer above the dashboard (e.g. Settings) loses arrow-key navigation and pans a hidden timeline instead.
-- **Suggested action:** Add `SELECT` to the skip list, with a live test.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-02-QUALITY-WP5-VIEWPORT-KEY-ACTION-RETURN-TYPE-COLLAPSES
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/dashboard/viewport.ts` (`viewportKeyAction`, `viewportForKey`).
-- **Finding:** The return type `"reset" | string | null` collapses to `string | null`, so `viewportForKey` accepts any string.
-- **Why it matters:** A `ViewportKey` union derived from `VIEWPORT_KEYS` would let the compiler catch a key typo. Same stringly-typed-return pattern as the existing F-b remainder.
-- **Suggested action:** Derive `type ViewportKey = (typeof VIEWPORT_KEYS)[number]` and narrow both signatures.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-11-02-QUALITY-WP5-PICKER-ROW-SHOULD-BE-A-COMPONENT
 - **Severity:** MINOR
 - **Location:** `src/components/picker/ProjectPicker.tsx` (row rendering inside `pickerItems.map → PICKER_ROW_CELLS.map → switch`).
 - **Finding:** The `isOpen` branch re-indented ~300 lines; the row is ~170 lines of JSX four levels deep in a 772-line component.
 - **Why it matters:** The next row-level change has to work through the same nesting; `git blame` on the row is now noise.
 - **Suggested action:** Extract a `PickerRow` component taking `isOpen`; prove the rendered output unchanged via `[[prove-render-unchanged-via-head-worktree]]`.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-02-QUALITY-WP5-OPEN-GROUP-LABEL-IS-A-LIST-ROW
-- **Severity:** MINOR
-- **Location:** `src/components/picker/ProjectPicker.tsx` (the "Open" group label).
-- **Finding:** The label is a plain `<li>` in the same `<ul>` as the project rows.
-- **Why it matters:** Screen readers and any `> li` row count treat it as a project row (the live test already special-cases it).
-- **Suggested action:** `role="presentation"` on the label, or move it out of the list.
 - **Priority:** low
 - **Status:** pending
 

@@ -43,11 +43,11 @@
 
 ## Code-quality findings — m16-5-wp5-qol-batch (2026-11-02)
 
-- **Pointer:** **1 MAJOR + 4 MINOR** from the review of `df52ce7` (0 CRITICAL). MAJOR: the quit path stamps `last_closed_at` with canonicalized registry keys against raw stored paths, so symlinked or trailing-slash projects silently miss it. MINOR: the Day-view key listener does not skip SELECT; `viewportKeyAction`'s return type collapses to `string`; the picker row should be its own component; the "Open" group label is a list row.
+- **Pointer:** **1 MINOR** remains from the review of `df52ce7`: the picker row should be its own component (`PickerRow`). The MAJOR and the other three MINORs were resolved 2026-11-04 by paydown WP6.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp5-qol-batch — 2026-11-02`.
-- **Priority:** medium (the MAJOR); low (the rest)
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** WP8's paydown. The MAJOR is a small Rust fix in `touch_closed` plus a real-symlink test; the two picker MINORs go together.
+- **Pickup shape:** paydown WP13 (`SettingsPanel` split and `PickerRow`).
 
 ## Code-quality findings — m16-5-wp3-supervisor-correctness (2026-10-27)
 
