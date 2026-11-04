@@ -43,7 +43,7 @@
 
 ## Code-quality findings — m16-5-wp3-supervisor-correctness (2026-10-27)
 
-- **Pointer:** **6 MINOR** from the review of `3e92860` (feature `565a363`; 0 CRITICAL). The MAJOR (the failure alarm counts per project) was closed **by design** 2026-11-04 (paydown sweep R2; `arch/workflow-supervisor.md` §F). MINOR: the clause-boundary docstring omits `,` and `(`; the probe runner skips production's model check; the activity feed dedupes by timestamp; the alarm seed races a live publish; the adjudicator tooltip omits unparseable replies; one overlong JSDoc line.
+- **Pointer:** **4 MINOR** from the review of `3e92860` (feature `565a363`; 0 CRITICAL). The MAJOR (the failure alarm counts per project) was closed **by design** 2026-11-04 (paydown sweep R2; `arch/workflow-supervisor.md` §F), and the clause-boundary docstring and alarm-tooltip MINORs were resolved by paydown WP2. MINOR: the probe runner skips production's model check; the activity feed dedupes by timestamp; the alarm seed races a live publish; one overlong JSDoc line.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp3-supervisor-correctness — 2026-10-27`.
 - **Priority:** low (all)
 - **Status:** pending
@@ -51,11 +51,11 @@
 
 ## Code-quality findings — m16-5-wp4-status-channel-semantics (2026-10-26)
 
-- **Pointer:** **4 MINOR** from the review of `b69201d` (0 CRITICAL, 0 MAJOR; a 5th MINOR was fixed in place). The four: the overlay emit leaves the lock before `emit`, so a stale overlay can arrive last; the PiP's `isAwaitingInput` re-implements the overlay rule; the unwaited separate tail read is unexplained; and a type-only import cycle between `verifyHumanPause` and `useSupervisor`.
+- **Pointer:** **3 MINOR** from the review of `b69201d` (0 CRITICAL, 0 MAJOR; a 5th MINOR was fixed in place, and the overlay emit-order item was resolved 2026-11-04 by paydown WP2 as a corrected doc claim). The three: the PiP's `isAwaitingInput` re-implements the overlay rule; the unwaited separate tail read is unexplained; and a type-only import cycle between `verifyHumanPause` and `useSupervisor`.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp4-status-channel-semantics — 2026-10-26`.
 - **Priority:** low (all)
 - **Status:** pending
-- **Pickup shape:** WP8's paydown. The emit-order item pairs naturally with any later status-channel change.
+- **Pickup shape:** WP8's paydown.
 
 ## Code-quality findings — m16-5-wp2-adjudicator-remeasure (2026-10-21)
 
@@ -97,12 +97,11 @@
 
 ## Code-quality findings — m16-wp2-media-in-editor-tab (2026-09-29)
 
-- **Pointer:** **5 MINOR** remain from the review of `5ea1aeb`. The MAJOR (missing card sticks on an unchanged mtime) was resolved by M16 WP3 on 2026-10-20 (see CHANGELOG). The MINORs:
+- **Pointer:** **4 MINOR** remain from the review of `5ea1aeb` (the "larger than 4 GiB" copy was resolved 2026-11-04 by paydown WP2). The MAJOR (missing card sticks on an unchanged mtime) was resolved by M16 WP3 on 2026-10-20 (see CHANGELOG). The MINORs:
   - `ReadErrorCard` stats through the scope-admitting `stat_media`
   - `stat_media_core` resolves and stats twice
   - the PDF iframe `sandbox` question was left open
   - `mediaKind` is called 3× with a `!` in PaneTabs
-  - the "larger than 4 GiB" copy vs a `>=` rule
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-wp2-media-in-editor-tab — 2026-09-29`.
 - **Priority:** low (all)
@@ -111,11 +110,10 @@
 
 ## Code-quality findings — analytics-week-export (2026-09-29)
 
-- **Pointer:** **2 MAJOR + 4 MINOR** from the review of `c7042af`. The MAJORs:
+- **Pointer:** **2 MAJOR + 3 MINOR** from the review of `c7042af` (the `WeekProjectMs.path` MINOR was resolved 2026-11-04 by paydown WP2). The MAJORs:
   - The `query.rs` week sort key's doc claims it is the `WEEK TOTAL` badge figure, but it sums 2 kinds and the badge sums 3.
   - The export's view-matching figures are unguarded Rust copies of `weekMath.ts`, checked by a circular test, while the arch doc says they "cannot drift".
   The MINORs:
-  - `WeekProjectMs.path` is the first day's winner, not the heaviest.
   - The `{sid}~{N}` life key is a stringly-typed round trip.
   - `ExportError::Db` also carries build and serde failures.
   - `dashboardState.ts` has a stale "three modes" header.
@@ -126,7 +124,7 @@
 
 ## Code-quality findings — silent-supervisor (2026-09-28)
 
-- **Pointer:** **5 MINOR** remain from the review of `778fe72`. (The MAJOR, no alarm for a CC transcript-format change, was resolved at M16.5 WP3, 2026-10-27.) The MINORs: a "stripped once" claim with two strip sites, a "user prose" floor that also counts `isMeta` skill bodies, a stale "read at the last possible moment" comment + reason list, a dedupe store only one test file resets, and an ad-hoc widened `onTurnEnd` param. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# silent-supervisor — 2026-09-28`.
+- **Pointer:** **4 MINOR** remain from the review of `778fe72` (the stale "last possible moment" comment + reason list was resolved 2026-11-04 by paydown WP2). (The MAJOR, no alarm for a CC transcript-format change, was resolved at M16.5 WP3, 2026-10-27.) The MINORs: a "stripped once" claim with two strip sites, a "user prose" floor that also counts `isMeta` skill bodies, a dedupe store only one test file resets, and an ad-hoc widened `onTurnEnd` param. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# silent-supervisor — 2026-09-28`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.

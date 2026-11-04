@@ -174,8 +174,11 @@ export interface VerifyHumanPauseDeps {
  * what keeps the gate-OFF app byte-identical: no read, no promote, no overlay on the wire.
  *
  * ⚠️ `stopEventAt` is the `Stop`'s own `last_event_at`, and the backend applies the overlay
- * only while that `Stop` is still the workspace's latest event. A reply typed while this ran
- * therefore wins. Without a timestamp there is nothing to compare against, so nothing is sent.
+ * only while that `Stop` is still the workspace's latest event, so the REGISTRY never lets the
+ * overlay overwrite a newer event. ⚠️ The EMITS are not ordered that way: the backend emits after
+ * releasing its lock, and no consumer compares `last_event_at`, so in a microsecond window a
+ * newer event's update can arrive first and the stale blue lands after it, until the next
+ * mapped event. Without a timestamp there is nothing to compare against, so nothing is sent.
  */
 export async function promoteIfVerifyHuman(
   event:

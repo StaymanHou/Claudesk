@@ -88,15 +88,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit `3e92860` (feature `565a363`), window `565a363^..3e92860`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 6 MINOR, all auto-backlogged.)*
 
-## SURFACE-2026-10-27-QUALITY-WP3-CLAUSE-BOUNDARY-DOCSTRING-OMITS-COMMA-AND-PAREN
-- **Severity:** MINOR
-- **Location:** `src/state/workflowMachine/transitionToken.ts` (`extractEmittedTransitionId` docstring vs `CLAUSE_BOUNDARY_RE`); `arch/workflow-supervisor.md` §D.
-- **Finding:** The docstring lists `. ! ? : ; → — ->` as clause boundaries, but the regex also accepts `,`, `(` and `[.!?])`, and tests depend on them (`Plan complete, \`TRANSITION: F7\``, `(TRANSITION: P10)`).
-- **Why it matters:** The comma is the loosest boundary and the likeliest source of a quoted token firing. A reader tuning the rule from the prose won't know it is there.
-- **Suggested action:** List the full set in the docstring (and the arch doc if it states one).
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-10-27-QUALITY-WP3-PROBE-RUNNER-SKIPS-THE-PRODUCTION-MODEL-CHECK
 - **Severity:** MINOR
 - **Location:** `tooling/adjudicator-probe/runner.ts` (`adjudicateOnce`).
@@ -124,15 +115,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-10-27-QUALITY-WP3-ADJUDICATOR-ALARM-TOOLTIP-OMITS-UNPARSEABLE
-- **Severity:** MINOR
-- **Location:** `src/cc/workspaceSupervisor.ts` (the "SUPERVISOR ADJUDICATOR FAILING" text).
-- **Finding:** It lists "an error, a timeout, or a model other than the pinned one", but an unparseable reply is also `adjudicator-failed`.
-- **Why it matters:** It points the operator at the wrong causes.
-- **Suggested action:** Add "an unreadable reply".
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-10-27-QUALITY-WP3-OVERLONG-JSDOC-LINE-IN-VERDICT
 - **Severity:** MINOR
 - **Location:** `src/state/supervisor/verdict.ts` (the one-line JSDoc on the applied mode, ~line 95).
@@ -145,15 +127,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 # m16-5-wp4-status-channel-semantics — 2026-10-26
 
 *(feature-review-quality on ship commit `b69201d` (feature `53141d4`), window `53141d4^..b69201d`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 5 MINOR. Four are auto-backlogged here; the 5th, a stale "drafted, unsent" line in `arch/status-channel-and-surfaces.md` §A.5, was fixed in place before archive.)*
-
-## SURFACE-2026-10-26-QUALITY-WP4-OVERLAY-EMIT-OUTSIDE-THE-LOCK-CAN-ARRIVE-STALE
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/status_broadcaster/commands.rs` (`workspace_status_promote`, `workspace_status_clear_attention`) + the drain loop's emit.
-- **Finding:** Both commands release the registry lock before `app.emit`, and so does the drain loop. If a newer hook event is recorded and emitted between the promote's unlock and its emit, the stale overlay arrives last. Neither the TS `applyStatusUpdate` nor the tray's `apply_update` compares `last_event_at`, so the dot shows the old `Stop` plus blue while CC runs, until the next mapped event. The clear path can re-emit an older base update in the same way.
-- **Why it matters:** The window is microseconds, but `verifyHumanPause.ts` says "a reply typed while this ran therefore wins". The compare-and-set protects the registry, not the order of emits.
-- **Suggested action:** Either emit while holding the lock (check that `emit` cannot re-enter the registry), or soften the doc claim to "the registry never overwrites a newer event".
-- **Priority:** low
-- **Status:** pending
 
 ## SURFACE-2026-10-26-QUALITY-WP4-PIP-ISAWAITINGINPUT-REIMPLEMENTS-THE-OVERLAY-RULE
 - **Severity:** MINOR
@@ -369,15 +342,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-09-29-QUALITY-OVER-MEDIA-LIMIT-COPY-SAYS-LARGER-THAN-WHILE-RULE-IS-AT-LEAST
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/editor/mediaDisplay.ts` → `CARD_REASON_TEXT["over-media-limit"]`
-- **Finding:** The card says "larger than 4 GiB" but `displayFor` uses `>=` (WP1 ruled "4 GiB or more").
-- **Why it matters:** A trivial copy/rule mismatch.
-- **Suggested action:** Reword to "4 GiB or larger".
-- **Priority:** low
-- **Status:** pending
-
 # analytics-week-export — 2026-09-29
 
 *(feature-review-quality on ship commit `c7042af`, window `c7042af^..c7042af`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 4 MINOR, all auto-backlogged.)*
@@ -401,9 +365,9 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Status:** pending
 
 ## SURFACE-2026-09-29-QUALITY-ANALYTICS-WEEK-EXPORT-MINOR-BATCH
-- **Severity:** MINOR ×4
+- **Severity:** MINOR ×3 (item 1, the `WeekProjectMs.path` doc, was resolved 2026-11-04 by paydown WP2: the first-day rule is now documented as the contract; the numbering is kept)
 - **Findings:**
-  1. `query.rs` `WeekProjectMs.path`: the doc says "its sessions' heaviest modal cwd", but `build_range` keeps the first non-empty per-day `path` (`if bucket.path.is_empty()`). Over a week that is the earliest day's winner, not the week's heaviest. Weight across days, or document the first-day rule. (The export publishes this field.)
+  1. *(resolved 2026-11-04, paydown WP2)*
   2. `query.rs` life key: the life index is encoded as `{sid}~{N}` and `session_display_id` re-parses it with `rsplit_once` plus a numeric check. This is a stringly-typed round trip, and a raw sid already ending in `~<digits>` truncates differently. Carry `(sid, life)` in the key.
   3. `export.rs` `ExportError::Db`: it also carries `build_week_ms` and serde failures, but is documented as "the DB is missing or unreadable". Add an `Internal` variant so the stderr category (and any future exit-code split) stays honest.
   4. `dashboardState.ts` header: it still says "three mutually-exclusive display modes"; there are four (`pending`). The paragraph around line 24 was not rewrapped.
@@ -415,11 +379,11 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 *(feature-review-quality on ship commit `778fe72`, window `778fe72^..778fe72`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged.)*
 
 ## SURFACE-2026-09-28-QUALITY-SILENT-SUPERVISOR-MINOR-BATCH
-- **Severity:** MINOR ×5
+- **Severity:** MINOR ×4 (item 3, the stale "last possible moment" comment + withhold-reason list, was resolved 2026-11-04 by paydown WP2; the numbering is kept)
 - **Findings:**
   1. `ccInputRouting.ts` header, the `Workspace.tsx` comment and the commit message say terminal reports are stripped "here, once, for BOTH readers", but `foldInput` (`unsentInput.ts`) strips them again and its header says it "now strips them first". Two strip sites, two docs that disagree on the owner. Pick one owner, or document the second as defense in depth.
   2. `transcript.ts`: `lastUserProseIndex` / `isUserProseTurn` also count `isMeta` skill-body lines, so the `readTurn` floor can sit mid-turn after a chained `Skill` call, while the `readTurn` header says the boundary is "the last user prose line" and "tool results never … move the boundary". Rename (e.g. `lastTurnBoundaryIndex`) or state the `isMeta` case in the `readTurn` doc.
-  3. `useSupervisor.ts` `decideTurn`: the comment "every condition guarding it is read at the last possible moment" is now overstated. `supervisorEnabledRef` is read before `fireOne`, and the new ≤2 s completion wait sits between that read and the inject, on top of the ~3 s adjudication gap. The withhold-reason list in the same function is missing `transcript-incomplete` and `duplicate-turn-end`.
+  3. *(resolved 2026-11-04, paydown WP2)*
   4. `turnEndDedupe.ts`: the claim store is module-level and only `activityFunnel.test.tsx` calls `resetTurnEnds()`. `useSupervisor.test.ts` and `supervisorActivityLive.test.tsx` also drive `onTurnEnd` and are safe only because they pass no `last_event_at`. Reset in a shared setup file.
   5. `useSupervisor.ts` `onTurnEnd`: the parameter is widened ad hoc to `TurnEndSignal & Pick<WorkspaceStatusUpdate, "last_event_at">` instead of adding `last_event_at` to `TurnEndSignal`, whose doc calls it "the slice the turn-end decision reads".
 - **Priority:** low

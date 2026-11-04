@@ -34,7 +34,7 @@ export const CARD_REASON_TEXT: Readonly<Record<CardReason, string>> = {
   "not-utf8": "This is a binary file, so it can't be opened as text.",
   "too-large": "This file is too large to open in the editor.",
   "over-media-limit":
-    "This file is larger than 4 GiB, the most the built-in player can load.",
+    "This file is 4 GiB or larger, more than the built-in player can load.",
   "not-a-pdf": "This file has a .pdf name but isn't a PDF.",
   missing: "This file is no longer on disk.",
 };

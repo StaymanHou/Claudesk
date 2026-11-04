@@ -994,7 +994,11 @@ pub fn build_range(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WeekProjectMs {
     pub(crate) alias: String,
-    /// The project's working directory: its sessions' heaviest modal cwd (see `build_day`).
+    /// The project's working directory: the path of the EARLIEST day in the range on which the
+    /// project appears. Each day's path is that day's heaviest modal cwd (`build_day`), and
+    /// `build_range` keeps the first non-empty one, so this is NOT the week's heaviest. The
+    /// `export-week` CLI publishes this field, so the first-day rule is the contract; weighting
+    /// across days would change what Neo reads.
     pub(crate) path: String,
     /// 7 cells, Mon→Sun.
     pub(crate) cells: Vec<RollupCellMs>,

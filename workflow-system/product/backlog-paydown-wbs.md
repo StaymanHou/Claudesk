@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1 done 2026-11-04
+status: in-progress  # WP1–WP2 done 2026-11-04
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -49,7 +49,10 @@ coverage** (`docs/lessons/source-text-guards.md`, entries 11–18). For every WP
 - **Any WP that deletes or renames an export runs `pnpm check:link` and the boot test** before a
   live observation is trusted.
 - **Re-anchor by SYMBOL**, never by the line a finding cites (`[[cite-code-by-symbol-not-line]]`).
-- **Gate:** `pnpm verify:auto`, with the timeout from `runtimes.md` (currently **159000**).
+- **Gate:** `pnpm verify:auto`, with the timeout from `runtimes.md` (currently **207000**).
+- **WIP file names:** prefix every WIP slug with `paydown-2026-11-04-`. The 2026-09-23 sweep's
+  `paydown-wp<N>-*.md` files already sit in `state/archive/`, and WP1's archive move collided
+  with one.
 - **Path:** a WP marked **feature** runs `/feature-plan` (so `feature-review-quality` sees its
   diff). A WP marked **task** runs `/task-plan`. The medium-risk code WPs take the feature path,
   because a task-path WP gets no code-quality review (the 2026-09-23 sweep's lesson).
@@ -150,7 +153,7 @@ itself a claim.
    BL). Add one `SELECT DISTINCT notification_type` step to the in-repo
    `.claude/skills/release/SKILL.md`, then delete the entry. Its code half is already done.
 
-## WP2: Doc and copy accuracy  `[impact: Med · effort: S · risk: Low]` · task
+## WP2: Doc and copy accuracy  `[impact: Med · effort: S · risk: Low]` · task · ✅ DONE 2026-11-04
 
 Each item is a lying doc or string; no behaviour changes. The one rename (WP5) is excluded here.
 - `10-27-QUALITY-WP3-CLAUSE-BOUNDARY-DOCSTRING-OMITS-COMMA-AND-PAREN`: list the full
@@ -160,11 +163,8 @@ Each item is a lying doc or string; no behaviour changes. The one rename (WP5) i
   `adjudicator-failed`, `workflow-not-supervised` and others. Point at `FanOutReason` instead of
   re-listing.
 - `ANALYTICS-WEEK-EXPORT-MINOR-BATCH#1`: document the first-day rule (D6).
-- `11-02-QUALITY-WP5-QUIT-PATH-…`'s doc half: `open_project_paths` claims "both derive from the
-  frontend's canonicalized path", but the frontend only normalizes the string. Fix the sentence
-  here; the code fix is WP6.
-- `09-23-QUALITY-GUARD-EXEMPTS-EVERY-ASYNC-COMMAND-UNLISTED`'s doc half: name the async-command gap
-  in both of the guard's "does NOT cover" lists. The allowlist half is WP4.
+- *(Moved at WP2 plan time to the WP that fixes the code, so no finding is split across two
+  closes: the `open_project_paths` sentence → WP6; the guard's async-command doc half → WP4.)*
 - `09-29-QUALITY-OVER-MEDIA-LIMIT-COPY-SAYS-LARGER-THAN-WHILE-RULE-IS-AT-LEAST`: change the copy to
   "4 GiB or larger".
 - `10-27-QUALITY-WP3-ADJUDICATOR-ALARM-TOOLTIP-OMITS-UNPARSEABLE`: add "an unreadable reply".
@@ -219,8 +219,10 @@ Test-only, so it runs before any code WP; a de-flaked gate helps every WP after 
   - add it to `MUST_STAY_ASYNC`
   - prove there is no freeze with `sample` (`[[verify-main-thread-freeze-via-sample]]`); the guard
     cannot see `trash::delete`
-- `09-23-QUALITY-GUARD-EXEMPTS-EVERY-ASYNC-COMMAND-UNLISTED` (MAJOR), rule half: an allowlist with
-  reasons for `(async)` commands.
+- `09-23-QUALITY-GUARD-EXEMPTS-EVERY-ASYNC-COMMAND-UNLISTED` (MAJOR), whole finding (its doc half
+  moved here from WP2): an allowlist with reasons for `(async)` commands, AND name the gap that
+  remains in both "does NOT cover" lists (the guard's module doc and
+  `docs/lessons/pip-nspanel-main-thread.md` → "What it cannot see").
 - `09-23-QUALITY-GUARD-CFG-TEST-MATCH-DROPS-NOT-TEST-ITEMS` (MAJOR, latent): parse the cfg, count an
   item as test-only only for `test` or `all(test, …)`, and add a fixture.
 - `09-23-QUALITY-WP9-MINOR-BATCH#2`: run `add_nested` for `ImplItem::Fn` and for trait default
@@ -250,6 +252,9 @@ Test-only, so it runs before any code WP; a de-flaked gate helps every WP after 
 - `11-02-QUALITY-WP5-QUIT-PATH-STAMPS-CANONICAL-KEYS-AGAINST-RAW-STORED-PATHS` (MAJOR, latent: 0
   of the operator's 27 paths differ from their realpath today):
   - compare `canonical_key` on both sides in `config_store::touch_closed`
+  - fix the `open_project_paths` doc (`status_broadcaster/mod.rs`): it says "both derive from the
+    frontend's canonicalized path", but the frontend only normalizes the string (moved here from
+    WP2)
   - add a **real symlinked temp-dir** test
   - only symlinks and `/tmp` paths are affected, because `PathBuf` equality is per component, so a
     trailing slash already compares equal

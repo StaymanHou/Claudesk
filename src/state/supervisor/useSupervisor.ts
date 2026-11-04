@@ -187,9 +187,11 @@ export async function decideTurn(
   // above: the operator flips this toggle precisely *because* the supervisor is misbehaving,
   // and a value captured at subscribe time would keep firing for the rest of the session. The
   // fire is the irreversible half (`injectCommand` has no retry and no pre-send cancel window),
-  // so every condition guarding it is read at the last possible moment. ⚠️ Reading the ref late
-  // does not make its VALUE fresh — the host refills it only on reveal and on its own toggle
-  // write (`supervisorToggleIpc.ts` says why that suffices today).
+  // so this is read once per turn end, not once per subscribe. ⚠️ It is NOT read at the last
+  // possible moment: the ≤2 s completion wait and the ~3 s adjudication both sit between this
+  // read and the inject, so a toggle flipped inside that window takes effect on the next turn.
+  // ⚠️ Nor does reading the ref make its VALUE fresh — the host refills it only on reveal and on
+  // its own toggle write (`supervisorToggleIpc.ts` says why that suffices today).
   if (host.supervisorEnabledRef.current === false)
     return withheld("supervisor-toggled-off");
 
@@ -300,9 +302,9 @@ export async function decideTurn(
     );
   } else if (outcome.reason && !outcome.recycle) {
     // ⚠️ **M14 WP0 — THE WITHHOLD REASON WAS COMPUTED AND THEN THROWN AWAY.** `fireOne` returns
-    // a precise reason for every non-fire (`policy-not-auto`, `not-dispatchable`,
-    // `not-supervised`, `adjudicator-says-awaiting`, `already-fired-for-this-turn`,
-    // `transcript-unreadable`, `no-verdict`, `unsent-input-present`) and nothing read it, so
+    // a precise reason for every non-fire (the full set is `FanOutReason` in `fanOut.ts`, which
+    // includes `WithholdReason` from `verdict.ts`; deliberately not re-listed here, because a
+    // copy of the list went stale) and nothing read it, so
     // "why did it not chain there?" had no answer short of reasoning about the code.
     //
     // ⚠️ **This is the tuning channel, and it ships WITH the suppression it measures.** WP0

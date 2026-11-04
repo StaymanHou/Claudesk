@@ -12,6 +12,13 @@
 - **Backlog resolved:** SURFACE-2026-10-27-QUALITY-WP3-FAILURE-ALARM-COUNTS-PER-PROJECT-FOR-MACHINE-WIDE-FAILURES — closed by design: the operator kept the supervisor failure alarm per-project, now recorded in `arch/workflow-supervisor.md` §F.
 - **Backlog resolved:** SURFACE-2026-08-21-NOTIFICATION-TYPE-FALLBACK-IS-WRONG-FOR-COMPLETION-TYPES — the `/release` skill now carries an advisory check that lists every `notification_type` in the analytics database, so an undocumented completion type is caught before it lights the dot blue.
 - **Task closed:** Paydown sweep WP1 cleared the backlog entries the 2026-11-04 sweep disposed of as delete or bury, re-measured the F10b stop at 1.5% after the upstream fix (kept open at low), and added a non-blocking `notification_type` vocabulary check to `/release`, whose first run found one unclassified type.
+- **Backlog resolved:** SURFACE-2026-10-27-QUALITY-WP3-CLAUSE-BOUNDARY-DOCSTRING-OMITS-COMMA-AND-PAREN — `extractEmittedTransitionId`'s doc now lists the full clause-boundary set, including the comma and paren the regex already accepted.
+- **Backlog resolved:** SURFACE-2026-10-26-QUALITY-WP4-OVERLAY-EMIT-OUTSIDE-THE-LOCK-CAN-ARRIVE-STALE — the verify-human overlay docs now say the compare-and-set orders the registry, not the emits, and why the emit stays outside the lock.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-OVER-MEDIA-LIMIT-COPY-SAYS-LARGER-THAN-WHILE-RULE-IS-AT-LEAST — the media card now says a file is "4 GiB or larger", matching the `>=` rule.
+- **Backlog resolved:** SURFACE-2026-10-27-QUALITY-WP3-ADJUDICATOR-ALARM-TOOLTIP-OMITS-UNPARSEABLE — the adjudicator-failing alarm tooltip now names all four failure bases, including an unreadable reply.
+- **Backlog resolved:** SURFACE-2026-09-28-QUALITY-SILENT-SUPERVISOR-MINOR-BATCH (partial: item 3) — `decideTurn` no longer claims the toggle is read at the last possible moment, and its stale withhold-reason list now points at `FanOutReason`.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-ANALYTICS-WEEK-EXPORT-MINOR-BATCH (partial: item 1) — `WeekProjectMs.path` now documents the earliest-day rule that `export-week` publishes, instead of claiming the week's heaviest cwd.
+- **Task closed:** Paydown sweep WP2 made six docs and user-visible strings say what the code does (clause boundaries, overlay emit order, the supervisor toggle read, the week export's path, the media-limit card, and the adjudicator alarm tooltip), with no behavior change.
 
 ## 2026-11-03
 

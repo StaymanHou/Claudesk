@@ -258,7 +258,13 @@ pub fn workspace_status_promote(
         .lock()
         .map_err(|_| "workspace registry lock poisoned".to_string())?
         .promote(&workspace_id, stop_event_at, Attention::VerifyHuman);
-    // The lock is dropped at the end of the statement above, before the emit.
+    // The lock is dropped at the end of the statement above, before the emit. ⚠️ So the
+    // compare-and-set orders the REGISTRY, not the emits: a newer hook event recorded and
+    // emitted between that unlock and this emit arrives first, and this stale overlay lands
+    // after it (no consumer compares `last_event_at`). The window is microseconds. Emitting
+    // under the lock is NOT the fix: this is a main-thread command and the tray listener runs
+    // on `emit`, which is the lock-held-across-a-marshal shape `sync_commands_do_not_block`
+    // cannot see.
     let Some(update) = promoted else {
         return Ok(false);
     };

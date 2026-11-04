@@ -168,8 +168,8 @@ export function workspaceSupervisorReadout(
               '"transcript-incomplete". Claude Code\'s transcript format has probably changed, ' +
               "so the supervisor will not fire until it is updated."
             : `SUPERVISOR ADJUDICATOR FAILING: the last ${failure.count} fire candidates ` +
-              'withheld "adjudicator-failed" (an error, a timeout, or a model other than the ' +
-              "pinned one). See the ▾ activity list for the detail.",
+              'withheld "adjudicator-failed" (an error, a timeout, an unreadable reply, or a ' +
+              "model other than the pinned one). See the ▾ activity list for the detail.",
       }
     : null;
   const alarmLine = alarm ? `${alarm.title}\n\n` : "";

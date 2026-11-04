@@ -53,8 +53,12 @@ const CLAUSE_BOUNDARY_RE = /(?:[.!?:;,(\u2192\u2014]|->|[.!?]\))$/;
  *
  * The rule, measured on the local corpus (`tooling/adjudicator-probe/tokenSplit.probe.ts`):
  * - **Emitted:** the token begins its line (after list / quote / emphasis decoration), or the
- *   text before it ends a clause: `.` `!` `?` `:` `;` `→` `—` `->`, ignoring emphasis and
- *   backticks between (`Approved. **TRANSITION: F13**`, `` → `TRANSITION: F38` ``).
+ *   text before it ends a clause, ignoring emphasis and backticks between
+ *   (`Approved. **TRANSITION: F13**`, `` → `TRANSITION: F38` ``). The full set is
+ *   `CLAUSE_BOUNDARY_RE`: `.` `!` `?` `:` `;` `,` `(` `→` `—` `->`, and a sentence end inside a
+ *   closing paren (`.)` `!)` `?)`). ⚠️ The comma is the loosest boundary
+ *   (`Plan complete, \`TRANSITION: F7\``), so it is the likeliest way a quoted token gets
+ *   through; `(` admits `(TRANSITION: P10)`. Tests depend on both.
  * - **Quoted:** the token is the object of a verb (`` I'm still not emitting `TRANSITION: F13` ``),
  *   sits inside a double-quoted span (`"…"`, `“…”`), or sits inside a code span that holds
  *   other text before it. A fenced code block is NOT a quote: older sessions emitted the
