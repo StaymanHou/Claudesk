@@ -26,15 +26,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-02-QUALITY-WP6-LINE-ACTIONS-REBUILT-PER-KEYSTROKE
-- **Severity:** MINOR
-- **Location:** `RightPanelHost.tsx` (`renderFindResults` effect on `[replacement]`, with an `exhaustive-deps` disable) + `editor/SyntheticView.tsx` (`LineActionWidget.eq` by identity).
-- **Finding:** Each replacement keystroke rebuilds every action → new extension array → CM6 reconfigure → every widget's DOM recreated, though only the tooltip changed.
-- **Why it matters:** Cheap now; scales with large result sets.
-- **Suggested action:** A stable `onClick` (it already goes through a ref) plus `eq` comparing label/title/testid.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-11-02-QUALITY-WP6-JSDOM-CM6-SHIMS-COPIED
 - **Severity:** MINOR
 - **Location:** `findResultsReplaceLive`, `overlaysOutsideEditorSplitLive`, `syntheticLineActions`, `searchPanelTextAssist` tests (+ WP5's `fileOpErrorLive`).
@@ -96,15 +87,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 # m16-5-wp3-supervisor-correctness — 2026-10-27
 
 *(feature-review-quality on ship commit `3e92860` (feature `565a363`), window `565a363^..3e92860`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 6 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-10-27-QUALITY-WP3-FAILURE-ALARM-COUNTS-PER-PROJECT-FOR-MACHINE-WIDE-FAILURES
-- **Severity:** MAJOR
-- **Location:** `src/state/supervisor/activityFeed.ts` (the fold keyed by `projectPath`) + `failureAlarm.ts`.
-- **Finding:** The alarm counts per project, but both failures it watches are MACHINE-wide: a CC transcript-format change, or a retired/moved adjudicator model. Each project must see 3 consecutive fire candidates fail before ITS badge lights. Fire candidates are rare, and 3–4 projects are in flight, so a broken adjudicator can stay silent per badge much longer than "3 failures" suggests.
-- **Why it matters:** The alarm exists to catch a silent supervisor. Keying it on an attribute that only correlates with the failure (`[[classifier-must-key-on-the-classified-property]]`) delays the signal in exactly the case it is for.
-- **Suggested action:** Count at least the adjudicator axis machine-wide (one counter over every record), and show it on every badge. Consider the same for the transcript axis. Keep the per-project tooltip context.
-- **Priority:** medium
-- **Status:** pending
 
 ## SURFACE-2026-10-27-QUALITY-WP3-CLAUSE-BOUNDARY-DOCSTRING-OMITS-COMMA-AND-PAREN
 - **Severity:** MINOR
@@ -320,24 +302,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-10-20-QUALITY-PLAYER-TWO-SUBSCRIPTION-PATHS-FOR-TIMEUPDATE
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/editor/MediaPlayer.tsx` → the time-follow effect + `elementProps`
-- **Finding:** For audio (and video without rVFC), the effect adds `timeupdate` / `seeked` listeners with `addEventListener`, while `elementProps` also binds `onTimeUpdate` / `onSeeked` for `record` / `pauseIfHidden`.
-- **Why it matters:** there are two subscription mechanisms on the same events of one element, so a change to one is easy to miss in the other.
-- **Suggested action:** fold the `setTime` / `pendingFrameRef` clearing into the prop handlers, with a media branch.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-10-20-QUALITY-PLAYER-PER-FRAME-RERENDER-OF-WHOLE-PLAYER
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/editor/MediaPlayer.tsx` → the rVFC loop's `setTime`
-- **Finding:** `setTime` on every presented frame re-renders the whole `MediaPlayer` (readout, rate buttons…) at up to 60 Hz during playback.
-- **Why it matters:** only the timecode span needs per-frame updates. This is cheap to fix now and grows as the strip gains controls.
-- **Suggested action:** a small `<Timecode>` child that owns the per-frame state.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-10-20-QUALITY-RESOLVEFPS-IS-A-PASSTHROUGH
 - **Severity:** MINOR
 - **Location:** `src/components/workspace/editor/mediaClock.ts` → `resolveFps`
@@ -485,18 +449,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
   7. `Workspace.tsx` (1527 lines) grew by about 70 lines of inline header JSX, plus hint-clock state, popover state and a seed effect, gated in two places (`if (!workflowEnabled)` in the seed effect, `workflowEnabled && visible` in the readout). Extract a `SupervisorHeaderControl` component so the surface's state and gate sit together.
   8. `SupervisorActivityPopover.tsx`: `role="dialog"` never takes focus, and Esc is handled by a `document` keydown listener. If focus stays in the xterm pane when `▾` is clicked (confirm in WKWebView), the Esc that closes the popover also reaches CC and could interrupt a running turn. Move focus into the popover, or scope the Esc handling.
 - **Priority:** low (#8 is worth a live check first: a leaked Esc is user-visible)
-- **Status:** pending
-
-# f-b-isolated-cc-profiles — 2026-09-24
-
-*(feature-review-quality on ship commit `409f458`, window `257529c^..409f458`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 6 MINOR, all auto-backlogged. Both MAJORs and all but one MINOR remainder resolved 2026-09-28 by task `f-b-quality-cleanup`; only the remainder below is open.)*
-
-## SURFACE-2026-09-24-QUALITY-F-B-MINOR-BATCH
-- **Severity:** MINOR (the remainder of item 3)
-- **Location:** `src-tauri/src/config_store/profile_create.rs`, `create` / `delete_created`
-- **Finding:** both still return `Result<_, String>`. Their errors mix the injected `register`/`trash` closures' `String`s with formatted IO failures, so a typed error would need a variant per source. The duplicated `invalid` helper (the other half of item 3) was removed 2026-09-28 by adding `ConfigError::Invalid` with one shared `profiles::invalid`.
-- **Suggested action:** only if a caller ever needs to branch on the failure kind. The command boundary is `String` either way, so there is no consumer today.
-- **Priority:** low
 - **Status:** pending
 
 # paydown-wp9-sync-command-blocking-guard — 2026-09-23

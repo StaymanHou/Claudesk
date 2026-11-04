@@ -15,22 +15,6 @@
 - **Priority:** low (lowered from high 2026-10-27 per design prior `simple-version-first-when-the-source-fix-shrank-the-problem`: breaks are now rare at source, and the next lever, richer adjudicator input, is an advanced minor-gain enhancement)
 - **Status:** open — re-measured at M16.5 WP3 (3.5), question KEPT per AC-18 (see the WP3 measurement above). Stays open.
 
-## SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR
-- **Source:** feature:verify-self (`silent-supervisor` Phase 3)
-- **Target level:** feature:spec
-- **Type:** bug
-- **Summary:** In one workspace, every emitted `Stop` reached the supervisor's `onTurnEnd` TWICE, and neither of its supervisor-started turns got the `⚙` turn-attribution badge.
-- **Context:** Dev build, 2026-09-28. `ws-1` (scratch-c) was the first workspace opened in that app run, then a second (scratch-b, `ws-3`) was opened beside it. Each of `ws-1`'s `Stop`s is one `outcome=emitted` line in `status-channel.log`, yet two activity records were written (`fired` + `duplicate-turn-end`; the dedupe from `silent-supervisor` AC-4 contained it). `ws-3` never duplicated, not even after a third workspace was opened. The live React tree held exactly ONE `Workspace` fiber for `ws-1` and one root, and `ws-1`'s turn total was correct (the pane's turn-start tap is not duplicated). The same symptom was seen on 2026-09-25 (one emitted `Stop`, two records). **Candidate explanation (unconfirmed):** a leftover, still-subscribed earlier instance of `ws-1`'s subtree. Its `useSupervisor` would make the duplicate call, and its pane would consume the pending `⚙` origin (claim is consume-once) before the live pane.
-- **Suggested action:** reproduce from a fresh dev launch (open A, open B, run a turn in A, and count records per `Stop`), then find which subscription survives unmount (`useTauriListen`'s cleanup; the XtermPane turn-start tap; any remount of the first workspace when the layout gains a second). A `duplicate-turn-end` line in `supervisor-activity.log` is the detector.
-- **M16.5 WP3 repro attempt (2026-10-27): NOT REPRODUCED; no fix shipped (AC-12).** A fresh env-stripped dev build was driven through the MCP bridge with real `cc_input` turns in scratch workspaces. It was 1 `Stop` : 1 record in ws-1 in every one of 8 scenarios: fresh launch; A then B (ids `ws-1`/`ws-3`, as on 09-28); A/B/A; HMR of `turnEnd.ts`; HMR of `useTauriListen.ts`, which REMOUNTED both workspaces at App level; a third workspace; an AUTO-edge fire; and a full page reload that re-minted `ws-1`. The `⚙` landed on the firing pane only. **Narrowed context from the logs:**
-  - The installed build has written **0** `duplicate-turn-end` in 1,278 records (v0.7.1 to v0.8.0, snapshot 2026-10-27). The leak is **dev-build-only** as far as is observed.
-  - All 9 dev `duplicate-turn-end` records ever written are ws-1 / scratch-c: 3 on 09-28 and 6 on 10-20. Both were sessions with source edits in flight. (09-25 shows the same doubling as same-second record pairs, from before the dedupe existed.)
-  - On 10-20, ws-1 was the ONLY workspace and every `Stop` doubled from the run's first turn, so **a second workspace is NOT the trigger**. The duplicate record lands in the same second as the real one and before it: two near-simultaneous deliveries, not a replay.
-  - Remaining suspects, unprobed: a long chain of mixed HMR updates (the probe ran two); a Rust-rebuild relaunch while Vite stays up; StrictMode's dev-only double effect interacting with one of those.
-  - The `duplicate-turn-end` dedupe already contains the decision, so the residual cost is a dev-only stray record and a possibly-missing `⚙`.
-- **Priority:** low (lowered 2026-10-27, M16.5 WP3: dev-build-only on the evidence, 0 in 1,278 installed-build records; decisions are already deduplicated)
-- **Status:** open — NOT reproduced at M16.5 WP3 (3.3, AC-12; see the repro attempt above). Stays open at low.
-
 ## SURFACE-2026-11-02-REPLACE-ALL-MATCHES-WHOLE-FILE-WHILE-SEARCH-MATCHES-PER-LINE
 - **Source:** feature:refactor (M16.5 WP6, review-quality CRITICAL follow-up)
 - **Target level:** product:wbs
@@ -43,7 +27,7 @@
 
 ## Code-quality findings — m16-5-wp6-per-result-replace (2026-11-02)
 
-- **Pointer:** **4 MINOR** open from the review of `6c97b1a` (the 1 CRITICAL + 1 MAJOR, and a 5th MINOR, were fixed by the same feature's refactor `390512f`). MINOR: the wire-query conversion at 4 sites; Replace All still uses the live query; line actions rebuilt per keystroke; jsdom CM6 shims copied into 5 tests.
+- **Pointer:** **3 MINOR** open from the review of `6c97b1a` (the 1 CRITICAL + 1 MAJOR, and a 5th MINOR, were fixed by the same feature's refactor `390512f`; "line actions rebuilt per keystroke" was Buried 2026-11-04, paydown WP1). MINOR: the wire-query conversion at 4 sites; Replace All still uses the live query; jsdom CM6 shims copied into 5 tests.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp6-per-result-replace — 2026-11-02`.
 - **Priority:** low (all)
 - **Status:** pending
@@ -59,11 +43,11 @@
 
 ## Code-quality findings — m16-5-wp3-supervisor-correctness (2026-10-27)
 
-- **Pointer:** **1 MAJOR + 6 MINOR** from the review of `3e92860` (feature `565a363`; 0 CRITICAL). MAJOR: the failure alarm counts per project although both failures it watches are machine-wide, so a broken adjudicator lights each badge late. MINOR: the clause-boundary docstring omits `,` and `(`; the probe runner skips production's model check; the activity feed dedupes by timestamp; the alarm seed races a live publish; the adjudicator tooltip omits unparseable replies; one overlong JSDoc line.
+- **Pointer:** **6 MINOR** from the review of `3e92860` (feature `565a363`; 0 CRITICAL). The MAJOR (the failure alarm counts per project) was closed **by design** 2026-11-04 (paydown sweep R2; `arch/workflow-supervisor.md` §F). MINOR: the clause-boundary docstring omits `,` and `(`; the probe runner skips production's model check; the activity feed dedupes by timestamp; the alarm seed races a live publish; the adjudicator tooltip omits unparseable replies; one overlong JSDoc line.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp3-supervisor-correctness — 2026-10-27`.
-- **Priority:** medium (the MAJOR); low (the rest)
+- **Priority:** low (all)
 - **Status:** pending
-- **Pickup shape:** WP8's paydown. The MAJOR and the seed race both touch `activityFeed.ts` and should be fixed together.
+- **Pickup shape:** the 2026-11-04 paydown sweep (`backlog-paydown-wbs.md` WP2/WP8/WP9/WP14).
 
 ## Code-quality findings — m16-5-wp4-status-channel-semantics (2026-10-26)
 
@@ -100,10 +84,8 @@
 
 ## Code-quality findings — m16-wp3-review-player (2026-10-20)
 
-- **Pointer:** **6 MINOR** from the review of `cd0f204`, all in the review player:
+- **Pointer:** **4 MINOR** from the review of `cd0f204`, all in the review player (two more, the two `timeupdate` subscription paths and the per-frame re-render, were Buried 2026-11-04, paydown WP1):
   - `elRef` typed as a video & audio intersection
-  - two subscription paths for `timeupdate`
-  - the whole player re-renders per frame (a `<Timecode>` child would fix it)
   - `resolveFps` is a leftover pass-through
   - comments cite WIP phase IDs
   - the strip reuses the zoom-button classes
@@ -265,9 +247,10 @@
   have caught this one** — it is a textbook AUTO-cell break, which makes it a useful real-world
   test case for the dogfooding pass. Scheduled as QoL work immediately AFTER the WP0 hotfix ships
   (operator, 2026-09-17).
-- **Priority:** medium
+- **Priority:** low (was medium; lowered 2026-11-04 on the post-fix measurement below)
 - **Update 2026-09-23 — the upstream fix has LANDED; what remains is MEASUREMENT.** mccc shipped the prose fix (`07ff3ba`, *"disambiguate the F10b edge into verify-human"*) and the tooling to measure it (`f25a509`, `--since/--until` on `measure-f10b`). No work is owed here. The open question is whether the stop still recurs in dogfooding after the fix date.
-- **Status:** pending — measurement only (dogfooding)
+- **Measured 2026-11-04 (paydown WP1), `measure-f10b-handback-rate.py`, AUTOPILOT/FSD-gated F10b turns:** after the fix (`--since 2026-09-22`) **3 of 198 stopped (1.5%; opus-5-5 3/183, opus-5 0/15)**; before it (`--until 2026-09-21`) opus-5 21/279 (7.5%), opus-4-8 9/452 (2.0%), opus-4-7 30/198 (15.2%). The fix cut the rate about 5x, but it is NOT zero, so the entry stays open. Re-measure at the next cycle boundary; a rate that climbs back toward 7% reopens the upstream ask.
+- **Status:** open — residual 1.5% after the upstream fix (priority lowered medium → low, 2026-11-04)
 
 ## SURFACE-2026-09-17-OBSERVABLE-OUTCOME-WRITTEN-FOR-A-SURFACE-A-LATER-PHASE-BUILDS
 - **Source:** feature:verify-self (M14 WP0 Phase 1)
@@ -388,7 +371,7 @@
 - **How to check:** `jq 'select(.projectPath=="<proj>")' <app-data>/supervisor-activity.log` on the
   installed app (`com.claudesk.app`), or scan CC transcripts for commands arriving ~4 s after
   turn end (`[[supervisor-activity-observable-from-cc-transcripts]]`).
-- **Related open items:** `SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR`. (The quoted-token and format-alarm items it once listed were resolved at M16.5 WP3, 2026-10-27; the format alarm now makes the CC-format-change regression loud.)
+- **Related items:** `SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR` (Buried 2026-11-04 to `backlog-archived.md`: dev-build-only). (The quoted-token and format-alarm items it once listed were resolved at M16.5 WP3, 2026-10-27; the format alarm now makes the CC-format-change regression loud.)
 - **Priority:** medium (a release containing `778fe72` — `v0.7.1` — is installed as of 2026-09-29; per this entry's own rule it drops from high). Was: high until a release containing `778fe72` is installed (the field build is still
   silent); medium after that.
 - **Status:** pending — ⚠️ **M16.5 WP7 (2026-11-04) did NOT run the on-screen checks: the operator deferred them to ordinary dogfooding** ("if I notice something while using it, I'll give feedback or add to backlog"). So checks 1–3, ESCALATE → no fire, and WP4's on-screen dot behavior (an artifact watch alone reads grey: no `monitor`-type `Stop` has ever appeared in the installed `status-channel.log`; every verify-human pause reads blue) stay **unseen, NOT passed**. A probe design that provokes each on purpose is in the archived WIP `workflow-system/state/archive/m16-5-wp7-installed-acceptance.md` if anyone wants to run it. As of 2026-11-04 the installed 0.8.1 has logged **0 plain fires** (first 0.8.1 record 01:19Z). Earlier: **a plain fire IS now observed on the installed build:** `v0.7.1` fired four times on 2026-10-12 (`bluecg-maps`, autopilot, P3→P5→P7→P9 in `supervisor-activity.log`), on top of the 2026-09-29 recycle. What remains is the on-screen half (a fire with its `⚙`, a fire with another app focused, Esc recovery); scheduled to close in **M16.5** (roadmap, 2026-10-20; WP7 closed it as deferred to dogfooding, see above). Earlier: fix shipped in `v0.7.1` (2026-09-29). Checks 1–4 and 6 were deferred to dogfooding on the installed release (now `v0.7.1`).
@@ -541,17 +524,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium (raised 2026-11-04 from low: the re-raise trigger is met by routine agent verify runs; was "1 observed instance in the entire corpus; no data impact — it degrades the ambient dot, the same surface M7 exists for").
 - **Status:** pending — was deferred to **F-b**, which shipped 2026-09-24 WITHOUT putting two workspaces on one tree ("the same directory under two profiles" is F-b Out of Scope; `WorkspaceRegistry` stays path-keyed and a row is one dir + one profile). So the trigger has not happened; still re-raise on the first real two-sessions-per-repo use. It travels with options (b)/(c) of the supervisor-hotfix "per turn" toggle-freshness finding, which is harmless for the same 1:1 reason (paydown-2026-09-23 fold-back).
 
-## SURFACE-2026-08-21-NOTIFICATION-TYPE-FALLBACK-IS-WRONG-FOR-COMPLETION-TYPES
-- **Source:** feature:build (M13.5 WP2 Phase 1 — the generalization of the defect just fixed)
-- **Target level:** operational (a periodic check, not a code change)
-- **Type:** trap (a conservative default that is right in one direction and wrong in the other)
-- ⚠️ **Rewritten 2026-09-23 (paydown WP6) down to the remaining open work.** The code half is DONE: `elicitation_url_dialog` is classified explicitly, the informational set is an enumerable list, and `every_documented_notification_type_is_classified_deliberately` pins the two lists as disjoint, with their union exactly the official hooks doc's 9 types. So a newly DOCUMENTED type now fails a test instead of riding the fallback.
-- **Summary (what remains):** `notification_awaits_input`'s unknown-type fallback maps any unrecognized `notification_type` to AwaitingInput. That is right for a future *input-needed* type and wrong for a *completion* one (`agent_completed` lit the dot blue for ~150s). ⚠️ **The fallback must NOT be inverted**; it is pinned by `notification_unknown_type_falls_back_to_awaiting`. The vocabulary test covers what the docs list, but **a type CC emits WITHOUT documenting it** (which is how `agent_completed` first appeared) is still caught only by looking at the corpus.
-- **Context kept:** `agent_completed` is NOT emitted by the in-turn `Agent` tool: a real backgrounded `Agent` task produced only `idle_prompt` (verify-human 2026-08-21). The likely emitter is a **background CC session** (`~/.claude/jobs`). Do not read "a background agent finished and the dot stayed gray" as exercising this path, because `idle_prompt` gives the identical signature. The four `elicitation_*` types have never been observed in either corpus.
-- **Suggested action:** a cheap periodic check, e.g. a `/release`-time checklist item: `SELECT DISTINCT json_extract(meta,'$.notification_type') FROM events` over `time-analytics.sqlite`, then classify anything outside the documented 9. Measured vocabulary as of 2026-08-21: `idle_prompt` 1723 · `permission_prompt` 392 · `agent_completed` 3 · `auth_success` 2 · `agent_needs_input` 1. A test reading the live DB is probably wrong (environment-dependent).
-- **Priority:** low (no live defect)
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-
 ## SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED
 - **Source:** backlog-paydown sweep 2026-08-19 (carried out of `backlog-paydown-wbs.md` at sweep
   close, so it survives that file's deletion — it was the sweep's only surviving obligation)
@@ -634,26 +606,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium (no live exposure; the arm's assertion is sound — the risk is the next
   surface, most likely M15's)
 - **Status:** deferred — carry to next cycle (M13 close 2026-08-18); ⚠️ **M15 is the likely author of the first exposed surface** (a Recycle menu item) — decide (a) vs (b) *before* building it, not after. Standing precedent is (b). ⚠️ **Re-anchored 2026-09-23 (paydown fold-back):** M15 closed with a **headless** supervisor that owns NO guard arm, so it never authored the exposed surface. The anchor was then the supervisor activity surface, expected to own the **seventh** arm, but that surface **shipped 2026-09-28 WITHOUT a seventh arm**: all of it derives from `workspaceSupervisorReadout`, arm 6's existing subject (`arch/workflow-supervisor.md` §G). So this question still has **no concrete anchor**. Decide (a) vs (b) when a supervisor surface first needs its own arm.
-
-## SURFACE-2026-08-06-SESSION-RESTORE-CONTRADICTS-ITSELF-ON-THE-DEFAULT-DRIVE-MODE
-- **Source:** feature:build (M12 WP4a Phase 2)
-- **Target level:** external — the **companion workflow-system repo** (`my-claude-code-customization`), not Claudesk code
-- **Type:** bug (doc/spec inconsistency in a skill body)
-- **Summary:** `~/.claude/skills/session-restore/SKILL.md` states two different defaults for the drive mode **within one file**: step 4 priority 4 says *"Default to `orchestrated` (Mode 2) if neither source has it"* (`:42`), while the mode menu 17 lines later labels *`3  Autopilot     only pause at verify-human (default)`* (`:59`). A reader following step 4 defaults to Mode 2; a reader reading the menu believes Mode 3 is the default.
-- **Context:** Found while settling M12 WP4a's P2.2 (what an unset drive mode should mean on the wire). It **strengthened** that verdict rather than blocking it: since there is no coherent upstream default even within a single skill, Claudesk emitting any default would be inventing workflow policy — so absence correctly emits **nothing**. ⚠️ Note the WBS's Finding F describes this as a disagreement *between* `session-start` and `session-restore`; the sharper truth is that `session-restore` disagrees with **itself**. Claudesk is unaffected either way (it defers entirely).
-- **Suggested action:** Not Claudesk's to fix — the companion repo owns it. Worth mentioning in the next cross-repo handoff: pick one default and make `:42` and `:59` agree. (Menu-labels-Mode-3 vs step-4-says-Mode-2; the 29-file archive sample suggests `autopilot` is what actually gets used, 28/29.) **Do NOT "fix" this from Claudesk** — hard constraint: zero companion-repo change in M12.
-- **Priority:** low (documentation clarity in an external repo; no Claudesk impact, and M12's design deliberately defers to whatever the skill decides)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12) — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §E.9; stays OPEN until mccc applies it
-
-## SURFACE-2026-08-06-MANUAL-SESSION-START-MODE-MENU-INTERRUPTS-BEFORE-INTENT
-- **Source:** product:wbs (M12 WP4 re-decomposition, 2026-08-06) — deferred by operator decision during the same session that measured it
-- **Target level:** product (a candidate M13/M14 item or a QoL-bucket entry; deliberately NOT scoped to a WP yet)
-- **Type:** UX friction (measured, not reported)
-- **Summary:** A **manual** `/session-start` costs **2.18 human turns** to reach work, vs ~0.49 for `/session-restore` and ~0.43 for `/session-resume` — roughly **4×**. The cause is *sequencing*, not persistence: the drive-mode menu arrives **before the operator has said what they want to do**. Of 17 manual `session-start` opens that got the menu, only **4 replies led with a mode word**; the other 13 ignored the menu entirely and stated a problem (*"do /init first"*, *"I can't open the jenkins web interface. Can you try?"*, *"reverse engineer to establish the product documents as a brownfield project"*). Contrast `session-restore`/`session-resume`, where 84–86% of replies bundle the mode with the work instruction reflexively, because the problem is already on disk and only the mode is nominally in question.
-- **Context:** Measured in the same full-corpus parse that drove the M12 WP4 re-decomposition (697 transcripts / 62 slugs / 2026-05-29→2026-08-06; 524 manual entry points, classifier exactly decidable with zero ambiguous cases). ⚠️ **Manual `session-start` is only 24 of 524 manual opens (4.6%)** — which is exactly why it is deferred rather than built: M12's signal work targets the 500 restore/resume opens. But it is the *most expensive per instance*. ⚠️ **The M12 mechanism does NOT automatically solve this.** M12 WP4b injects a drive mode; that removes the menu, but the deeper friction here is that a fresh `/session-start` has no work context at all, so the operator must still state intent. The 2.18-turn figure would improve but not collapse. ⚠️ Note also that `session-start` **never reads a persisted mode** (12 `drive_mode` refs in its SKILL.md, all writes or prose; step 3 presents the menu unconditionally) and defaults to **autopilot** on Enter, while `session-restore` defaults to **orchestrated** — the two disagree, so there is no single upstream default.
-- **Suggested action:** Revisit after dogfooding M12's signal. If the injected mode alone brings manual `session-start` into line with the restore path, close this. If not, the remaining question is whether Claudesk can supply *work intent* as well as *mode* — which overlaps M13's skill registry and should be decided there rather than as an isolated fix. ⚠️ Do **not** address it by changing `session-start`'s behavior in the companion repo: the same constraint that governs `/session-restore` applies — the skill is correct for a plain-CLI user, who has stated no mode and no intent.
-- **Priority:** low-medium (4.6% of manual opens, but ~4× the per-instance cost; no correctness impact, and M12's signal may partially absorb it)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12); prior note: **deferred by operator decision 2026-08-06** (*"session-start can be a later item in the backlog. much lower priority than session-restore, but not nothing"*)
 
 ## Code-quality findings — m13-wp3-recycle-session (2026-08-18)
 - **Pointer:** **1 MAJOR remaining.** The uncancellable-across-unmount MAJOR was resolved 2026-08-19, and all three MINORs are resolved (the last, `showRecycleButton`'s stale `:489` cite, at paydown-2026-09-23 WP4). The late-subscription disposal MAJOR is now FULLY closed (paydown-2026-09-23 WP6): the `WORKSPACE_STATUS` arm has its own deferred-unlisten test, and each arm is mutation-proved on its own. Remaining, the documentary MAJOR: **52–71% comment density, with the "Recycle is not a skill-button member" rationale in five files.** Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m13-wp3-recycle-session — 2026-08-18`.
@@ -929,12 +881,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** one small task. Do `spawn_blocking` for the dry run, keeping the lock-guard anchor, together with the guard's async-exemption rule and the `cfg` predicate fix, each with a fixture test and a mutant. The provenance labels go to the T1/T2 comment pass.
 
-## Code-quality findings — f-b-isolated-cc-profiles (2026-09-24)
-- **Pointer:** **1 MINOR remainder** from review of ship commit `409f458`. Both MAJORs and the rest of the MINOR batch were resolved 2026-09-28 (task `f-b-quality-cleanup`). What remains: `profile_create::create` / `delete_created` still return `Result<_, String>`.
-  - Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# f-b-isolated-cc-profiles — 2026-09-24`.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-
 ## SURFACE-2026-09-18-DOC-COUNT-NEEDS-A-GENERATOR-NOT-A-DETECTOR
 - **Source:** feature:verify-codify (M14 WP4 Phase 4)
 - **Target level:** product:arch
@@ -944,42 +890,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** If this drifts again, invert the mechanism: make the count a **generated artifact** rather than something to detect. Options: (a) a single source-of-truth line emitted by a script that docs `include`, (b) an HTML-comment marker (`<!-- guard-count -->…<!-- /guard-count -->`) whose content a test REGENERATES from `armSubjects` and fails on diff — a generator's output is unambiguous where prose intent is not. ⚠️ **Do not re-attempt the detector shape** without reading why it failed first.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-
-## SURFACE-2026-09-23-PAYDOWN-TASK-PATH-WPS-GOT-NO-CODE-QUALITY-REVIEW
-- **Source:** task:act (paydown-2026-09-23 fold-back)
-- **Target level:** feature:spec (a review pass, not a fix)
-- **Type:** gap
-- **Summary:** Paydown **WP8** (`4a21cbf`, small live defects and dead code, 26 files) and **WP10** (`37b12a2`, the dictated-prompt wrap, 14 files) changed runtime behavior but ran on the **task** path. The task path has no `feature-review-quality` state, so neither diff was ever reviewed. WP3, WP7 and WP9 ran on the feature path, and each review found at least one MAJOR, including WP9's "the fix is incomplete" finding on the very defect it had just fixed.
-- **Context:** Each WP was mutation-tested per item, so the untested risk is the class a reviewer catches and a per-item mutant does not: dead leftovers, a rationale restated across files, a fix that is right at the site and incomplete at the class. WP8 includes behavior changes (the drive-mode readout gate, the unconditional `aria-live` mount, the `WorkspaceStatus` export deletion, stderr pass-through, the `UnknownRoot` variant).
-- **Suggested action:** Optional. Run a one-shot `code-quality-reviewer` over `4a21cbf` and `37b12a2` (each against its parent), and auto-backlog its findings as usual. If it is skipped, delete this entry with a note saying so.
-- **Priority:** low-medium
-- **Status:** pending — optional; operator's call
-
-## SURFACE-2026-09-23-PAYDOWN-AUTOPILOT-DEFAULTS-AWAIT-RATIFICATION
-- **Source:** task:act (paydown-2026-09-23 fold-back)
-- **Target level:** task (a read-and-rule, no build unless one is overturned)
-- **Type:** gap
-- **Summary:** The 2026-09-23 paydown ran in autopilot, and three WPs took defaults they disclosed as "flag if wrong". The operator has not ruled on them. They are recorded under each archive's "Decisions taken at the autopilot default" / "Defaults taken" heading:
-  - **WP5** (`archive/paydown-wp5-chord-registry-settings-guards.md`): three CM6 bindings went into `NOT_LISTED` (⌘⌥G is carried separately, see `SURFACE-2026-09-23-CM6-GO-TO-LINE-HAS-NO-SETTINGS-HOTKEY-ROW`). Row 6 used a test-side AST selector with no host refactor. `chordLabel` was deleted, not wired. AG1 anchored only the completeness arm.
-  - **WP6** (`archive/paydown-wp6-guards-that-cannot-fail.md`): Row 7 uses an `AbortSignal` in `DocLinkClickDeps`. Row 28 is a partial resolution. `MAIN_WINDOW_LABEL` is a `pub(crate)` const. J3.2 got a positive exactly-one assertion. `tooling/link-check` went into tsconfig `include`. appBoot's `uncaught` assertion was decided by probe. G6 took its sibling nit.
-  - ⚠️ **WP10** (`archive/paydown-wp10-dictated-prompt-wrap.md`): **the ruling said "per-panel toggle", and the build took ONE global localStorage key** (`claudesk.prompt.dictatedWrap`). "Per-panel" was read as "lives in the panel, not in Settings", because a per-workspace value would mean re-disabling it in every project. This is the one default that could contradict what the operator meant.
-- **Suggested action:** The operator reads the three lists and either ratifies them (delete this entry with a CHANGELOG line) or names the one to overturn, which becomes its own task.
-- **Priority:** low (the WP10 item alone is low-medium)
-- **Status:** pending — operator's call
-
-
-## SURFACE-2026-10-20-REVIEW-PLAYER-VFR-FRAME-STEP
-- **Source:** feature:build (M16 WP3 Phase 1)
-- **Target level:** product:wbs
-- **Type:** gap
-- **Summary:** The review player frame-steps by seeking to the midpoint of a fixed-rate frame grid built from the track's `configuration.framerate`. A variable-frame-rate video (macOS screen recordings, phone video) reports a nominal/average rate, so steps can skip or repeat frames, and the `.ff` timecode is approximate.
-- **Context:** Every M16 WP3 fixture is constant-rate; no VFR file was measured. `snapFps` keeps an unusual rate raw rather than claim a standard one.
-- **Suggested action:** If VFR review matters in dogfooding, step by presented frames instead (seek just past the current rVFC `mediaTime`, then confirm a new frame presented). Measure on a real screen recording first.
-- **Measured at M16.5 WP5 task 5.6 (2026-11-02) — the fault is REAL:** a synthetic VFR H.264 (120 frames, exact 1/600 timebase, 60 fps bursts of 7 with 116.7 ms gaps — the shape of a screen recording; each frame a distinct luma so the shown frame is identifiable; `tmp/scratch/scratch-a/media/wp5-vfr.mp4`, ffprobe `r_frame_rate=60/1 avg_frame_rate=1200/37`) reads as **32.432 fps** in the player. 40 presses of "next frame" in the dev app: **5 exact, 18 skips, 17 repeats** — the canvas pixel repeated 4× at every gap, exactly as the midpoint-grid prediction from the true PTS list said.
-- **Feasibility, measured:** in this WebKit `requestVideoFrameCallback` DOES fire on a paused seek and reports the PRESENTED frame's PTS (seek 0.15 → `mediaTime` 0.1). So a correct VFR step is buildable without a demuxer: **prev** = one seek to `cur - 1ms` (lands on the previous frame); **next** = grow-then-bisect seeks until `mediaTime` changes (≈10–20 seeks worst case), then settle on that frame. Keep the midpoint grid for constant-rate files (M16 WP3's measured rule) — that needs a CFR/VFR decision the player does not have today.
-- **Why not built at WP5 (agent decision, disclosed to the operator 2026-11-02):** a probing engine is not the simple version, it would touch the constant-rate path M16 tuned, and it only matters for VFR files. Per `simple-version-first-when-the-source-fix-shrank-the-problem` and the operator's "drop the enhancement if it is not worth my attention".
-- **Priority:** low
-- **Status:** open — measured at M16.5 WP5 (fault confirmed, fix designed, not built)
 
 ## SURFACE-2026-10-26-MEDIATABLIVE-FLAKES-UNDER-FULL-SUITE-LOAD
 - **Source:** feature:build (M16.5 WP3 Phase 2)
@@ -1019,4 +929,14 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** Sequence on `tmp/scratch/restore-test` (dev build, agent-launched): open (`cc-1`, painted normally), run turns, close via the header's "Close restore-test" → close guard → **Close Anyway** (the guard read Running because the agent's own tool hooks shared the fixture's cwd; see the path-keyed registry limit), change the picker-row drive mode to None, reopen by row click (`cc-2`, spawned without `--continue`). The pane showed 68 `.xterm-rows` children with zero characters, and a native `webview_screenshot` was black at roughly 30 s, 2 min and 4 min. A window `resize` event did not repaint it. This is NOT caveat (h) (a fresh pane is blank only for ~4–10 s). Candidates, uninvestigated: the PTY early-output buffer never released because the new pane's `cc_ready` / listener attach targeted the old session, or a stale per-workspace listener after the forced close.
 - **Suggested action:** Reproduce first in the installed build: close a workspace (both a normal close and Close Anyway), reopen the same project, and see whether the pane paints. If it reproduces, trace `cc_ready` and the output listener for the reopened session id.
 - **Priority:** medium if it reproduces in the installed build (a blank pane hides an awaiting question); low if dev-only
+- **Status:** pending
+
+## SURFACE-2026-11-04-QUOTA-AUTO-RESUME-FIRED-IS-AN-UNCLASSIFIED-NOTIFICATION-TYPE
+- **Source:** task:act (paydown WP1, the first run of the new `/release` vocabulary check)
+- **Target level:** product:wbs → `backlog-paydown-wbs.md` WP8 (status cluster)
+- **Type:** bug (low)
+- **Summary:** CC emits `notification_type: "quota_auto_resume_fired"` (9 events in the prod `time-analytics.sqlite`, 2026-09-21 → 2026-10-26). It is undocumented and in neither `INPUT_NEEDED_NOTIFICATION_TYPES` nor `INFORMATIONAL_NOTIFICATION_TYPES`, so `notification_awaits_input` falls back to AwaitingInput (blue).
+- **Context:** In all 9 sessions a `UserPromptSubmit` follows within 6–41 ms (CC auto-resumes the turn after a quota reset), so the wrong blue lasts about 40 ms on the live dot and in the reclassifier's AwaitingInput spans. Impact is negligible today, but the project rule is that every observed type is classified DELIBERATELY, never left to the fallback (the `agent_completed` lesson). The full vocabulary on 2026-11-04 was `idle_prompt` 4964 · `permission_prompt` 626 · `agent_completed` 21 · `agent_needs_input` 15 · `auth_success` 10 · `quota_auto_resume_fired` 9.
+- **Suggested action:** Add it to `INFORMATIONAL_NOTIFICATION_TYPES`, with a one-line why (the auto-resumed turn's own `UserPromptSubmit` drives the state). Keep `every_documented_notification_type_is_classified_deliberately` green. That test pins the DOCUMENTED nine, so either extend it with an "observed, undocumented" list or leave it unchanged and note why.
+- **Priority:** low
 - **Status:** pending

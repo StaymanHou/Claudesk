@@ -133,6 +133,22 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
    is clean, and the tap repo is present with an SSH remote. STOP and tell the
    operator if any fails.
 
+   **Advisory, never blocking: the `notification_type` vocabulary check.** List what
+   CC has actually sent:
+
+   ```bash
+   sqlite3 -readonly "$HOME/Library/Application Support/com.claudesk.app/time-analytics.sqlite" \
+     "SELECT json_extract(meta,'\$.notification_type') AS t, count(*) FROM events
+      WHERE t IS NOT NULL GROUP BY t ORDER BY 2 DESC;"
+   ```
+
+   Compare it with the two lists in `status_broadcaster/mod.rs`
+   (`INPUT_NEEDED_NOTIFICATION_TYPES` and `INFORMATIONAL_NOTIFICATION_TYPES`). Any type
+   in neither list falls back to AwaitingInput, which is right for an input-needed type
+   and wrong for a completion one (`agent_completed` lit the dot blue that way). For a new
+   type, file a SURFACE and tell the operator, but do not hold the release. The fallback
+   itself must NOT be inverted.
+
 2. **Bump the version.** Edit both:
    - `src-tauri/tauri.conf.json` → `version`
    - `src-tauri/Cargo.toml` → `[package] version`

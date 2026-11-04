@@ -371,6 +371,10 @@ for dev. It is size-capped at 5 MiB with one rotated generation (`.log.1`), reus
   - ⚠️ **It SURVIVES a relaunch** (operator decision, overriding the spec's "resets"): the mount
     seed replays the project's newest 50 records through the same fold.
   - It is part of the gated readout, so it owns **no seventh guard arm**.
+  - ⚠️ **It counts PER PROJECT, including the `adjudicator-failed` axis** (operator decision
+    2026-11-04, paydown sweep R2). An adjudicator failure is often machine-wide (a broken CLI, a
+    moved pin), and failures across interleaved projects may never reach 3 in any one of them. A
+    machine-wide counter was proposed and **declined**, so do not re-file it as a defect.
 - **`inject-failed` is now reachable.** `injectCommand` swallows a rejected `cc_input`, so the
   supervisor passes an `onIpcError` that re-throws. Before this, a failed injection was reported as
   a fire.

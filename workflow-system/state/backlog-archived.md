@@ -371,3 +371,75 @@ changes (e.g. the prerequisite toolchain lands for another reason).
 - **Fix shape:** none needed. Recorded only so a future reader doesn't "fix" the mini-timeline to a `dur_ms` basis + break the wall-relative layout (the positions MUST stay on the minute grid to align with the main timeline). If the wall FIGURE (not the positions) ever needs sub-minute precision, sum `dur_ms` across the session's segs for the denominator label only — but leave the positioning math alone.
 - **Priority:** low (awareness; likely a no-op / won't-fix).
 - **Status:** pending.
+
+## SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR  `← Buried 2026-11-04 (paydown WP1)`
+- **Buried because:** the disposition model scored this dev-build-only on the evidence (0 `duplicate-turn-end` in 1,278 installed-build records), not reproduced at M16.5 WP3, and the `duplicate-turn-end` dedupe already contains the decision. Low impact; the remaining suspects need a long HMR-chain repro (medium effort).
+- **Source:** feature:verify-self (`silent-supervisor` Phase 3)
+- **Target level:** feature:spec
+- **Type:** bug
+- **Summary:** In one workspace, every emitted `Stop` reached the supervisor's `onTurnEnd` TWICE, and neither of its supervisor-started turns got the `⚙` turn-attribution badge.
+- **Context:** Dev build, 2026-09-28. `ws-1` (scratch-c) was the first workspace opened in that app run, then a second (scratch-b, `ws-3`) was opened beside it. Each of `ws-1`'s `Stop`s is one `outcome=emitted` line in `status-channel.log`, yet two activity records were written (`fired` + `duplicate-turn-end`; the dedupe from `silent-supervisor` AC-4 contained it). `ws-3` never duplicated, not even after a third workspace was opened. The live React tree held exactly ONE `Workspace` fiber for `ws-1` and one root, and `ws-1`'s turn total was correct (the pane's turn-start tap is not duplicated). The same symptom was seen on 2026-09-25 (one emitted `Stop`, two records). **Candidate explanation (unconfirmed):** a leftover, still-subscribed earlier instance of `ws-1`'s subtree. Its `useSupervisor` would make the duplicate call, and its pane would consume the pending `⚙` origin (claim is consume-once) before the live pane.
+- **Suggested action:** reproduce from a fresh dev launch (open A, open B, run a turn in A, and count records per `Stop`), then find which subscription survives unmount (`useTauriListen`'s cleanup; the XtermPane turn-start tap; any remount of the first workspace when the layout gains a second). A `duplicate-turn-end` line in `supervisor-activity.log` is the detector.
+- **M16.5 WP3 repro attempt (2026-10-27): NOT REPRODUCED; no fix shipped (AC-12).** A fresh env-stripped dev build was driven through the MCP bridge with real `cc_input` turns in scratch workspaces. It was 1 `Stop` : 1 record in ws-1 in every one of 8 scenarios: fresh launch; A then B (ids `ws-1`/`ws-3`, as on 09-28); A/B/A; HMR of `turnEnd.ts`; HMR of `useTauriListen.ts`, which REMOUNTED both workspaces at App level; a third workspace; an AUTO-edge fire; and a full page reload that re-minted `ws-1`. The `⚙` landed on the firing pane only. **Narrowed context from the logs:**
+  - The installed build has written **0** `duplicate-turn-end` in 1,278 records (v0.7.1 to v0.8.0, snapshot 2026-10-27). The leak is **dev-build-only** as far as is observed.
+  - All 9 dev `duplicate-turn-end` records ever written are ws-1 / scratch-c: 3 on 09-28 and 6 on 10-20. Both were sessions with source edits in flight. (09-25 shows the same doubling as same-second record pairs, from before the dedupe existed.)
+  - On 10-20, ws-1 was the ONLY workspace and every `Stop` doubled from the run's first turn, so **a second workspace is NOT the trigger**. The duplicate record lands in the same second as the real one and before it: two near-simultaneous deliveries, not a replay.
+  - Remaining suspects, unprobed: a long chain of mixed HMR updates (the probe ran two); a Rust-rebuild relaunch while Vite stays up; StrictMode's dev-only double effect interacting with one of those.
+  - The `duplicate-turn-end` dedupe already contains the decision, so the residual cost is a dev-only stray record and a possibly-missing `⚙`.
+- **Priority:** low (lowered 2026-10-27, M16.5 WP3: dev-build-only on the evidence, 0 in 1,278 installed-build records; decisions are already deduplicated)
+- **Status:** open — NOT reproduced at M16.5 WP3 (3.3, AC-12; see the repro attempt above). Stays open at low.
+
+## SURFACE-2026-10-20-REVIEW-PLAYER-VFR-FRAME-STEP  `← Buried 2026-11-04 (paydown WP1)`
+- **Buried because:** the disposition model scored this low impact (VFR sources are rare in the operator's review use), M effort, medium risk to the constant-frame-rate path that works today. Measured, not built (M16.5 WP5).
+- **Source:** feature:build (M16 WP3 Phase 1)
+- **Target level:** product:wbs
+- **Type:** gap
+- **Summary:** The review player frame-steps by seeking to the midpoint of a fixed-rate frame grid built from the track's `configuration.framerate`. A variable-frame-rate video (macOS screen recordings, phone video) reports a nominal/average rate, so steps can skip or repeat frames, and the `.ff` timecode is approximate.
+- **Context:** Every M16 WP3 fixture is constant-rate; no VFR file was measured. `snapFps` keeps an unusual rate raw rather than claim a standard one.
+- **Suggested action:** If VFR review matters in dogfooding, step by presented frames instead (seek just past the current rVFC `mediaTime`, then confirm a new frame presented). Measure on a real screen recording first.
+- **Measured at M16.5 WP5 task 5.6 (2026-11-02) — the fault is REAL:** a synthetic VFR H.264 (120 frames, exact 1/600 timebase, 60 fps bursts of 7 with 116.7 ms gaps — the shape of a screen recording; each frame a distinct luma so the shown frame is identifiable; `tmp/scratch/scratch-a/media/wp5-vfr.mp4`, ffprobe `r_frame_rate=60/1 avg_frame_rate=1200/37`) reads as **32.432 fps** in the player. 40 presses of "next frame" in the dev app: **5 exact, 18 skips, 17 repeats** — the canvas pixel repeated 4× at every gap, exactly as the midpoint-grid prediction from the true PTS list said.
+- **Feasibility, measured:** in this WebKit `requestVideoFrameCallback` DOES fire on a paused seek and reports the PRESENTED frame's PTS (seek 0.15 → `mediaTime` 0.1). So a correct VFR step is buildable without a demuxer: **prev** = one seek to `cur - 1ms` (lands on the previous frame); **next** = grow-then-bisect seeks until `mediaTime` changes (≈10–20 seeks worst case), then settle on that frame. Keep the midpoint grid for constant-rate files (M16 WP3's measured rule) — that needs a CFR/VFR decision the player does not have today.
+- **Why not built at WP5 (agent decision, disclosed to the operator 2026-11-02):** a probing engine is not the simple version, it would touch the constant-rate path M16 tuned, and it only matters for VFR files. Per `simple-version-first-when-the-source-fix-shrank-the-problem` and the operator's "drop the enhancement if it is not worth my attention".
+- **Priority:** low
+- **Status:** open — measured at M16.5 WP5 (fault confirmed, fix designed, not built)
+
+## SURFACE-2026-09-23-PAYDOWN-TASK-PATH-WPS-GOT-NO-CODE-QUALITY-REVIEW  `← Buried 2026-11-04 (paydown WP1)`
+- **Buried because:** the disposition model scored this its lesson is absorbed into the 2026-11-04 sweep's Path rule (medium-risk code WPs take the feature path so review-quality sees them); the two commits (`4a21cbf`, `37b12a2`) are six weeks old and since touched, so a retro review now is low value.
+- **Source:** task:act (paydown-2026-09-23 fold-back)
+- **Target level:** feature:spec (a review pass, not a fix)
+- **Type:** gap
+- **Summary:** Paydown **WP8** (`4a21cbf`, small live defects and dead code, 26 files) and **WP10** (`37b12a2`, the dictated-prompt wrap, 14 files) changed runtime behavior but ran on the **task** path. The task path has no `feature-review-quality` state, so neither diff was ever reviewed. WP3, WP7 and WP9 ran on the feature path, and each review found at least one MAJOR, including WP9's "the fix is incomplete" finding on the very defect it had just fixed.
+- **Context:** Each WP was mutation-tested per item, so the untested risk is the class a reviewer catches and a per-item mutant does not: dead leftovers, a rationale restated across files, a fix that is right at the site and incomplete at the class. WP8 includes behavior changes (the drive-mode readout gate, the unconditional `aria-live` mount, the `WorkspaceStatus` export deletion, stderr pass-through, the `UnknownRoot` variant).
+- **Suggested action:** Optional. Run a one-shot `code-quality-reviewer` over `4a21cbf` and `37b12a2` (each against its parent), and auto-backlog its findings as usual. If it is skipped, delete this entry with a note saying so.
+- **Priority:** low-medium
+- **Status:** pending — optional; operator's call
+
+## SURFACE-2026-10-20-QUALITY-PLAYER-TWO-SUBSCRIPTION-PATHS-FOR-TIMEUPDATE  `← Buried 2026-11-04 (paydown WP1)`
+- **Buried because:** the disposition model scored this low impact (the review player is stable and rarely touched), medium risk to playback timing that no test observes.
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/MediaPlayer.tsx` → the time-follow effect + `elementProps`
+- **Finding:** For audio (and video without rVFC), the effect adds `timeupdate` / `seeked` listeners with `addEventListener`, while `elementProps` also binds `onTimeUpdate` / `onSeeked` for `record` / `pauseIfHidden`.
+- **Why it matters:** there are two subscription mechanisms on the same events of one element, so a change to one is easy to miss in the other.
+- **Suggested action:** fold the `setTime` / `pendingFrameRef` clearing into the prop handlers, with a media branch.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-10-20-QUALITY-PLAYER-PER-FRAME-RERENDER-OF-WHOLE-PLAYER  `← Buried 2026-11-04 (paydown WP1)`
+- **Buried because:** the disposition model scored this low impact (no measured perf problem in the review player), medium risk to the rVFC timecode path that no test observes.
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/MediaPlayer.tsx` → the rVFC loop's `setTime`
+- **Finding:** `setTime` on every presented frame re-renders the whole `MediaPlayer` (readout, rate buttons…) at up to 60 Hz during playback.
+- **Why it matters:** only the timecode span needs per-frame updates. This is cheap to fix now and grows as the strip gains controls.
+- **Suggested action:** a small `<Timecode>` child that owns the per-frame state.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-02-QUALITY-WP6-LINE-ACTIONS-REBUILT-PER-KEYSTROKE  `← Buried 2026-11-04 (paydown WP1)`
+- **Buried because:** the disposition model scored this low impact (no measured cost on result sets of real size), medium risk: making `LineActionWidget.eq` skip updates can leave a stale `onClick`.
+- **Severity:** MINOR
+- **Location:** `RightPanelHost.tsx` (`renderFindResults` effect on `[replacement]`, with an `exhaustive-deps` disable) + `editor/SyntheticView.tsx` (`LineActionWidget.eq` by identity).
+- **Finding:** Each replacement keystroke rebuilds every action → new extension array → CM6 reconfigure → every widget's DOM recreated, though only the tooltip changed.
+- **Why it matters:** Cheap now; scales with large result sets.
+- **Suggested action:** A stable `onClick` (it already goes through a ref) plus `eq` comparing label/title/testid.
+- **Priority:** low
+- **Status:** pending
