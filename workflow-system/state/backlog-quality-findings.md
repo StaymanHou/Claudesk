@@ -53,28 +53,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-# m16-5-wp6-per-result-replace — 2026-11-02
-
-*(feature-review-quality on ship commit `6c97b1a`, window `6c97b1a^..6c97b1a`; drive_mode=autopilot. 1 CRITICAL + 1 MAJOR fixed by `/feature-refactor` (F40, `390512f`); 5 MINOR auto-backlogged, 1 of them since fixed by that refactor — 4 remain below.)*
-
-## SURFACE-2026-11-02-QUALITY-WP6-WIRE-QUERY-CONVERSION-REPEATED
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/RightPanelHost.tsx` (`replaceFromResults`, `onReplaceConfirm` ×2) + `search/ProjectSearch.tsx`.
-- **Finding:** The camelCase→snake_case `SearchQuery` → IPC `query` object is hand-built at 4 sites.
-- **Why it matters:** A new mode toggle must be added in four places.
-- **Suggested action:** `toWireQuery(q)` beside `SearchQuery` in `searchModel.ts`.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-02-QUALITY-WP6-REPLACE-ALL-USES-LIVE-QUERY
-- **Severity:** MINOR (pre-existing; WP6 made the asymmetry explicit)
-- **Location:** `src/components/workspace/RightPanelHost.tsx` → `onReplaceConfirm`.
-- **Finding:** Row buttons act on the query that produced the shown results; Replace All still uses the live `searchQuery` field, while its confirm shows `lastCounts` from the shown results. (Mitigated: editing the query field nulls `lastCounts`, which disables Replace All, so the divergence needs a search between.)
-- **Why it matters:** The two replace paths answer "which query?" differently.
-- **Suggested action:** Have Replace All use `findResultsShown.query` too, or document why not.
-- **Priority:** low
-- **Status:** pending
-
 # m16-5-wp5-qol-batch — 2026-11-02
 
 *(feature-review-quality on ship commit `df52ce7`, window `29c3395..df52ce7`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*

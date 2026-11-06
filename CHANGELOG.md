@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-06
+
+- **Task closed:** Paydown 2026-11-04 WP7 makes Find and Replace follow one rule (ruling R1): Replace All now matches per line on the query that produced the shown results, so it only ever touches what search could show, and every search/replace call builds its IPC query through one `toWireQuery`.
+- **Backlog resolved:** SURFACE-2026-11-02-REPLACE-ALL-MATCHES-WHOLE-FILE-WHILE-SEARCH-MATCHES-PER-LINE — `replace_core` now routes through `replace_every_match_per_line`, so `^foo` / `foo$` replace exactly the search count (proven live and by a test the whole-file mutant fails) and a cross-line regex replaces nothing.
+- **Backlog resolved:** SURFACE-2026-11-02-QUALITY-WP6-REPLACE-ALL-USES-LIVE-QUERY — Replace All's confirm reads `findResultsShown.query`, like the row and file buttons, pinned by a live-harness test the live-query mutant fails.
+- **Backlog resolved:** SURFACE-2026-11-02-QUALITY-WP6-WIRE-QUERY-CONVERSION-REPEATED — `toWireQuery` in `searchModel.ts` replaces the four hand-built snake_case query objects.
+
 ## 2026-11-04
 
 - **Backlog resolved:** SURFACE-2026-11-02-DRIVE-MODE-MENU-STILL-SHOWN-UNDER-A-CLAUDESK-MODE — mccc shipped the drive-mode picker, and a live check confirmed that `/session-start` and `/session-restore` skip the mode pick under a Claudesk mode, still ask through a select with no mode, and `/session-handoff` writes `drive_mode: from-claudesk`.

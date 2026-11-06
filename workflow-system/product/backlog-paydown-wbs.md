@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1–WP6b done 2026-11-04
+status: in-progress  # WP1–WP6b done 2026-11-04; WP7 done 2026-11-06
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -276,7 +276,7 @@ Test-only, so it runs before any code WP; a de-flaked gate helps every WP after 
 - It was built and verified live in the same run as WP6: the archived WIP
   `paydown-2026-11-04-wp6-…`, T5, and commit `18d4d58`.
 
-## WP7: Find and replace rule  `[impact: Med · effort: S · risk: Low–Med]` · task
+## WP7: Find and replace rule  `[impact: Med · effort: S · risk: Low–Med]` · task · ✅ DONE 2026-11-06 (R1 applied; 3 entries + the WP6 pointer resolved)
 
 - `11-02-REPLACE-ALL-MATCHES-WHOLE-FILE-WHILE-SEARCH-MATCHES-PER-LINE` (BL, medium): apply **R1**.
   - Add an anchored-regex test (`^foo`) asserting the search count equals the Replace All count.

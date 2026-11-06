@@ -15,16 +15,6 @@
 - **Priority:** low (lowered from high 2026-10-27 per design prior `simple-version-first-when-the-source-fix-shrank-the-problem`: breaks are now rare at source, and the next lever, richer adjudicator input, is an advanced minor-gain enhancement)
 - **Status:** open — re-measured at M16.5 WP3 (3.5), question KEPT per AC-18 (see the WP3 measurement above). Stays open.
 
-## SURFACE-2026-11-02-REPLACE-ALL-MATCHES-WHOLE-FILE-WHILE-SEARCH-MATCHES-PER-LINE
-- **Source:** feature:refactor (M16.5 WP6, review-quality CRITICAL follow-up)
-- **Target level:** product:wbs
-- **Type:** bug (pre-existing)
-- **Summary:** Replace All (`replace_core`) still runs the regex over the WHOLE file, while ⌘⇧F search matches PER LINE. With an anchored regex the two disagree: `^foo` is shown on every line that starts with `foo` but Replace All replaces only the first line of each file, and `foo$` replaces only a match at the very end of a file (Rust `$` without `(?m)` does not match before `\n`). The confirm dialog's count (from search) then overstates what is replaced, silently.
-- **Context:** WP6's refactor fixed the same defect for the NEW per-file scope (shared per-line helper `replace_every_match_per_line`). Replace All was left whole-file on purpose: a test, `replace_count_matches_whole_file_effect_under_multiline_regex`, pins that a `\n`-spanning regex replaces across lines, and changing that is a behaviour change, not a refactor.
-- **Suggested action:** Decide the rule. Most likely make Replace All per-line too (it only ever replaces what search showed, and search can never show a `\n`-spanning match) and retire the multiline test; or keep whole-file and add `(?m)` so anchors agree. Either way, add an anchored-regex test comparing search's count to Replace All's.
-- **Priority:** medium
-- **Status:** pending
-
 ## Code-quality findings — paydown-2026-11-04-wp4-run-lock-and-sync-guard (2026-11-04)
 
 - **Pointer:** **1 MAJOR + 4 MINOR** from the review of `190b3a2`. MAJOR: the process-group primitives (`StopOnDrop`, the grace constant, group kill + reap) are copied between `workflow_install::runner` and `adjudicator`, not shared, and only one copy documents its limits. MINOR: the grace path drops queued output; `run_streaming` has no output cap; there are three ways to release the run lock; the `spawn_blocking` hop is repeated.
@@ -32,14 +22,6 @@
 - **Priority:** medium (MAJOR) / low (the rest)
 - **Status:** pending
 - **Pickup shape:** one small task: a shared `subprocess` module (group spawn, kill + reap, stop-on-drop, grace, output cap, limits doc) that both runners use, plus the grace-path drain. The lock-release unification and the hop helper are independent one-liners.
-
-## Code-quality findings — m16-5-wp6-per-result-replace (2026-11-02)
-
-- **Pointer:** **2 MINOR** open from the review of `6c97b1a` (the 1 CRITICAL + 1 MAJOR, and a 5th MINOR, were fixed by the same feature's refactor `390512f`; "line actions rebuilt per keystroke" was Buried 2026-11-04, paydown WP1; the copied jsdom CM6 shims were resolved by paydown WP3). MINOR: the wire-query conversion at 4 sites; Replace All still uses the live query.
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp6-per-result-replace — 2026-11-02`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** WP8's paydown; the two RightPanelHost items (wire query, Replace All query) go together.
 
 ## Code-quality findings — m16-5-wp5-qol-batch (2026-11-02)
 
