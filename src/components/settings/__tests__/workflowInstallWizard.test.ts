@@ -148,7 +148,7 @@ describe("post-install refresh — the stale-status bug found at verify-human", 
   // never a formatted multi-line expression.
   // ═══════════════════════════════════════════════════════════════════════════
   const PANEL = readFileSync(
-    fileURLToPath(new URL("../SettingsPanel.tsx", import.meta.url)),
+    fileURLToPath(new URL("../WorkflowFeaturesSettings.tsx", import.meta.url)),
     "utf8",
   );
 
@@ -214,7 +214,7 @@ describe("install-affordance POSITION — under the status line, above the manua
     "utf8",
   );
   const PANEL_SRC = readFileSync(
-    fileURLToPath(new URL("../SettingsPanel.tsx", import.meta.url)),
+    fileURLToPath(new URL("../WorkflowFeaturesSettings.tsx", import.meta.url)),
     "utf8",
   );
 

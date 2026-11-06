@@ -151,20 +151,10 @@ describe("the picker offers a visible Settings entry point (discovery parity)", 
   });
 });
 
-describe("F-b — the permission-mode control says it does not govern profiles", () => {
-  it("carries the note inside the claude-code group, before the profiles group", () => {
-    // Operator ruling 2026-09-23: a non-default profile's own permissions.defaultMode governs,
-    // so without this note the app-global control reads as broken for profile workspaces.
-    const cc = panelSrc.indexOf('id="claude-code"');
-    const note = panelSrc.indexOf(
-      'data-testid="settings-permission-mode-profile-note"',
-    );
-    const profiles = panelSrc.indexOf('id="profiles"');
-    expect(cc).toBeGreaterThan(-1);
-    expect(note).toBeGreaterThan(cc);
-    expect(note).toBeLessThan(profiles);
-  });
-});
+// F-b — the permission-mode control's "does not govern profiles" note (operator ruling
+// 2026-09-23) must sit inside the claude-code group, before the profiles group. Since paydown
+// 2026-11-04 WP13 the note lives in ClaudeCodeSettings.tsx and the group shell here, so that
+// is a DOM question: asserted on a live mount in `settingsPanelGroupsRender.test.tsx`.
 
 describe("the panel shell renders its six labelled groups", () => {
   it("has a stable testid for live verify-self", () => {

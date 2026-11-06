@@ -59,11 +59,12 @@ describe("picker row cell order — the model cell is a flat sibling", () => {
     // If the component stopped consuming PICKER_ROW_CELLS, the value above would become
     // decorative and these assertions would guard nothing. That is the exact
     // "guard-that-guards-nothing" failure mode; pin the consumption.
-    const picker = readFileSync(
-      join(process.cwd(), "src", "components/picker/ProjectPicker.tsx"),
+    // The row's markup lives in PickerRow.tsx since paydown 2026-11-04 WP13.
+    const row = readFileSync(
+      join(process.cwd(), "src", "components/picker/PickerRow.tsx"),
       "utf8",
     );
-    expect(picker).toContain("PICKER_ROW_CELLS.map");
+    expect(row).toContain("PICKER_ROW_CELLS.map");
   });
 });
 

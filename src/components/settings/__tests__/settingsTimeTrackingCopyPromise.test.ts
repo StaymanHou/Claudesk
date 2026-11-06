@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isSettingsChord } from "../settingsChord";
-import settingsPanelRaw from "../SettingsPanel.tsx?raw";
+import analyticsRaw from "../AnalyticsSettings.tsx?raw";
 import globalDashboardRaw from "../../workspace/dashboard/GlobalDashboard.tsx?raw";
 
 // ⚠️ Whitespace-normalized, for the reason documented at length in the header of
@@ -10,7 +10,7 @@ import globalDashboardRaw from "../../workspace/dashboard/GlobalDashboard.tsx?ra
 // text must sit on one line for a raw match to work, and it is the assertion carrying the
 // cross-module promise, so its blind spot is the one that lets the advertised route rot.
 const flat = (src: string) => src.replace(/\s+/g, " ");
-const settingsPanel = flat(settingsPanelRaw);
+const analytics = flat(analyticsRaw);
 const globalDashboard = flat(globalDashboardRaw);
 
 // M11.5 WP3 verify-codify — the CROSS-SURFACE PROMISE.
@@ -23,8 +23,10 @@ const globalDashboard = flat(globalDashboardRaw);
 //     "Turn on **Time tracking** in Settings (⌘,)"
 // That single sentence hardcodes THREE facts that live in other modules:
 //   1. the chord is ⌘,                      → owned by settingsChord.ts
-//   2. Settings contains the control        → owned by SettingsPanel.tsx
-//   3. the control is labelled "Time tracking" → owned by SettingsPanel.tsx
+//   2. Settings contains the control        → owned by SettingsPanel.tsx (the group shell)
+//   3. the control is labelled "Time tracking" → owned by AnalyticsSettings.tsx (its body)
+// (Fact 2 is a DOM question since paydown 2026-11-04 WP13 split the body out: it is asserted
+// on a live mount in `settingsPanelGroupsRender.test.tsx`.)
 // Nothing tied those together. A chord rebind or a label rename would leave every
 // existing assertion green while the advertised route quietly became wrong.
 //
@@ -58,30 +60,19 @@ describe("M11.5 WP3 — the dashboard's advertised route is actually true", () =
     expect(globalDashboard).toContain("in Settings (⌘,)");
   });
 
-  it("Settings really contains a control with the advertised label", () => {
+  it("the Analytics body really contains a control with the advertised label", () => {
     // The label is what the user visually scans for after pressing the chord. Renaming it
     // to "Session tracking" or "Analytics" would strand a user who followed the
     // instruction — and would otherwise pass every test in the suite.
-    expect(settingsPanel).toContain(`>${ADVERTISED_CONTROL_LABEL}<`);
+    expect(analytics).toContain(`>${ADVERTISED_CONTROL_LABEL}<`);
   });
 
   it("that control is the time-tracking toggle, not a coincidental same-named element", () => {
-    // Guards the assertion above against a false positive: the label text must sit in the
-    // same group as the time-tracking checkbox, so a match elsewhere in the panel cannot
-    // satisfy it. Located by slicing between the Analytics group marker and the next
-    // group, then asserting BOTH the testid and the label appear inside that window.
-    const analyticsStart = settingsPanel.indexOf('id="analytics"');
-    expect(analyticsStart).toBeGreaterThan(-1);
-    const nextGroup = settingsPanel.indexOf(
-      "<SettingsGroup",
-      analyticsStart + 1,
-    );
-    const analyticsBlock = settingsPanel.slice(
-      analyticsStart,
-      nextGroup === -1 ? undefined : nextGroup,
-    );
-    expect(analyticsBlock).toContain('data-testid="settings-time-tracking"');
-    expect(analyticsBlock).toContain(ADVERTISED_CONTROL_LABEL);
+    // Guards the assertion above against a false positive. The module IS the Analytics
+    // group's body, so the window is the whole module; that the panel mounts it inside the
+    // analytics group is pinned by the live render in `settingsPanelGroupsRender.test.tsx`.
+    expect(analytics).toContain('data-testid="settings-time-tracking"');
+    expect(analytics).toContain(ADVERTISED_CONTROL_LABEL);
   });
 
   it("the dashboard does not advertise a route to a surface that no longer exists", () => {
@@ -116,7 +107,7 @@ describe("meta — this guard can fail", () => {
   it("reads real source text from both surfaces", () => {
     // RAW imports, not the normalized copies — `flat("")` is also "", so normalizing
     // first would pass straight through an empty-loader failure.
-    expect(settingsPanelRaw.length).toBeGreaterThan(1000);
+    expect(analyticsRaw.length).toBeGreaterThan(500);
     expect(globalDashboardRaw.length).toBeGreaterThan(1000);
   });
 });

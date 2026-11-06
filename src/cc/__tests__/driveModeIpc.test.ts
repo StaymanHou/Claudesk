@@ -142,7 +142,12 @@ describe("drive-mode wire vocabulary — the TS union must match Rust's", () => 
     // ⚠️ Asserting the picker's OWN source is strictly stronger than the old symbol-absence
     // form, which would have passed if someone added the per-row call to `ProjectModelCell.tsx`
     // while importing the getter from anywhere else. The old guard watched the wrong file.
-    for (const file of ["ProjectModelCell.tsx", "ProjectPicker.tsx"]) {
+    for (const file of [
+      "ProjectModelCell.tsx",
+      "ProjectPicker.tsx",
+      // The row component (paydown 2026-11-04 WP13) is exactly where a per-row read would go.
+      "PickerRow.tsx",
+    ]) {
       const src = readFileSync(
         join(process.cwd(), "src", "components", "picker", file),
         "utf8",

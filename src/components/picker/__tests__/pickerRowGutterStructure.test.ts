@@ -41,7 +41,8 @@ const html = (row: string): Document =>
   new JSDOM(`<!doctype html><html><body>${row}</body></html>`).window.document;
 
 /**
- * The row's shipped structure, transcribed from `ProjectPicker.tsx`'s `case "open"`.
+ * The row's shipped structure, transcribed from `PickerRow.tsx`'s `case "open"` (it lived in
+ * `ProjectPicker.tsx` until paydown 2026-11-04 WP13).
  *
  * ⚠️ A transcription, and that limit is real: this is a REPLICA, so it cannot catch the
  * component diverging from it (`[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`
@@ -65,11 +66,11 @@ const row = (opts: { announcing: boolean }): string => `
 </button>`;
 
 // ⚠️ The fixture's glyph was `⏵` until 2026-08-18 (paydown WP4). It is FIXTURE DATA mirroring
-// what `ProjectPicker` renders, and it had gone stale when the operator replaced the play
+// what `PickerRow` renders, and it had gone stale when the operator replaced the play
 // triangle with `⊘` at M12 WP3. No assertion here reads the character — every one targets
 // `.picker-recent-nofire` — so nothing was broken, which is exactly why it survived: a fixture
 // that no assertion depends on drifts silently and then misinforms the next reader about what
-// the DOM looks like. `ProjectPicker.tsx`'s render site is the authority on the glyph.
+// the DOM looks like. `PickerRow.tsx`'s render site is the authority on the glyph.
 describe("the ⊘ gutter's structure (parsed DOM, not source text)", () => {
   it("the gutter exists on an announcing row AND on a silent one", () => {
     // THE P3.9 INVARIANT, stated structurally: presence is unconditional. If someone

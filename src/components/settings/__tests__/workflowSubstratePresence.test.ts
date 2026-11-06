@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import panelSrc from "../SettingsPanel.tsx?raw";
+import panelSrc from "../WorkflowFeaturesSettings.tsx?raw";
 import infoSrc from "../WorkflowSubstrateInfo.tsx?raw";
 import {
   substrateArmFor,
@@ -87,20 +87,16 @@ describe("the component delegates to the pure function rather than re-deriving t
 });
 
 describe("the consuming surface renders the block (integration boundary)", () => {
-  // Phase 3's boundary is `SettingsPanel.tsx` — an EXISTING UI component whose user-visible
+  // Phase 3's boundary is the Settings panel — an EXISTING UI component whose user-visible
   // behavior changed. Per the integration-boundary rule the test set must exercise that
-  // consuming surface by name, not just the new module in isolation.
+  // consuming surface by name, not just the new module in isolation. Since paydown 2026-11-04
+  // WP13 the block's state and mount live in `WorkflowFeaturesSettings.tsx` (the group's body),
+  // which is what `panelSrc` reads. WHERE that body sits — inside the workflow-features group,
+  // before Analytics — is a DOM question, so it is asserted on a live mount of the real panel
+  // in `settingsPanelGroupsRender.test.tsx`, not by splicing two files' source.
 
-  it("SettingsPanel mounts WorkflowSubstrateInfo inside the workflow-features group", () => {
+  it("the workflow-features body mounts WorkflowSubstrateInfo", () => {
     expect(panelSrc).toContain("<WorkflowSubstrateInfo");
-    // Ordering: the mount must sit after the group's own id, i.e. inside that group and not
-    // in Analytics/Updates. Index comparison rather than a multi-line regex.
-    const groupAt = panelSrc.indexOf('id="workflow-features"');
-    const mountAt = panelSrc.indexOf("<WorkflowSubstrateInfo");
-    const analyticsAt = panelSrc.indexOf('id="analytics"');
-    expect(groupAt).toBeGreaterThan(-1);
-    expect(mountAt).toBeGreaterThan(groupAt);
-    expect(mountAt).toBeLessThan(analyticsAt);
   });
 
   it("seeds presence from the read-only backend command", () => {

@@ -42,55 +42,22 @@
 // preference (same reason "Zoom In" is not in Settings) — so the migration count is 3,
 // not 4. M14 EXTENDS this panel; it does not re-litigate it.
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+// ## Layout (paydown 2026-11-04 WP13)
+// This file is the panel's SHELL: the group order, each group's id/title/hint, the highlight,
+// the error surface and the gate control. Each group's BODY is its own module beside it
+// (ClaudeCodeSettings, ProfilesSettings, WorkflowFeaturesSettings, AnalyticsSettings,
+// UpdatesSettings, HotkeySettings). A body that owns a setting owns its `useSettingControl`
+// too, except the gate's, which two groups read (see WorkflowFeaturesSettings.tsx).
+
+import { useCallback, useEffect, useState } from "react";
 import { useSettingControl } from "./useSettingControl";
-import { invoke } from "@tauri-apps/api/core";
-import {
-  WorkflowSubstrateInfo,
-  offersInstallWizard,
-  type SubstratePresence,
-  type InstallProvenance,
-} from "./WorkflowSubstrateInfo";
-import { WorkflowInstallWizard } from "./WorkflowInstallWizard";
+import { SettingsGroup } from "./SettingsGroup";
+import { ClaudeCodeSettings } from "./ClaudeCodeSettings";
 import { ProfilesSettings } from "./ProfilesSettings";
-import {
-  WorkflowUninstallDialog,
-  type UninstallFinished,
-} from "./WorkflowUninstallDialog";
-import {
-  gateToggleAction,
-  outcomeForIntent,
-  type UninstallIntent,
-  type UninstallTrigger,
-} from "./uninstallIntercept";
-import { UNINSTALL_BUTTON_LABEL } from "./workflowUninstallCopy";
-import {
-  visibleChords,
-  type ChordEntry,
-  type ChordHost,
-} from "../workspace/chordRegistry";
-import { getWorkflowSubstrateInstalled } from "../../state/workflowSubstrate";
-import {
-  CC_PERMISSION_MODE_EVENT,
-  CC_PERMISSION_MODE_OPTIONS,
-  DEFAULT_CC_PERMISSION_MODE,
-  coerceCcPermissionMode,
-  type CcPermissionMode,
-} from "../../cc/permissionMode";
-import {
-  getCcPermissionMode,
-  setCcPermissionMode,
-} from "../../cc/permissionModeIpc";
-import {
-  TIME_TRACKING_ENABLED_EVENT,
-  getTimeTrackingEnabled,
-  setTimeTrackingEnabled,
-} from "../../state/timeAnalytics";
-import {
-  UPDATER_NOTIFICATIONS_ENABLED_EVENT,
-  getUpdateNotificationsEnabled,
-  setUpdateNotificationsEnabled,
-} from "../../updater/updaterPrefs";
+import { WorkflowFeaturesSettings } from "./WorkflowFeaturesSettings";
+import { AnalyticsSettings } from "./AnalyticsSettings";
+import { UpdatesSettings } from "./UpdatesSettings";
+import { HotkeySettings } from "./HotkeySettings";
 import {
   WORKFLOW_FEATURES_ENABLED_EVENT,
   WORKFLOW_FEATURES_PRE_SEED_DEFAULT,
@@ -118,96 +85,6 @@ export interface SettingsPanelProps {
   highlightGroup?: string;
 }
 
-/** One labelled settings group. The label + help line are the affordance a flat
- *  unlabelled strip could not offer — and the reason the gate has somewhere to explain
- *  its `~/.claude/` dependency. */
-// M14 WP3 — the hotkey reference.
-//
-// ## Why this group renders from the registry rather than a hand-written list
-// The chord map used to be a COMMENT BLOCK in editor/paletteCommands.ts. It could not be
-// rendered, could not be tested against the code it described, and drifted silently — WP3
-// Phase 1 promoted it to typed data (`chordRegistry.ts`) with two guards, one per drift
-// direction. This group is the payoff: the user-facing surface reads the same data the
-// guards check, so a chord cannot appear here without being wired, or be wired without
-// appearing here.
-//
-// ## The gate (P2.3)
-// Entries are read through `visibleChords(enabled)`, which OMITS gate-dependent chords when
-// the gate is off rather than greying them out. ⌘⇧K (Docs) genuinely does nothing while the
-// gate is off — `panelForChord` returns null so the keystroke passes through untouched — so
-// showing it disabled would be a DEAD AFFORDANCE. With the gate off this group must be
-// byte-identical to one in an app that never had the feature.
-//
-// ⚠️ The gate value comes from `workflowFeatures.value` (this panel's own live control), NOT
-// from `useWorkflowFeaturesEnabled()`. Both read the same backend, but the control is the one
-// that updates the instant the user toggles the checkbox a few rows above — subscribing to
-// the hook here would introduce a second source of truth in one component and make the list
-// lag its own switch.
-
-// ⚠️ `satisfies Record<ChordHost, …>` is the exhaustiveness tie: a host added to the union
-// without a section title fails `tsc` here instead of its entries rendering nowhere. Render
-// order is this object's key order.
-const HOST_TITLES = {
-  app: "Application",
-  workspace: "Workspace",
-  editor: "Editor",
-} as const satisfies Record<ChordHost, string>;
-
-const HOST_ORDER = Object.keys(HOST_TITLES) as ChordHost[];
-
-function HotkeyRow({ entry }: { entry: ChordEntry }) {
-  return (
-    <div
-      className={`settings-hotkey-row${entry.claudeskOwned ? "" : " settings-hotkey-row-foreign"}`}
-      data-testid={`hotkey-row-${entry.id}`}
-    >
-      <kbd className="settings-hotkey-chord">{entry.label}</kbd>
-      <div className="settings-hotkey-outcomes">
-        {entry.outcomes.map((outcome, i) => (
-          <div key={i} data-testid="hotkey-outcome">
-            <span className="settings-hotkey-description">
-              {outcome.description}
-            </span>
-            {outcome.whenFocused !== undefined && (
-              <span className="settings-hotkey-context">
-                {" "}
-                — when {outcome.whenFocused} has focus
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SettingsGroup({
-  id,
-  title,
-  hint,
-  highlighted = false,
-  children,
-}: {
-  id: string;
-  title: string;
-  hint: string;
-  /** M10.9 WP3 — briefly flash this group (the invite routed the user here). */
-  highlighted?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <section
-      className={`settings-group${highlighted ? " settings-group-highlight" : ""}`}
-      data-testid={`settings-group-${id}`}
-      data-highlighted={highlighted ? "true" : undefined}
-    >
-      <h3 className="settings-group-title">{title}</h3>
-      <p className="settings-group-hint">{hint}</p>
-      <div className="settings-group-body">{children}</div>
-    </section>
-  );
-}
-
 /**
  * How long the routed-to group stays flashed — three discrete blinks (operator, 2026-07-29).
  *
@@ -229,36 +106,6 @@ export default function SettingsPanel({
   const [error, setError] = useState<string | null>(null);
   const onError = useCallback((message: string) => setError(message), []);
 
-  const permissionMode = useSettingControl<CcPermissionMode>({
-    initial: DEFAULT_CC_PERMISSION_MODE,
-    get: getCcPermissionMode,
-    persist: setCcPermissionMode,
-    event: CC_PERMISSION_MODE_EVENT,
-    errorLabel: "update permission mode",
-    onError,
-    // A stale/corrupt persisted value falls back to the default rather than selecting an
-    // impossible option (behavior carried over from the picker dropdown).
-    coerce: coerceCcPermissionMode,
-  });
-
-  const timeTracking = useSettingControl<boolean>({
-    initial: false, // matches the backend default — no flicker on mount
-    get: getTimeTrackingEnabled,
-    persist: setTimeTrackingEnabled,
-    event: TIME_TRACKING_ENABLED_EVENT,
-    errorLabel: "update time tracking",
-    onError,
-  });
-
-  const updateNotifications = useSettingControl<boolean>({
-    initial: true, // backend default is ON (operator-benefit default)
-    get: getUpdateNotificationsEnabled,
-    persist: setUpdateNotificationsEnabled,
-    event: UPDATER_NOTIFICATIONS_ENABLED_EVENT,
-    errorLabel: "update notification setting",
-    onError,
-  });
-
   const workflowFeatures = useSettingControl<boolean>({
     initial: WORKFLOW_FEATURES_PRE_SEED_DEFAULT, // false — OFF for everyone
     get: getWorkflowFeaturesEnabled,
@@ -267,8 +114,6 @@ export default function SettingsPanel({
     errorLabel: "update workflow features",
     onError,
   });
-  // Read ONCE per render and shared by every host section below.
-  const chords = visibleChords(workflowFeatures.value);
 
   // M10.9 WP3 — the routed-from-invite highlight, self-clearing after HIGHLIGHT_MS.
   //
@@ -293,131 +138,6 @@ export default function SettingsPanel({
     // unmounted component.
     return () => clearTimeout(t);
   }, [highlightGroup]);
-
-  // M10.9 WP3 — substrate presence. Deliberately NOT a `useSettingControl`: that hook's
-  // contract is seed → listen to a broadcast → optimistic set → revert, and three of those
-  // four don't apply. This is a READ-ONLY probe of the filesystem with no setter, and there
-  // is no Claudesk-side event for "a directory appeared" — inventing one (or polling) would
-  // add a mechanism to watch something that changes about once in a user's lifetime.
-  //
-  // `null` until resolved, so the surface renders nothing rather than guessing (see the
-  // component header). A rejection also lands as `null`: the backend is contracted never to
-  // error, so a rejection here means something unexpected, and silently claiming
-  // "not installed" would be worse than showing nothing.
-  const [substratePresent, setSubstratePresent] =
-    useState<SubstratePresence>(null);
-  // Extracted so the install wizard can re-run it on success — see `onFinished` below. WP3
-  // only ever needed this at mount (a directory does not appear on its own); WP3.5a's wizard
-  // makes it appear, so the read has to be repeatable.
-  const refreshSubstratePresent = useCallback(() => {
-    getWorkflowSubstrateInstalled()
-      .then(setSubstratePresent)
-      .catch(() => setSubstratePresent(null));
-  }, []);
-  useEffect(() => {
-    let cancelled = false; // StrictMode double-mount guard, same as useSettingControl's
-    getWorkflowSubstrateInstalled()
-      .then((present) => {
-        if (!cancelled) setSubstratePresent(present);
-      })
-      .catch(() => {
-        if (!cancelled) setSubstratePresent(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // M10.9 WP3.5a — the substrate's PROVENANCE, which is a different question from WP3's
-  // presence check and cannot be derived from it. Presence answers "is something installed?";
-  // provenance answers "did *Claudesk* install it?" — and only the latter decides whether an
-  // install affordance may appear. A hand-clone and a Claudesk-managed install are both
-  // "present"; only one of them is ours to act on.
-  //
-  // `null` until resolved, same discipline as `substratePresent`: no affordance is offered
-  // until we know, because the default-wrong direction here offers to install over the
-  // operator's live repo.
-  const [provenance, setProvenance] = useState<InstallProvenance>(null);
-  const [wizardOpen, setWizardOpen] = useState(false);
-  // ⚠️ ONE fetch body, not two. The mount effect used to duplicate `refreshProvenance`'s
-  // `invoke().then().catch()` verbatim, differing only by a `cancelled` guard — so a change to
-  // the read (a new command name, a different fallback, an added state write) had to be made
-  // twice, and making it once would have left the two paths silently disagreeing.
-  // (`SURFACE-2026-07-29-QUALITY-WP3.5A-PROVENANCE-FETCH-DUPLICATED`.)
-  //
-  // The guard is a PARAMETER rather than dropped: the mount path must not write state after
-  // unmount, while the manual refresh has no unmount to race and passes a permanently-live
-  // predicate.
-  const refreshProvenanceIf = useCallback((isLive: () => boolean) => {
-    invoke<string>("workflow_install_state")
-      .then((s) => {
-        if (isLive()) setProvenance(s as Exclude<InstallProvenance, null>);
-      })
-      .catch(() => {
-        if (isLive()) setProvenance(null);
-      });
-  }, []);
-  const refreshProvenance = useCallback(
-    () => refreshProvenanceIf(() => true),
-    [refreshProvenanceIf],
-  );
-  useEffect(() => {
-    let cancelled = false;
-    refreshProvenanceIf(() => !cancelled);
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshProvenanceIf]);
-
-  // M10.9 WP3.5b — the uninstall dialog's open state, plus HOW it was opened. Both entry
-  // points are supported (operator, 2026-07-31): the substrate row's button and the gate
-  // toggle. The trigger is carried explicitly rather than inferred, because `[Cancel]` means
-  // something different on each path — see `UninstallTrigger`.
-  const [uninstallOpen, setUninstallOpen] = useState(false);
-  const [uninstallTrigger, setUninstallTrigger] =
-    useState<UninstallTrigger>("toggle");
-
-  /**
-   * The gate checkbox's onChange. Routes through the pure `gateToggleAction` decision rather
-   * than branching inline — this is the branch that decides whether a DESTRUCTIVE dialog
-   * opens, which is exactly the shape the repo rule says must be asserted as a value.
-   *
-   * The `"open-uninstall-dialog"` arm deliberately does NOT call `workflowFeatures.set(false)`
-   * first. Not persisting is what makes `[Cancel]` structural: there is no window in which the
-   * gate is off-but-not-uninstalled, so a crash or a quit mid-dialog cannot strand the user in
-   * `[Keep mccc]`'s state without having chosen it. See `uninstallIntercept.ts`.
-   */
-  const onGateToggle = useCallback(
-    (nextValue: boolean) => {
-      if (gateToggleAction(nextValue, provenance) === "open-uninstall-dialog") {
-        setUninstallTrigger("toggle");
-        setUninstallOpen(true);
-        return;
-      }
-      workflowFeatures.set(nextValue);
-    },
-    [provenance, workflowFeatures],
-  );
-
-  /**
-   * Apply an intent from the uninstall dialog.
-   *
-   * The intent→outcome mapping is the shared pure table, so the dialog's buttons and this
-   * handler cannot disagree about what "keep" versus "cancel" means. `persistGate: null` is
-   * the cancel case — nothing is written, which is the whole revert.
-   */
-  const onUninstallIntent = useCallback(
-    (intent: UninstallIntent) => {
-      const outcome = outcomeForIntent(intent);
-      if (outcome.persistGate !== null) {
-        workflowFeatures.set(outcome.persistGate);
-      }
-      // Deliberately does NOT close: `uninstall` fires this at run-START, and tearing the
-      // dialog down there would hide the run the user just authorized. The dialog owns its
-      // own dismissal via `onClose`.
-    },
-    [workflowFeatures],
-  );
 
   return (
     <div
@@ -445,34 +165,7 @@ export default function SettingsPanel({
           title="Claude Code"
           hint="How new Claude Code sessions start. Takes effect on the next session — the mode is chosen once per process."
         >
-          <label className="settings-row">
-            <span className="settings-row-label">Permission mode</span>
-            <select
-              data-testid="settings-permission-mode"
-              aria-label="Permission mode"
-              value={permissionMode.value}
-              onChange={(e) =>
-                permissionMode.set(coerceCcPermissionMode(e.target.value))
-              }
-            >
-              {CC_PERMISSION_MODE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {/* F-b (operator ruling 2026-09-23): a non-default profile's OWN
-              permissions.defaultMode governs its sessions — Claudesk passes no
-              --permission-mode for it. Said here, or this control reads as broken. */}
-          <p
-            className="settings-row-help"
-            data-testid="settings-permission-mode-profile-note"
-          >
-            Applies to the <code>default</code> profile. A project on another
-            profile uses that profile&apos;s own{" "}
-            <code>permissions.defaultMode</code>.
-          </p>
+          <ClaudeCodeSettings onError={onError} />
         </SettingsGroup>
 
         <SettingsGroup
@@ -489,136 +182,7 @@ export default function SettingsPanel({
           hint="Opt in to the workflow-orchestration layer — docs, auto-resume, and skill shortcuts."
           highlighted={highlighted === "workflow-features"}
         >
-          <label className="settings-row settings-row-check">
-            <input
-              type="checkbox"
-              data-testid="settings-workflow-features"
-              checked={workflowFeatures.value}
-              onChange={(e) => onGateToggle(e.target.checked)}
-            />
-            <span className="settings-row-label">Enable workflow features</span>
-          </label>
-          {/* The help line the flat strip had no room for. This setting is the one that
-              genuinely needs it: it gates a whole feature class AND depends on software
-              Claudesk does not ship. Enabling here is a pure UI flip — it never installs
-              or modifies anything under ~/.claude/.
-
-              WP3 trimmed the "Requires the workflow system installed in ~/.claude/" clause
-              that used to open this line: the substrate block immediately below now states
-              the install status as a FACT for this machine, which is strictly better than a
-              generic requirement the reader has to go check. Keeping both would have said
-              the same thing twice in adjacent paragraphs. The "doesn't install anything"
-              half stays — it is the part the status line does not cover, and it is the
-              milestone's load-bearing promise. (Revisit at WP3.5: once the wizards exist,
-              enabling CAN trigger an install, so this sentence will need to change.)
-
-              REVISITED 2026-07-29 (WP3.5a Phase 4), and the promise SURVIVES — sharpened, not
-              deleted. The wizard installs, but the TOGGLE still does not: milestone property 2's
-              revision says Claudesk may install "EXCEPT through an explicit, user-driven wizard",
-              and keeping those two acts separate is the whole point. So the copy now attributes
-              the non-action to the toggle specifically, and points at the deliberate second step
-              rather than claiming nothing in the app can ever install. Saying "this installs
-              nothing" would now be false; dropping the line entirely would lose the very
-              distinction the milestone is built on. */}
-          <p className="settings-row-help">
-            Turning this on only shows the features — it doesn&rsquo;t install
-            anything. Installing is a separate, explicit step.
-          </p>
-          {/* M10.9 WP3.5a — the install affordance is passed INTO the substrate block as a
-              slot, so it renders directly under "Workflow system: not installed" and above the
-              manual-steps disclosure (operator, verify-human 2026-07-30).
-
-              Position is the requirement, not decoration. Rendering the button as a sibling
-              *before* this block put it above the very status line that explains why a user
-              would want it — an action floating free of its own justification. Inside the
-              block, the reading order is: what state am I in → the button that changes it →
-              the manual fallback if Claudesk can't act.
-
-              Gated on `offersInstallWizard`, true ONLY for `"absent"`: a `"developer"`
-              substrate is the operator's live repo (or a hand-clone) that Claudesk did not
-              record installing, and per the provenance rule it must describe, never act.
-              `null` (unresolved) shows nothing. */}
-          <WorkflowSubstrateInfo
-            present={substratePresent}
-            provenance={provenance}
-            uninstallAction={
-              uninstallOpen ? (
-                <WorkflowUninstallDialog
-                  trigger={uninstallTrigger}
-                  onIntent={onUninstallIntent}
-                  onClose={() => setUninstallOpen(false)}
-                  onFinished={(result: UninstallFinished) => {
-                    // Re-resolve BOTH sources, for the same reason the install path does:
-                    // they are independent and both stale after a removal. `provenance`
-                    // drives the affordances, `substratePresent` drives the status line —
-                    // refreshing only one was the shipped WP3.5a bug.
-                    refreshProvenance();
-                    refreshSubstratePresent();
-                    void result;
-                  }}
-                />
-              ) : provenance === "managed" ? (
-                /* The visible PAIR of [Install…] (operator, verify-human 2026-07-31). Only
-                   `managed` gets it — the provenance rule: Claudesk offers to remove only
-                   what it recorded installing, so `developer` (the operator's live repo, a
-                   hand-clone, or a damaged record) never sees this button, and `absent` has
-                   nothing to remove. Same slot as the dialog it opens, so the affordance and
-                   its expanded form occupy one position. */
-                <button
-                  type="button"
-                  className="substrate-install-button"
-                  data-testid="substrate-uninstall-button"
-                  onClick={() => {
-                    setUninstallTrigger("button");
-                    setUninstallOpen(true);
-                  }}
-                >
-                  {UNINSTALL_BUTTON_LABEL}
-                </button>
-              ) : undefined
-            }
-            installAction={
-              wizardOpen ? (
-                <WorkflowInstallWizard
-                  onClose={() => setWizardOpen(false)}
-                  onFinished={(result) => {
-                    // Re-resolve BOTH substrate state sources. They are independent and both
-                    // stale after an install: `provenance` drives the affordance,
-                    // `substratePresent` drives the "installed ✓ / not installed" line.
-                    //
-                    // Refreshing only provenance (the shipped bug, caught at verify-human)
-                    // made the button correctly disappear while the line still read "not
-                    // installed" after a successful install — violating the spec criterion
-                    // that the block re-resolves without a relaunch. Two sources, one event:
-                    // both must be refreshed or the surface contradicts itself.
-                    refreshProvenance();
-                    refreshSubstratePresent();
-                    // Honor the pure reducer's gate decision. Never re-derived here — the
-                    // decision came from Rust's terminal-state table.
-                    if (result.revert_gate && workflowFeatures.value) {
-                      workflowFeatures.set(false);
-                    }
-                  }}
-                  onEnableAndClose={() => {
-                    // Goes through the panel's existing `useSettingControl` seam, so the flip
-                    // keeps the optimistic-set + revert-on-IPC-failure discipline every other
-                    // control here uses. The wizard does not own settings state.
-                    workflowFeatures.set(true);
-                    setWizardOpen(false);
-                  }}
-                />
-              ) : offersInstallWizard(provenance) ? (
-                <button
-                  type="button"
-                  className="substrate-install-button"
-                  data-testid="substrate-install-button"
-                  onClick={() => setWizardOpen(true)}
-                >
-                  Install with the wizard&hellip;
-                </button>
-              ) : undefined
-            }
-          />
+          <WorkflowFeaturesSettings workflowFeatures={workflowFeatures} />
         </SettingsGroup>
 
         <SettingsGroup
@@ -626,15 +190,7 @@ export default function SettingsPanel({
           title="Analytics"
           hint="Time tracking for your Claude Code sessions. Fully offline — nothing is uploaded; sessions are stored in a local database on this Mac. While on, it records Claude Code activity across the whole Mac, not just projects open in Claudesk. Off means zero storage and zero IO."
         >
-          <label className="settings-row settings-row-check">
-            <input
-              type="checkbox"
-              data-testid="settings-time-tracking"
-              checked={timeTracking.value}
-              onChange={(e) => timeTracking.set(e.target.checked)}
-            />
-            <span className="settings-row-label">Time tracking</span>
-          </label>
+          <AnalyticsSettings onError={onError} />
         </SettingsGroup>
 
         <SettingsGroup
@@ -642,25 +198,10 @@ export default function SettingsPanel({
           title="Updates"
           hint="How Claudesk tells you about new versions."
         >
-          <label className="settings-row settings-row-check">
-            <input
-              type="checkbox"
-              data-testid="settings-update-notifications"
-              checked={updateNotifications.value}
-              onChange={(e) => updateNotifications.set(e.target.checked)}
-            />
-            <span className="settings-row-label">Update notifications</span>
-          </label>
-          {onCheckForUpdates && (
-            <button
-              type="button"
-              className="settings-check-updates"
-              data-testid="settings-check-updates"
-              onClick={onCheckForUpdates}
-            >
-              Check for updates
-            </button>
-          )}
+          <UpdatesSettings
+            onError={onError}
+            onCheckForUpdates={onCheckForUpdates}
+          />
         </SettingsGroup>
 
         <SettingsGroup
@@ -668,24 +209,7 @@ export default function SettingsPanel({
           title="Keyboard shortcuts"
           hint="Every chord Claudesk responds to. Editor shortcuts belong to CodeMirror, not Claudesk — they are listed so it is clear why a key behaves differently inside the editor."
         >
-          {HOST_ORDER.map((host) => {
-            const entries = chords.filter((entry) => entry.host === host);
-            if (entries.length === 0) return null;
-            return (
-              <div
-                key={host}
-                className="settings-hotkey-section"
-                data-testid={`hotkey-section-${host}`}
-              >
-                <h4 className="settings-hotkey-section-title">
-                  {HOST_TITLES[host]}
-                </h4>
-                {entries.map((entry) => (
-                  <HotkeyRow key={entry.id} entry={entry} />
-                ))}
-              </div>
-            );
-          })}
+          <HotkeySettings workflowFeaturesEnabled={workflowFeatures.value} />
         </SettingsGroup>
       </div>
       {error !== null && (

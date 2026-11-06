@@ -71,9 +71,10 @@ export function offersInstallWizard(state: InstallProvenance): boolean {
  * fix — refresh BOTH state sources — is what armed this; the two fixes were verified
  * individually, never together.)
  *
- * Rendering the slot in the installed arm is safe in the steady state: `SettingsPanel`
- * supplies the slot only while the wizard is open or provenance is `absent` (the button), so
- * an installed machine with no wizard open gets `undefined` here and renders nothing.
+ * Rendering the slot in the installed arm is safe in the steady state:
+ * `WorkflowFeaturesSettings` supplies the slot only while the wizard is open or provenance is
+ * `absent` (the button), so an installed machine with no wizard open gets `undefined` here and
+ * renders nothing.
  */
 export function armRendersInstallSlot(arm: SubstrateArm): boolean {
   return arm === "absent" || arm === "installed";
@@ -90,8 +91,9 @@ export function armRendersInstallSlot(arm: SubstrateArm): boolean {
  * identical install-side bug; the two are the same defect class (a slot scoped to the state
  * that *summons* it rather than the states it must *survive*).
  *
- * Safe in the steady state for the same reason: `SettingsPanel` supplies the slot only while
- * the dialog is open, so an absent machine with no dialog gets `undefined` and renders nothing.
+ * Safe in the steady state for the same reason: `WorkflowFeaturesSettings` supplies the slot
+ * only while the dialog is open, so an absent machine with no dialog gets `undefined` and
+ * renders nothing.
  */
 export function armRendersUninstallSlot(arm: SubstrateArm): boolean {
   return arm === "installed" || arm === "absent";
@@ -220,7 +222,7 @@ interface WorkflowSubstrateInfoProps {
    * manual-steps disclosure.
    *
    * A slot rather than a prop this component acts on: the wizard's open/closed state and the
-   * provenance gate live in `SettingsPanel`, and this component stays presentational.
+   * provenance gate live in `WorkflowFeaturesSettings`, and this component stays presentational.
    *
    * **Position is the requirement, and it took two corrections to get right**
    * (operator, verify-human 2026-07-30). Both halves have to be in the slot:
@@ -248,9 +250,10 @@ interface WorkflowSubstrateInfoProps {
    * slotted where the reader is already looking.
    *
    * Same slot discipline as `installAction`, and for the same reason: the open/closed state
-   * lives in `SettingsPanel`, this component stays presentational. The slot carries the
-   * `[Uninstall & disable…]` BUTTON when the dialog is closed and the dialog itself when open —
-   * one position for the affordance and its expanded form, exactly as `installAction` does.
+   * lives in `WorkflowFeaturesSettings`, this component stays presentational. The slot
+   * carries the `[Uninstall & disable…]` BUTTON when the dialog is closed and the dialog
+   * itself when open — one position for the affordance and its expanded form, exactly as
+   * `installAction` does.
    * (An earlier version shipped no button at all, on the theory that the gate toggle should be
    * the sole trigger; the operator overturned that at verify-human — see design prior
    * `paired-actions-need-paired-affordances`.)

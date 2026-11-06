@@ -191,38 +191,51 @@ describe("the component's structure (source guards — STRUCTURE only, never run
   // single identifiers or call shapes rather than formatted multi-line expressions, and a
   // non-vacuity check runs first. They pin STRUCTURE; the runtime proof is the operator's
   // click at verify-human plus the live MCP-bridge run at verify-self.
-  const src = readFileSync(
-    fileURLToPath(new URL("../ProjectPicker.tsx", import.meta.url)),
-    "utf8",
+  const strip = (text: string) =>
+    text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  // The picker: the open path, the gate read, the one announce call.
+  const code = strip(
+    readFileSync(
+      fileURLToPath(new URL("../ProjectPicker.tsx", import.meta.url)),
+      "utf8",
+    ),
   );
-  const code = src
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "");
+  // The row's markup (paydown 2026-11-04 WP13 extracted it from the picker): the cells, the
+  // no-fire door, the gutter. Row-structure guards read THIS file.
+  const rowCode = strip(
+    readFileSync(
+      fileURLToPath(new URL("../PickerRow.tsx", import.meta.url)),
+      "utf8",
+    ),
+  );
 
   it("the source is readable (non-vacuity guard)", () => {
     expect(code.length).toBeGreaterThan(2000);
-    expect(code).toContain("PICKER_ROW_CELLS.map");
+    expect(rowCode.length).toBeGreaterThan(2000);
+    expect(rowCode).toContain("PICKER_ROW_CELLS.map");
+    // The picker really renders the row, or every row guard below watches dead code.
+    expect(code).toContain("<PickerRow");
   });
 
   it("the no-fire control is a span role=button, never a nested <button>", () => {
     // ⚠️ THE STRUCTURAL RULE. A `<button>` inside the open `<button>` is invalid HTML whose
     // failure mode is SILENT: the inner control's clicks surface on the outer handler, so it
     // looks like it does the wrong thing rather than like it is broken.
-    expect(code).toContain('role="button"');
-    expect(code).toContain("picker-recent-nofire");
+    expect(rowCode).toContain('role="button"');
+    expect(rowCode).toContain("picker-recent-nofire");
     // The open cell must contain exactly ONE <button> tag — the open button itself.
-    const openCase = code.slice(
-      code.indexOf('case "open"'),
-      code.indexOf('case "model"'),
+    const openCase = rowCode.slice(
+      rowCode.indexOf('case "open"'),
+      rowCode.indexOf('case "model"'),
     );
     expect((openCase.match(/<button/g) ?? []).length).toBe(1);
   });
 
   it("the nested control stops propagation on BOTH pointerdown and click", () => {
     // Without either, the outer open-and-fire handler runs too — the exact silent defect.
-    const openCase = code.slice(
-      code.indexOf('case "open"'),
-      code.indexOf('case "model"'),
+    const openCase = rowCode.slice(
+      rowCode.indexOf('case "open"'),
+      rowCode.indexOf('case "model"'),
     );
     expect(openCase).toContain("onPointerDown");
     expect(
@@ -231,9 +244,9 @@ describe("the component's structure (source guards — STRUCTURE only, never run
   });
 
   it("the nested control has a keyboard mirror (a span has no implicit activation)", () => {
-    const openCase = code.slice(
-      code.indexOf('case "open"'),
-      code.indexOf('case "model"'),
+    const openCase = rowCode.slice(
+      rowCode.indexOf('case "open"'),
+      rowCode.indexOf('case "model"'),
     );
     expect(openCase).toContain("onKeyDown");
     expect(openCase).toContain('e.key === "Enter"');
@@ -252,9 +265,9 @@ describe("the component's structure (source guards — STRUCTURE only, never run
     // locating the gutter and the conditional and comparing positions, because "contains
     // the class name" would pass on the broken version too — the broken version also
     // contained it, just inside the `&&`.
-    const openCase = code.slice(
-      code.indexOf('case "open"'),
-      code.indexOf('case "model"'),
+    const openCase = rowCode.slice(
+      rowCode.indexOf('case "open"'),
+      rowCode.indexOf('case "model"'),
     );
     const gutter = openCase.indexOf('className="picker-recent-gutter"');
     const conditional = openCase.indexOf("{showNoFireDoor &&");
@@ -308,9 +321,9 @@ describe("the component's structure (source guards — STRUCTURE only, never run
   it("an empty gutter stays out of the accessibility tree", () => {
     // A reserved spacing box is not content; announcing it would add a meaningless node to
     // every non-announcing row.
-    const openCase = code.slice(
-      code.indexOf('case "open"'),
-      code.indexOf('case "model"'),
+    const openCase = rowCode.slice(
+      rowCode.indexOf('case "open"'),
+      rowCode.indexOf('case "model"'),
     );
     expect(openCase).toContain("aria-hidden={!showNoFireDoor}");
   });
@@ -382,17 +395,23 @@ describe("the component's structure (source guards — STRUCTURE only, never run
     // The component's only legitimate gate use is passing the hook's value INTO
     // `rowAffordances`. So: the hook appears, `rowAffordances(` appears, and no expression
     // pairing the gate value with an arm/kind discriminator appears here.
-    const squeezed = code.replace(/\s+/g, "");
-    expect(squeezed.length).toBeGreaterThan(2000); // non-vacuity
-    expect(squeezed).toContain("rowAffordances(");
-    // A component-side arm test would have to name a kind to branch on. None may appear.
-    for (const kindLiteral of ['"argv"', '"inject"']) {
-      expect(
-        squeezed,
-        `ProjectPicker must not branch on an action kind (${kindLiteral}) — the per-arm ` +
-          "gate decision belongs to armAvailable() in announceRow.ts, which is where it is " +
-          "mutation-proven. Two homes for this rule drift silently.",
-      ).not.toContain(kindLiteral);
+    // Both files call `rowAffordances(`: the picker on the click path, the row to render.
+    for (const [name, text] of [
+      ["ProjectPicker", code],
+      ["PickerRow", rowCode],
+    ] as const) {
+      const squeezed = text.replace(/\s+/g, "");
+      expect(squeezed.length).toBeGreaterThan(2000); // non-vacuity
+      expect(squeezed).toContain("rowAffordances(");
+      // A component-side arm test would have to name a kind to branch on. None may appear.
+      for (const kindLiteral of ['"argv"', '"inject"']) {
+        expect(
+          squeezed,
+          `${name} must not branch on an action kind (${kindLiteral}) — the per-arm ` +
+            "gate decision belongs to armAvailable() in announceRow.ts, which is where it is " +
+            "mutation-proven. Two homes for this rule drift silently.",
+        ).not.toContain(kindLiteral);
+      }
     }
   });
 
@@ -445,12 +464,12 @@ describe("the component's structure (source guards — STRUCTURE only, never run
     const calls =
       squeezed.match(/invoke<[^>]*>\("picker_announce_actions"/g) ?? [];
     expect(calls.length).toBe(1);
-    // The row map starts at PICKER_ROW_CELLS.map — the call must precede it.
-    const callAt = code.indexOf("picker_announce_actions");
-    const mapAt = code.indexOf("PICKER_ROW_CELLS.map");
-    expect(callAt).toBeGreaterThan(-1);
-    expect(mapAt).toBeGreaterThan(-1);
-    expect(callAt).toBeLessThan(mapAt);
+    // Not per row: the row component (paydown 2026-11-04 WP13) makes NO IPC call at all; it
+    // receives the announce map as a prop. (This used to be an ordering check against the
+    // row map inside ProjectPicker; the map now lives in another file.)
+    expect(rowCode).toContain("announceMap");
+    expect(rowCode).not.toContain("picker_announce_actions");
+    expect(rowCode).not.toMatch(/\binvoke\b/);
   });
 
   it("Open Folder… passes an explicit null rather than relying on map absence", () => {

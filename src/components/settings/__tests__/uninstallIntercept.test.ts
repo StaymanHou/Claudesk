@@ -156,7 +156,7 @@ describe("the panel consumes the decision rather than re-deriving it", () => {
   // Comment-stripped (a guard reading raw source matches its own prose) and identifier-level
   // (never a formatted multi-line expression).
   const PANEL = readFileSync(
-    fileURLToPath(new URL("../SettingsPanel.tsx", import.meta.url)),
+    fileURLToPath(new URL("../WorkflowFeaturesSettings.tsx", import.meta.url)),
     "utf8",
   )
     .split("\n")
