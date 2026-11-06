@@ -34,6 +34,7 @@ import {
   shouldScheduleFire,
 } from "./autoResumeFire";
 import type { AutoResumeAction, OpenIntent } from "../../state/predictAction";
+import { takeSpawnArgs, type SpawnIntentRef } from "../../cc/spawnArgs";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
 import {
@@ -224,6 +225,12 @@ interface XtermPaneProps {
    */
   openIntent?: OpenIntent;
   /**
+   * A one-shot intent for the NEXT `cc_spawn`, overriding `openIntent` once. A drive-mode apply
+   * sets it to `turn-respawn` immediately before `relaunch()`; the spawn reads and clears it. See
+   * `cc/spawnArgs.ts`.
+   */
+  spawnIntentRef?: SpawnIntentRef;
+  /**
    * M13.5 WP3 P3.3 — record a turn-start marker each time this pane's CC session begins a
    * turn, so the jump affordance can scroll back to it.
    *
@@ -273,6 +280,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       active = true,
       pendingAction = null,
       openIntent = "fire",
+      spawnIntentRef,
       markTurnStarts = false,
       onTurnStartRecorded,
       onInputForwarded,
@@ -792,9 +800,12 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           // Rust command takes no such parameter, so passing it would be a wire error.
           const sessionId = await invoke<string>(
             spawnCommand,
-            spawnCommand === "cc_spawn"
-              ? { projectPath, intent: openIntent }
-              : { projectPath },
+            takeSpawnArgs(
+              spawnCommand,
+              projectPath,
+              openIntent,
+              spawnIntentRef,
+            ),
           );
           if (cancelled) {
             // This effect run was torn down (unmount, or a nonce/path/command re-run) before
@@ -924,9 +935,9 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       // satisfy exhaustive-deps; it is not a re-spawn trigger.
       // `pendingAction` is ALSO EXCLUDED: the reducer never clears it, and re-fire is governed
       // by the consume-once latch (`shouldScheduleFire` + `hasFiredRef`), not by this list.
-      // `openIntent` is ALSO EXCLUDED, and it is NOT immutable: a drive-mode apply flips it to
-      // `turn-respawn` (M13.5 WP4). Excluding it means that flip ALONE never re-spawns; the
-      // value is read when a nonce bump re-runs this effect (the apply's `relaunch()`).
+      // `openIntent` is ALSO EXCLUDED: it is the door the workspace was opened with and does not
+      // change. A drive-mode apply's `turn-respawn` arrives by `spawnIntentRef` instead, read at
+      // spawn time, so it never needs a re-run either (`spawnIntentRef` is a stable ref object).
       // eslint-disable-next-line react-hooks/exhaustive-deps -- deps come from spawnTriggerDeps (the unit-tested contract) + the stable fitAndResize callback
     }, [
       ...spawnTriggerDeps({ spawnNonce, projectPath, spawnCommand }),

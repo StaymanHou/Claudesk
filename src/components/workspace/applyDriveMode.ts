@@ -139,15 +139,23 @@ export const IDLE_POLL_MS = 250;
  * ⚠️ The timeout exists so a queued apply cannot hang forever on a session that never returns
  * to idle (a wedged turn, a crashed agent). Abandoning is the honest failure: the mode is already
  * persisted, so the change still applies on the next natural spawn.
+ *
+ * `signal` ends the wait early with `false`: the caller aborts it when its workspace unmounts, so
+ * a queued apply does not keep polling for up to `IDLE_WAIT_MS` after the workspace is gone. The
+ * sleep between polls wakes on the abort rather than waiting out `pollMs`.
  */
 export async function waitForIdle(
   ref: { readonly current: WireWorkspaceState },
   sessionLiveRef: { readonly current: boolean },
-  timeoutMs = IDLE_WAIT_MS,
-  pollMs = IDLE_POLL_MS,
+  {
+    signal,
+    timeoutMs = IDLE_WAIT_MS,
+    pollMs = IDLE_POLL_MS,
+  }: { signal?: AbortSignal; timeoutMs?: number; pollMs?: number } = {},
 ): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
+    if (signal?.aborted) return false;
     // ⚠️ BOTH refs, and the second is not optional here. The dialog's `canApplyNow` and this
     // poll must answer the SAME question — if the dialog says "now" on a live-but-unobserved
     // session while this poll ignored `sessionLive`, the apply would hang until timeout on a
@@ -156,26 +164,23 @@ export async function waitForIdle(
     // callers, same arguments.
     if (readyToRespawn(ref.current, sessionLiveRef.current)) return true;
     if (Date.now() >= deadline) return false;
-    await new Promise((r) => setTimeout(r, pollMs));
+    await abortableSleep(pollMs, signal);
   }
 }
 
-/**
- * How long to keep the `turn-respawn` intent latched after calling `relaunch()`.
- *
- * ⚠️ **Not a guess at how long a spawn takes.** The relaunch chain is asynchronous (kill → clear
- * the spawn-once latch → nonce bump → spawn effect), and `openIntent` is deliberately NOT in the
- * spawn effect's dependency list — it is read from the closure at nonce-bump time. So the latch
- * only has to survive the React commit that triggers the bump, not the spawn itself. Clearing it
- * synchronously after `relaunch()` would let the spawn read the workspace's ORIGINAL door, which
- * for a `fire` open would CONSUME the unclean-exit flag and silently disable auto-resume on the
- * next real open.
- *
- * ⚠️ **The 400 ms is UNMEASURED.** It is a margin chosen to comfortably outlast one React commit,
- * not a sampled figure: no measurement, no test pinning it, one call site. Do not read it as a
- * sibling of `INJECT_SETTLE_MS`, which IS measured and pinned — question this number freely.
- */
-export const RESPAWN_INTENT_HOLD_MS = 400;
+/** Resolve after `ms`, or as soon as `signal` aborts, whichever comes first. Never rejects. */
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
+}
 
 /**
  * The write a drive-mode interaction should perform, given how it ended.

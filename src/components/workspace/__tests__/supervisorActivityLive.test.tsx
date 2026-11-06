@@ -392,3 +392,76 @@ describe("the failure alarm on a live Workspace", () => {
     expect(q(el, "workspace-header-supervisor")).toBeNull();
   });
 });
+
+// Paydown 2026-11-04 WP12 — the mount seed reads the file ONCE per project per run, and a FAILED
+// read does not count as that once (`SURFACE-2026-11-06-QUALITY-WP8-SEED-ONCE-SWALLOWS-A-FAILED-READ`).
+// Each test mounts the same project twice; the feed's module state carries between the mounts the
+// way it carries between two workspaces of one app run.
+describe("the mount seed: once per project, and a failed read is retried", () => {
+  const reads = () =>
+    ipcCalls.filter((c) => c.cmd === "supervisor_activity_read");
+  // A thenable, so the rejection exists only once the IPC call awaits it.
+  const failingRead = {
+    then(_ok: unknown, fail: (e: Error) => void) {
+      fail(new Error("read failed"));
+    },
+  };
+
+  it("a failed first read leaves the project unseeded: the next mount reads again and seeds", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await mountWorkspace({
+        gate: true,
+        storedDriveMode: "autopilot",
+        ipcAnswers: { supervisor_activity_read: failingRead },
+      });
+      expect(reads()).toHaveLength(1);
+      await unmountWorkspace();
+    } finally {
+      warn.mockRestore();
+    }
+    const el = await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      ipcAnswers: {
+        supervisor_activity_read: [line({ reason: "unsent-input-present" })],
+      },
+    });
+    expect(reads()).toHaveLength(1);
+    expect(q(el, "workspace-header-supervisor")?.getAttribute("title")).toMatch(
+      /Last: withheld: unsent-input-present/,
+    );
+  });
+
+  it("a project seeded by an earlier mount is not read again", async () => {
+    await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      ipcAnswers: { supervisor_activity_read: [line({})] },
+    });
+    expect(reads(), "positive control: the first mount reads").toHaveLength(1);
+    await unmountWorkspace();
+    await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      ipcAnswers: { supervisor_activity_read: [line({})] },
+    });
+    expect(reads()).toEqual([]);
+  });
+
+  it("an EMPTY successful read still seeds: a project with no records is not re-read per mount", async () => {
+    await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      ipcAnswers: { supervisor_activity_read: [] },
+    });
+    expect(reads()).toHaveLength(1);
+    await unmountWorkspace();
+    await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      ipcAnswers: { supervisor_activity_read: [] },
+    });
+    expect(reads()).toEqual([]);
+  });
+});

@@ -3,6 +3,7 @@ import {
   readyToRespawn,
   applyConfirmBody,
   driveModeWriteFor,
+  waitForIdle,
 } from "../applyDriveMode";
 import type { WireWorkspaceState } from "../../../state/workspaceStatus";
 
@@ -138,5 +139,50 @@ describe("driveModeWriteFor", () => {
     expect(driveModeWriteFor("cancel").persist).not.toBe(
       driveModeWriteFor("apply").persist,
     );
+  });
+});
+
+describe("waitForIdle", () => {
+  const live = { current: true };
+
+  it("resolves true on the first poll when the workspace is already idle", async () => {
+    expect(await waitForIdle({ current: "idle" }, live)).toBe(true);
+  });
+
+  it("resolves true once the state turns idle (positive control for the abort cases)", async () => {
+    const state: { current: WireWorkspaceState } = { current: "running" };
+    const done = waitForIdle(state, live, { pollMs: 5 });
+    setTimeout(() => (state.current = "idle"), 12);
+    expect(await done).toBe(true);
+  });
+
+  it("resolves false at the deadline when the agent never goes idle", async () => {
+    expect(
+      await waitForIdle({ current: "running" }, live, {
+        timeoutMs: 20,
+        pollMs: 5,
+      }),
+    ).toBe(false);
+  });
+
+  it("an ALREADY-aborted signal resolves false without polling, even when idle", async () => {
+    const ac = new AbortController();
+    ac.abort();
+    expect(
+      await waitForIdle({ current: "idle" }, live, { signal: ac.signal }),
+    ).toBe(false);
+  });
+
+  it("aborting mid-sleep resolves false without waiting out pollMs", async () => {
+    const ac = new AbortController();
+    const started = Date.now();
+    const done = waitForIdle({ current: "running" }, live, {
+      signal: ac.signal,
+      pollMs: 60_000,
+    });
+    setTimeout(() => ac.abort(), 10);
+    expect(await done).toBe(false);
+    // The poll sleep is a minute; only an abort-aware sleep returns well inside it.
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 });

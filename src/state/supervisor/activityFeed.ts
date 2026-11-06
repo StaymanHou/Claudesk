@@ -109,6 +109,11 @@ export function seedActivity(
   notify();
 }
 
+/** Whether `projectPath`'s file replay has already been folded this app run. */
+export function isSeeded(projectPath: string): boolean {
+  return seeded.has(projectPath);
+}
+
 /** The project's structural-failure alarm, or `null` (M16.5 WP3). */
 export function activityAlarm(projectPath: string): SupervisorAlarm | null {
   return alarms.get(projectPath) ?? null;

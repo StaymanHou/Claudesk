@@ -136,62 +136,6 @@ describe("the workspace-list hook carries the action to the reducer", () => {
   });
 });
 
-describe("the open INTENT reaches cc_spawn (P4.6 — the boundary the defect crossed)", () => {
-  // ⚠️ THE POINT OF THIS BLOCK. Every other assertion about the no-fire door was already green
-  // when the door was broken: `actionForIntent(argv,"no-fire") === null` is mutation-proven, the
-  // `⏵` hit-tests to itself, `pending_action` was correctly `null`. None of that mattered,
-  // because the spawn call was `invoke(spawnCommand, { projectPath })` and the backend resolved
-  // the argv arm from the unclean flag alone.
-  //
-  // So this guards the ONE line the intent has to survive. A source-text guard is the honest
-  // instrument here: the alternative is rendering `XtermPane` (no component-render harness
-  // exists — `SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS`) and spawning a real
-  // `claude`. It verifies STRUCTURE, not runtime; the runtime proof is verify-self's live
-  // `ps` check that the `⏵` door produces argv without `--continue`.
-  //
-  // ⚠️ Honest scoping of what `tsc` covers, measured rather than assumed. Deleting the prop from
-  // the invoke entirely IS caught by `tsc` (TS6133 — the destructured prop becomes unused), so
-  // this guard is not the only net for the crudest mutation. What `tsc` canNOT catch is the
-  // shape that keeps the prop read but sends the wrong value (`intent: openIntent ? "fire" :
-  // "fire"`), which passed `tsc` and 1886 tests until the pattern below was tightened. That
-  // narrower case is this guard's real job.
-  const pane = readFileSync(
-    fileURLToPath(new URL("../../workspace/XtermPane.tsx", import.meta.url)),
-    "utf8",
-  )
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "");
-
-  it("XtermPane.tsx is readable (non-vacuity guard)", () => {
-    expect(pane.length).toBeGreaterThan(5000);
-    expect(pane).toContain("invoke");
-  });
-
-  it("the spawn invoke sends `intent` for cc_spawn", () => {
-    // ⚠️ THE PATTERN IS ANCHORED AND TERMINATED, and that precision was earned by a mutation
-    // that defeated the looser version. The first attempt was `/intent:\s*openIntent/`, which
-    // MATCHED `intent: openIntent ? "fire" : "fire"` — a payload that always authorizes the argv
-    // arm, i.e. the original defect restored. That mutant passed `tsc` (the prop is still read,
-    // so no TS6133) AND all 1886 tests.
-    //
-    // So the assertion requires `openIntent` to be the WHOLE value: followed only by a comma,
-    // brace, or whitespace-then-either. A ternary, a `||` fallback, or a literal now fails.
-    // Same family as `[[raw-guard-identifier-satisfied-by-own-comments]]`: an identifier
-    // *appearing* is not the identifier being *used as the value*.
-    expect(pane).toMatch(/intent:\s*openIntent\s*[,}]/);
-  });
-
-  it("the intent payload is not a hardcoded literal or a ternary", () => {
-    // The negative half, stated separately so a future loosening fails with a name that says
-    // what went wrong. Mutation-derived: these are the exact shapes that slipped through.
-    expect(pane).not.toMatch(/intent:\s*"(fire|no-fire)"/);
-    expect(pane).not.toMatch(/intent:\s*openIntent\s*[?|]/);
-  });
-
-  it("the shell spawn does NOT send an intent", () => {
-    // `term_spawn` is a login shell with no resume arm and its Rust command takes no such
-    // parameter, so sending one would be a wire error. The conditional payload is what keeps
-    // both spawn kinds correct from one call site.
-    expect(pane).toMatch(/spawnCommand === "cc_spawn"/);
-  });
-});
+// The P4.6 block that pinned "the open INTENT reaches cc_spawn" lived here as a regex over
+// `XtermPane.tsx`. Since paydown 2026-11-04 WP12 the payload is built by `takeSpawnArgs`, and its
+// value tests plus the call-shape guard now live in `src/cc/__tests__/spawnArgs.test.ts`.

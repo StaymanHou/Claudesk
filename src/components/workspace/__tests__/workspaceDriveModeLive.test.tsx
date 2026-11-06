@@ -3,10 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { emit } from "@tauri-apps/api/event";
 import { PROJECT_DRIVE_MODE_EVENT } from "../../../cc/driveModeIpc";
+import { IDLE_POLL_MS } from "../applyDriveMode";
 import {
   click,
   ipcCalls,
   mountWorkspace,
+  pane,
   settle,
   uncaught,
   unmountWorkspace,
@@ -189,5 +191,109 @@ describe("M16.5 WP4 — the verify-human overlay is DISPLAY ONLY (operator rulin
     expect(el.querySelector(".status-dot")?.className).toContain(
       "status-dot-idle",
     );
+  });
+});
+
+describe("the apply's respawn takes turn-respawn by REF, at spawn time (paydown 2026-11-04 WP12)", () => {
+  it("Apply on an idle agent relaunches ONCE, and that spawn sends turn-respawn", async () => {
+    // The stub's relaunch takes the override through the real `takeSpawnArgs`, so this reads
+    // what the real pane's spawn would send.
+    const el = await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      statusState: "idle",
+    });
+    await choose(el, "fsd");
+    await click(el.querySelector('[data-testid="drivemode-confirm-apply"]'));
+    expect(pane.relaunches).toBe(1);
+    expect(pane.spawnIntents).toEqual(["turn-respawn"]);
+    // One-shot: taken and cleared, and the pane's own door was never rewritten, so any LATER
+    // relaunch (the relaunch button, a Recycle) spawns as the door it was opened with.
+    expect(pane.props?.spawnIntentRef?.current).toBeNull();
+    expect(pane.props?.openIntent).toBe("fire");
+    // No longer queued once the respawn is under way.
+    expect(
+      el.querySelector('[data-testid="workspace-header-drivemode-pending"]'),
+    ).toBeNull();
+  });
+
+  it("with no apply, nothing relaunches and no override is pending (positive control)", async () => {
+    await mountWorkspace({ gate: true, statusState: "idle" });
+    expect(pane.relaunches).toBe(0);
+    expect(pane.props?.spawnIntentRef?.current).toBeNull();
+  });
+});
+
+describe("an apply still queued when the workspace unmounts is aborted (paydown 2026-11-04 WP12)", () => {
+  it("stops polling for idle once the workspace is gone", async () => {
+    const el = await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      statusState: "running",
+    });
+    await choose(el, "fsd");
+    await click(el.querySelector('[data-testid="drivemode-confirm-apply"]'));
+    expect(
+      el.querySelector('[data-testid="workspace-header-drivemode-pending"]'),
+      "the apply must be QUEUED for this test to mean anything",
+    ).not.toBeNull();
+
+    const warn = vi.spyOn(console, "warn");
+    await unmountWorkspace();
+    // Count the poll's own sleeps from here on. Before the abort existed, a queued apply kept
+    // scheduling one every IDLE_POLL_MS for up to ten minutes after the unmount.
+    const spy = vi.spyOn(globalThis, "setTimeout");
+    try {
+      await new Promise((r) => setTimeout(r, 3 * IDLE_POLL_MS + 50));
+      const polls = spy.mock.calls.filter(([, ms]) => ms === IDLE_POLL_MS);
+      expect(polls).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+    // An aborted apply is the operator closing the workspace, so it reports nothing.
+    const applyWarns = warn.mock.calls.filter(([m]) =>
+      String(m).startsWith("drive-mode apply"),
+    );
+    warn.mockRestore();
+    expect(applyWarns).toEqual([]);
+    expect(pane.relaunches).toBe(0);
+  });
+});
+
+describe("a failed drive-mode write reverts and abandons the respawn (paydown 2026-11-04 WP12)", () => {
+  it("the readout returns to the stored mode, nothing relaunches, and the failure is logged", async () => {
+    // A thenable rather than `Promise.reject`, so the rejection exists only once the IPC call
+    // awaits it (an eager rejected promise is reported as unhandled before it is ever used).
+    const rejects = {
+      then(_ok: unknown, fail: (e: Error) => void) {
+        fail(new Error("disk full"));
+      },
+    };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const el = await mountWorkspace({
+        gate: true,
+        storedDriveMode: "autopilot",
+        statusState: "idle",
+        ipcAnswers: { project_set_default_drive_mode: rejects },
+      });
+      await choose(el, "fsd");
+      await click(el.querySelector('[data-testid="drivemode-confirm-apply"]'));
+      // The write was attempted, for this project…
+      expect(writes().map((c) => c.args)).toEqual([{ path: OWN, mode: "fsd" }]);
+      // …failed, so the optimistic value is reverted and the respawn never happens.
+      expect(readout(el)?.textContent).toContain("autopilot");
+      expect(
+        el.querySelector('[data-testid="workspace-header-drivemode-pending"]'),
+      ).toBeNull();
+      expect(pane.relaunches).toBe(0);
+      expect(
+        warn.mock.calls.some(
+          ([m]) => String(m) === "drive-mode apply: write failed",
+        ),
+      ).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

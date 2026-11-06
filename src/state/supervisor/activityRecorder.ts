@@ -50,15 +50,27 @@ export async function recordActivity(record: ActivityRecord): Promise<void> {
  */
 export const ACTIVITY_READ_LINE_LIMIT = 2000;
 
-/** The newest `limit` raw record lines from the durable file, oldest first. `[]` on failure. */
-export async function readActivityLines(limit: number): Promise<string[]> {
+/**
+ * The newest `limit` raw record lines from the durable file, oldest first, or `null` when the
+ * read failed (an IPC error, or an answer that is not a list). Callers that must not treat a
+ * failure as "no records" use this; the mount seed is one (a failed read must not mark the
+ * project seeded).
+ */
+export async function tryReadActivityLines(
+  limit: number,
+): Promise<string[] | null> {
   try {
     const lines = await invoke<string[]>("supervisor_activity_read", { limit });
-    return Array.isArray(lines) ? lines : [];
+    return Array.isArray(lines) ? lines : null;
   } catch (e) {
     console.warn(
       `supervisor: could not read the activity record — ${String(e)}`,
     );
-    return [];
+    return null;
   }
+}
+
+/** {@link tryReadActivityLines}, with a failure read as `[]`. Never rejects. */
+export async function readActivityLines(limit: number): Promise<string[]> {
+  return (await tryReadActivityLines(limit)) ?? [];
 }

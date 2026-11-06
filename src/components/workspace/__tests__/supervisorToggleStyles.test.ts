@@ -16,12 +16,17 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const css = readFileSync(resolve(__dirname, "../../../App.css"), "utf8");
-const component = readFileSync(resolve(__dirname, "../Workspace.tsx"), "utf8");
+/** A source file with comments stripped — a class named only in prose is not emitted. */
+const stripped = (file: string) =>
+  readFileSync(resolve(__dirname, file), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
 
-/** The component with comments stripped — a class named only in prose is not emitted. */
-const emitted = component
-  .replace(/\/\*[\s\S]*?\*\//g, "")
-  .replace(/^\s*\/\/.*$/gm, "");
+// Since paydown 2026-11-04 WP12 the badge, its markers and the `▾` trigger render in
+// `SupervisorHeaderControl.tsx`; the toggle's wiring (its value, ref, action and revert) and the
+// turn-nav `⚙` stay in `Workspace.tsx`. Each block below reads the file that owns its subject.
+const emitted = stripped("../SupervisorHeaderControl.tsx");
+const workspaceSrc = stripped("../Workspace.tsx");
 
 /** Every class the toggle emits → the CSS selector that must style it. Load-bearing: direction 1
  *  iterates it, and the reverse test below fails on an emitted toggle class missing from it. */
@@ -74,7 +79,7 @@ describe("direction 1 — every class the component EMITS is styled", () => {
     // should (e.g. the template-literal `is-off`), so the scan cannot go quietly blind.
     expect(
       [...new Set(emittedToggle)].sort(),
-      "Workspace.tsx's toggle classes must be exactly CLASSES — a new class needs an entry " +
+      "SupervisorHeaderControl.tsx's toggle classes must be exactly CLASSES — a new class needs an entry " +
         "(with its selector); a missing one means the className scan went blind",
     ).toEqual(Object.keys(CLASSES).sort());
   });
@@ -95,7 +100,7 @@ describe("direction 2 — every class App.css STYLES is actually emitted", () =>
     for (const name of new Set(ruleNames)) {
       expect(
         emitted,
-        `App.css styles .${name} but Workspace.tsx never emits it — either the component ` +
+        `App.css styles .${name} but SupervisorHeaderControl.tsx never emits it — either the component ` +
           `stopped rendering it (dead CSS still carrying behavior) or the rule is a typo`,
       ).toContain(name);
     }
@@ -173,7 +178,7 @@ describe("⚠️ Workspace.tsx actually wires the toggle through", () => {
   it("routes the click through `supervisorToggleAction`, not an inline flip", () => {
     // An inline `!(ref.current ?? true)` would work today and silently lose the `revertTo`
     // distinction the moment someone "simplified" the revert to `!next`.
-    expect(emitted).toMatch(
+    expect(workspaceSrc).toMatch(
       /supervisorToggleAction\(\s*supervisorEnabledRef\.current/,
     );
   });
@@ -181,23 +186,33 @@ describe("⚠️ Workspace.tsx actually wires the toggle through", () => {
   it("⚠️ reverts with the action's `revertTo`, never with a recomputed value", () => {
     // Destructured as `revertTo: previous`, then passed to the failure arm. Asserting the
     // DESTRUCTURE plus the restore call is what makes a recomputation visible here.
-    expect(emitted).toMatch(/revertTo:\s*previous/);
-    expect(emitted).toMatch(/setSupervisorEnabled\(previous\)/);
+    expect(workspaceSrc).toMatch(/revertTo:\s*previous/);
+    expect(workspaceSrc).toMatch(/setSupervisorEnabled\(previous\)/);
   });
 
   it("⚠️ the failure arm exists at all — a bare `void write()` would strand the optimistic UI", () => {
-    expect(emitted).toMatch(
+    expect(workspaceSrc).toMatch(
       /setProjectSupervisorEnabled\([\s\S]{0,120}?\.catch\(/,
     );
   });
 
   it("passes the supervisor ref to useSupervisor as the third per-turn condition", () => {
     // Without this line the toggle persists, renders and flips — and changes nothing.
-    expect(emitted).toMatch(/supervisorEnabledRef,/);
+    expect(workspaceSrc).toMatch(/supervisorEnabledRef,/);
+  });
+
+  it("hands the control the toggle action and the collapsed value", () => {
+    // The control only renders and calls back; the value and the action are Workspace's.
+    expect(workspaceSrc).toMatch(
+      /<SupervisorHeaderControl[\s\S]{0,400}?onToggle=\{toggleSupervisor\}/,
+    );
+    expect(workspaceSrc).toMatch(
+      /<SupervisorHeaderControl[\s\S]{0,400}?enabled=\{supervisorEnabled \?\? true\}/,
+    );
   });
 
   it("reads the stored value on workspace reveal", () => {
-    expect(emitted).toMatch(
+    expect(workspaceSrc).toMatch(
       /getProjectSupervisorEnabled\(workspace\.project_path\)/,
     );
   });
@@ -260,11 +275,13 @@ describe("⚠️ Workspace.tsx actually wires the toggle through", () => {
 });
 
 describe("the guard is not vacuous", () => {
-  it("actually read both files", () => {
+  it("actually read all three files", () => {
     expect(css.length).toBeGreaterThan(1000);
     expect(emitted.length).toBeGreaterThan(1000);
+    expect(workspaceSrc.length).toBeGreaterThan(1000);
     // Sanity: the strip did not eat the source.
-    expect(emitted).toContain("workspace-header");
+    expect(emitted).toContain("workspace-header-supervisor");
+    expect(workspaceSrc).toContain("workspace-header");
   });
 });
 
@@ -299,7 +316,7 @@ describe("turn attribution — the turn readout's ⚙ (2026-09-28)", () => {
     /(?:^|\n)\s*color:\s*(#[0-9a-fA-F]{6});/.exec(block(selector))?.[1];
 
   it(".workspace-turn-origin is emitted and styled", () => {
-    expect(emitted).toMatch(/className="workspace-turn-origin"/);
+    expect(workspaceSrc).toMatch(/className="workspace-turn-origin"/);
     expect(css).toContain(".workspace-turn-origin {");
   });
 

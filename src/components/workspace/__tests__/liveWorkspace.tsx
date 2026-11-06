@@ -35,7 +35,8 @@ import type { TurnNavState } from "../turnMarkers";
 import type { TurnNavView } from "../XtermPane";
 import type { SupervisorOrigin } from "../../../state/supervisor/turnOrigin";
 import type { Workspace as WorkspaceModel } from "../../../state/workspace";
-import { RESPAWN_INTENT_HOLD_MS } from "../applyDriveMode";
+import type { OpenIntent } from "../../../state/predictAction";
+import { takeSpawnArgs, type SpawnIntentRef } from "../../../cc/spawnArgs";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -55,6 +56,8 @@ interface StubPaneProps {
   onTurnStartRecorded?: (nav: TurnNavView) => void;
   onInputForwarded?: (chunk: string) => void;
   claimTurnOrigin?: () => SupervisorOrigin | null;
+  openIntent?: OpenIntent;
+  spawnIntentRef?: SpawnIntentRef;
 }
 
 /** What one workspace's stub pane saw and what it will answer. */
@@ -65,6 +68,11 @@ export interface PaneRecord {
   props: null | StubPaneProps;
   /** How many times `Workspace` called `relaunch()` (a drive-mode apply's respawn). */
   relaunches: number;
+  /**
+   * The intent each relaunch's spawn sent, taken exactly as the real pane's spawn takes it
+   * (`takeSpawnArgs`, which also clears the one-shot override).
+   */
+  spawnIntents: OpenIntent[];
 }
 
 /** The workspace id `mountWorkspace` mounts. */
@@ -76,7 +84,13 @@ const panes = new Map<string, PaneRecord>();
 function recordFor(workspaceId: string): PaneRecord {
   let rec = panes.get(workspaceId);
   if (!rec) {
-    rec = { steps: [], navAfterStep: AT_REST, props: null, relaunches: 0 };
+    rec = {
+      steps: [],
+      navAfterStep: AT_REST,
+      props: null,
+      relaunches: 0,
+      spawnIntents: [],
+    };
     panes.set(workspaceId, rec);
   }
   return rec;
@@ -99,6 +113,7 @@ export const pane: PaneRecord = {
   navAfterStep: AT_REST,
   props: null,
   relaunches: 0,
+  spawnIntents: [],
 };
 
 function XtermPaneStub(props: StubPaneProps, ref: Ref<unknown>) {
@@ -114,7 +129,17 @@ function XtermPaneStub(props: StubPaneProps, ref: Ref<unknown>) {
     refit() {},
     setFontSize() {},
     relaunch() {
-      recordFor(id).relaunches += 1;
+      const rec = recordFor(id);
+      rec.relaunches += 1;
+      // The real relaunch spawns asynchronously, but nothing writes the override between the
+      // call and the spawn, so taking it here reads the same value.
+      const { intent } = takeSpawnArgs(
+        "cc_spawn",
+        "/stub",
+        props.openIntent ?? "fire",
+        props.spawnIntentRef,
+      );
+      if (intent) rec.spawnIntents.push(intent);
     },
     stepTurn(dir: "prev" | "next") {
       recordFor(id).steps.push(dir);
@@ -178,15 +203,6 @@ export function bootIpc(
  * plumbing it calls into.
  */
 export async function teardownIpc(r: Root | null, h: HTMLElement | null) {
-  // ⚠️ A drive-mode apply's respawn ends in a fire-and-forget `RESPAWN_INTENT_HOLD_MS` sleep
-  // that then sets state. Unmounting before it fires leaks the timer past the test, and under a
-  // loaded full-suite run it fired after the file's jsdom was gone ("window is not defined",
-  // an unhandled rejection; paydown 2026-11-04 WP3). Wait it out while still mounted. The
-  // production fix (a ref instead of the sleep) is sweep WP12.
-  if ([...panes.values()].some((p) => p.relaunches > 0))
-    await act(async () => {
-      await new Promise((res) => setTimeout(res, RESPAWN_INTENT_HOLD_MS + 50));
-    });
   await act(async () => r?.unmount());
   await settle();
   h?.remove();
@@ -230,6 +246,7 @@ export async function mountWorkspace(opts: MountOptions) {
   pane.navAfterStep = AT_REST;
   pane.props = null;
   pane.relaunches = 0;
+  pane.spawnIntents = [];
   panes.set(MOUNTED_ID, pane);
   const model = {
     id: MOUNTED_ID,
