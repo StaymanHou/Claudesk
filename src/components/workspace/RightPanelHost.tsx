@@ -105,6 +105,7 @@ const ProjectSearch = lazy(() =>
 import { isSearchChord } from "./search/searchChord";
 import {
   matchTargetFor,
+  toWireQuery,
   totalMatchCount,
   type SearchQuery,
 } from "./search/searchModel";
@@ -797,12 +798,7 @@ export function RightPanelHost({
     const shown = findResultsShown.current;
     if (!shown || rowReplaceBusy.current) return;
     rowReplaceBusy.current = true;
-    const query = {
-      pattern: shown.query.pattern,
-      regex: shown.query.regex,
-      case_sensitive: shown.query.caseSensitive,
-      whole_word: shown.query.wholeWord,
-    };
+    const query = toWireQuery(shown.query);
     const fail = (prefix: string) => (e: unknown) => {
       setSearchError(`${prefix}: ${String(e)}`);
       setSearchOpen(true);
@@ -840,7 +836,10 @@ export function RightPanelHost({
 
   // The confirm resolved: on "replace", run the backend project_replace, then re-run the
   // search to refresh the Find Results tab (replaced matches drop out). On "cancel",
-  // close the dialog and change nothing. A write/IPC failure surfaces in the overlay's
+  // close the dialog and change nothing. Like the row buttons, it acts on the query that
+  // PRODUCED the shown results, never the live field (paydown 2026-11-04 WP7, ruling R1):
+  // a row replace re-searches with the shown query and re-enables Replace All while the
+  // field may hold an edited, never-searched query. A write/IPC failure surfaces in the overlay's
   // inline error row (never silently swallowed — the WP6 IPC-error lesson).
   //
   // TWO WALKS BY DESIGN: project_replace returns a {files_changed, matches_replaced}
@@ -853,35 +852,20 @@ export function RightPanelHost({
   // out of scope for v1 (see SURFACE-2026-06-21-QUALITY-WP7-REPLACE-THEN-RESEARCH-TWO-WALKS).
   const onReplaceConfirm = (choice: ReplaceAllChoice) => {
     setReplaceConfirmOpen(false);
-    if (choice !== "replace") return;
+    const shown = findResultsShown.current;
+    if (choice !== "replace" || !shown) return;
     setSearchError(null);
+    const query = toWireQuery(shown.query);
     invoke<{ files_changed: number; matches_replaced: number }>(
       "project_replace",
-      {
-        root: projectPath,
-        query: {
-          pattern: searchQuery.pattern,
-          regex: searchQuery.regex,
-          case_sensitive: searchQuery.caseSensitive,
-          whole_word: searchQuery.wholeWord,
-        },
-        replacement,
-      },
+      { root: projectPath, query, replacement },
     )
       .then(() =>
         // Re-run the search so the tab reflects the post-replace state (the just-replaced
         // matches are gone; any remaining ones stay). Reuses the same result→tab path.
-        invoke<FileMatches[]>("project_search", {
-          root: projectPath,
-          query: {
-            pattern: searchQuery.pattern,
-            regex: searchQuery.regex,
-            case_sensitive: searchQuery.caseSensitive,
-            whole_word: searchQuery.wholeWord,
-          },
-        }),
+        invoke<FileMatches[]>("project_search", { root: projectPath, query }),
       )
-      .then((r) => handleSearchResults(r, searchQuery))
+      .then((r) => handleSearchResults(r, shown.query))
       .catch((e: unknown) => setSearchError(`Replace failed: ${String(e)}`));
   };
 

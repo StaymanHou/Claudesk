@@ -28,7 +28,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { type FileMatches, type SearchQuery } from "./searchModel";
+import { toWireQuery, type FileMatches, type SearchQuery } from "./searchModel";
 import { SEARCH_CHORD_LABEL } from "./searchChord";
 import { NO_TEXT_ASSIST } from "../../noTextAssist";
 
@@ -89,12 +89,7 @@ export function ProjectSearch({
     onError(null);
     invoke<FileMatches[]>("project_search", {
       root: projectPath,
-      query: {
-        pattern: query.pattern,
-        regex: query.regex,
-        case_sensitive: query.caseSensitive,
-        whole_word: query.wholeWord,
-      },
+      query: toWireQuery(query),
     })
       .then((r) => onResults(r, query))
       .catch((e: unknown) => onError(`Search failed: ${String(e)}`))

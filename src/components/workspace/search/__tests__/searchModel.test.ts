@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   byteOffsetToCharIndex,
   matchTargetFor,
+  toWireQuery,
   totalMatchCount,
   type FileMatches,
   type LineMatch,
@@ -106,5 +107,36 @@ describe("IPC wire-shape contract (regression: WP7 P2 verify-human BLOCKING)", (
 
   it("totalMatchCount handles a real IPC payload", () => {
     expect(totalMatchCount(fromBackend)).toBe(1);
+  });
+});
+
+describe("toWireQuery — SearchQuery → the backend's snake_case `query` argument", () => {
+  it("maps every mode to its serde field name, with distinct values per field", () => {
+    expect(
+      toWireQuery({
+        pattern: "^foo",
+        regex: true,
+        caseSensitive: false,
+        wholeWord: true,
+      }),
+    ).toEqual({
+      pattern: "^foo",
+      regex: true,
+      case_sensitive: false,
+      whole_word: true,
+    });
+    expect(
+      toWireQuery({
+        pattern: "x",
+        regex: false,
+        caseSensitive: true,
+        wholeWord: false,
+      }),
+    ).toEqual({
+      pattern: "x",
+      regex: false,
+      case_sensitive: true,
+      whole_word: false,
+    });
   });
 });

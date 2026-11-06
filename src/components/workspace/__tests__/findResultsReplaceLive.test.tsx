@@ -5,7 +5,8 @@
 //   - a button sends `project_replace` with ITS row's scope, the query that PRODUCED the
 //     results (not the edited field) and the CURRENT replacement text;
 //   - every replace is followed by a re-search with that same query (WBS 6.3);
-//   - a failure opens the overlay with a "Replace failed:" error.
+//   - a failure opens the overlay with a "Replace failed:" error;
+//   - Replace All acts on that same shown query (paydown 2026-11-04 WP7, ruling R1).
 import { afterEach, describe, expect, it } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -203,6 +204,39 @@ describe("Find Results hover replace — live RightPanelHost (M16.5 WP6)", () =>
     expect(calls[mark + 1].args.query).toMatchObject({ pattern: "foo" });
     // The replacement IS live: the field now reads empty.
     expect(calls[mark].args.replacement).toBe("");
+  });
+
+  // Paydown 2026-11-04 WP7, ruling R1. Editing the field nulls the counts and disables
+  // Replace All, but a ROW replace re-searches with the SHOWN query and re-enables it while
+  // the field still holds the edited, never-searched pattern. Replace All must then act on
+  // the shown query too, or it would replace a pattern nobody saw results for.
+  it("Replace All uses the shown results' query after a row replace re-enabled it", async () => {
+    await mount();
+    await searchFoo();
+    await chordSearch(); // reopen, edit the pattern WITHOUT searching
+    await typeInto("project-search-input", "zzz");
+    const replaceAll = () =>
+      q('[data-testid="project-search-replace-all"]') as HTMLButtonElement;
+    expect(replaceAll().disabled).toBe(true);
+    await press(buttons("find-replace-match")[0]); // re-searches `foo`
+    expect(replaceAll().disabled).toBe(false);
+    expect(
+      (q('[data-testid="project-search-input"]') as HTMLInputElement).value,
+    ).toBe("zzz");
+
+    await act(async () => replaceAll().click());
+    await settle();
+    const mark = calls.length;
+    await press(q('[data-testid="confirm-replace"]')!);
+    expect(after(mark)).toEqual(["project_replace", "project_search"]);
+    expect(calls[mark].args.scope).toBeUndefined();
+    expect(calls[mark].args.query).toEqual({
+      pattern: "foo",
+      regex: false,
+      case_sensitive: false,
+      whole_word: false,
+    });
+    expect(calls[mark + 1].args.query).toEqual(calls[mark].args.query);
   });
 
   it("a refused replace still re-searches and opens the overlay with the error", async () => {

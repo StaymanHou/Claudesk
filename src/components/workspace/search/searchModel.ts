@@ -5,7 +5,7 @@
 // This module holds the React-free, DOM-free pieces so they are vitest-testable
 // (repo posture: pure logic → vitest, live DOM → Playwright):
 //   - the result types mirroring the backend's FileMatches / LineMatch,
-//   - the SearchQuery the overlay sends,
+//   - the SearchQuery the overlay sends, and toWireQuery (its snake_case IPC shape),
 //   - byteOffsetToCharIndex: converts the backend's BYTE match offsets into JS
 //     string (UTF-16) indices so the editor can position a selection exactly,
 //   - matchTargetFor: builds the open-with-highlight target passed through openFile.
@@ -49,6 +49,27 @@ export interface SearchQuery {
   regex: boolean;
   caseSensitive: boolean;
   wholeWord: boolean;
+}
+
+/**
+ * The `query` argument of the `project_search` / `project_replace` commands: the backend's
+ * `SearchQuery`, whose serde field names are snake_case (IPC DTOs are snake_case end to end).
+ */
+export interface WireSearchQuery {
+  pattern: string;
+  regex: boolean;
+  case_sensitive: boolean;
+  whole_word: boolean;
+}
+
+/** THE one place a `SearchQuery` becomes its wire shape, so a new mode is added once. */
+export function toWireQuery(q: SearchQuery): WireSearchQuery {
+  return {
+    pattern: q.pattern,
+    regex: q.regex,
+    case_sensitive: q.caseSensitive,
+    whole_word: q.wholeWord,
+  };
 }
 
 /**

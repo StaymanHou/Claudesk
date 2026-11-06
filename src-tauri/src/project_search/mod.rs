@@ -233,11 +233,15 @@ pub struct ReplaceSummary {
 
 /// Replace every match of `query` with `replacement` across the project, in place.
 ///
-/// Reuses the SAME composed regex and shared walk as [`search_core`], so "what gets
+/// Reuses the SAME composed regex and shared walk as [`search_core`], and matches PER
+/// LINE exactly as search does ([`replace_every_match_per_line`]), so "what gets
 /// replaced" is exactly "what a search with this query would have found" — no second
-/// match definition. For each file with ≥1 match, the new contents are computed with
-/// [`Regex::replace_all`] and written via [`crate::editor_fs::write_file_core`] (the
-/// atomic tmp-then-rename write, root-confined). Capture-group references (`$1`,
+/// match definition. An anchor (`^`, `$`) therefore means here what it meant in the
+/// Find Results, and a pattern that could only match across a line break (`(?s)a.b`)
+/// replaces nothing, because search can never show such a match (paydown 2026-11-04
+/// WP7, ruling R1: Replace only ever touches what search could show). Each changed file
+/// is written via [`crate::editor_fs::write_file_core`] (the atomic tmp-then-rename
+/// write, root-confined). Capture-group references (`$1`,
 /// `${name}`) in `replacement` expand in **regex** mode; in **substring** mode the
 /// replacement is inserted literally (a `$` in it is not a group reference) via
 /// [`regex::NoExpand`].
@@ -278,20 +282,13 @@ pub fn replace_core(
             continue;
         };
 
-        // Count over the WHOLE file string — the same span `replace_all` mutates below
-        // — so `matches_replaced` equals what replace actually changes, even if a future
-        // regex matches across line boundaries (`(?s)…`, explicit `\n`). For a line-
-        // oriented pattern this equals the per-line sum (a `.`-default regex never
-        // crosses `\n`), so it agrees with search's per-line count for today's queries
-        // while staying exact under a multiline pattern (count-vs-effect can't diverge).
-        let count = re.find_iter(&contents).count();
+        // Per line, like search: the count and the rewrite come from the same pass, so
+        // `matches_replaced` is what changed AND what search showed for this file.
+        let (new_contents, count) =
+            replace_every_match_per_line(&contents, &re, query.regex, replacement);
         if count == 0 {
             continue;
         }
-
-        // Whole-file, deliberately (see `replace_count_matches_whole_file_effect_under_
-        // multiline_regex`); the scoped replaces below are per-line instead.
-        let new_contents = replace_all_in(&re, &contents, query.regex, replacement);
 
         // A no-op replacement (e.g. `x` → `x`) leaves contents identical — don't rewrite
         // the file or count it as changed, but the matches were still "replaced".
@@ -343,7 +340,8 @@ pub enum ReplaceScope {
 
 /// Replace within `scope`. [`ReplaceScope::All`] is exactly [`replace_core`]; the other
 /// two read and rewrite ONE file, resolved root-confined through `editor_fs` (no walk),
-/// with the same composed regex and the same literal-vs-expand rule.
+/// with the same composed regex, the same literal-vs-expand rule and the same per-line
+/// matching as search.
 ///
 /// # Errors
 /// - [`ProjectSearchError::BadRoot`] / [`ProjectSearchError::BadPattern`] — as for search.
@@ -910,25 +908,91 @@ mod tests {
     }
 
     #[test]
-    fn replace_count_matches_whole_file_effect_under_multiline_regex() {
-        // A cross-line regex (the `s` flag lets `.` match `\n`) replaces a span the OLD
-        // per-line counter never counted. The whole-file find_iter count must equal the
-        // number of spans replace_all actually mutates — no count-vs-effect divergence.
+    fn replace_all_skips_a_match_only_a_cross_line_regex_finds() {
+        // A cross-line regex (the `s` flag lets `.` match `\n`) has no match search could
+        // show, since search matches per line. Ruling R1: Replace only touches what search
+        // could show, so Replace All replaces nothing and leaves the file untouched.
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("a.txt"), "foo\nbar\nfoo\nbar\n").unwrap();
-        // The `(?s)` flag lets `.` match `\n`, so `foo.bar` spans the foo\nbar boundary.
         let q = SearchQuery {
             pattern: r"(?s)foo.bar".to_string(),
             regex: true,
             case_sensitive: false,
             whole_word: false,
         };
+        assert_eq!(total(&search_core(dir.path(), &q).unwrap()), 0);
         let summary = replace_core(dir.path(), &q, "X").unwrap();
-        // "foo\nbar" appears twice (lines 1-2 and 3-4). replace_all mutates both spans.
-        assert_eq!(summary.matches_replaced, 2, "{summary:?}");
-        assert_eq!(summary.files_changed, 1);
+        assert_eq!(summary.matches_replaced, 0, "{summary:?}");
+        assert_eq!(summary.files_changed, 0);
         let out = fs::read_to_string(dir.path().join("a.txt")).unwrap();
-        assert_eq!(out, "X\nX\n");
+        assert_eq!(out, "foo\nbar\nfoo\nbar\n");
+    }
+
+    /// Two files whose anchored matches sit on lines a WHOLE-FILE regex would not see:
+    /// `^foo` past the first line, `foo$` before the last `\n` (and a `\r\n` line).
+    fn anchored_fixture() -> TempDir {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("a.txt"),
+            "foo one\nfoo two\nmid foo mid\ntwo foo\r\nfoo\n",
+        )
+        .unwrap();
+        fs::write(dir.path().join("b.txt"), "x\nfoo three\nend foo\n").unwrap();
+        dir
+    }
+
+    fn regex_query(pattern: &str) -> SearchQuery {
+        SearchQuery {
+            pattern: pattern.to_string(),
+            regex: true,
+            case_sensitive: false,
+            whole_word: false,
+        }
+    }
+
+    #[test]
+    fn replace_all_count_equals_search_count_under_anchored_regex() {
+        // Ruling R1: Replace All matches per line, like search, so the confirm's count (from
+        // search) is what gets replaced. A whole-file regex replaces only `^foo` on line 1
+        // and `foo$` at end of file, so each count below would fall short.
+        for (pattern, expected) in [("^foo", 4), ("foo$", 3)] {
+            let dir = anchored_fixture();
+            let q = regex_query(pattern);
+            let search_total = total(&search_core(dir.path(), &q).unwrap());
+            assert_eq!(search_total, expected, "{pattern}: search");
+            let summary = replace_core(dir.path(), &q, "X").unwrap();
+            assert_eq!(
+                summary.matches_replaced as usize, search_total,
+                "{pattern}: {summary:?}"
+            );
+            assert_eq!(summary.files_changed, 2, "{pattern}");
+            assert_eq!(total(&search_core(dir.path(), &q).unwrap()), 0, "{pattern}");
+        }
+    }
+
+    #[test]
+    fn replace_all_rewrites_exactly_the_anchored_lines() {
+        let dir = anchored_fixture();
+        replace_core(dir.path(), &regex_query("^foo"), "X").unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+            "X one\nX two\nmid foo mid\ntwo foo\r\nX\n"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join("b.txt")).unwrap(),
+            "x\nX three\nend foo\n"
+        );
+
+        let dir = anchored_fixture();
+        replace_core(dir.path(), &regex_query("foo$"), "X").unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+            "foo one\nfoo two\nmid foo mid\ntwo X\r\nX\n"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join("b.txt")).unwrap(),
+            "x\nfoo three\nend X\n"
+        );
     }
 
     #[test]
