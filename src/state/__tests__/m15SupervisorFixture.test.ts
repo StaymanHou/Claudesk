@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 //
 // ⚠️ WHAT THIS FILE IS, AND DELIBERATELY IS NOT.
 //
-// The probe's SCRIPTS are throwaway Python under the gitignored `tmp/scratch/m15-probe/`;
+// The probe's SCRIPTS are throwaway Python in `../claudesk-scratch/m15-probe/` (outside the repo);
 // WP3 owns the real, shippable transcript reader and will delete them. Pinning those
 // scripts would create a test WP3 is obliged to delete — coverage with a built-in expiry.
 //
@@ -202,7 +202,7 @@ describe("M15 WP1 — the ground-truth break signal", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // M15 WP1 Phase 2 — the measurements that bind WP3.
 //
-// Phase 2's detector (`tmp/scratch/m15-probe/detect.py`) is throwaway like the
+// Phase 2's detector (`../claudesk-scratch/m15-probe/detect.py`) is throwaway like the
 // reader before it, so it is NOT pinned here. What IS durable is the set of
 // MEASUREMENTS it produced, every one of which is re-derivable from the frozen
 // fixture alone — which is why they can be asserted without the script existing.

@@ -51,15 +51,24 @@ backend-process outcomes the webview cannot see.
 
 When an agent drives live verify-self through the MCP bridge, it picks a project from the picker → a
 **real** CC session spawns in that project's directory. To keep that off real work, three throwaway
-git repos live at `tmp/scratch/scratch-{a,b,c}` (each its own repo with a baseline commit, so
-diff/git-status surfaces have content). `tmp/` is gitignored.
+git repos live at `/Users/stayman/Personal/projects/claudesk-scratch/scratch-{a,b,c}` (each its own
+repo with a baseline commit, so diff/git-status surfaces have content), beside the other fixtures
+(`restore-test`, `media-probe`, `f-b-prof`, `m15-probe`; its `README.md` lists them).
+
+⚠️ **They live OUTSIDE the repo on purpose (moved 2026-11-06, paydown-2026-11-04 WP11).** Hook events
+resolve to the open workspace whose folder is the nearest path-ancestor of the event's `cwd`, so a
+session in `claudesk/tmp/scratch/*` drove the operator's own `claudesk` workspace: its dot, its blue
+verify-human overlay and its supervisor's turn ends. Never put a CC scratch workspace back under the
+repo. The repo's `tmp/scratch/` is now only for throwaway vitest specs, which need the project's
+resolver.
 
 **Prefer opening these for verify-self over real projects.** Mandatory once a check drives a status
 *transition* or anything that spawns/answers a CC session (Phase 2/3 of M5 onward); read-only
 DOM/click checks against a real recent are harmless, but the scratch dirs are still the default.
 
-First use: "Open folder…" → `tmp/scratch/scratch-a` to add them to the picker recents; thereafter
-they're one click.
+First use: "Open folder…" → `../claudesk-scratch/scratch-a` to add them to the picker recents;
+thereafter they're one click. (The dev `projects.json` already has a, b and c. A moved folder is a new
+path to CC, so its first open asks folder trust again, and `--continue` has no history there.)
 
 ## 4. ⚠️ Extracting a pure state machine proves the MACHINE, not its CALLER
 

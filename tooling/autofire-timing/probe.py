@@ -73,8 +73,9 @@ by port. On 2026-07-13 a blanket name/port kill during a verify-self run killed 
 operator's live application; the dev and prod builds share the process name
 `claudesk`. Nothing here can repeat that: there is exactly one PID and we own it.
 
-It also runs `claude` in a THROWAWAY scratch repo (`tmp/scratch/scratch-a`), never a
-real project, per the standing scratch-workspace convention.
+It also runs `claude` in a THROWAWAY scratch repo (`../claudesk-scratch/scratch-a`, a sibling
+OUTSIDE this repo), never a real project, per the standing scratch-workspace convention. Outside,
+because a session inside the repo resolves to the operator's own `claudesk` workspace.
 """
 
 from __future__ import annotations
@@ -489,8 +490,9 @@ def main() -> int:
                     help="ms to wait after spawn before sending (cc-ready arm)")
     ap.add_argument("--settle", type=float, default=6.0,
                     help="seconds to read output after sending (default 6)")
-    ap.add_argument("--project", default=str(repo / "tmp/scratch/scratch-a"),
-                    help="project dir to spawn CC in (default: tmp/scratch/scratch-a)")
+    scratch_root = (repo.parent / "claudesk-scratch").resolve()
+    ap.add_argument("--project", default=str(scratch_root / "scratch-a"),
+                    help="project dir to spawn CC in (default: ../claudesk-scratch/scratch-a)")
     ap.add_argument("--mode", default=DEFAULT_MODE,
                     help=f"--permission-mode value (default {DEFAULT_MODE})")
     ap.add_argument("--capture-dir", default=str(repo / "tmp/autofire-timing"),
@@ -508,8 +510,8 @@ def main() -> int:
         return 2
     # Refuse to spawn CC anywhere but a scratch repo unless forced by an explicit
     # --project outside it. This is the scratch-workspace convention, made mechanical.
-    if "tmp/scratch/" not in str(project_dir):
-        print(f"warning: {project_dir} is not a tmp/scratch/* repo — a real CC session "
+    if scratch_root not in project_dir.parents:
+        print(f"warning: {project_dir} is not under {scratch_root} — a real CC session "
               f"will start there", file=sys.stderr)
 
     capture_dir = None if args.no_capture else Path(args.capture_dir)

@@ -94,6 +94,18 @@ describe("isScratchSlug", () => {
       false,
     );
   });
+
+  it("matches the new home outside the repo, and no other claudesk-prefixed slug", () => {
+    for (const dir of ["scratch-a", "restore-test", "m15-probe"])
+      expect(
+        isScratchSlug(
+          `-Users-stayman-Personal-projects-claudesk-scratch-${dir}`,
+        ),
+      ).toBe(true);
+    expect(
+      isScratchSlug("-Users-stayman-Personal-projects-claudesk-src-tauri"),
+    ).toBe(false);
+  });
 });
 
 describe("classifyNext", () => {

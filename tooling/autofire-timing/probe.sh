@@ -41,8 +41,8 @@
 # live application (dev and prod share the process name `claudesk`). Nothing here can
 # repeat that — there is exactly one PID and we own it.
 #
-# CC is spawned in a THROWAWAY scratch repo (`tmp/scratch/scratch-a`), never a real
-# project, per the standing scratch-workspace convention.
+# CC is spawned in a THROWAWAY scratch repo (`../claudesk-scratch/scratch-a`, a sibling
+# OUTSIDE this repo), never a real project, per the standing scratch-workspace convention.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set -uo pipefail
@@ -80,7 +80,7 @@ OPTIONS
                   cold-start claim — one warm sample is explicitly insufficient.
   --delay-ms N    Pre-send delay for the cc-ready arm (default 0).
   --settle SECS   Seconds to read output after sending (default 6).
-  --project DIR   Where to spawn CC (default tmp/scratch/scratch-a).
+  --project DIR   Where to spawn CC (default ../claudesk-scratch/scratch-a).
   --mode VALUE    --permission-mode value (default bypassPermissions, Claudesk's).
   --capture-dir D Where raw PTY captures go (default tmp/autofire-timing, gitignored).
   --no-capture    Skip writing capture files.

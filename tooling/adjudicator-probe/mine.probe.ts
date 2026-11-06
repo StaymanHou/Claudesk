@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import {
-  M15_PROBE_SLUG,
+  M15_PROBE_SLUGS,
   isAdjudicatorSession,
   isScratchSlug,
   mineTranscript,
@@ -110,7 +110,7 @@ it("mine", () => {
     }
     for (const file of files.sort()) {
       filesScanned++;
-      if (project === M15_PROBE_SLUG) {
+      if (M15_PROBE_SLUGS.has(project)) {
         excluded.m15Probe++;
         continue;
       }

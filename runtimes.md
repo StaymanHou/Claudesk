@@ -31,13 +31,14 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 98s (2026-11-06, paydown-2026-11-04 WP10 act re-run, EXIT=0; after a debug-bundle build)
+- **Last:** 63s (2026-11-06, paydown-2026-11-04 WP11 act, EXIT=0)
 - **Use timeout:** 207000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 63s — 2026-11-06 (paydown WP11 act, EXIT=0)
   - 98s — 2026-11-06 (paydown WP10 act re-run, EXIT=0; a `tauri build --debug` just before left cargo partly cold)
   - 62s — 2026-11-06 (paydown WP10 act, EXIT=0; Rust editor_fs edit forced a partial rebuild)
   - 46s — 2026-11-06 (paydown WP9 act, EXIT=0)

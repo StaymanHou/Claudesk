@@ -12,4 +12,4 @@ For dev/verification of the F-b profile feature, use the operator-requested **`~
 
 **Why:** adopting a profile writes Claudesk's hook entry into that profile's `settings.json`, and a dev build registers its OWN (`claudesk-hook-dev.pl`) marker — the operator wants dev work kept off the real profiles they use daily (`claude-original`, `neo`, `eos`, …).
 
-**How to apply:** at any F-b verify step that needs a logged-in profile (the deferred P3.verify-human.1 idle→running→awaiting→idle cycle; Phase 4/5 verify-human), adopt `claude-original-dev`, not a real profile. Scratch-only checks can keep using the unlogged-in `tmp/scratch/f-b-prof/claude-scratch`. Related: [[verify-self-dev-vs-prod-process-name-collision]].
+**How to apply:** at any F-b verify step that needs a logged-in profile (the deferred P3.verify-human.1 idle→running→awaiting→idle cycle; Phase 4/5 verify-human), adopt `claude-original-dev`, not a real profile. Scratch-only checks can keep using the unlogged-in `/Users/stayman/Personal/projects/claudesk-scratch/f-b-prof/claude-scratch` (moved out of the repo's `tmp/scratch/` 2026-11-06). Related: [[verify-self-dev-vs-prod-process-name-collision]].

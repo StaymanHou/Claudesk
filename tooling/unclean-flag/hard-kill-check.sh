@@ -142,7 +142,7 @@ echo
 bold "ARM 1 — HARD KILL (no cleanup code runs → the flag MUST survive)"
 cat <<'STEPS'
   1. Launch the dev app:            pnpm tauri:dev
-  2. Open a scratch workspace       (tmp/scratch/scratch-a)
+  2. Open a scratch workspace       (../claudesk-scratch/scratch-a)
   3. Confirm the flag was SET:      tooling/unclean-flag/hard-kill-check.sh --state
   4. Hard-kill it:                  tooling/unclean-flag/hard-kill-check.sh --kill
   5. Confirm the flag SURVIVED:     tooling/unclean-flag/hard-kill-check.sh --state

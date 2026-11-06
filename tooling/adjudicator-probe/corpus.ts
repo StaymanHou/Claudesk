@@ -26,17 +26,24 @@ const ADJUDICATOR_PROMPT_OPENINGS = [
   "You are judging whether an AI coding agent's turn ENDED WAITING FOR THE OPERATOR.",
 ];
 
-/** The M15 probe's own run directory. Its sessions are the probe, not the operator. */
-export const M15_PROBE_SLUG =
-  "-Users-stayman-Personal-projects-claudesk-tmp-scratch-m15-probe";
+/** The M15 probe's own run directory, before and after the 2026-11-06 move out of the repo.
+ *  Its sessions are the probe, not the operator. */
+export const M15_PROBE_SLUGS: ReadonlySet<string> = new Set([
+  "-Users-stayman-Personal-projects-claudesk-tmp-scratch-m15-probe",
+  "-Users-stayman-Personal-projects-claudesk-scratch-m15-probe",
+]);
+
+/** The scratch workspaces' home since 2026-11-06 (`../claudesk-scratch/`, outside the repo). */
+const SCRATCH_ROOT_SLUG = "-Users-stayman-Personal-projects-claudesk-scratch-";
 
 /**
- * A `tmp/scratch` workspace (`scratch-a/b/c`, the M15 probe dir). The agent drives CC there
- * during verify-self, so its "operator" lines are scripted ("Use no tools. Reply with the single
- * word Built…") and are not operator behavior.
+ * A scratch workspace (`scratch-a/b/c`, `restore-test`, the M15 probe dir). The agent drives CC
+ * there during verify-self, so its "operator" lines are scripted ("Use no tools. Reply with the
+ * single word Built…") and are not operator behavior. Both homes count: `claudesk/tmp/scratch/`
+ * (every transcript before the move) and `claudesk-scratch/`.
  */
 export function isScratchSlug(slug: string): boolean {
-  return slug.includes("-tmp-scratch-");
+  return slug.includes("-tmp-scratch-") || slug.startsWith(SCRATCH_ROOT_SLUG);
 }
 
 export type ProjectClass = "claudesk" | "personal" | "work" | "other";
