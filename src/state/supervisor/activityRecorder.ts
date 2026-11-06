@@ -42,6 +42,14 @@ export async function recordActivity(record: ActivityRecord): Promise<void> {
   await appendActivity(record);
 }
 
+/**
+ * How many raw lines a reader asks for before filtering to one project. Records from every
+ * workspace share one file, so a small read would often find none of a project's. It equals the
+ * backend's cap (`MAX_READ_LINES` in `supervisor_activity/commands.rs`), pinned by
+ * `activityReadLimit.test.ts`: asking for more would be silently truncated.
+ */
+export const ACTIVITY_READ_LINE_LIMIT = 2000;
+
 /** The newest `limit` raw record lines from the durable file, oldest first. `[]` on failure. */
 export async function readActivityLines(limit: number): Promise<string[]> {
   try {

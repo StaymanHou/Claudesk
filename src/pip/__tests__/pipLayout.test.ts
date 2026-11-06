@@ -12,6 +12,10 @@ import {
   PIP_LAYOUT_EVENT,
   type PipLayout,
 } from "../pipLayout";
+import type {
+  WireWorkspaceState,
+  WorkspaceStatusMap,
+} from "../../state/workspaceStatus";
 
 describe("pipLayout — the layout vocabulary + cycle", () => {
   it("default layout is WP3's horizontal mirror", () => {
@@ -79,7 +83,7 @@ describe("coercePipLayout — honest fall-back on a stale/corrupt value", () => 
 // The status map now holds `{ state, snippet? }` entries (not bare state strings —
 // the debt-paydown WP2 snippet-tooltip wiring). `mk` wraps a state-by-id literal into
 // that shape so these attention tests read as before.
-const mk = (m: Record<string, string>): Record<string, { state: string }> =>
+const mk = (m: Record<string, WireWorkspaceState>): WorkspaceStatusMap =>
   Object.fromEntries(Object.entries(m).map(([k, state]) => [k, { state }]));
 
 describe("Phase 4 — isAwaitingInput (the 'needs me' predicate)", () => {
@@ -178,14 +182,17 @@ describe("M16.5 WP4 — a verify-human overlay is a PiP 'needs me' cue", () => {
       ),
     ).toBe(true);
     expect(isAwaitingInput({ a: { state: "idle" } }, "a")).toBe(false);
-    expect(
-      isAwaitingInput({ a: { state: "idle", attention: null } }, "a"),
-    ).toBe(false);
+    // A `null` off the wire (serde's `None`) is outside the TS type; it must not read as an
+    // overlay.
+    const nullOffTheWire = {
+      a: { state: "idle", attention: null },
+    } as unknown as WorkspaceStatusMap;
+    expect(isAwaitingInput(nullOffTheWire, "a")).toBe(false);
   });
 
   it("orderForAttention pulls an overlaid workspace to the front", () => {
     const tiles = [{ id: "x" }, { id: "y" }];
-    const map = {
+    const map: WorkspaceStatusMap = {
       x: { state: "running" },
       y: { state: "idle", attention: "verify_human" },
     };

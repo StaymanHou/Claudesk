@@ -37,7 +37,7 @@ import {
   type TranscriptLine,
   type TranscriptTail,
 } from "./transcript";
-import type { Decision } from "./useSupervisor";
+import type { Decision } from "./activityRecord";
 
 /** The skill whose pause the overlay exists for. */
 export const VERIFY_HUMAN_SKILL = "feature-verify-human";

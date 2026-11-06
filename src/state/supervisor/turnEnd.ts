@@ -32,6 +32,8 @@ export interface TurnEndSignal {
   workspace_id: string;
   is_turn_end?: boolean;
   session_id?: string;
+  /** The hook's send time (epoch ms): with `workspace_id`, the `Stop`'s identity for dedupe. */
+  last_event_at?: number;
 }
 
 /**

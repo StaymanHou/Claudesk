@@ -29,7 +29,7 @@ import {
   describeDecision,
   type ActivityRecord,
 } from "../state/supervisor/activityRecord";
-import { relativeTime } from "../components/workspace/diff/diffModel";
+import { relativeTime } from "../state/timeFormat";
 import type { SupervisorOrigin } from "../state/supervisor/turnOrigin";
 import type { SupervisorAlarm } from "../state/supervisor/failureAlarm";
 
@@ -121,6 +121,21 @@ export const SUPERVISOR_SUPPRESSED_GLYPH = "⏸";
  */
 export const SUPERVISOR_ALARM_GLYPH = "!";
 
+/** The optional inputs of {@link workspaceSupervisorReadout}; each defaults to "absent". */
+export interface WorkspaceSupervisorReadoutOptions {
+  /** Whether a half-typed line is currently suppressing the supervisor. */
+  readonly unsentInput?: boolean;
+  /** The project's newest activity record and the current time (epoch ms). */
+  readonly last?: {
+    readonly record: ActivityRecord;
+    readonly nowMs: number;
+  } | null;
+  /** The supervisor's origin for the turn the turn readout has selected. */
+  readonly turnOrigin?: SupervisorOrigin | null;
+  /** The project's structural-failure alarm (`failureAlarm.ts`). */
+  readonly failure?: SupervisorAlarm | null;
+}
+
 /**
  * Derive the workspace header's supervisor readout.
  *
@@ -139,21 +154,18 @@ export const SUPERVISOR_ALARM_GLYPH = "!";
  * @param enabled the project's persisted `supervisor_enabled` (absent → `true`, resolved in Rust)
  * @param gateEnabled `workflow_features_enabled` — when false there is no readout at all
  * @param workspaceName display name, for the accessible label
- * @param unsentInput whether a half-typed line is currently suppressing the supervisor
- * @param last the project's newest activity record and the current time (epoch ms), or `null`
- * @param turnOrigin the supervisor's origin for the turn the turn readout has selected, or `null`
+ * @param options the readout's optional inputs, named so call sites cannot transpose them
  */
 export function workspaceSupervisorReadout(
   enabled: boolean,
   gateEnabled: boolean,
   workspaceName: string,
-  unsentInput = false,
-  last: {
-    readonly record: ActivityRecord;
-    readonly nowMs: number;
-  } | null = null,
-  turnOrigin: SupervisorOrigin | null = null,
-  failure: SupervisorAlarm | null = null,
+  {
+    unsentInput = false,
+    last = null,
+    turnOrigin = null,
+    failure = null,
+  }: WorkspaceSupervisorReadoutOptions = {},
 ): WorkspaceSupervisorReadout | null {
   if (!gateEnabled) return null;
 

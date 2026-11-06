@@ -822,12 +822,10 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
       },
       nowMs: 61_000,
     };
-    expect(
-      workspaceSupervisorReadout(true, false, "x", false, last),
-    ).toBeNull();
+    expect(workspaceSupervisorReadout(true, false, "x", { last })).toBeNull();
     // Anti-vacuity: with the gate ON the same input produces the hint.
     expect(
-      workspaceSupervisorReadout(true, true, "x", false, last)?.lastAction,
+      workspaceSupervisorReadout(true, true, "x", { last })?.lastAction,
     ).toBe("fired /feature-plan · 1m ago");
   });
 
@@ -838,11 +836,11 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
     // so deliberately NOT titled "renders no …".
     const origin = { command: "/feature-verify-auto", firedAt: 1_000 };
     expect(
-      workspaceSupervisorReadout(true, false, "x", false, null, origin),
+      workspaceSupervisorReadout(true, false, "x", { turnOrigin: origin }),
     ).toBeNull();
     // Anti-vacuity: with the gate ON the same origin produces the mark.
     expect(
-      workspaceSupervisorReadout(true, true, "x", false, null, origin)
+      workspaceSupervisorReadout(true, true, "x", { turnOrigin: origin })
         ?.turnBadge?.text,
     ).toBe("⚙");
   });

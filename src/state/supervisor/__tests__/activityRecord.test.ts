@@ -66,6 +66,7 @@ describe("serializeRecord", () => {
 describe("outcomeForReason", () => {
   it("maps the supervisor's own failures to error and every decision to withheld", () => {
     expect(outcomeForReason("sweep-threw")).toBe("error");
+    expect(outcomeForReason("recycle-threw")).toBe("error");
     expect(outcomeForReason("inject-failed")).toBe("error");
     expect(outcomeForReason("policy-not-auto")).toBe("withheld");
     // A turn whose close never reached the transcript is a withhold, not a supervisor error.

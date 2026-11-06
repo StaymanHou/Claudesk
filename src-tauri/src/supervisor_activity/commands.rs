@@ -12,7 +12,9 @@ use super::{activity_log, append, read_last};
 use crate::config_store::commands::resolve_data_dir;
 use tauri::AppHandle;
 
-/// Upper bound on a single read, so a caller cannot ask for the whole file through IPC.
+/// Upper bound on a single read, so a caller cannot ask for the whole file through IPC. The
+/// frontend asks for exactly this many (`ACTIVITY_READ_LINE_LIMIT`; pinned by
+/// `activityReadLimit.test.ts`).
 const MAX_READ_LINES: usize = 2000;
 
 /// Append one already-serialized record line to `supervisor-activity.log`.

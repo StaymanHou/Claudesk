@@ -4,6 +4,12 @@
 // ⚠️ It reads the DURABLE file (`supervisor_activity_read`), not the live feed, so the list spans
 // app relaunches. It is only ever rendered inside the gated readout block, so with the workflow
 // gate OFF it cannot exist.
+//
+// ⚠️ IT TAKES FOCUS, AND ITS ESC IS SCOPED TO IT (paydown 2026-11-04 WP8). WebKit does not focus a
+// button on click, so after `▾` the focus is still in the terminal. With Esc on a `document`
+// listener, the key that closed this list ALSO reached CC through xterm's textarea and could
+// interrupt a running turn. Now the popover focuses itself on open, handles Esc on its own
+// element without letting it bubble, and hands focus back to the terminal when it closes.
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -11,17 +17,14 @@ import {
   recentForProject,
   type ActivityRecord,
 } from "../../state/supervisor/activityRecord";
-import { readActivityLines } from "../../state/supervisor/activityRecorder";
-import { relativeTime } from "./diff/diffModel";
+import {
+  ACTIVITY_READ_LINE_LIMIT,
+  readActivityLines,
+} from "../../state/supervisor/activityRecorder";
+import { relativeTime } from "../../state/timeFormat";
 
 /** How many decisions the popover lists. */
 export const POPOVER_RECORD_LIMIT = 20;
-
-/**
- * How many raw lines to read before filtering to this project. Records from every workspace share
- * one file, so reading only 20 lines would often find none of this project's.
- */
-const READ_LINE_LIMIT = 2000;
 
 export function SupervisorActivityPopover({
   projectPath,
@@ -36,7 +39,7 @@ export function SupervisorActivityPopover({
 
   useEffect(() => {
     let cancelled = false;
-    void readActivityLines(READ_LINE_LIMIT).then((lines) => {
+    void readActivityLines(ACTIVITY_READ_LINE_LIMIT).then((lines) => {
       if (!cancelled)
         setRecords(recentForProject(lines, projectPath, POPOVER_RECORD_LIMIT));
     });
@@ -46,19 +49,29 @@ export function SupervisorActivityPopover({
   }, [projectPath]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
     const onPointer = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
-    document.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onPointer);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointer);
-    };
+    return () => document.removeEventListener("pointerdown", onPointer);
   }, [onClose]);
+
+  // Take focus on open; give it back on close. Restored only if the focus is still ours (or was
+  // lost with our node), so a click that moved it elsewhere is not overridden.
+  useEffect(() => {
+    const node = ref.current;
+    const before =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    node?.focus();
+    return () => {
+      const now = document.activeElement;
+      if (now === null || now === document.body || node?.contains(now)) {
+        before?.focus();
+      }
+    };
+  }, []);
 
   return (
     <div
@@ -67,7 +80,14 @@ export function SupervisorActivityPopover({
       data-testid="supervisor-activity-popover"
       role="dialog"
       aria-label="Supervisor activity"
+      tabIndex={-1}
       onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key !== "Escape") return;
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }}
     >
       <div className="supervisor-activity-title">Supervisor activity</div>
       {records === null ? (

@@ -86,26 +86,33 @@ describe("⚠️ the toggle does NOT depend on the drive mode", () => {
 // four clearing bytes get in `unsentInput.test.ts`.
 describe("the SUPPRESSED state (D-5)", () => {
   it("1/4 — gate ON + toggle ON + unsent input → SUPPRESSED", () => {
-    const r = workspaceSupervisorReadout(true, true, "W", true);
+    const r = workspaceSupervisorReadout(true, true, "W", {
+      unsentInput: true,
+    });
     expect(r?.suppressed).toBe(true);
   });
 
   it("2/4 — gate OFF → no readout at all (so no marker)", () => {
-    expect(workspaceSupervisorReadout(true, false, "W", true)).toBeNull();
+    expect(
+      workspaceSupervisorReadout(true, false, "W", { unsentInput: true }),
+    ).toBeNull();
   });
 
   it("3/4 — toggle OFF → NOT suppressed, even with unsent input", () => {
     // ⚠️ A workspace the operator turned off is not "held back by your typing" — it is off.
     // Showing both would make the badge mean two things at once.
-    const r = workspaceSupervisorReadout(false, true, "W", true);
+    const r = workspaceSupervisorReadout(false, true, "W", {
+      unsentInput: true,
+    });
     expect(r?.suppressed).toBe(false);
     expect(r?.enabled).toBe(false);
   });
 
   it("4/4 — no unsent input → NOT suppressed", () => {
-    expect(workspaceSupervisorReadout(true, true, "W", false)?.suppressed).toBe(
-      false,
-    );
+    expect(
+      workspaceSupervisorReadout(true, true, "W", { unsentInput: false })
+        ?.suppressed,
+    ).toBe(false);
   });
 
   it("defaults to NOT suppressed when the argument is omitted", () => {
@@ -119,22 +126,30 @@ describe("the SUPPRESSED copy", () => {
   // otherwise a held-back workspace reads as a faulty one, the opposite of the reassurance the
   // marker exists to give.
   it("says it is held back, not off, and names the way out", () => {
-    const t = workspaceSupervisorReadout(true, true, "W", true)?.title ?? "";
+    const t =
+      workspaceSupervisorReadout(true, true, "W", { unsentInput: true })
+        ?.title ?? "";
     expect(t).toMatch(/held back/i);
     expect(t, "must name the clearing keys").toMatch(/esc/i);
     expect(t).toMatch(/unsent input/i);
   });
 
   it("the accessible label mentions the held-back state", () => {
-    const l = workspaceSupervisorReadout(true, true, "W", true)?.label ?? "";
+    const l =
+      workspaceSupervisorReadout(true, true, "W", { unsentInput: true })
+        ?.label ?? "";
     expect(l).toMatch(/held back/i);
   });
 
   it("⚠️ a NON-suppressed ON readout does NOT claim to be held back", () => {
     // The anti-vacuity half: if the suppressed copy were returned unconditionally, every
     // assertion above would pass while the state was meaningless.
-    const l = workspaceSupervisorReadout(true, true, "W", false)?.label ?? "";
-    const t = workspaceSupervisorReadout(true, true, "W", false)?.title ?? "";
+    const l =
+      workspaceSupervisorReadout(true, true, "W", { unsentInput: false })
+        ?.label ?? "";
+    const t =
+      workspaceSupervisorReadout(true, true, "W", { unsentInput: false })
+        ?.title ?? "";
     expect(l).not.toMatch(/held back/i);
     expect(t).not.toMatch(/held back/i);
   });
@@ -148,14 +163,9 @@ describe("the TURN mark (turn attribution)", () => {
   });
 
   it("is the header's own gear, and its tooltip names the command the supervisor ran", () => {
-    const badge = workspaceSupervisorReadout(
-      true,
-      true,
-      "x",
-      false,
-      null,
-      origin,
-    )?.turnBadge;
+    const badge = workspaceSupervisorReadout(true, true, "x", {
+      turnOrigin: origin,
+    })?.turnBadge;
     expect(badge?.text).toBe(SUPERVISOR_TURN_GLYPH);
     expect(SUPERVISOR_TURN_GLYPH).toBe("⚙");
     expect(badge?.title).toContain("supervisor started this turn");
@@ -164,7 +174,7 @@ describe("the TURN mark (turn attribution)", () => {
 
   it("⚠️ stays shown after the project is turned OFF: it records who started that turn", () => {
     expect(
-      workspaceSupervisorReadout(false, true, "x", false, null, origin)
+      workspaceSupervisorReadout(false, true, "x", { turnOrigin: origin })
         ?.turnBadge?.text,
     ).toBe("⚙");
   });

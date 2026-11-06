@@ -439,7 +439,7 @@ describe("AC-1: exactly one record per turn end, one per exit", () => {
     },
   );
 
-  it("a throwing onRecycle is still recorded, as sweep-threw", async () => {
+  it("a throwing onRecycle is recorded once, as recycle-threw, WITH the decision's context", async () => {
     await mount({
       tail: () => tailFor("F5", RECYCLE_TOKEN_THRESHOLD + 1),
       wip: WIP_AT_BOUNDARY,
@@ -448,9 +448,15 @@ describe("AC-1: exactly one record per turn end, one per exit", () => {
       },
     });
     await turnEnd();
-    expect(records.map((r) => [r.outcome, r.reason])).toEqual([
-      ["error", "sweep-threw"],
-    ]);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      outcome: "error",
+      reason: "recycle-threw",
+      edgeId: "F5",
+      command: "/feature-plan",
+      tokens: RECYCLE_TOKEN_THRESHOLD + 1,
+    });
+    expect(records[0].transcriptPath).not.toBeNull();
   });
 
   it("a turn-end event without a session id records sessionId null", async () => {

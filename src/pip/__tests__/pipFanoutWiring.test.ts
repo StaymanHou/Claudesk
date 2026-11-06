@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 // than silently blanking/freezing the panel.
 import appSource from "../../App.tsx?raw";
 import pipSource from "../Pip.tsx?raw";
+import pipLayoutSource from "../pipLayout.ts?raw";
 import fanoutSource from "../usePipFanout.ts?raw";
 import filmstripSource from "../../components/workspace/Filmstrip.tsx?raw";
 import tickerSource from "../../components/workspace/useMirrorTicker.ts?raw";
@@ -247,6 +248,26 @@ describe("M5 WP4 Phase 5 — cross-layout never-disagree invariant (structural)"
     const truth =
       pipSource.match(/(?<!display)stateFor\(statusMap, tile\.id\)/g) ?? [];
     expect(truth.length).toBe(0);
+  });
+
+  it("the 'needs me' ORDERING reads the same funnel as the dot (paydown WP8)", () => {
+    // The dot comes from `displayStateFor`, and the minimal layout's sort and POP come from
+    // `isAwaitingInput`. If that predicate re-implements the overlay rule (it once tested
+    // `attention != null` itself), a new overlay variant changes the colour and not the sort,
+    // or the reverse. So its BODY must be the funnel call, and must not touch `attention`.
+    const code = pipLayoutSource
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    const body = code.match(
+      /export function isAwaitingInput\([^)]*\)[^{]*\{([\s\S]*?)\n\}/,
+    )?.[1];
+    expect(body, "isAwaitingInput not found in pipLayout.ts").toBeDefined();
+    expect(body).toMatch(
+      /return displayStateFor\(statusMap, workspaceId\) === AWAITING_INPUT_STATE;/,
+    );
+    expect(body).not.toMatch(/attention/);
+    // And Pip.tsx's POP reads that predicate, not a hand-rolled one.
+    expect(pipSource).toMatch(/isAwaitingInput\(statusMap, tile\.id\)/);
   });
 
   it("every dot in the PiP is the shared WorkspaceStatusIndicator (no hand-rolled status-dot)", () => {

@@ -189,12 +189,16 @@ fn is_known_informational_notification(t: &str) -> bool {
 
 /// The informational `notification_type`s, as a list so the vocabulary test can enumerate
 /// it (see [`is_known_informational_notification`] for why each is here).
-const INFORMATIONAL_NOTIFICATION_TYPES: [&str; 5] = [
+const INFORMATIONAL_NOTIFICATION_TYPES: [&str; 6] = [
     "idle_prompt",
     "auth_success",
     "agent_completed",
     "elicitation_complete",
     "elicitation_response",
+    // Undocumented, observed 9× (2026-09-21 → 2026-10-26): CC resumes a turn by itself after a
+    // quota reset. Its own `UserPromptSubmit` follows within 6–41 ms and drives the state, so
+    // the fallback's AwaitingInput lit the dot blue for nothing (paydown 2026-11-04 WP8).
+    "quota_auto_resume_fired",
 ];
 
 /// The background-task `type` that is NOT work: CC's watch on an artifact the agent
@@ -999,6 +1003,10 @@ mod tests {
     /// decide which, rather than letting the fallback decide by accident.
     #[test]
     fn every_documented_notification_type_is_classified_deliberately() {
+        // Types CC emits but does not document, found in the `time-analytics.sqlite` corpus.
+        // Classified deliberately like the documented ones, so the set below is documented ∪
+        // observed. A new observed type goes here AND into one of the two lists.
+        const OBSERVED_UNDOCUMENTED: [&str; 1] = ["quota_auto_resume_fired"];
         const DOCUMENTED: [&str; 9] = [
             "permission_prompt",
             "idle_prompt",
@@ -1022,12 +1030,28 @@ mod tests {
             .copied()
             .collect();
         classified.sort_unstable();
-        let mut documented = DOCUMENTED.to_vec();
+        let mut documented: Vec<&str> = DOCUMENTED
+            .iter()
+            .chain(OBSERVED_UNDOCUMENTED.iter())
+            .copied()
+            .collect();
         documented.sort_unstable();
         assert_eq!(
             classified, documented,
-            "the classified notification types must be exactly the documented set — a \
-             documented type missing here is being classified by the fallback, by accident"
+            "the classified notification types must be exactly the documented + observed set \
+             — a known type missing here is being classified by the fallback, by accident"
+        );
+    }
+
+    #[test]
+    fn quota_auto_resume_fired_is_informational_not_by_fallback() {
+        // The fallback answers AwaitingInput for an unlisted type, so the derived state alone
+        // cannot show the type is LISTED (the `agent_needs_input` lesson below). Assert both:
+        // the predicate's answer, and the membership that answer must come from.
+        assert!(!notification_awaits_input(Some("quota_auto_resume_fired")));
+        assert!(
+            INFORMATIONAL_NOTIFICATION_TYPES.contains(&"quota_auto_resume_fired"),
+            "quota_auto_resume_fired must be classified explicitly, not by the fallback"
         );
     }
 

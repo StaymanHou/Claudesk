@@ -333,7 +333,7 @@ for dev. It is size-capped at 5 MiB with one rotated generation (`.log.1`), reus
 - **Schema** (single home: `src/state/supervisor/activityRecord.ts`; Rust stores opaque lines,
   R-4): `v, ts, appVersion, workspaceId, projectPath, sessionId` (the CC session id from the hook
   event), `outcome` ∈ `fired | withheld | recycle-started | recycle-declined | error`, `reason` (one
-  closed union: `SupervisorReason` = `FanOutReason` + the early-exit reasons), `transcriptPath,
+  closed union: `SupervisorReason` = `FanOutReason` + the early-exit reasons + `HostReason`), `transcriptPath,
   edgeId, mode, detail` (the verdict detail, formerly dropped), `command, tokens`. Never
   transcript text.
 - ⚠️ **Filter by `projectPath`, not `workspaceId`.** Ids like `ws-1` are reassigned on every app
@@ -359,6 +359,10 @@ for dev. It is size-capped at 5 MiB with one rotated generation (`.log.1`), reus
   that went through the adjudicator carries **`adjudicatorModel`**, the resolved id (`v` stays
   1; the field is optional). It is not named `model`, because `useSupervisor.test.ts`'s source
   guard matches a bare `model:`.
+- **Reason added at paydown 2026-11-04 WP8:** `recycle-threw` (outcome **`error`**; `HostReason`).
+  `decideTurn` catches a throw from the caller's `onRecycle` itself, so the record keeps the edge,
+  tokens, transcript and deferred command. It used to fall through to `onTurnEnd`'s catch-all as
+  `sweep-threw` with that context dropped. `sweep-threw` now means a throw from anything else.
 - **The failure alarm (M16.5 WP3 3.2; `failureAlarm.ts`).** It exists for the failure that went
   unseen once already, the silent supervisor. It is a pure fold over the activity feed, keyed by
   `projectPath` (`activityFeed.ts`) like every other read of the record, with two axes: consecutive `transcript-incomplete` (CC's format moved) and consecutive

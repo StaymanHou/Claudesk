@@ -101,12 +101,16 @@ import { recycleSession, waitForFreshSessionId } from "./recycleSession";
 import { useSupervisor } from "../../state/supervisor/useSupervisor";
 import { UnsentInputWatermark } from "../../state/supervisor/unsentInput";
 import {
-  publishActivity,
+  SEED_REPLAY_LIMIT,
+  seedActivity,
   useActivityAlarm,
   useLatestActivity,
 } from "../../state/supervisor/activityFeed";
 import { recentForProject } from "../../state/supervisor/activityRecord";
-import { readActivityLines } from "../../state/supervisor/activityRecorder";
+import {
+  ACTIVITY_READ_LINE_LIMIT,
+  readActivityLines,
+} from "../../state/supervisor/activityRecorder";
 import { SupervisorActivityPopover } from "./SupervisorActivityPopover";
 import {
   SUPERVISOR_SUPPRESSED_GLYPH,
@@ -269,13 +273,19 @@ export function Workspace({
     // Seed the hint from the durable file once per project, so it survives a relaunch. ⚠️ Gated:
     // with workflow features OFF this reads nothing, and nothing ever writes the file.
     // M16.5 WP3: the project's newest 50 records are replayed oldest-first, so the failure alarm
-    // (`failureAlarm.ts`) also survives a relaunch instead of silently resetting.
+    // (`failureAlarm.ts`) also survives a relaunch instead of silently resetting. `seedActivity`
+    // folds them IN FRONT of any live decision that beat this async read (paydown WP8).
     if (!workflowEnabled) return;
     let cancelled = false;
-    void readActivityLines(2000).then((lines) => {
+    void readActivityLines(ACTIVITY_READ_LINE_LIMIT).then((lines) => {
       if (cancelled) return;
-      const recent = recentForProject(lines, workspace.project_path, 50);
-      for (const record of recent.reverse()) publishActivity(record);
+      const recent = recentForProject(
+        lines,
+        workspace.project_path,
+        SEED_REPLAY_LIMIT,
+      );
+      // `recentForProject` is newest first; the seed folds oldest first.
+      seedActivity(workspace.project_path, recent.reverse());
     });
     return () => {
       cancelled = true;
@@ -304,10 +314,12 @@ export function Workspace({
     supervisorEnabled ?? true,
     workflowEnabled && visible,
     workspace.display_name,
-    unsentInput,
-    lastActivity ? { record: lastActivity, nowMs: hintNowMs } : null,
-    turnNav.origin,
-    supervisorAlarm,
+    {
+      unsentInput,
+      last: lastActivity ? { record: lastActivity, nowMs: hintNowMs } : null,
+      turnOrigin: turnNav.origin,
+      failure: supervisorAlarm,
+    },
   );
   const driveModeReadout = workspaceDriveModeReadout(
     storedDriveMode,

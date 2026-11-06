@@ -178,18 +178,57 @@ describe("the activity popover and hint on a live Workspace", () => {
     ).toHaveLength(1);
   });
 
-  it("Esc closes the popover", async () => {
+  // Paydown 2026-11-04 WP8. WebKit does not focus a button on click, so after `▾` the focus is
+  // still in the terminal. The popover must take it, or the Esc that closes the list also
+  // reaches CC through xterm's textarea and can interrupt a running turn.
+  it("⚠️ opening takes focus; Esc closes it WITHOUT reaching the page; focus goes back", async () => {
+    const el = await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+    });
+    // Stands in for xterm's helper textarea, which holds focus in a real workspace.
+    const terminal = document.createElement("textarea");
+    document.body.appendChild(terminal);
+    terminal.focus();
+    const leaked: string[] = [];
+    const spy = (e: KeyboardEvent) => leaked.push(e.key);
+    document.addEventListener("keydown", spy);
+    try {
+      // `click()` does not move focus (as in WebKit), so only the popover can take it.
+      await click(q(el, "workspace-header-supervisor-activity"));
+      const pop = q(el, "supervisor-activity-popover");
+      expect(pop).not.toBeNull();
+      expect(document.activeElement).toBe(pop);
+
+      await act(async () => {
+        document.activeElement!.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        );
+      });
+      await settle();
+      expect(q(el, "supervisor-activity-popover")).toBeNull();
+      expect(leaked, "the closing Esc must not bubble to the page").toEqual([]);
+      expect(document.activeElement).toBe(terminal);
+    } finally {
+      document.removeEventListener("keydown", spy);
+      terminal.remove();
+    }
+  });
+
+  it("an Esc aimed at the terminal no longer closes the popover from afar", async () => {
+    // The old `document` listener closed the list on ANY Esc, including one meant for CC.
     const el = await mountWorkspace({
       gate: true,
       storedDriveMode: "autopilot",
     });
     await click(q(el, "workspace-header-supervisor-activity"));
-    expect(q(el, "supervisor-activity-popover")).not.toBeNull();
     await act(async () => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
     });
     await settle();
-    expect(q(el, "supervisor-activity-popover")).toBeNull();
+    expect(q(el, "supervisor-activity-popover")).not.toBeNull();
   });
 
   it("a pointerdown outside the popover closes it; one inside does not", async () => {
@@ -273,6 +312,31 @@ describe("the failure alarm on a live Workspace", () => {
     );
     expect(q(el, "workspace-header-supervisor")?.getAttribute("title")).toMatch(
       /^SUPERVISOR CANNOT READ TURNS/,
+    );
+  });
+
+  it("⚠️ survives a live decision that lands BEFORE the mount seed (paydown WP8)", async () => {
+    // The seed reads the file over async IPC. A decision published first is NEWER than every
+    // replayed record; the old seed re-published each one and the feed dropped them all as
+    // older, so the alarm the log shows silently restarted from zero.
+    publishActivity(
+      buildRecord({
+        ts: Date.now(),
+        appVersion: null,
+        workspaceId: "ws-1",
+        projectPath: OWN,
+        sessionId: null,
+        outcome: "withheld",
+        reason: "no-pty-session", // neutral on both axes
+      }),
+    );
+    const el = await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      ipcAnswers: { supervisor_activity_read: failing(3) },
+    });
+    expect(q(el, ALARM)?.getAttribute("title")).toContain(
+      "SUPERVISOR CANNOT READ TURNS",
     );
   });
 

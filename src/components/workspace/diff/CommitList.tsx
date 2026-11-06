@@ -8,7 +8,8 @@
 // accumulation live in the parent DiffPanel; this is presentation + callbacks.
 
 import { memo } from "react";
-import { type CommitSummary, relativeTime } from "./diffModel";
+import { type CommitSummary } from "./diffModel";
+import { relativeTime } from "../../../state/timeFormat";
 
 interface CommitListProps {
   commits: readonly CommitSummary[];

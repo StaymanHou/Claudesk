@@ -25,6 +25,11 @@
  * byte-identical to the Rust `pip::layout::PipLayout` serde kebab-case rendering
  * (`pip_set_layout`/`pip_get_layout` IPC + the `pip-layout` event payload).
  */
+import {
+  displayStateFor,
+  type WorkspaceStatusMap,
+} from "../state/workspaceStatus";
+
 export type PipLayout =
   | "horizontal-mirror"
   | "vertical-mirror"
@@ -85,19 +90,16 @@ export function coercePipLayout(value: unknown): PipLayout {
 //
 // The minimal layout answers the operator's "is anyone waiting on me?" glance for the
 // all-instances-busy case. Two pure helpers support it (the POP styling itself is CSS):
-//   1. `isAwaitingInput` — the single predicate for "this workspace needs me" (keyed on
-//      the wire `awaiting_input` state, the ONE source of truth — see workspaceStatus.ts).
+//   1. `isAwaitingInput` — the single predicate for "this workspace needs me" (what the
+//      `displayStateFor` funnel shows: the wire `awaiting_input` state or a live overlay).
 //   2. `orderForAttention` — stable-sort awaiting-input workspaces to the FRONT, otherwise
 //      preserving the incoming (persisted filmstrip) order, so "needs me" rises to where
 //      the eye lands first without scrambling the calm row of running/idle dots.
 
-/** A minimal structural subset of the wire status map this module needs — each entry
- *  exposes at least a `state` string (`WorkspaceStatusMap` satisfies this). Kept narrow
- *  so this module doesn't depend on the full `workspaceStatus` types. */
-export type AttentionStatusMap = Record<
-  string,
-  { state: string; attention?: string | null }
->;
+/** The status map the attention helpers read. It is the wire map itself, because "needs me"
+ *  is decided by `displayStateFor`, the ONE overlay rule, and that reads the wire map (paydown
+ *  2026-11-04 WP8: this module used to re-implement the rule over its own narrow type). */
+export type AttentionStatusMap = WorkspaceStatusMap;
 
 /** The wire state literal that means "this workspace is waiting on the operator". Kept
  *  in sync with `WireWorkspaceState`'s `awaiting_input` (snake_case wire contract).
@@ -109,15 +111,15 @@ export type AttentionStatusMap = Record<
  *  distinguished by its own dot COLOUR (purple) and a slow breathe, not by priority. */
 export const AWAITING_INPUT_STATE = "awaiting_input";
 
-/** True iff the workspace needs the operator: its wire state is awaiting-input, OR a
- *  display overlay is live (M16.5 WP4 — a verify-human pause reads as "needs me" here too,
- *  matching `displayStateFor`, so the PiP sorts and pops it like any other ask). */
+/** True iff the workspace needs the operator: what a status surface SHOWS for it is
+ *  awaiting-input, either its wire state or a live display overlay (M16.5 WP4: a verify-human
+ *  pause reads as "needs me" too). ⚠️ Routed through `displayStateFor`, so the PiP's sort and
+ *  POP agree with its dot colour by construction; never re-implement the overlay rule here. */
 export function isAwaitingInput(
   statusMap: AttentionStatusMap,
   workspaceId: string,
 ): boolean {
-  const entry = statusMap[workspaceId];
-  return entry?.attention != null || entry?.state === AWAITING_INPUT_STATE;
+  return displayStateFor(statusMap, workspaceId) === AWAITING_INPUT_STATE;
 }
 
 /**

@@ -40,13 +40,12 @@ import {
   buildRecord,
   outcomeForReason,
   type ActivityRecord,
-  type RecordInput,
+  type Decision,
 } from "./activityRecord";
 import { readAppVersion, recordActivity } from "./activityRecorder";
 import type { TurnEndSignal } from "./turnEnd";
 import { armOrigin, cancelOrigin } from "./turnOrigin";
 import { claimTurnEnd } from "./turnEndDedupe";
-import type { WorkspaceStatusUpdate } from "../workspaceStatus";
 import {
   promoteIfVerifyHuman,
   SessionSkillMemo,
@@ -156,16 +155,11 @@ export async function readWipFor(
   return parseWip(res?.text ?? null);
 }
 
-/** Everything about the decision that the host's base fields do not already say. */
-export type Decision = Omit<
-  RecordInput,
-  "ts" | "appVersion" | "workspaceId" | "projectPath" | "sessionId"
->;
-
 /**
- * Resolve one turn end to ONE decision. Every exit returns a `Decision`. A throw from caller
- * code (`onRecycle`) is caught by `useSupervisor`'s `onTurnEnd`, which still records it, so a
- * turn end always yields exactly one record.
+ * Resolve one turn end to ONE decision. Every exit returns a `Decision`. A throw from the
+ * caller's `onRecycle` is caught here and recorded as `recycle-threw` with the decision's
+ * context; anything else that throws is caught by `onTurnEnd` as `sweep-threw`. Either way a
+ * turn end yields exactly one record.
  */
 export async function decideTurn(
   host: SupervisorHost,
@@ -333,13 +327,23 @@ export async function decideTurn(
   // see the module header for why that is structural, not stylistic. The caller reports
   // whether it began, so the record states the final outcome.
   if (outcome.recycle) {
-    const status = host.onRecycle(outcome.recycle);
-    return {
+    const recycled = {
       ...context,
-      outcome: status === "started" ? "recycle-started" : "recycle-declined",
-      reason: "context-pressure-recycle",
       command: `/${outcome.recycle.skill}`,
       tokens: outcome.recycle.tokens,
+    };
+    let status: RecycleStatus;
+    try {
+      status = host.onRecycle(outcome.recycle);
+    } catch (e) {
+      // Caught HERE, not by `onTurnEnd`'s catch-all, so the record keeps what the decision knew.
+      warn(`supervisor: recycle threw for ${host.workspaceId} — ${String(e)}`);
+      return { ...recycled, outcome: "error", reason: "recycle-threw" };
+    }
+    return {
+      ...recycled,
+      outcome: status === "started" ? "recycle-started" : "recycle-declined",
+      reason: "context-pressure-recycle",
     };
   }
   if (outcome.fired) {
@@ -377,9 +381,7 @@ export function useSupervisor(host: SupervisorHost): void {
   }, [host.enabled]);
 
   const onTurnEnd = useCallback(
-    async (
-      event?: TurnEndSignal & Pick<WorkspaceStatusUpdate, "last_event_at">,
-    ) => {
+    async (event?: TurnEndSignal) => {
       // ⚠️ Re-checked HERE rather than only in `useTurnEnd`'s `enabled`: the gate can flip while
       // a turn is in flight, and the fire is the irreversible half. ⚠️ **It is also the ONE exit
       // that writes no activity record**: with the M10.9 gate OFF the app must be byte-identical
@@ -405,8 +407,8 @@ export function useSupervisor(host: SupervisorHost): void {
             },
           );
         } catch (e) {
-          // `fireOne` isolates its own failures; this catches caller code (`onRecycle`) so the
-          // throw neither escapes into React nor costs the turn its record.
+          // `fireOne` isolates its own failures and `decideTurn` catches `onRecycle`; this is the
+          // last resort, so no throw escapes into React or costs the turn its record.
           (host.warn ?? ((m: string) => console.warn(m)))(
             `supervisor: sweep threw for ${host.workspaceId} — ${String(e)}`,
           );

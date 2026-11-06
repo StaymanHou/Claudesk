@@ -93,26 +93,6 @@ export function fileKey(file: { path: string; staged: boolean }): string {
   return `${file.staged ? "staged" : "unstaged"}:${file.path}`;
 }
 
-/**
- * Format an epoch-seconds timestamp as a coarse relative time ("3h ago", "2d
- * ago", "just now"). Pure given `now` (epoch seconds) so it's testable without a
- * clock; DiffPanel passes `Date.now()/1000` at render. Future times clamp to
- * "just now" (clock skew between commit time and local).
- */
-export function relativeTime(epochSecs: number, nowSecs: number): string {
-  const delta = Math.max(0, nowSecs - epochSecs);
-  if (delta < 60) return "just now";
-  const mins = Math.floor(delta / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  return `${Math.floor(months / 12)}y ago`;
-}
-
 // ── View-mode state machine ───────────────────────────────────────────────────
 //
 // The files area shows EITHER the working-directory changes (default) or a

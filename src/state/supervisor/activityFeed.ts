@@ -22,34 +22,90 @@ const latest = new Map<string, ActivityRecord>();
 const failures = new Map<string, AlarmState>();
 const alarms = new Map<string, SupervisorAlarm | null>();
 const listeners = new Set<() => void>();
+// Paydown 2026-11-04 WP8 — the projects whose file replay has been folded, and, for each project
+// not seeded yet, the live records published so far. The seed is async, so a live decision can
+// land first; the seed then folds the replay IN FRONT of these instead of being dropped as older.
+const seeded = new Set<string>();
+const unseededLive = new Map<string, ActivityRecord[]>();
+
+/** How many of a project's newest file records the mount seed replays. */
+export const SEED_REPLAY_LIMIT = 50;
 
 function notify(): void {
   for (const l of listeners) l();
+}
+
+/** Show `state`'s alarm, replacing the held object only when the alarm itself changed. */
+function setAlarmState(projectPath: string, state: AlarmState): void {
+  failures.set(projectPath, state);
+  const next = alarmFor(state);
+  const prev = alarms.get(projectPath) ?? null;
+  // A new object only when the alarm itself changes, so the React snapshot stays stable.
+  if (
+    next?.kind !== prev?.kind ||
+    (next !== null && prev !== null && next.count !== prev.count)
+  ) {
+    alarms.set(projectPath, next);
+  }
 }
 
 /** Record `record` as its project's newest decision, unless a newer one is already held. */
 export function publishActivity(record: ActivityRecord): void {
   const held = latest.get(record.projectPath);
   if (held && held.ts > record.ts) return;
-  // ⚠️ A record already held (the same ts, as the mount seed can re-publish) folds nothing:
-  // counting it twice would raise the alarm a turn early.
-  if (held !== record && !(held && held.ts === record.ts)) {
-    const state = nextAlarmState(
-      failures.get(record.projectPath) ?? NO_FAILURES,
-      record,
-    );
-    failures.set(record.projectPath, state);
-    // A new object only when the alarm itself changes, so the React snapshot stays stable.
-    const next = alarmFor(state);
-    const prev = alarms.get(record.projectPath) ?? null;
-    if (
-      next?.kind !== prev?.kind ||
-      (next !== null && prev !== null && next.count !== prev.count)
-    ) {
-      alarms.set(record.projectPath, next);
-    }
+  setAlarmState(
+    record.projectPath,
+    nextAlarmState(failures.get(record.projectPath) ?? NO_FAILURES, record),
+  );
+  if (!seeded.has(record.projectPath)) {
+    const buffered = unseededLive.get(record.projectPath) ?? [];
+    buffered.push(record);
+    // Only the trailing run matters to the alarm; the cap keeps an unseeded project bounded.
+    if (buffered.length > SEED_REPLAY_LIMIT) buffered.shift();
+    unseededLive.set(record.projectPath, buffered);
   }
   latest.set(record.projectPath, record);
+  notify();
+}
+
+/**
+ * A record's identity across the file and the live feed. The same decision read back from the
+ * file is a different object with the same fields, and two distinct decisions can share a
+ * millisecond (a `duplicate-turn-end` and the turn it repeats), so neither `===` nor `ts` alone
+ * will do.
+ */
+function identity(r: ActivityRecord): string {
+  return `${r.ts}|${r.workspaceId}|${r.outcome}|${r.reason ?? ""}`;
+}
+
+/**
+ * Fold a project's file replay (oldest first) into the feed, ONCE per project per app run.
+ *
+ * Merged with whatever was published live before it landed: deduped by {@link identity}, sorted
+ * by time, and folded from scratch, so a live decision that beat the async read neither drops
+ * the replay nor is counted twice. A later seed for the same project (a second workspace) is a
+ * no-op, because every record it would replay has already been folded.
+ */
+export function seedActivity(
+  projectPath: string,
+  replay: readonly ActivityRecord[],
+): void {
+  if (seeded.has(projectPath)) return;
+  seeded.add(projectPath);
+  const live = unseededLive.get(projectPath) ?? [];
+  unseededLive.delete(projectPath);
+  const byId = new Map<string, ActivityRecord>();
+  for (const r of [...replay, ...live]) byId.set(identity(r), r);
+  // `sort` is stable, so equal-ts records keep replay-then-live order.
+  const merged = [...byId.values()].sort((a, b) => a.ts - b.ts);
+  if (merged.length === 0) return;
+  setAlarmState(
+    projectPath,
+    merged.reduce<AlarmState>(nextAlarmState, NO_FAILURES),
+  );
+  const newest = merged[merged.length - 1];
+  const held = latest.get(projectPath);
+  if (!held || held.ts <= newest.ts) latest.set(projectPath, newest);
   notify();
 }
 
@@ -87,5 +143,7 @@ export function resetActivityFeed(): void {
   latest.clear();
   failures.clear();
   alarms.clear();
+  seeded.clear();
+  unseededLive.clear();
   notify();
 }

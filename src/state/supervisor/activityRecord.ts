@@ -24,8 +24,16 @@ export type EarlyExitReason =
   /** This exact `Stop` was already decided; a second delivery is recorded, never re-decided. */
   | "duplicate-turn-end";
 
+/** Failures of the HOST's own code inside `decideTurn`, after `fireOne` returned. */
+export type HostReason =
+  /**
+   * The caller's `onRecycle` threw. Its own reason, not `sweep-threw`, so the record keeps the
+   * decision context the recycle was based on (edge, tokens, transcript, deferred command).
+   */
+  "recycle-threw";
+
 /** Every reason a record can carry: one closed union, so reasons stay exhaustive and grep-able. */
-export type SupervisorReason = FanOutReason | EarlyExitReason;
+export type SupervisorReason = FanOutReason | EarlyExitReason | HostReason;
 
 /** What the turn-end decision came to. */
 export type ActivityOutcome =
@@ -73,6 +81,7 @@ export interface ActivityRecord {
 /** Failures of the supervisor's own machinery, as opposed to decisions it made. */
 const ERROR_REASONS: ReadonlySet<SupervisorReason> = new Set<SupervisorReason>([
   "sweep-threw",
+  "recycle-threw",
   "inject-failed",
   "adjudicator-failed",
 ]);
@@ -99,6 +108,16 @@ export interface RecordInput {
   readonly tokens?: number | null;
   readonly adjudicatorModel?: string | null;
 }
+
+/**
+ * Everything about a turn-end decision that the host's base fields do not already say. It lives
+ * here, in the record's leaf module, so `useSupervisor.ts` and `verifyHumanPause.ts` share it
+ * without importing each other.
+ */
+export type Decision = Omit<
+  RecordInput,
+  "ts" | "appVersion" | "workspaceId" | "projectPath" | "sessionId"
+>;
 
 /** Build a complete record, filling every absent optional field with `null`. */
 export function buildRecord(input: RecordInput): ActivityRecord {

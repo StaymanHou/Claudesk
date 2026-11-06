@@ -74,6 +74,9 @@ const EFFECTS: Record<SupervisorReason, AxisEffects> = {
   // Past the adjudicator.
   "adjudicator-says-awaiting": ADJUDICATED,
   "context-pressure-recycle": ADJUDICATED,
+  // The same decision as `context-pressure-recycle`; only the caller's recycle then threw, which
+  // says nothing new about either axis.
+  "recycle-threw": ADJUDICATED,
   "unsent-input-present": ADJUDICATED,
   "inject-failed": ADJUDICATED,
 };
