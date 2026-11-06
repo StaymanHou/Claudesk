@@ -55,22 +55,6 @@ export function snapFps(
   return best ?? raw;
 }
 
-/**
- * The frame rate to use, from the track's own `configuration.framerate`. `null` means unknown:
- * callers step by {@link FALLBACK_FPS} and show the clock timecode, never invented frames.
- *
- * ⚠️ There is deliberately NO seek-based probe behind this. Two paused seeks do measure a
- * frame interval exactly on H.264/HEVC, but VP9's millisecond-rounded timestamps read 24 fps
- * as 23.81 — nearer 23.976 than 24 — so the probe would confidently pick the wrong rate, and
- * telling the two apart takes a multi-seek refinement. No file measured in WKWebView lacked a
- * track framerate, so that machinery would exist only for an unobserved case.
- */
-export function resolveFps(
-  trackFramerate: number | null | undefined,
-): number | null {
-  return snapFps(trackFramerate, TRACK_FPS_TOLERANCE);
-}
-
 /** Tolerance, in frames, for reading a time as a frame index. Covers a presented frame's
  *  timestamp sitting a hair below its frame (float noise, VP9's ms rounding) without pulling
  *  a frame MIDPOINT (where frame-step seeks) into the next frame. */
@@ -247,7 +231,11 @@ export function mediaInfoOf(el: TrackSource): MediaInfo {
     (c): c is string => c !== null,
   );
   return {
-    fps: resolveFps(video?.framerate),
+    // The track's own rate, snapped; `null` means unknown, and callers step by FALLBACK_FPS and
+    // show the clock timecode. ⚠️ Deliberately NO seek-based probe behind it: VP9's ms-rounded
+    // timestamps read 24 fps as 23.81 (nearer 23.976), and no file measured in WKWebView lacked
+    // a track framerate.
+    fps: snapFps(video?.framerate),
     codec: codecs.length > 0 ? codecs.join(" / ") : null,
     audioFormat: audio
       ? audioFormatLabel(audio.sampleRate, audio.numberOfChannels)

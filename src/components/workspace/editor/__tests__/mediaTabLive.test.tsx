@@ -66,7 +66,7 @@ async function mount() {
           pdf_magic: path === "doc.pdf",
         };
       }
-      if (cmd === "stat_file") return { mtime_ms: 1, size: 1 };
+      if (cmd === "stat_file") return { mtime_ms: 1, size: SIZES[path] ?? 1 };
       if (cmd === "read_file") {
         if (path === "main.ts") return "const x = 1;\n";
         if (path === "diagram.svg")
@@ -418,7 +418,7 @@ describe("a media file in an ordinary editor tab", () => {
 });
 
 describe("read_file refusals route to the card; other errors keep the error state", () => {
-  it("a binary (not-utf8) → the card, with the size fetched by stat", async () => {
+  it("a binary (not-utf8) → the card, with the size fetched by stat_file", async () => {
     SIZES["bin.dat"] = 2048;
     await mount();
     await open("bin.dat");
@@ -429,6 +429,14 @@ describe("read_file refusals route to the card; other errors keep the error stat
     expect(
       card!.querySelector('[data-testid="media-card-meta"]')!.textContent,
     ).toBe("2.0 KB · DAT");
+    // The size must come from `stat_file`. Both mocks return the same size, so the text above
+    // cannot tell them apart: `stat_media` would also admit the root to the asset scope.
+    expect(
+      calls.filter((c) => c.cmd === "stat_media" && c.args.path === "bin.dat"),
+    ).toEqual([]);
+    expect(
+      calls.some((c) => c.cmd === "stat_file" && c.args.path === "bin.dat"),
+    ).toBe(true);
     expect(
       activeBody().querySelector('[data-testid="editor-error"]'),
     ).toBeNull();

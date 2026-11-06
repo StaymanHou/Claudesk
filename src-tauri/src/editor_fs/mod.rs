@@ -341,17 +341,19 @@ pub fn write_file_core(root: &Path, requested: &Path, contents: &str) -> Result<
 pub fn stat_file_core(root: &Path, requested: &Path) -> Result<FileMarker, EditorFsError> {
     let target = resolve_within(root, requested)?;
     let meta = std::fs::metadata(&target)?;
-    // mtime → ms since epoch. A clock-before-epoch mtime (shouldn't happen on a real
-    // file) yields a negative duration; treat its magnitude as negative ms so the
-    // marker is still a well-defined comparable value rather than an error.
-    let mtime = meta.modified()?;
-    let mtime_ms = match mtime.duration_since(UNIX_EPOCH) {
+    Ok(FileMarker {
+        mtime_ms: mtime_ms_of(&meta)?,
+        size: meta.len(),
+    })
+}
+
+/// mtime → ms since the Unix epoch. A clock-before-epoch mtime (shouldn't happen on a real
+/// file) yields a negative duration; its magnitude becomes negative ms, so the value is still a
+/// well-defined comparable number rather than an error.
+fn mtime_ms_of(meta: &std::fs::Metadata) -> std::io::Result<f64> {
+    Ok(match meta.modified()?.duration_since(UNIX_EPOCH) {
         Ok(d) => d.as_secs_f64() * 1000.0,
         Err(e) => -(e.duration().as_secs_f64() * 1000.0),
-    };
-    Ok(FileMarker {
-        mtime_ms,
-        size: meta.len(),
     })
 }
 
@@ -387,15 +389,14 @@ pub fn stat_media_core(root: &Path, requested: &Path) -> Result<MediaStat, Edito
     if meta.is_dir() {
         return Err(EditorFsError::NotAFile(target.display().to_string()));
     }
-    let marker = stat_file_core(root, requested)?;
     let mut head = Vec::with_capacity(PDF_MAGIC.len());
     std::fs::File::open(&target)?
         .take(PDF_MAGIC.len() as u64)
         .read_to_end(&mut head)?;
     Ok(MediaStat {
         path: target.display().to_string(),
-        size: marker.size,
-        mtime_ms: marker.mtime_ms,
+        size: meta.len(),
+        mtime_ms: mtime_ms_of(&meta)?,
         pdf_magic: head == PDF_MAGIC,
     })
 }

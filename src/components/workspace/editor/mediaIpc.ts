@@ -9,6 +9,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import prefixes from "./readErrorPrefixes.json";
 import type { RightPanel } from "../panelHost";
+import type { FileMarker } from "./diskConflict";
 
 /** The subset of Tauri's `invoke` these helpers use; injectable for tests. */
 export type Invoker = (
@@ -38,6 +39,16 @@ export function statMedia(
   invoker: Invoker = invoke,
 ): Promise<MediaStat> {
   return invoker("stat_media", { root, path }) as Promise<MediaStat>;
+}
+
+/** Stat a file under `root` with the side-effect-free `stat_file` (no asset-scope admission).
+ *  For a caller that needs only the size or mtime, not an asset URL. */
+export function statFile(
+  root: string,
+  path: string,
+  invoker: Invoker = invoke,
+): Promise<FileMarker> {
+  return invoker("stat_file", { root, path }) as Promise<FileMarker>;
 }
 
 /** Read a UTF-8 text file under `root` (the editor's own `read_file`), for the SVG

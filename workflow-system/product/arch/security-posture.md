@@ -94,11 +94,20 @@ origin and a bundled `tauri://localhost` build):
    file name.** Tauri's asset handler serves an unknown extension as `text/html`, and a live
    positive control showed an HTML file named `evil.pdf` **running its script** in an ungated
    iframe. A `.pdf` without the magic gets the info card.
+   ⚠️ **The PDF `<iframe>` has NO `sandbox`, by measurement (2026-11-06, paydown WP10), so the sniff
+   is the ONLY control on it.** A real PDF swapped into fresh iframes on both `http://localhost:1420`
+   (dev) and `tauri://localhost` (a debug bundle): `sandbox=""`, `allow-same-origin`, `allow-scripts`
+   and even `allow-scripts allow-same-origin` each fired `load` and rendered **blank**, while
+   no-sandbox controls before and after rendered. The sandbox flag set itself disables WebKit's PDF
+   viewer (a plugin), and no token re-enables it, so defense-in-depth here is not available without
+   replacing the native viewer (e.g. a pdf.js render).
 
 Both are pinned by `mediaNoScriptElements.test.tsx`: a rendered check over every `mediaKind`
 extension (the population is derived, not listed) that SVG is never `<object>`/`<embed>` even with
 `pdf_magic` set, plus a source check that `<object>`/`<embed>` appear nowhere in the media modules
-and `<iframe>` exactly once, inside `PdfView`.
+and `<iframe>` exactly once, inside `PdfView`. The same file also asserts the rendered PDF iframe
+has **no** `sandbox` attribute: jsdom cannot see a blank PDF, so an added sandbox would otherwise
+ship with every gate green.
 
 **Open in default app** (`open_in_default_app`) is an external spawn of `/usr/bin/open` on a path
 that passed the same two guard layers, so it can only open a file inside a known project.

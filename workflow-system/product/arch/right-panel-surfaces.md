@@ -242,7 +242,7 @@ reload that keeps the playhead. A/B compare, ranges, markers, waveform and thumb
    seek lands on the previous frame in WebKit (measured 0/30 forward). The current frame is read
    from rVFC `mediaTime`.
 2. ⚠️ **fps comes from `videoTracks[0].configuration.framerate`, read at `loadeddata`** — mp4 track
-   lists are EMPTY at `loadedmetadata` — then snapped to `COMMON_FPS` (`resolveFps`). **There is NO
+   lists are EMPTY at `loadedmetadata` — then snapped to `COMMON_FPS` (`snapFps`, called from `mediaInfoOf`). **There is NO
    seek probe:** on VP9 it reads 24 fps as 23.81. No rate → `fps unknown`, a clock timecode and a
    1/30 s step (`FALLBACK_FPS`). ⚠️ `preload="auto"` is required: with `"metadata"` WebKit paints
    black after a paused seek and never fills the mp4 track lists.

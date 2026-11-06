@@ -1604,13 +1604,15 @@ body,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.media-zoom-controls {
+/* Toolbar buttons shared by every media view: the image zoom, the SVG text toggle and the
+   player strip. Named for the toolbar, not for zoom: a zoom-only rule needs its own selector. */
+.media-tool-group {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
   flex-shrink: 0;
 }
-.media-zoom-btn {
+.media-tool-btn {
   padding: 0 0.4rem;
   font: inherit;
   color: #9b9b9b;
@@ -1619,11 +1621,11 @@ body,
   border-radius: 4px;
   cursor: pointer;
 }
-.media-zoom-btn:hover {
+.media-tool-btn:hover {
   color: #d4d4d4;
   background-color: #252526;
 }
-.media-zoom-btn.is-active {
+.media-tool-btn.is-active {
   color: #d4d4d4;
   border-color: #6ea8ff;
 }
@@ -1673,7 +1675,7 @@ body,
 }
 /* M16 WP3 — the review player. The element sits on black (a letterbox reads as the video's
    edge, not the editor's), the strip below copies the toolbar's colours. Hex copied from
-   .media-toolbar / .media-zoom-btn above: there is no token layer. */
+   .media-toolbar / .media-tool-btn above: there is no token layer. */
 .media-player-stage {
   flex: 1;
   min-height: 0;

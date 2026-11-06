@@ -72,7 +72,12 @@ export function MediaPlayer({
   onRenderError,
   playheadRef,
 }: MediaPlayerProps) {
-  const elRef = useRef<HTMLVideoElement & HTMLAudioElement>(null);
+  // The base type, so a video-only access on the audio path is a type error. A callback ref,
+  // because an object ref of the base type is not assignable to `<video>`'s `ref`.
+  const elRef = useRef<HTMLMediaElement | null>(null);
+  const setEl = useCallback((el: HTMLMediaElement | null) => {
+    elRef.current = el;
+  }, []);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   // The time the strip shows. For video it is the PRESENTED frame's timestamp (rVFC
   // `mediaTime`), not `currentTime`: after a frame-step seek `currentTime` is the frame's
@@ -108,10 +113,11 @@ export function MediaPlayer({
     const el = elRef.current;
     if (!el) return;
     setLoaded({
-      ...mediaInfoOf(el as unknown as TrackSource),
+      // lib.dom does not declare `videoTracks` / `audioTracks`; WebKit has both.
+      ...mediaInfoOf(el as HTMLMediaElement & TrackSource),
       duration: el.duration,
-      width: media === "video" ? (el as HTMLVideoElement).videoWidth : 0,
-      height: media === "video" ? (el as HTMLVideoElement).videoHeight : 0,
+      width: el instanceof HTMLVideoElement ? el.videoWidth : 0,
+      height: el instanceof HTMLVideoElement ? el.videoHeight : 0,
     });
     // A reload (the file changed on disk): resume where the operator was, at the same speed
     // and loop setting, playing only if it was playing (spec AC-14).
@@ -128,7 +134,7 @@ export function MediaPlayer({
     setTime(el.currentTime);
     armedRef.current = true;
     record();
-  }, [media, playheadRef, record]);
+  }, [playheadRef, record]);
 
   // A new element (a regenerated file gets a new `?v=` URL, so a new keyed element) is unarmed
   // until it loads.
@@ -161,8 +167,8 @@ export function MediaPlayer({
   useEffect(() => {
     const el = elRef.current;
     if (!el) return;
-    if (media === "video" && "requestVideoFrameCallback" in el) {
-      const video = el as HTMLVideoElement;
+    if (el instanceof HTMLVideoElement && "requestVideoFrameCallback" in el) {
+      const video = el;
       let id = 0;
       const onFrame: VideoFrameRequestCallback = (_now, meta) => {
         pendingFrameRef.current = null;
@@ -275,7 +281,7 @@ export function MediaPlayer({
     : null;
 
   const elementProps = {
-    ref: elRef,
+    ref: setEl,
     src,
     controls: true,
     // ⚠️ "auto", not "metadata": with "metadata" WebKit never reaches `loadeddata`, paints
@@ -323,10 +329,10 @@ export function MediaPlayer({
       </div>
       <div className="media-player-strip" data-testid="media-player-strip">
         {media === "video" && (
-          <span className="media-zoom-controls">
+          <span className="media-tool-group">
             <button
               type="button"
-              className="media-zoom-btn"
+              className="media-tool-btn"
               data-testid="media-step-prev"
               onClick={() => step(-1)}
               title="Previous frame (,)"
@@ -336,7 +342,7 @@ export function MediaPlayer({
             </button>
             <button
               type="button"
-              className="media-zoom-btn"
+              className="media-tool-btn"
               data-testid="media-step-next"
               onClick={() => step(1)}
               title="Next frame (.)"
@@ -351,7 +357,7 @@ export function MediaPlayer({
         </span>
         <span className="media-player-strip-spacer" />
         <span
-          className="media-zoom-controls"
+          className="media-tool-group"
           role="group"
           aria-label="Playback speed"
         >
@@ -359,7 +365,7 @@ export function MediaPlayer({
             <button
               key={r}
               type="button"
-              className={`media-zoom-btn${rate === r ? " is-active" : ""}`}
+              className={`media-tool-btn${rate === r ? " is-active" : ""}`}
               data-testid={`media-rate-${r}`}
               aria-pressed={rate === r}
               onClick={() => setPlaybackRate(r)}
@@ -371,7 +377,7 @@ export function MediaPlayer({
         </span>
         <button
           type="button"
-          className={`media-zoom-btn${loop ? " is-active" : ""}`}
+          className={`media-tool-btn${loop ? " is-active" : ""}`}
           data-testid="media-loop"
           aria-pressed={loop}
           onClick={toggleLoop}

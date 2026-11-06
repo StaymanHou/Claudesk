@@ -495,6 +495,8 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
             <div className="editor-tab-bodies">
               {tabs.map((tab) => {
                 const isActive = tab.id === activeTabId;
+                const media =
+                  tab.kind === "file" && tab.path ? mediaKind(tab.path) : null;
                 return (
                   <div
                     key={tab.id}
@@ -504,13 +506,11 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
                     aria-labelledby={`editortab-${tab.id}`}
                     style={{ display: isActive ? "flex" : "none" }}
                   >
-                    {tab.kind === "file" &&
-                    tab.path &&
-                    mediaKind(tab.path) !== null ? (
+                    {media !== null && tab.path ? (
                       <MediaView
                         root={projectPath}
                         path={tab.path}
-                        kind={mediaKind(tab.path)!}
+                        kind={media}
                         epoch={mediaEpochs[tab.path] ?? 0}
                       />
                     ) : tab.kind === "file" && tab.path ? (

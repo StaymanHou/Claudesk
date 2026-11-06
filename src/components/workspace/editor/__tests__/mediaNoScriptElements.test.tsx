@@ -97,6 +97,16 @@ describe("no media path reaches a script-capable element except a real PDF", () 
     expect(dom.querySelector('[data-testid="media-svg"] img')).not.toBeNull();
     expect(dom.querySelector(SCRIPT_CAPABLE)).toBeNull();
   });
+
+  it("the PDF <iframe> carries NO sandbox attribute (any sandbox blanks WebKit's PDF viewer)", async () => {
+    // Measured 2026-11-06 in dev and a debug bundle: "", allow-same-origin, allow-scripts and
+    // allow-scripts+allow-same-origin all load and render blank. jsdom cannot see that, so
+    // adding one would ship an empty PDF view with every other gate green.
+    const dom = await render("doc.pdf", true);
+    const frame = dom.querySelector('[data-testid="media-pdf"] iframe');
+    expect(frame).not.toBeNull();
+    expect(frame!.hasAttribute("sandbox")).toBe(false);
+  });
 });
 
 describe("source: the media modules name no other script-capable element", () => {

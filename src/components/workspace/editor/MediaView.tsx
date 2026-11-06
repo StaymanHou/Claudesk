@@ -158,7 +158,8 @@ export function MediaView({
  * A PDF in WebKit's native viewer, over the asset URL. ⚠️ The ONLY `<iframe>` any media view
  * builds, and only reachable for a `display.kind === "pdf"`, which `displayFor` produces only
  * when the backend saw `%PDF-` at byte 0. A rendered guard (mediaNoScriptElements.test.tsx) pins
- * both halves.
+ * both halves. ⚠️ No `sandbox`: ANY value blanks WebKit's PDF viewer (measured, dev + bundle;
+ * see arch/security-posture.md → "Two element rules"), so the `%PDF-` gate is the only control.
  */
 function PdfView({ stat, path }: { stat: MediaStat; path: string }) {
   return (
@@ -218,7 +219,7 @@ function SvgView({ root, stat, path, invoker, onRenderError }: SvgViewProps) {
   const toggle = (
     <button
       type="button"
-      className={`media-zoom-btn${asText ? " is-active" : ""}`}
+      className={`media-tool-btn${asText ? " is-active" : ""}`}
       data-testid="media-svg-text-toggle"
       aria-pressed={asText}
       onClick={() => setAsText((v) => !v)}
@@ -245,7 +246,7 @@ function SvgView({ root, stat, path, invoker, onRenderError }: SvgViewProps) {
         <span className="media-readout" data-testid="media-readout">
           {[formatBytes(stat.size), "SVG source (read-only)", path].join(" · ")}
         </span>
-        <span className="media-zoom-controls">{toggle}</span>
+        <span className="media-tool-group">{toggle}</span>
       </div>
       {textError ? (
         <div className="editor-error" data-testid="editor-error">
@@ -328,11 +329,11 @@ function ImageView({
             .filter(Boolean)
             .join(" · ")}
         </span>
-        <span className="media-zoom-controls">
+        <span className="media-tool-group">
           {extraControls}
           <button
             type="button"
-            className="media-zoom-btn"
+            className="media-tool-btn"
             data-testid="media-zoom-out"
             onClick={() => apply("out")}
             title="Zoom out (⌘-)"
@@ -342,7 +343,7 @@ function ImageView({
           </button>
           <button
             type="button"
-            className={`media-zoom-btn${zoom.mode === "fit" ? " is-active" : ""}`}
+            className={`media-tool-btn${zoom.mode === "fit" ? " is-active" : ""}`}
             data-testid="media-zoom-fit"
             onClick={() => apply("reset")}
             title="Fit to pane (⌘0)"
@@ -351,7 +352,7 @@ function ImageView({
           </button>
           <button
             type="button"
-            className={`media-zoom-btn${zoom.mode === "scale" && zoom.scale === 1 ? " is-active" : ""}`}
+            className={`media-tool-btn${zoom.mode === "scale" && zoom.scale === 1 ? " is-active" : ""}`}
             data-testid="media-zoom-actual"
             onClick={() => apply("actual")}
             title="Actual size"
@@ -360,7 +361,7 @@ function ImageView({
           </button>
           <button
             type="button"
-            className="media-zoom-btn"
+            className="media-tool-btn"
             data-testid="media-zoom-in"
             onClick={() => apply("in")}
             title="Zoom in (⌘=)"

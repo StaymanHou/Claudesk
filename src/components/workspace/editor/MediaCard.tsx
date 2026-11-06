@@ -5,12 +5,12 @@
 // the escape hatch that makes a refusal a one-click detour instead of a dead end.
 
 import { useEffect, useState } from "react";
-import { openInDefaultApp, statMedia, type Invoker } from "./mediaIpc";
+import { openInDefaultApp, statFile, type Invoker } from "./mediaIpc";
 import { basenameOf, extensionOf } from "./mediaKind";
 import { CARD_REASON_TEXT, formatBytes, type CardReason } from "./mediaDisplay";
 
 interface MediaCardProps {
-  /** Workspace root (the `stat_media` / `open_in_default_app` root). */
+  /** Workspace root (the `stat_file` / `open_in_default_app` root). */
   root: string;
   /** The tab's path, as the editor opened it. */
   path: string;
@@ -56,7 +56,8 @@ export function MediaCard({
 /**
  * The card for a `read_file` refusal (`not-utf8` / `too-large`), which arrives with no stat.
  * It fetches the size itself so the card reads the same as a media file's; a failed stat
- * just leaves the size off.
+ * just leaves the size off. ⚠️ Through `stat_file`, not `stat_media`: this card builds no asset
+ * URL, so it must not admit the root to the asset scope.
  */
 export function ReadErrorCard({
   root,
@@ -67,7 +68,7 @@ export function ReadErrorCard({
   const [size, setSize] = useState<number | null>(null);
   useEffect(() => {
     let live = true;
-    statMedia(root, path, invoker).then(
+    statFile(root, path, invoker).then(
       (s) => {
         if (live) setSize(s.size);
       },

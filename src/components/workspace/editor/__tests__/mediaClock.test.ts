@@ -11,7 +11,7 @@ import {
   frameIndexAt,
   isHiddenInApp,
   lastFrameIndex,
-  resolveFps,
+  mediaInfoOf,
   restoreTime,
   seekTargetFor,
   snapFps,
@@ -46,21 +46,24 @@ describe("snapFps", () => {
   });
 });
 
-describe("resolveFps", () => {
-  it("uses the track's own framerate, snapped", () => {
-    expect(resolveFps(24.000000384)).toBe(24);
-    expect(resolveFps(23.976022720336914)).toBe(NTSC_24);
+describe("snapFps on a track's framerate (mediaInfoOf's fps)", () => {
+  it("mediaInfoOf snaps the first video track's own framerate", () => {
+    const fpsOf = (framerate: number) =>
+      mediaInfoOf({ videoTracks: [{ configuration: { framerate } }] }).fps;
+    expect(fpsOf(23.976022720336914)).toBe(NTSC_24);
+    expect(fpsOf(24.000000384)).toBe(24);
+    expect(fpsOf(0)).toBeNull();
   });
 
   it("is null when the track gives no rate — the caller steps by the guard, shows no frames", () => {
-    expect(resolveFps(0)).toBeNull();
-    expect(resolveFps(undefined)).toBeNull();
+    expect(snapFps(0)).toBeNull();
+    expect(snapFps(undefined)).toBeNull();
     expect(FALLBACK_FPS).toBe(30);
   });
 
   it("does not snap a VP9 two-seek reading (1/0.042 s): why there is no seek probe", () => {
     // Two paused seeks on a 24 fps VP9 file measure 0.042 s (ms-rounded timestamps). That is
-    // nearer 23.976 than 24, so any snap would be confidently wrong; resolveFps keeps it raw.
+    // nearer 23.976 than 24, so any snap would be confidently wrong; snapFps keeps it raw.
     expect(snapFps(1 / 0.042)).toBeCloseTo(23.8095, 3);
   });
 });
