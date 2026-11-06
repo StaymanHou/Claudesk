@@ -36,5 +36,24 @@ the default-state render is reachable, the same limit `hotkeyGroupRender.test.ts
 It proves "unchanged", not "correct". Pair it with the mutants that prove the new guards
 bite.
 
+**⚠️ When content arrives through effects, use a LIVE mount instead (paydown WP13, 2026-11-06).**
+`renderToStaticMarkup` runs no effects. For `ProjectPicker` that means `recents` stays `[]` and
+**no row renders in either tree**, so the diff passes even with the row component deleted (the
+fixture makes right and wrong identical; source-text-guards entry 15). The variant that worked
+for `SettingsPanel` (8 fixtures) and `ProjectPicker` (8 fixtures):
+- In the throwaway spec, mount with `createRoot` + `act` + `mockIPC(cb, {shouldMockEvents:true})`
+  + `mockWindows("main")`, wait for effects (~30 ms in `act`), drive clicks/filters per fixture,
+  and dump `innerHTML` **plus the sorted IPC call list plus the callback arguments** (e.g.
+  `onOpen`). Same HEAD-worktree recipe otherwise.
+- Pick fixtures so every branch renders once (gate on/off, each announcement kind, a missing
+  profile, an open dialog), run HEAD twice to prove the dump deterministic, and keep a positive
+  control (one mutated attribute must change the dumps).
+- jsdom lacks `scrollIntoView`; stub it on `Element.prototype` in the spec if a dialog calls it.
+
+**An identical render does NOT prove the extraction's new prop seams are pinned.** After WP13,
+passing `workflowApplicable={true}` to every row, or making the row's × and commit callbacks
+no-ops, passed all 750 picker/app tests. So after extracting a component, **mutate each new prop
+to a constant or no-op** and add a live test for any that survive.
+
 Related: [[prove-mechanical-transform-by-rerunning-it]] (the same shape for formatter sweeps:
 re-run the transform rather than hand-normalize), [[whole-app-jsdom-boot-via-tauri-mockipc]].

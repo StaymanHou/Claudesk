@@ -4,6 +4,46 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# paydown-2026-11-04-wp13-settings-split-and-picker-row — 2026-11-06
+
+*(feature-review-quality on ship commit `0e7c138`, window `fea480e..0e7c138`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 4 MINOR, all auto-backlogged; finding 1 re-checked against the source before filing.)*
+
+## SURFACE-2026-11-06-QUALITY-WP13-ANNOUNCE-ONCE-GUARD-LOST-ITS-ORDERING-CHECK
+- **Severity:** MINOR
+- **Location:** `src/components/picker/__tests__/announceRow.test.ts` ("the announce call is made ONCE, not per row").
+- **Finding:** WP13 replaced "the `picker_announce_actions` call precedes the row map" with "`PickerRow.tsx` makes no IPC call". The new comment says "the map now lives in another file", but only the per-CELL map (`PICKER_ROW_CELLS.map`) moved. The per-ROW loop, `pickerItems.map`, is still in `ProjectPicker.tsx` (verified: line 545 at `0e7c138`). Moving the single invoke into that loop would keep the count at 1 and pass.
+- **Why it matters:** a small hole in the N+1 guard, and the comment tells the next reader that the hole cannot exist.
+- **Suggested action:** restore the ordering half against the picker's own loop, `indexOf("picker_announce_actions") < indexOf("pickerItems.map")` (non-vacuity: both > -1). Keep the row-makes-no-IPC half. Correct the comment. Mutation-prove it by moving the invoke into the loop.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-06-QUALITY-WP13-REPOINTED-GUARDS-KEEP-PANEL-NAMES
+- **Severity:** MINOR
+- **Location:** `uninstallIntercept.test.ts` (`PANEL`, `describe("the panel consumes the decision…")`), `workflowInstallWizard.test.ts` (`PANEL`, `PANEL_SRC`), `workflowSubstratePresence.test.ts` (`panelSrc`).
+- **Finding:** these guards now read `WorkflowFeaturesSettings.tsx` but keep their panel-era names. The other three re-pointed guards in the same commit renamed their binding to `groupSrc`.
+- **Why it matters:** a reader who wants to know which file is pinned checks the wrong one.
+- **Suggested action:** rename the bindings (e.g. `BODY` / `bodySrc`) and the one `describe`. No assertion changes.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-06-QUALITY-WP13-PICKER-LIVE-TESTS-HAVE-NO-SHARED-HARNESS
+- **Severity:** MINOR
+- **Location:** `src/components/picker/__tests__/*Live.test.tsx` (five files, two of them new in WP13); `pickerRowCallbacksLive.test.tsx` writes out the native value-setter idiom three times.
+- **Finding:** each live picker test rebuilds the createRoot + mockIPC + act + afterEach scaffolding. The workspace has a shared harness (`liveWorkspace.tsx`); the picker has none.
+- **Why it matters:** a new mount-time IPC command means five edits, and the next live test copies again.
+- **Suggested action:** a small `livePicker.tsx` (mount with a projects/announce/profiles fixture, gate-via-broadcast, `setNativeValue`), then migrate the five files.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-06-QUALITY-WP13-PICKERROW-MOVED-COMMENT-INDENTATION
+- **Severity:** MINOR
+- **Location:** `src/components/picker/PickerRow.tsx`, four JSX comment blocks (the cells-as-data note, the announcement-line note, the gutter note, the `⊘` glyph note).
+- **Finding:** moved verbatim, these blocks kept their old continuation indentation, so continuation lines sit up to 10 columns off their `{/*` opener (Prettier does not reflow comment bodies).
+- **Why it matters:** cosmetic; an artifact of the move.
+- **Suggested action:** fold into WP14's comment-convention pass, which already owns these blocks' density.
+- **Priority:** low
+- **Status:** pending
+
 # paydown-2026-11-04-wp12-workspace-extractions — 2026-11-06
 
 *(feature-review-quality on ship commit `82856a4`, window `f42796f..82856a4`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 2 MINOR, all auto-backlogged; each claim re-checked against the source before filing.)*
@@ -103,19 +143,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** `spawn_blocking(...).await.map_err(|e| format!("… stopped unexpectedly: {e}"))?` appears three times, each worded differently.
 - **Why it matters:** It is the remedy `ASYNC_COMMANDS` reasons point to, so it will spread as more commands move off the main thread.
 - **Suggested action:** A shared helper. Low cost either way.
-- **Priority:** low
-- **Status:** pending
-
-# m16-5-wp5-qol-batch — 2026-11-02
-
-*(feature-review-quality on ship commit `df52ce7`, window `29c3395..df52ce7`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-11-02-QUALITY-WP5-PICKER-ROW-SHOULD-BE-A-COMPONENT
-- **Severity:** MINOR
-- **Location:** `src/components/picker/ProjectPicker.tsx` (row rendering inside `pickerItems.map → PICKER_ROW_CELLS.map → switch`).
-- **Finding:** The `isOpen` branch re-indented ~300 lines; the row is ~170 lines of JSX four levels deep in a 772-line component.
-- **Why it matters:** The next row-level change has to work through the same nesting; `git blame` on the row is now noise.
-- **Suggested action:** Extract a `PickerRow` component taking `isOpen`; prove the rendered output unchanged via `[[prove-render-unchanged-via-head-worktree]]`.
 - **Priority:** low
 - **Status:** pending
 
@@ -459,19 +486,6 @@ scheduling items rather than polish.*
   little from each site — that is the recorded failure mode.
 - **Priority:** low
 - **Status:** pending — 2 of 4 sub-items remain; routed to the T1/T2 convention pass
-
-# m10.9-wp2-workflow-features-gate — 2026-07-28
-
-*(feature-review-quality against ship commit `467593f`; Mode 3 autopilot. 0 CRITICAL / 4 MAJOR / 4 MINOR. **One MAJOR is NOT listed here — it was a live StrictMode double-write defect in `useSettingControl` and was fixed immediately rather than backlogged; see the WIP's `## Code-Quality Review`.** Reviewer: "well-built work that clears the bar the milestone set… the debt is concentrated in two places: the `?raw` idiom still doing load-bearing work despite this feature paying twice to learn it can't, and the (now-fixed) side-effect-in-updater.")*
-
-## SURFACE-2026-07-28-QUALITY-WP2-SETTINGSPANEL-NEAR-DOING-TOO-MUCH
-- **Severity:** MINOR
-- **Location:** `src/components/settings/SettingsPanel.tsx`
-- **Finding:** Four `useSettingControl` calls, an error surface, a `SettingsGroup` sub-component, and the JSX in one file — close to but not over the doing-too-much line.
-- **Why it matters:** Readable today, but M14 extends this panel; adding controls without extracting a per-group module is the point where it tips.
-- **Suggested action:** extract per-group modules when M14 starts, while the extraction is still cheap.
-- **Priority:** low
-- **Status:** pending
 
 # m11-wp4-docs-live-reload — 2026-08-02
 

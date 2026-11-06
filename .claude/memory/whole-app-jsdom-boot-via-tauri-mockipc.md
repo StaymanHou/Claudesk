@@ -19,4 +19,12 @@ Command replies that matter at boot: `prune_missing_projects → []`, `list_proj
 - Assert **identity**: content seeded through `mockIPC` must appear, e.g. `.picker-recent-name` === the seeded project. A non-empty root is not enough; see source-text-guards entry 15.
 - Reset per-test capture state. A second entry booted in the same file shares the jsdom and the first tree is never unmounted.
 - ⚠️ This harness **cannot catch a deleted export**: Vitest reads a missing binding as `undefined`. That class belongs to `pnpm check:link` (source-text-guards entry 19).
+- ⚠️ **The workflow gate cannot be answered by name here** (offInvariantGuard allows only the
+  gate's own seam files to name its command), so tests leave the seed `null` (OFF) and turn it ON
+  with `emit(WORKFLOW_FEATURES_ENABLED_EVENT, true)` (precedent `gateOffClearWiring.test.tsx`).
+  **That ON does not survive a remount:** a component that unmounts and remounts (a filter
+  round-trip, a reopened panel) re-seeds from the command, gets `null`, and reads the gate OFF
+  again, so its gated lines disappear. **Re-broadcast after any unmount/remount step** (paydown
+  WP13, `pickerRowCallbacksLive.test.tsx`). In the real app the seed returns the true value, so
+  this is a harness artifact, not a product bug.
 - A mocked IPC proves the webview side only. See [[verify-self-stub-cannot-cross-subprocess-boundary]]. The entry uses StrictMode, so [[strictmode-remount-deadlocks-an-unreleased-fetch-latch]] can bite here too.

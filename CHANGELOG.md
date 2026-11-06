@@ -40,6 +40,9 @@
 - **Backlog resolved:** SURFACE-2026-08-26-QUALITY-DRIVEMODE-MINOR-POLISH — item (d), the last one: the drive-mode apply chain moved into the `useDriveModeApply` hook, with an unmount abort and a write-failure test the dropped-revert mutant fails.
 - **Backlog resolved:** SURFACE-2026-09-28-QUALITY-SUPERVISOR-ACTIVITY-MINOR-BATCH (partial: item 7) — `SupervisorHeaderControl` owns the badge, popover, hint clock and seed with both gates; the retargeted style guard and a new wiring pin bite on the raw-watermark and unwired-toggle mutants.
 - **Backlog resolved:** SURFACE-2026-11-06-QUALITY-WP8-SEED-ONCE-SWALLOWS-A-FAILED-READ — `tryReadActivityLines` returns `null` on a failed read so the seed leaves the project unseeded and retries, and `isSeeded` skips the read once a project is seeded; three live tests and three mutants pin it.
+- **Feature shipped:** Paydown 2026-11-04 WP13 splits the Settings panel into one module per group (the panel keeps the shell and the gate control) and extracts the picker's row into `PickerRow`, with the rendered markup and IPC proved identical to before and the new prop seams pinned by live-mount tests.
+- **Backlog resolved:** SURFACE-2026-07-28-QUALITY-WP2-SETTINGSPANEL-NEAR-DOING-TOO-MUCH — `SettingsPanel.tsx` is 234 lines of shell; each group's body (`ClaudeCodeSettings`, `WorkflowFeaturesSettings`, `AnalyticsSettings`, `UpdatesSettings`, `HotkeySettings`) is its own module.
+- **Backlog resolved:** SURFACE-2026-11-02-QUALITY-WP5-PICKER-ROW-SHOULD-BE-A-COMPONENT — the row is `PickerRow.tsx`; `ProjectPicker.tsx` went from 775 to 590 lines.
 
 ## 2026-11-04
 

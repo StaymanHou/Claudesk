@@ -395,7 +395,7 @@ R4. Runs after WP8, so it moves already-fixed code.
   - the `liveWorkspace.tsx` interaction harness for the apply path
   - `check:link` and the boot test, because exports move
 
-## WP13: `SettingsPanel` split and `PickerRow`  `[impact: Med · effort: M · risk: Low–Med]` · feature
+## WP13: `SettingsPanel` split and `PickerRow`  `[impact: Med · effort: M · risk: Low–Med]` · feature · ✅ DONE 2026-11-06 (`0e7c138`; 2 entries resolved; panel 710→234 + 5 body modules, picker 775→590 + `PickerRow`; render-identical vs HEAD; 2 prop-seam holes pinned by live tests; review: 4 MINOR auto-backlogged)
 
 R4.
 - `07-28-QUALITY-WP2-SETTINGSPANEL-NEAR-DOING-TOO-MUCH` (now 710 lines): one module per group.
@@ -405,6 +405,16 @@ R4.
   - ⚠️ The drive-mode `<select>` on the row is a deliberate exception (CLAUDE.md), so move it
     unchanged.
 - **Proof:** render-unchanged against a HEAD worktree for both files.
+
+## WP13b: WP12 and WP13 review leftovers  `[impact: Low–Med · effort: S · risk: Low]` · task
+
+Inserted at WP13's plan (decision D5: these are behavioural fixes in other files, so they stayed
+out of WP13's "nothing rendered changed" diff).
+- `11-06-QUALITY-WP12-SUPERVISOR-READOUT-SPLIT-ACROSS-TWO-CALLS` (MAJOR) and
+  `11-06-QUALITY-WP12-SPAWN-INTENT-SET-BEFORE-PANE-CONFIRMED` (MINOR).
+- `11-06-QUALITY-WP13-ANNOUNCE-ONCE-GUARD-LOST-ITS-ORDERING-CHECK` and
+  `11-06-QUALITY-WP13-REPOINTED-GUARDS-KEEP-PANEL-NAMES` (both MINOR, test-only).
+- Optional, if it stays small: `11-06-QUALITY-WP13-PICKER-LIVE-TESTS-HAVE-NO-SHARED-HARNESS`.
 
 ## WP14: The comment-convention pass  `[impact: Med (closes about 20 entries) · effort: M · risk: Low]` · feature
 
@@ -426,6 +436,8 @@ R3. `08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED` (BL) and its roster.
   - the newer COMMENT nits: `10-27-…-OVERLONG-JSDOC-LINE-IN-VERDICT`, `10-26-…-UNWAITED-SEPARATE-TAIL-READ`,
     `10-21-…-MEASUREMENT-NUMBERS-REPEATED…`, `10-20-…-PLAYER-COMMENTS-CITE-WIP-PHASE-IDS`,
     `ANALYTICS-…-BATCH#4`, `SILENT-SUPERVISOR-…#1,#2`, `SUPERVISOR-ACTIVITY-…#1,#2`
+  - from WP12/WP13: `11-06-…-WP12-POINTER-COMMENTS-DESCRIBE-HISTORY`,
+    `11-06-…-WP13-PICKERROW-MOVED-COMMENT-INDENTATION`
 - **Prove it with the parser-token diff** (`[[prove-comments-only-diff-via-parser-tokens]]`): no
   code token may change.
 

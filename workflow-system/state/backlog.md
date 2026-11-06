@@ -15,6 +15,14 @@
 - **Priority:** low (lowered from high 2026-10-27 per design prior `simple-version-first-when-the-source-fix-shrank-the-problem`: breaks are now rare at source, and the next lever, richer adjudicator input, is an advanced minor-gain enhancement)
 - **Status:** open — re-measured at M16.5 WP3 (3.5), question KEPT per AC-18 (see the WP3 measurement above). Stays open.
 
+## Code-quality findings — paydown-2026-11-04-wp13-settings-split-and-picker-row (2026-11-06)
+
+- **Pointer:** **4 MINOR** from the review of `0e7c138` (0 CRITICAL, 0 MAJOR). The announce-once guard lost its ordering half, and its new comment is wrong. Three re-pointed guards keep panel-era names. The picker's five live tests share no harness. Four moved JSX comments in `PickerRow.tsx` kept their old indentation.
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp13-settings-split-and-picker-row — 2026-11-06`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** the guard fix and the renames fit the small post-WP13 task (D5, with WP12's leftovers); the indentation fits WP14; the shared harness is its own small task.
+
 ## Code-quality findings — paydown-2026-11-04-wp12-workspace-extractions (2026-11-06)
 
 - **Pointer:** **1 MAJOR + 2 MINOR** from the review of `82856a4` (0 CRITICAL). The MAJOR: the supervisor readout is split across two half-filled `workspaceSupervisorReadout` calls, with its gate repeated in `Workspace.tsx` and `SupervisorHeaderControl.tsx`. The MINORs: the spawn-intent ref is set before the pane handle is confirmed; two pointer comments describe history.
@@ -38,14 +46,6 @@
 - **Priority:** medium (MAJOR) / low (the rest)
 - **Status:** pending
 - **Pickup shape:** one small task: a shared `subprocess` module (group spawn, kill + reap, stop-on-drop, grace, output cap, limits doc) that both runners use, plus the grace-path drain. The lock-release unification and the hop helper are independent one-liners.
-
-## Code-quality findings — m16-5-wp5-qol-batch (2026-11-02)
-
-- **Pointer:** **1 MINOR** remains from the review of `df52ce7`: the picker row should be its own component (`PickerRow`). The MAJOR and the other three MINORs were resolved 2026-11-04 by paydown WP6.
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp5-qol-batch — 2026-11-02`.
-- **Priority:** low
-- **Status:** pending
-- **Pickup shape:** paydown WP13 (`SettingsPanel` split and `PickerRow`).
 
 ## Code-quality findings — m16-5-wp3-supervisor-correctness (2026-10-27)
 
@@ -628,9 +628,9 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** **DEFERRED to backlog 2026-08-01 (operator decision) — REMOVED from Milestone 11.5.** Was M11.5 WP2; re-scoped out after the attempt above proved it is feature-sized rather than papercut-sized, and the bucket's stated value is that it stays tight. **M11.5 continues at WP3.** Revive as its own feature item when the `drawLine` rewrite is worth funding.
 
 ## Code-quality findings — m10.9-wp2-workflow-features-gate (2026-07-28)
-- **Pointer:** **1 MINOR + 1 density item remaining** (rewritten 2026-09-23, paydown WP5). Resolved and recorded: `WP2-CHORD-ARM-MISSES-PANELHOST` (M11.5 WP4), `WP2-RAW-GUARDS-STILL-LOAD-BEARING`, the Escape-branch `return`, the `ALLOWED_SAMPLE` duplicate, and (paydown WP5) the MAJOR `WP2-PICKER-PREFIXED-TESTIDS-IN-SETTINGS-PANEL`. Remaining: MINOR, `SettingsPanel.tsx` near doing too much (its own trigger fired when M14 extended it); and the milestone rationale restated in about 6 places. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m10.9-wp2-workflow-features-gate — 2026-07-28`.
+- **Pointer:** **1 density item remaining**, stub-only (no body): the milestone rationale is restated in about 6 places. Rewritten 2026-11-06 (paydown WP13), which resolved the last MINOR with a body (`WP2-SETTINGSPANEL-NEAR-DOING-TOO-MUCH`; CHANGELOG 2026-11-06). Earlier resolutions: `WP2-CHORD-ARM-MISSES-PANELHOST` (M11.5 WP4), `WP2-RAW-GUARDS-STILL-LOAD-BEARING`, the Escape-branch `return`, the `ALLOWED_SAMPLE` duplicate, and the MAJOR `WP2-PICKER-PREFIXED-TESTIDS-IN-SETTINGS-PANEL` (paydown WP5).
 - **Priority:** low
-- **Status:** pending — the size MINOR → deferred to the next Settings feature; the rationale restatement → the comment-convention pass
+- **Status:** pending — the comment-convention pass (paydown WP14's stub-only roster)
 
 ## SURFACE-2026-08-28-SUPERSEDED-TEXT-IN-DURABLE-DOCS-HAS-NO-CONVENTION
 - **Source:** cross-project global learning, ported 2026-08-28 from `knowledge_base` (CMC ad-ops).

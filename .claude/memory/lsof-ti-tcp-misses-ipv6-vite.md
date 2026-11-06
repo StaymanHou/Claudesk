@@ -49,5 +49,13 @@ and nothing in a `ps` listing distinguishes them.
 4. `TaskStop` on a backgrounded `pnpm tauri:dev` may leave its tree alive — but "the tree is
    alive" does **not** license killing anything that merely *looks* like it.
 
+5. **The reverse case: "port in use" can be YOUR OWN orphan** (paydown WP13, 2026-11-06).
+   Killing your `tauri:dev` tree by PID (shell, `pnpm tauri:dev`, the tauri CLI,
+   `target/debug/claudesk`) leaves its `beforeDevCommand` children, `pnpm dev` and Vite,
+   **orphaned with PPID 1**, still listening on `[::1]:1420`. Before killing one, prove it is
+   yours: `ps -o pid,ppid,lstart,command` and match the start time to your own launch, within a
+   second or two of your `target/debug/claudesk`. Kill only the ones that match. Rule 1 still
+   holds for anything that does not match.
+
 A `nc -z 127.0.0.1 1420` probe is also misleading here: it tests IPv4 and reports "refuses" while
 the IPv6 listener is up.
