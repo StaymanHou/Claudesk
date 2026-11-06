@@ -14,6 +14,17 @@
 - **Backlog resolved:** SURFACE-2026-11-04-QUOTA-AUTO-RESUME-FIRED-IS-AN-UNCLASSIFIED-NOTIFICATION-TYPE — the type is in `INFORMATIONAL_NOTIFICATION_TYPES`, and the vocabulary test now pins documented plus observed-undocumented types.
 - **Backlog resolved:** SURFACE-2026-09-28-QUALITY-SUPERVISOR-ACTIVITY-MINOR-BATCH (partial: items 3, 4, 5, 6, 8) — `recycle-threw` keeps the decision context, `relativeTime` moved to `src/state/timeFormat.ts`, the readout takes an options object, one read limit is pinned to Rust's, and the popover takes focus and scopes its Esc.
 - **Backlog resolved:** SURFACE-2026-09-28-QUALITY-SILENT-SUPERVISOR-MINOR-BATCH (partial: item 5) — `TurnEndSignal` declares `last_event_at`, replacing `onTurnEnd`'s ad hoc widened parameter.
+- **Task closed:** Paydown 2026-11-04 WP9 makes the adjudicator probe durable and production-shaped: its full labelled set lives in a private copy outside the repo, its replay test is bound to the prompt, tail length and model it measured, and its runner accepts only replies production would.
+- **Backlog resolved:** SURFACE-2026-10-21-QUALITY-WP2-REPLAY-TEST-NOT-BOUND-TO-PROMPT-MODEL-TAIL — the committed set's `_meta.measuredAgainst` records the prompt sha, `TAIL_CHARS` and the resolved model, and the replay test fails if any of them changes.
+- **Backlog resolved:** SURFACE-2026-10-21-QUALITY-WP2-TAIL-CHARS-EXPORT-UNUSED — the replay test now imports `TAIL_CHARS` to assert the tail length the evidence was scored at.
+- **Backlog resolved:** SURFACE-2026-10-21-QUALITY-WP2-FREEZE-GATE-READS-A-WIP-PATH-FINALIZE-MOVES — one `wipOrArchive` resolver finds both probes' WIP records in `wip/` or `archive/`, and the WP2 gate uses the shared `frozenLabelsRefusal`.
+- **Backlog resolved:** SURFACE-2026-10-21-QUALITY-WP2-FULL-LABELLED-SET-IS-SINGLE-COPY-IN-TMP — the full set is copied (sha-checked, with a `PROVENANCE.md`) to `~/Library/Application Support/claudesk-tooling/adjudicator-probe/`, which the probe's `OUT` now names.
+- **Backlog resolved:** SURFACE-2026-10-21-QUALITY-WP2-RESUME-NEVER-RETRIES-FAILED-CALLS — both probes' resumes retry `error` and `model-mismatch` answers through one `isRetryable`, and a spawn failure resolves as an error instead of hanging.
+- **Backlog resolved:** SURFACE-2026-10-27-QUALITY-WP3-PROBE-RUNNER-SKIPS-THE-PRODUCTION-MODEL-CHECK — the runner parses replies with production's `parseReplyEnvelope` and its extracted exact-pin rule `answeredByPinOnly`, recording anything else as `model-mismatch`.
+- **Backlog resolved:** SURFACE-2026-10-21-QUALITY-WP2-RUN-NUMBERS-SORTED-AS-STRINGS — runs sort numerically everywhere (`distinctRuns`).
+- **Backlog resolved:** SURFACE-2026-10-21-QUALITY-WP2-PRNG-SHUFFLE-AND-LABELS-DUPLICATED — `mulberry32`, `shuffle` and `LABELS` are exported once from `labelSheet.ts`, and every seeded artifact (rows, the review sample, the WP3 split) reproduces byte-for-byte.
+- **Backlog resolved:** SURFACE-2026-10-21-QUALITY-WP2-POLICY-EXCLUSION-RESTATED-THREE-TIMES — `isPolicyExcluded` reads production's `SUPERVISED_WORKFLOWS` by edge workflow, and the replay test uses it instead of an id-prefix regex.
+- **Backlog resolved:** SURFACE-2026-10-21-QUALITY-WP2-CLAUDESK-TAILS-KEPT-BY-PREFIX-MATCH — only the two exact claudesk slugs keep unredacted tails, so a sibling `claudesk-*` directory is redacted and scanned.
 
 ## 2026-11-04
 

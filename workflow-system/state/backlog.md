@@ -41,11 +41,11 @@
 
 ## Code-quality findings — m16-5-wp3-supervisor-correctness (2026-10-27)
 
-- **Pointer:** **2 MINOR** from the review of `3e92860` (feature `565a363`; 0 CRITICAL). The MAJOR (the failure alarm counts per project) was closed **by design** 2026-11-04 (paydown sweep R2; `arch/workflow-supervisor.md` §F), the clause-boundary docstring and alarm-tooltip MINORs were resolved by paydown WP2, and the timestamp dedupe and seed race by paydown WP8 (2026-11-06). MINOR: the probe runner skips production's model check; one overlong JSDoc line.
+- **Pointer:** **1 MINOR** from the review of `3e92860` (feature `565a363`; 0 CRITICAL). The MAJOR (the failure alarm counts per project) was closed **by design** 2026-11-04 (paydown sweep R2; `arch/workflow-supervisor.md` §F), the clause-boundary docstring and alarm-tooltip MINORs were resolved by paydown WP2, the timestamp dedupe and seed race by paydown WP8 (2026-11-06), and the probe runner's model check by paydown WP9 (2026-11-06). Remaining: one overlong JSDoc line.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp3-supervisor-correctness — 2026-10-27`.
-- **Priority:** low (all)
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** the 2026-11-04 paydown sweep (`backlog-paydown-wbs.md` WP9 for the probe runner, WP14 for the JSDoc line).
+- **Pickup shape:** paydown WP14 (the comment-convention pass).
 
 ## Code-quality findings — m16-5-wp4-status-channel-semantics (2026-10-26)
 
@@ -57,19 +57,11 @@
 
 ## Code-quality findings — m16-5-wp2-adjudicator-remeasure (2026-10-21)
 
-- **Pointer:** **3 MAJOR + 7 MINOR** from the review of `c5fc34f`.
-  - The MAJORs are all *durability* debt, and all bite when WP3 3.5 re-uses the probe:
-    - the replay test isn't bound to the prompt, model and tail length it measured;
-    - the freeze gate reads a WIP path that finalize moves;
-    - the full labelled set is a single copy in gitignored `tmp/`.
-  - The MINORs: resume never retries failed calls; run numbers sort as strings; the PRNG and
-    `LABELS` are duplicated; the policy rule is restated; claudesk tails are kept by prefix
-    match; the numbers are repeated in four places; `TAIL_CHARS` is exported but unused.
-
+- **Pointer:** **1 MINOR** remains from the review of `c5fc34f` (originally 3 MAJOR + 7 MINOR). The other nine were resolved by paydown WP9 (2026-11-06). Remaining: the measurement numbers are repeated in four places.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp2-adjudicator-remeasure — 2026-10-21`.
-- **Priority:** medium (the MAJORs) / low (the rest)
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** fold into WP3 task 3.5 (the three MAJORs plus the repeated-numbers and `TAIL_CHARS` MINORs) and WP3 3.4 (the policy-rule MINOR); the rest go to WP8's paydown.
+- **Pickup shape:** paydown WP14 (the comment-convention pass).
 
 ## Code-quality findings — m16-wp3-review-player (2026-10-20)
 

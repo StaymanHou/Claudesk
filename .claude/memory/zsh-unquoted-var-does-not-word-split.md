@@ -1,6 +1,6 @@
 ---
 name: zsh-unquoted-var-does-not-word-split
-description: The Bash tool's shell here is zsh, which does NOT word-split an unquoted `$var` — `for f in $files` iterates ONCE over the whole newline-joined list, so a bulk rename or mutation loop silently does nothing. Pipe to `xargs` (or `${(f)var}`) and grep-confirm the edit landed.
+description: The Bash tool's shell here is zsh, which does NOT word-split an unquoted `$var` — `for f in $files` iterates ONCE over the whole newline-joined list, so a bulk rename or mutation loop silently does nothing. Pipe to `xargs` (or `${(f)var}`) and grep-confirm the edit landed. Also `$var:s…` is a zsh MODIFIER (`git show $rev:src/x` is mangled); write `"${rev}:path"`.
 metadata:
   type: feedback
 ---
@@ -32,6 +32,15 @@ mutant applied through such a loop is a **silent no-op**, and a no-op mutant rea
   inside a `for` either, because the same rule applies to a variable holding its result.
 - **Always grep-confirm that the edit landed** (`grep -c` the new form, and grep that the old
   form is gone) before trusting any result that follows a bulk edit.
+
+**A second zsh trap: `$var:<letter>` is a MODIFIER, not text (paydown WP9, 2026-11-06).**
+`git show $rev:src/state/x.ts` does not pass `<rev>:src/…`. zsh reads `:s` as its substitution
+modifier on `$rev`, so git received a mangled argument (`fatal: ambiguous argument '904dcc8/x.ts'`).
+Inside a pipe (`git show $rev:src/x.ts | sed … | shasum -a 256`), the failure prints the
+**empty-input sha `e3b0c44298fc…b855`**, which looks like a real hash. So "both revisions hash the
+same" can be two empty inputs agreeing. The same applies to `:h`, `:t`, `:r`, `:e`, `:a`, `:u`, `:l`,
+and others. **Write `"${rev}:path"`** (braces end the parameter before the colon), and treat
+`e3b0c442…` as "the input was empty", never as a result.
 
 Related: [[bash-cargo-env]] (a different consequence of the Bash-tool shell not being your
 interactive shell), [[verify-the-mutation-landed]], [[bsd-sed-lacks-word-boundary]].

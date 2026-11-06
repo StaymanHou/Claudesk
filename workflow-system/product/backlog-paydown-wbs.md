@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP8 done 2026-11-06
+status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP9 done 2026-11-06
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -314,7 +314,7 @@ already-fixed code.
   to `INFORMATIONAL_NOTIFICATION_TYPES` (`status_broadcaster/mod.rs`).
 - ⚠️ **The R2 arch line already landed in WP1** (`arch/workflow-supervisor.md` §F); skip that bullet above.
 
-## WP9: Adjudicator-probe tooling  `[impact: Low–Med · effort: S · risk: Low (tooling)]` · task
+## WP9: Adjudicator-probe tooling  `[impact: Low–Med · effort: S · risk: Low (tooling)]` · task · ✅ DONE 2026-11-06 (`6c3a8c8`; 10 entries resolved, the WP2 numbers MINOR stays with WP14)
 
 Everything lives in `tooling/adjudicator-probe/`. WP2's three MAJORs are effectively MINOR now,
 because the consumer they warned about (WP3 3.5) has already run. Rule 1 sweeps them anyway.

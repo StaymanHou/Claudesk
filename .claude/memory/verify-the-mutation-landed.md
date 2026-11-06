@@ -44,3 +44,14 @@ session.
 Directly load-bearing for **M11.5 WP4**, whose entire deliverable *is* a mutation-proof (the
 OFF-invariant guard's chord arm must be shown to FAIL on an ungated chord in `panelHost.ts`) — a
 non-landing mutation there would report success while the hole stayed open.
+
+**The other half: confirm the TEST RUN happened, too (paydown 2026-11-04 WP9, 2026-11-06).** A
+mutation loop wrapped each run as `timeout 60 ./node_modules/.bin/vitest run … | grep -E "Tests |×"`.
+**macOS has no `timeout`** (it is GNU coreutils), so every run failed with "command not found" before
+vitest started, and the `grep` printed **nothing** for all five mutants. The mutants had landed
+(each was `grep`-confirmed), but an empty verdict line reads as "no test failed", which is exactly the
+false "guard hole" this memory warns about. It was caught only because a passing run should still print
+a `Tests N passed` line. **Rule:** each mutant's output must contain a positive `Tests N …` summary
+before its verdict means anything. Drop the wrapper (vitest has its own timeouts), or use a `perl alarm`
+watchdog (see [[perl-alarm-watchdog-orphans-cargo-test-binary]] for its cargo caveat).
+

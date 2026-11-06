@@ -101,15 +101,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit `3e92860` (feature `565a363`), window `565a363^..3e92860`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 6 MINOR, all auto-backlogged.)*
 
-## SURFACE-2026-10-27-QUALITY-WP3-PROBE-RUNNER-SKIPS-THE-PRODUCTION-MODEL-CHECK
-- **Severity:** MINOR
-- **Location:** `tooling/adjudicator-probe/runner.ts` (`adjudicateOnce`).
-- **Finding:** It is called "production-shaped", but it parses the JSON envelope itself and does not apply production's exactly-the-pin check (`parseReplyEnvelope` + the model check in `adjudicator.ts`).
-- **Why it matters:** The tool that justifies a pin or wording change would score another model's answer as valid, which is the silent alias move 3.6 just closed in production. Two envelope parsers can also drift apart.
-- **Suggested action:** Reuse `parseReplyEnvelope` and the model check (export them if needed), and record a mismatch as its own `basis`.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-10-27-QUALITY-WP3-OVERLONG-JSDOC-LINE-IN-VERDICT
 - **Severity:** MINOR
 - **Location:** `src/state/supervisor/verdict.ts` (the one-line JSDoc on the applied mode, ~line 95).
@@ -136,93 +127,12 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit `c5fc34f` (feature `904dcc8`), window `904dcc8^..c5fc34f`; drive_mode=autopilot. 0 CRITICAL, 3 MAJOR, 8 MINOR. Ten are auto-backlogged here; the 8th MINOR (a stale WIP leaf) was fixed in place before archive.)*
 
-## SURFACE-2026-10-21-QUALITY-WP2-REPLAY-TEST-NOT-BOUND-TO-PROMPT-MODEL-TAIL
-- **Severity:** MAJOR
-- **Location:** `src/state/supervisor/__tests__/adjudicatorRemeasure.test.ts` + `wp2-adjudicator-set.json` `_meta`
-- **Finding:** The replay records no hash of `adjudicationPrompt`, no `TAIL_CHARS` and no resolved model (`redact.probe.ts` drops `models`). After WP3 3.5 rewrites the prompt, the test stays green and keeps saying "the shipped adjudicator FAILS" about a prompt that no longer ships.
-- **Why it matters:** A guard that reports green while checking nothing; 3.5 is the scheduled change that triggers it.
-- **Suggested action:** Record `sha256(adjudicationPrompt(""))`, `TAIL_CHARS` and `ADJUDICATOR_MODEL` (plus the resolved id) in `_meta`, and assert they equal the live values, so a mismatch fails with "re-run the probe". This also gives the new `TAIL_CHARS` export its caller. Natural fit: WP3 3.5.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-10-21-QUALITY-WP2-FREEZE-GATE-READS-A-WIP-PATH-FINALIZE-MOVES
-- **Severity:** MAJOR
-- **Location:** `tooling/adjudicator-probe/score.probe.ts` → `WIP` constant / `set` step
-- **Finding:** `set` refuses unless `workflow-system/state/wip/m16-5-wp2-adjudicator-remeasure.md` contains the freeze sha, and `feature-finalize` moves that file to `state/archive/`. The re-score WP3 3.5 depends on then fails with ENOENT.
-- **Why it matters:** A known next consumer is broken by the workflow's own archive step.
-- **Suggested action:** Check the sha against a durable record (`freeze-report.json`, or the committed set's `_meta`), or resolve the WIP in either `wip/` or `archive/`. Natural fit: WP3 3.5, as its first step.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-10-21-QUALITY-WP2-FULL-LABELLED-SET-IS-SINGLE-COPY-IN-TMP
-- **Severity:** MAJOR
-- **Location:** `tooling/adjudicator-probe/paths.ts` (`OUT` = gitignored `tmp/adjudicator-probe/`)
-- **Finding:** The only full set lives in gitignored `tmp/` and nothing documents that: tails for the ~2/3 non-claudesk records, `labels.frozen.json`, `score-set.json`, `answers.jsonl`. The committed set has no text for those records. The rebuild path (`mine.probe.ts`) works only while every source transcript still exists, and CC can prune old transcripts.
-- **Why it matters:** WP3 3.5's held-out re-score needs those tails; the evidence can silently disappear.
-- **Suggested action:** Decide where a private copy lives (outside the public repo, e.g. a backed-up local dir) and write that path and the restore step into `paths.ts` / WBS 3.5. Natural fit: WP3 3.5.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-10-21-QUALITY-WP2-RESUME-NEVER-RETRIES-FAILED-CALLS
-- **Severity:** MINOR
-- **Location:** `tooling/adjudicator-probe/score.probe.ts` → `score` step / `adjudicateOnce`
-- **Finding:** An `error`/`timeout` answer is appended and its key counted as done, so a transient failure becomes a permanent AWAITING. `spawn` has no `child.on("error")`, so a missing `claude` binary is unhandled.
-- **Why it matters:** A quiet bias on the next re-run (this run had 0 failures).
-- **Suggested action:** Treat only `basis: "model"` as done, and add an `error` handler that resolves a failed answer.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-10-21-QUALITY-WP2-RUN-NUMBERS-SORTED-AS-STRINGS
-- **Severity:** MINOR
-- **Location:** `score.probe.ts` `report` / `redact.probe.ts` (`.sort()` on run numbers)
-- **Finding:** The default `.sort()` compares strings, so from run 10 on `answers[i]` stops matching run `i+1`, which the replay test assumes.
-- **Why it matters:** A hidden ordering bug in evidence the probe will extend.
-- **Suggested action:** Sort with `(a, b) => a - b`.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-10-21-QUALITY-WP2-PRNG-SHUFFLE-AND-LABELS-DUPLICATED
-- **Severity:** MINOR
-- **Location:** `triage.ts` `sampleIds` vs `labelSheet.ts` `mulberry32`/`shuffle`; `LABELS` in `reviewer.ts` and `labelSheet.ts`
-- **Finding:** The seeded PRNG and Fisher-Yates are written twice, byte for byte, and `LABELS` is defined twice.
-- **Why it matters:** Two copies drift.
-- **Suggested action:** Export them once from `labelSheet.ts` and import them elsewhere.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-10-21-QUALITY-WP2-POLICY-EXCLUSION-RESTATED-THREE-TIMES
-- **Severity:** MINOR
-- **Location:** `triage.ts` `isPolicyExcluded`; `adjudicatorRemeasure.test.ts` `/^[PI]/`
-- **Finding:** The product/incident rule is restated in tooling and in the test, ahead of WP3 3.4 putting it into `decideVerdict`.
-- **Why it matters:** Once production has the rule, these copies drift.
-- **Suggested action:** When 3.4 lands, import the production predicate in both places. Natural fit: WP3 3.4.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-10-21-QUALITY-WP2-CLAUDESK-TAILS-KEPT-BY-PREFIX-MATCH
-- **Severity:** MINOR
-- **Location:** `corpus.ts` `projectClassOf`; `redact.ts` `redactionViolations`
-- **Finding:** Any slug starting with `-Users-stayman-Personal-projects-claudesk` keeps its tails in an open-source commit, and those records skip the forbidden-token scan, so a sibling `claudesk-*` dir (a worktree or fork) would be committed unscanned. Only `-src-tauri` exists today; scratch dirs are excluded.
-- **Why it matters:** A small hole in a leak gate.
-- **Suggested action:** Allow-list the exact slugs, or run the forbidden-token scan on claudesk tails as well.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-10-21-QUALITY-WP2-MEASUREMENT-NUMBERS-REPEATED-IN-FOUR-PLACES
 - **Severity:** MINOR
 - **Location:** `adjudicator.ts` header; `adjudicatorRemeasure.test.ts` header; `wbs.md` WP2; backlog SURFACE
 - **Finding:** The same figures (95/103, 126/188, the CI, 8/29) appear in four places.
 - **Why it matters:** When 3.5 re-measures, four places must change together; the comment budget calls duplication "the expensive half".
 - **Suggested action:** Keep the numbers in `wbs.md`; reduce the code headers to the verdict plus a pointer. Natural fit: WP3 3.5.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-10-21-QUALITY-WP2-TAIL-CHARS-EXPORT-UNUSED
-- **Severity:** MINOR
-- **Location:** `src/state/supervisor/fanOut.ts` → `export const TAIL_CHARS`
-- **Finding:** Exported, with no importer.
-- **Why it matters:** A dead export.
-- **Suggested action:** Resolved by the first MAJOR (binding the replay to `TAIL_CHARS`), or un-export it.
 - **Priority:** low
 - **Status:** pending
 
