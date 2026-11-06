@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP11 done 2026-11-06
+status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP12 done 2026-11-06
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -376,7 +376,7 @@ because the consumer they warned about (WP3 3.5) has already run. Rule 1 sweeps 
   - reproduced → fix it in this WP
   - not reproduced → rewrite the entry to "installed-build watch" and leave it open
 
-## WP12: `Workspace.tsx` extractions  `[impact: High (most-touched file) · effort: M · risk: Med]` · feature
+## WP12: `Workspace.tsx` extractions  `[impact: High (most-touched file) · effort: M · risk: Med]` · feature · ✅ DONE 2026-11-06 (`82856a4`; 3 entries resolved + batch #7; the hold → a one-shot spawn-intent ref; review: 1 MAJOR + 2 MINOR auto-backlogged)
 
 R4. Runs after WP8, so it moves already-fixed code.
 - `09-28-QUALITY-SUPERVISOR-ACTIVITY-MINOR-BATCH#7`: extract `SupervisorHeaderControl`. It absorbs

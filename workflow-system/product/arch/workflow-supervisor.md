@@ -385,6 +385,15 @@ for dev. It is size-capped at 5 MiB with one rotated generation (`.log.1`), reus
 - **In-UI:** the `⚙ supervised` badge's tooltip carries the newest decision
   (`Last: withheld: … · 2m ago`, live via the frontend-only `activityFeed`, seeded from the file on
   mount), and the `▾` trigger beside it opens a popover listing the project's last 20 decisions.
+  The badge, its markers, the popover, the hint clock and the seed live in
+  `components/workspace/SupervisorHeaderControl.tsx` (paydown 2026-11-04 WP12); the toggle's value,
+  its ref and action stay in `Workspace` because `useSupervisor` reads them at fire time.
+  - ⚠️ **The seed runs ONCE per project per app run, and a FAILED read does not count as that once.**
+    It reads through `tryReadActivityLines`, which returns `null` on an IPC failure or a non-list
+    answer. On `null` the project stays unseeded and the next mount retries. A project already
+    seeded (`isSeeded`) skips the 2000-line read entirely. An EMPTY successful read still seeds, so
+    a project with no records is not re-read on every mount. The popover keeps reading through
+    `readActivityLines`, which still maps a failure to `[]`.
 
 ### Turn attribution (2026-09-28): the `⚙` on supervisor-started turns
 

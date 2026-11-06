@@ -4,18 +4,40 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
-# paydown-2026-11-04-wp8-supervisor-and-status-cluster — 2026-11-06
+# paydown-2026-11-04-wp12-workspace-extractions — 2026-11-06
 
-*(feature-review-quality on ship commit `4de4e70`, window `4de4e70^..4de4e70`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 3 MINOR, all auto-backlogged; each claim re-checked against the source before filing.)*
+*(feature-review-quality on ship commit `82856a4`, window `f42796f..82856a4`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 2 MINOR, all auto-backlogged; each claim re-checked against the source before filing.)*
 
-## SURFACE-2026-11-06-QUALITY-WP8-SEED-ONCE-SWALLOWS-A-FAILED-READ
+## SURFACE-2026-11-06-QUALITY-WP12-SUPERVISOR-READOUT-SPLIT-ACROSS-TWO-CALLS
+- **Severity:** MAJOR
+- **Location:** `src/components/workspace/Workspace.tsx` (`supervisorTurnBadge`) and `src/components/workspace/SupervisorHeaderControl.tsx` (its `workspaceSupervisorReadout` call and its header comment).
+- **Finding:** `workspaceSupervisorReadout` is now called twice, and each call fills only half its options. `Workspace` passes only `turnOrigin`, so its suppressed/alarm/lastAction fields are always empty. The control omits `turnOrigin`, so its `turnBadge` is always `null`. The gate arguments (`supervisorEnabled ?? true`, `workflowEnabled && visible`) are repeated in both files, which contradicts the control's header ("both of its gates sit in one place").
+- **Why it matters:** a future read of a field that is always empty never errors, it silently renders nothing. The two copies of the gate can also drift apart.
+- **Suggested action:** extract a gated `supervisorTurnBadge(gateOn, turnOrigin)` that `workspaceSupervisorReadout` also uses, so each surface makes one call. Alternatively, lift the readout into `Workspace` and pass the readout object to the control. Keep arm 6 of `offInvariantGuard`, which asserts the readout's gate as a value, pointed at whichever function owns the gate. Re-check the turn-`⚙` gate-OFF live test (mutant C4) after the change.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-06-QUALITY-WP12-SPAWN-INTENT-SET-BEFORE-PANE-CONFIRMED
 - **Severity:** MINOR
-- **Location:** `src/state/supervisor/activityFeed.ts` (`seedActivity`: `seeded.add` before the `merged.length === 0` return) + `src/components/workspace/Workspace.tsx` (the mount seed effect).
-- **Finding:** `readActivityLines` returns `[]` on an IPC failure, and `seedActivity` marks the project seeded even for an empty replay. So one failed first read disables the relaunch replay for that project for the rest of the app run (a second workspace's seed is a no-op). Also, every later mount still does the full 2000-line read only for the seed to discard it.
-- **Why it matters:** a narrow, silent loss of exactly the survives-a-relaunch property WP8 protected, plus a wasted IPC read per extra mount.
-- **Suggested action:** export an `isSeeded(projectPath)` and skip the read when true; and either do not mark a project seeded on an empty/failed read, or have `readActivityLines` distinguish "failed" from "empty".
+- **Location:** `src/components/workspace/useDriveModeApply.ts` (the relaunch step of `startApply`); `src/cc/spawnArgs.ts` (`takeSpawnArgs`).
+- **Finding:** `spawnIntentRef.current = "turn-respawn"` is set before `ccPaneRef.current?.relaunch()`. If the pane ref were null, the override would persist, and the next unrelated spawn (Retry, `cc-relaunch`, Recycle) would take `turn-respawn`. A spawn run that is cancelled (a path or command re-run) also consumes the override, leaving the surviving run on the original door.
+- **Why it matters:** these are rare paths: the abort already covers unmount, and the pane is otherwise always mounted. But a one-shot that can persist removes the guarantee that the respawn's own spawn takes it.
+- **Suggested action:** set the ref only when `ccPaneRef.current` is non-null, inside the same branch as `relaunch()`. Optionally restore a taken override in `XtermPane`'s `cancelled` branch.
 - **Priority:** low
 - **Status:** pending
+
+## SURFACE-2026-11-06-QUALITY-WP12-POINTER-COMMENTS-DESCRIBE-HISTORY
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/Workspace.tsx` (the "(`ccPaneRef` itself is declared with the drive-mode hook above …)" parenthetical); `src/components/picker/__tests__/pickerOnOpenArity.test.ts` (the three-line note where the P4.6 block was).
+- **Finding:** two comments this diff added describe where code moved, not why it is shaped this way.
+- **Why it matters:** the comment budget in `docs/lessons/source-text-guards.md` routes history to `git log` and the archive.
+- **Suggested action:** delete both. The P4.6 history is in `spawnArgs.test.ts`'s header and in commit `82856a4`. Fits WP14's comment-convention pass.
+- **Priority:** low
+- **Status:** pending
+
+# paydown-2026-11-04-wp8-supervisor-and-status-cluster — 2026-11-06
+
+*(feature-review-quality on ship commit `4de4e70`, window `4de4e70^..4de4e70`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 3 MINOR, all auto-backlogged; each claim re-checked against the source before filing. The seed-once MINOR was resolved by paydown WP12, 2026-11-06; 2 remain.)*
 
 ## SURFACE-2026-11-06-QUALITY-WP8-POPOVER-FOCUS-RULE-SPLITS-THE-ANCHOR-COMMENT
 - **Severity:** MINOR
@@ -169,7 +191,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 *(feature-review-quality on ship commit `dece979`, window `dece979^..dece979`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 8 MINOR, all auto-backlogged. The torn-append MAJOR was resolved 2026-09-28 by task `activity-log-append-tear`; 1 MAJOR + 8 MINOR remain.)*
 
 ## SURFACE-2026-09-28-QUALITY-SUPERVISOR-ACTIVITY-MINOR-BATCH
-- **Severity:** MINOR ×3 (items 3, 4, 5, 6 and 8 were resolved 2026-11-06 by paydown WP8; the numbering is kept. Items 1–2 are WP14's comment pass, item 7 is WP12's `SupervisorHeaderControl` extraction)
+- **Severity:** MINOR ×2 (items 3, 4, 5, 6 and 8 were resolved 2026-11-06 by paydown WP8, and item 7 by paydown WP12 the same day; the numbering is kept. Items 1–2 are WP14's comment pass)
 - **Findings:**
   1. `useSupervisor.ts` (`decideTurn`, the toggle check): the comment says the value is "read PER TURN for the same reason as the gate above", but after the extraction the gate (`host.enabled`) now sits in `onTurnEnd`, not above. Repoint the reference.
   2. `fanOut.ts`: the old `/** What happened for one workspace in a sweep. */` now sits directly above the new `FanOutReason` doc block. Two JSDoc blocks are stacked, and `FanOutOutcome` has lost its doc. Move it.
@@ -177,7 +199,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
   4. *(resolved 2026-11-06, paydown WP8: `relativeTime` lives in `src/state/timeFormat.ts`)*
   5. *(resolved 2026-11-06, paydown WP8: the readout takes an options object)*
   6. *(resolved 2026-11-06, paydown WP8: one `ACTIVITY_READ_LINE_LIMIT`, pinned to Rust's `MAX_READ_LINES`; `no-stored-mode` is still recorded, per default D3)*
-  7. `Workspace.tsx` (1527 lines) grew by about 70 lines of inline header JSX, plus hint-clock state, popover state and a seed effect, gated in two places (`if (!workflowEnabled)` in the seed effect, `workflowEnabled && visible` in the readout). Extract a `SupervisorHeaderControl` component so the surface's state and gate sit together.
+  7. *(resolved 2026-11-06, paydown WP12: `SupervisorHeaderControl.tsx` owns the badge, popover, hint clock and seed, with both gates)*
   8. *(resolved 2026-11-06, paydown WP8: the popover takes focus, scopes its Esc and restores focus; checked live against a positive control)*
 - **Priority:** low
 - **Status:** pending
@@ -304,39 +326,6 @@ pointers; keep the invariants and the ⚠️-what-to-do-on-failure paragraphs. T
 Applying its test — *would a reader who has never seen the WIP make a worse decision without this sentence?* — the **failure-direction and what-to-do-when-this-fails** paragraphs earn their place (keep). The **attempt-history narrative** does not: the WIP and backlog already carry it verbatim, making the test file a **third copy that will drift**.
 
 **Fix shape:** pointer-to-canonical-home, not shorter sentences — trimming treats the symptom.
-
-# drive-mode-on-the-workspace-surface — 2026-08-26
-
-⚠️ **The re-entrancy defect (formerly finding 1) was resolved at paydown-2026-09-23 WP8** by R1
-Option A: the readout is disabled while an apply is queued. That was done WITHOUT the
-`useDriveModeApply` hook extraction, which R1 defers to the next time drive-mode apply is touched.
-The scheduler-timing sleep below is the extraction's remaining payoff.
-
-⚠️ **Escalation note, carried out of the 2026-09-23 paydown WBS (its ruling R1) so it is not re-derived.** A "latest wins" supersede (B′: a second Apply while ⏳ is queued replaces the first) was sized as **small**. The respawn reads the stored mode from `projects.json` **at spawn time** (`resolve_cc_spawn_env`), not the value captured at the click, so a second Apply only needs to persist, and the one queued respawn picks it up. In the race where the respawn reads before the write lands, the header's existing `is-stale` marker shows the mismatch, so the failure is not silent. **Escalate from "disable while queued" to B′ only if the operator actually hits "I want to change it while ⏳ is showing."** The lower-bug-surface option was chosen under `[PRIOR: explicit-selectable-mode-over-inferred-mode]`.
-
-## SURFACE-2026-08-26-QUALITY-RESPAWN-INTENT-HOLD-IS-SCHEDULER-TIMING
-- **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
-- **Type:** tech-debt
-- **Summary:** `RESPAWN_INTENT_HOLD_MS = 400` (`applyDriveMode.ts:165`) synchronises against the
-  React scheduler rather than an event. `await Promise.resolve()` is a microtask and does **not**
-  guarantee a committed render before `relaunch()`.
-- **Context:** ⚠️ A deterministic mechanism was available **and is the house idiom in the same
-  file** — `onSessionIdRef` (`XtermPane.tsx:467`) solves exactly this problem. The failure mode if
-  the window is missed is the silent one the comment itself names: the spawn reads the ORIGINAL
-  door, consuming the unclean-exit flag and disabling auto-resume on the next real open. **No test
-  can observe it.**
-- **Suggested action:** Replace the sleep with a ref the spawn effect reads at spawn time. Folds
-  into the `useDriveModeApply` extraction.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-08-26-QUALITY-DRIVEMODE-MINOR-POLISH
-- **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
-- **Type:** tech-debt (2 MINOR findings remain, grouped)
-- **Summary:** ⚠️ **Rewritten 2026-09-23 (paydown WP8).** (a) and (b) were deleted at paydown WP4, and (c), the duplicated `.workspace-header-drivemode` CSS declaration, was merged at paydown WP8. Remaining: (d) `Workspace.tsx` has about 130 inline lines of drive-mode state in a component past 1170 lines.
-- **Suggested action:** (d) is the `useDriveModeApply` hook extraction that R1 (paydown 2026-09-23) DEFERS to the next time drive-mode apply is touched.
-- **Priority:** low
-- **Status:** pending
 
 # turn-output-reorientation — 2026-08-25
 

@@ -270,10 +270,30 @@ reintroduces a silent auto-resume killer); and `readyToRespawn` is **`idle` ONLY
 2026-09-23 WP8). While `respawnWanted`, it is `aria-disabled` with `.is-queued`, click and Enter open
 nothing, and its tooltip names the queued mode. Before the fix, a **second Apply was silently
 discarded** at `resolveDriveMode`'s `respawnWanted` early return while the readout showed the new
-value, reachable only behind a busy agent. ⚠️ **Do not "improve" this to latest-wins without
-reading R1 in the paydown record**: a supersede (B′) is small, because the respawn reads the stored
-mode at spawn time, but it was deliberately NOT built until the operator actually wants to change
-modes mid-queue. `workspaceDriveModeLive.test.tsx` pins it.
+value, reachable only behind a busy agent. ⚠️ **Do not "improve" this to latest-wins
+unprompted.** A supersede (B′: a second Apply while ⏳ is queued replaces the first) is SMALL. The
+respawn reads the stored mode from `projects.json` **at spawn time** (`resolve_cc_spawn_env`), not
+the value captured at the click, so a second Apply would only need to persist, and the one queued
+respawn picks it up. In the race where the respawn reads before the write lands, the header's
+`is-stale` marker shows the mismatch, so the failure is not silent. It was deliberately NOT built:
+escalate to B′ only if the operator actually hits "I want to change it while ⏳ is showing"
+(`[PRIOR: explicit-selectable-mode-over-inferred-mode]`). `workspaceDriveModeLive.test.tsx` pins the
+disabled state. "Queued" means **waiting for idle**: the ⏳ and the disabled state clear the moment
+the respawn fires, not when the new session reports in (operator, paydown 2026-11-04 WP12).
+
+⚠️ **How the respawn spawns as `turn-respawn` (paydown 2026-11-04 WP12): a one-shot REF, never a
+timer.** The apply chain lives in `useDriveModeApply` (`components/workspace/useDriveModeApply.ts`).
+It sets `spawnIntentRef.current = "turn-respawn"` immediately before `ccPaneRef.current?.relaunch()`.
+`XtermPane`'s spawn builds its payload through `takeSpawnArgs` (`cc/spawnArgs.ts`), which takes the
+override and clears it, and only for `cc_spawn`. So the spawn that the relaunch causes is the one
+that takes it, and every later relaunch (`cc-relaunch`, Recycle) is back on the workspace's own
+door. The prop `openIntent` is the door alone and never changes. This replaced a 400 ms
+`RESPAWN_INTENT_HOLD_MS` sleep that held a prop across the relaunch and was synchronised against
+the React scheduler; do not reintroduce a hold. Proven live: with no unclean flag, an Apply's
+respawn carried `--continue`, which only `TurnRespawn` produces. ⚠️ **An apply still queued when
+the workspace unmounts is ABORTED**: `waitForIdle` takes a signal, its sleep wakes on the abort,
+and the chain then does nothing (no relaunch, no state, no warning). The persisted mode applies at
+the next natural spawn.
 
 ⚠️ **The OFF-invariant guard's SIXTH arm** covers this surface (the fifth is M13's skill row). Arm 6
 asserts `workspaceDriveModeReadout` returns `null` when the gate is off — which **is** DOM absence,

@@ -15,13 +15,21 @@
 - **Priority:** low (lowered from high 2026-10-27 per design prior `simple-version-first-when-the-source-fix-shrank-the-problem`: breaks are now rare at source, and the next lever, richer adjudicator input, is an advanced minor-gain enhancement)
 - **Status:** open — re-measured at M16.5 WP3 (3.5), question KEPT per AC-18 (see the WP3 measurement above). Stays open.
 
+## Code-quality findings — paydown-2026-11-04-wp12-workspace-extractions (2026-11-06)
+
+- **Pointer:** **1 MAJOR + 2 MINOR** from the review of `82856a4` (0 CRITICAL). The MAJOR: the supervisor readout is split across two half-filled `workspaceSupervisorReadout` calls, with its gate repeated in `Workspace.tsx` and `SupervisorHeaderControl.tsx`. The MINORs: the spawn-intent ref is set before the pane handle is confirmed; two pointer comments describe history.
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp12-workspace-extractions — 2026-11-06`.
+- **Priority:** medium (MAJOR); low (MINORs)
+- **Status:** pending
+- **Pickup shape:** the MAJOR and the spawn-intent MINOR fit WP13 (the next component extraction) or a small task; the comment MINOR fits WP14's comment-convention pass.
+
 ## Code-quality findings — paydown-2026-11-04-wp8-supervisor-and-status-cluster (2026-11-06)
 
-- **Pointer:** **3 MINOR** from the review of `4de4e70` (0 CRITICAL, 0 MAJOR): seed-once marks a project seeded on a failed (empty) read, and later mounts still read 2000 lines to discard them; the popover `:focus` CSS rule splits the left-anchor comment from its rule; a test comment claims `null` arrives off the wire when serde omits `None`.
+- **Pointer:** **2 MINOR remain** from the review of `4de4e70` (0 CRITICAL, 0 MAJOR; the seed-once MINOR was resolved by paydown WP12, 2026-11-06). Both are comments: the popover `:focus` CSS rule splits the left-anchor comment from its rule, and a test comment claims `null` arrives off the wire when serde omits `None`.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp8-supervisor-and-status-cluster — 2026-11-06`.
 - **Priority:** low (all)
 - **Status:** pending
-- **Pickup shape:** the seed item fits WP12 (it already moves the `Workspace.tsx` seed effect); the two comment items fit WP14's comment-convention pass.
+- **Pickup shape:** WP14's comment-convention pass.
 
 ## Code-quality findings — paydown-2026-11-04-wp4-run-lock-and-sync-guard (2026-11-04)
 
@@ -81,10 +89,10 @@
 
 ## Code-quality findings — supervisor-activity-record (2026-09-28)
 
-- **Pointer:** **3 MINOR remain** from the review of `dece979` (the torn-append MAJOR was resolved by task `activity-log-append-tear`, 2026-09-28; the hand-kept-file-list guard MAJOR by paydown WP3, 2026-11-04; items 3, 4, 5, 6 and 8 by paydown WP8, 2026-11-06). The MINORs: two stale comments (WP14) and the `SupervisorHeaderControl` extraction from `Workspace.tsx` (WP12). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-activity-record — 2026-09-28`.
+- **Pointer:** **2 MINOR remain** from the review of `dece979` (the torn-append MAJOR was resolved by task `activity-log-append-tear`, 2026-09-28; the hand-kept-file-list guard MAJOR by paydown WP3, 2026-11-04; items 3, 4, 5, 6 and 8 by paydown WP8, and item 7, the `SupervisorHeaderControl` extraction, by paydown WP12, both 2026-11-06). The two left are stale comments. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-activity-record — 2026-09-28`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-- **Pickup shape:** the 2026-11-04 paydown sweep (`backlog-paydown-wbs.md` WP12, WP14).
+- **Pickup shape:** the 2026-11-04 paydown sweep (`backlog-paydown-wbs.md` WP14).
 
 ## Code-quality findings — paydown-wp3-boot-smoke-test (2026-09-23)
 
@@ -125,11 +133,6 @@
 - **Pointer:** **1 MINOR remains** (0 CRITICAL). The naive-baseline MAJOR was resolved at paydown-2026-09-23 WP4. At WP6: the decisive-bar MAJOR (`scoreArm` now uses the bar parsed from `_meta.threshold`, and each arm's margin uses its own positives), the near-tautological assertions (deleted) and the access-style nits. Remaining: the test file's comment density, a third copy of the WIP's attempt history. Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp1-supervisor-probe — 2026-09-12`.
 - **Priority:** low
 - **Status:** pending — routed to the comment-convention pass (G5)
-
-## Code-quality findings — drive-mode-on-the-workspace-surface (2026-08-26)
-- **Pointer:** **2 findings remain** (rewritten 2026-09-23, paydown WP8). The borrowed-credibility MAJOR and MINOR-polish (a)/(b) were resolved at paydown-2026-09-23 WP4, and the source guards (H4) at WP7 by a live `Workspace` mount. At WP8 the re-entrancy defect was resolved by R1 Option A (the readout is disabled while an apply is queued), and the duplicated CSS rule (c) was merged. Remaining: the `RESPAWN_INTENT_HOLD_MS` scheduler-timing sleep (H2) and MINOR-polish (d). Both are the `useDriveModeApply` hook extraction that R1 DEFERS to the next drive-mode touch. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# drive-mode-on-the-workspace-surface — 2026-08-26`.
-- **Priority:** medium (the scheduler-timing sleep); low for (d)
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
 ## Code-quality findings — turn-output-reorientation (2026-08-25)
 - **Pointer:** **1 MINOR remains** (rewritten 2026-09-23). The export-guard MAJOR was resolved at paydown WP3; the push-not-poll contract-drift MAJOR and the dead `TURN_MARKER_COLOR` comment at paydown WP4 (prose narrowed at every layer; the returned `nav` is now documented as unused by the shipped caller, not threaded through); and the `?raw`-on-a-DOM-question MAJOR at paydown WP7 (`turnNavControls.test.tsx` now drives a live `Workspace` mount). Remaining: (2) the 58% comment-density MINOR, an instance of `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED` (⚠️ the retraction blocks are load-bearing and must NOT be swept). The conditionally-mounted `aria-live` span was resolved at paydown WP8. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# turn-output-reorientation — 2026-08-25`.
