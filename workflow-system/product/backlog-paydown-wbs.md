@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP9 done 2026-11-06
+status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP10 done 2026-11-06
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -334,7 +334,7 @@ because the consumer they warned about (WP3 3.5) has already run. Rule 1 sweeps 
 - `…-POLICY-EXCLUSION-RESTATED-THREE-TIMES`: import `SUPERVISED_WORKFLOWS`.
 - `…-CLAUDESK-TAILS-KEPT-BY-PREFIX-MATCH`: an exact-slug allow-list.
 
-## WP10: Media cleanup and the PDF sandbox measurement  `[impact: Low–Med · effort: S–M · risk: Low–Med]` · task
+## WP10: Media cleanup and the PDF sandbox measurement  `[impact: Low–Med · effort: S–M · risk: Low–Med]` · task · ✅ DONE 2026-11-06 (`54fec49`; 7 entries resolved; PDF `sandbox` measured unsupportable — any value blanks WebKit's viewer — recorded + pinned)
 
 - `09-29-QUALITY-READ-ERROR-CARD-STATS-VIA-THE-SCOPE-ADMITTING-COMMAND`: switch to `stat_file`, and
   update the mock.

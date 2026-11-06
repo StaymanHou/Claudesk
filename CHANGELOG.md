@@ -25,6 +25,14 @@
 - **Backlog resolved:** SURFACE-2026-10-21-QUALITY-WP2-PRNG-SHUFFLE-AND-LABELS-DUPLICATED — `mulberry32`, `shuffle` and `LABELS` are exported once from `labelSheet.ts`, and every seeded artifact (rows, the review sample, the WP3 split) reproduces byte-for-byte.
 - **Backlog resolved:** SURFACE-2026-10-21-QUALITY-WP2-POLICY-EXCLUSION-RESTATED-THREE-TIMES — `isPolicyExcluded` reads production's `SUPERVISED_WORKFLOWS` by edge workflow, and the replay test uses it instead of an id-prefix regex.
 - **Backlog resolved:** SURFACE-2026-10-21-QUALITY-WP2-CLAUDESK-TAILS-KEPT-BY-PREFIX-MATCH — only the two exact claudesk slugs keep unredacted tails, so a sibling `claudesk-*` directory is redacted and scanned.
+- **Task closed:** Paydown 2026-11-04 WP10 cleans up the media code and settles the PDF `<iframe>` sandbox question by measurement: any `sandbox` value blanks WebKit's PDF viewer in dev and in a bundle, so the `%PDF-` sniff stays the only control, and a rendered test now keeps the attribute off.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-READ-ERROR-CARD-STATS-VIA-THE-SCOPE-ADMITTING-COMMAND — `ReadErrorCard` reads its size through the side-effect-free `stat_file` (new `statFile`), observed live with no `stat_media` call for the file.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-STAT-MEDIA-CORE-RESOLVES-AND-STATS-TWICE — `stat_media_core` takes size and mtime from its first `meta` through a `mtime_ms_of` helper it shares with `stat_file_core`.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-PDF-IFRAME-SANDBOX-QUESTION-LEFT-OPEN — measured in dev and a debug bundle, `""`, `allow-same-origin`, `allow-scripts` and both together all render blank, which is recorded in `arch/security-posture.md` and pinned by a no-sandbox test.
+- **Backlog resolved:** SURFACE-2026-09-29-QUALITY-PANETABS-MEDIAKIND-CALLED-THREE-TIMES-WITH-A-NONNULL-ASSERT — `PaneTabs` binds the media kind once per tab and drops the `!`.
+- **Backlog resolved:** SURFACE-2026-10-20-QUALITY-PLAYER-ELREF-INTERSECTION-TYPE — the player's ref is `HTMLMediaElement` through a callback ref, and video-only reads narrow with `instanceof HTMLVideoElement`.
+- **Backlog resolved:** SURFACE-2026-10-20-QUALITY-RESOLVEFPS-IS-A-PASSTHROUGH — `mediaInfoOf` calls `snapFps` directly, with a new test pinning the snap at that call site.
+- **Backlog resolved:** SURFACE-2026-10-20-QUALITY-PLAYER-STRIP-REUSES-ZOOM-BUTTON-CLASSES — every media toolbar uses the neutral `.media-tool-btn` / `.media-tool-group` classes.
 
 ## 2026-11-04
 

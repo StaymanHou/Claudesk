@@ -65,29 +65,12 @@
 
 ## Code-quality findings — m16-wp3-review-player (2026-10-20)
 
-- **Pointer:** **4 MINOR** from the review of `cd0f204`, all in the review player (two more, the two `timeupdate` subscription paths and the per-frame re-render, were Buried 2026-11-04, paydown WP1):
-  - `elRef` typed as a video & audio intersection
-  - `resolveFps` is a leftover pass-through
-  - comments cite WIP phase IDs
-  - the strip reuses the zoom-button classes
+- **Pointer:** **1 MINOR remains** from the review of `cd0f204`: comments in `MediaPlayer.tsx` cite WIP phase IDs (→ paydown WP14, the comment-convention pass). The other three were resolved 2026-11-06 by paydown-2026-11-04 WP10 (the `elRef` intersection type, the `resolveFps` pass-through, the strip's zoom-button classes; see CHANGELOG). Two more, the two `timeupdate` subscription paths and the per-frame re-render, were Buried 2026-11-04 at paydown WP1.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-wp3-review-player — 2026-10-20`.
-- **Priority:** low (all)
+- **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-- **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
-
-## Code-quality findings — m16-wp2-media-in-editor-tab (2026-09-29)
-
-- **Pointer:** **4 MINOR** remain from the review of `5ea1aeb` (the "larger than 4 GiB" copy was resolved 2026-11-04 by paydown WP2). The MAJOR (missing card sticks on an unchanged mtime) was resolved by M16 WP3 on 2026-10-20 (see CHANGELOG). The MINORs:
-  - `ReadErrorCard` stats through the scope-admitting `stat_media`
-  - `stat_media_core` resolves and stats twice
-  - the PDF iframe `sandbox` question was left open
-  - `mediaKind` is called 3× with a `!` in PaneTabs
-
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-wp2-media-in-editor-tab — 2026-09-29`.
-- **Priority:** low (all)
-- **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-- **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
+- **Pickup shape:** paydown WP14 (the comment-convention pass).
 
 ## Code-quality findings — silent-supervisor (2026-09-28)
 

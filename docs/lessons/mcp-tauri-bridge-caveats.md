@@ -208,6 +208,11 @@ not write", which is the standing *instrument-that-cannot-observe-reports-absenc
    from the xterm buffer). So treat it like any other tap: an empty capture means nothing until a
    positive control shows it can see a known call. The instrument that worked was reading the
    effect in the PTY (item 1, caveat (i)).
+   ⚠️ **Reproduced 2026-11-06 (paydown-2026-11-04 WP10 verify):** `[]` again, filtered and
+   unfiltered, across known `stat_media` calls. **What worked for a call/no-call question with no
+   visible effect:** a temporary `eprintln!("// TELEMETRY <cmd> {path}")` at the top of each
+   `#[tauri::command]` under test, read from the `pnpm tauri:dev` log (it rebuilds and restarts by
+   itself), with a known call as the positive control. Back up the file and revert it by `shasum -c`.
 
 ⚠️ **Do not conclude "no IPC happened" from a JS-level tap under any circumstances.** Confirm the
 tap can see a *known-positive* call first — a positive control — or use a different instrument.
