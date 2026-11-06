@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP10 done 2026-11-06
+status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP11 done 2026-11-06
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -351,7 +351,7 @@ because the consumer they warned about (WP3 3.5) has already run. Rule 1 sweeps 
   - pin the attribute, or record why not
   - the app ships `csp: null` (`[[app-ships-with-no-csp]]`), so this is worth the measurement
 
-## WP11: Scratch workspaces out of the repo, and the reopened-pane probe  `[impact: Med · effort: S–M · risk: Low–Med]` · task
+## WP11: Scratch workspaces out of the repo, and the reopened-pane probe  `[impact: Med · effort: S–M · risk: Low–Med]` · task · ✅ DONE 2026-11-06 (`59ae19e`; scratch → `../claudesk-scratch/`, installed log `resolved=none`; 08-21 entry rewritten to its residual; pane sighting NOT reproduced → watch)
 
 - `08-21-STATUS-PATH-KEYS-ON-CWD-ALONE-COLLAPSING-SESSIONS` (BL, medium): move `tmp/scratch/*` CC
   workspaces to D4.

@@ -33,6 +33,8 @@
 - **Backlog resolved:** SURFACE-2026-10-20-QUALITY-PLAYER-ELREF-INTERSECTION-TYPE — the player's ref is `HTMLMediaElement` through a callback ref, and video-only reads narrow with `instanceof HTMLVideoElement`.
 - **Backlog resolved:** SURFACE-2026-10-20-QUALITY-RESOLVEFPS-IS-A-PASSTHROUGH — `mediaInfoOf` calls `snapFps` directly, with a new test pinning the snap at that call site.
 - **Backlog resolved:** SURFACE-2026-10-20-QUALITY-PLAYER-STRIP-REUSES-ZOOM-BUTTON-CLASSES — every media toolbar uses the neutral `.media-tool-btn` / `.media-tool-group` classes.
+- **Task closed:** Paydown 2026-11-04 WP11 moves the CC scratch workspaces and fixtures out of the repo to `../claudesk-scratch/`, so agent test sessions no longer resolve to the operator's `claudesk` workspace (measured in the installed app: `resolved=none`, against `ws-3` before), and a deliberate probe did not reproduce the "reopened CC pane never paints" sighting, which is now an installed-build watch.
+- **Backlog resolved:** SURFACE-2026-08-21-STATUS-PATH-KEYS-ON-CWD-ALONE-COLLAPSING-SESSIONS (partial) — the routine agent-run trigger is gone now that scratch workspaces live outside the repo; the entry stays open, at low priority, for the rare case of two real sessions in one repo.
 
 ## 2026-11-04
 
