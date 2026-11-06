@@ -15,6 +15,14 @@
 - **Priority:** low (lowered from high 2026-10-27 per design prior `simple-version-first-when-the-source-fix-shrank-the-problem`: breaks are now rare at source, and the next lever, richer adjudicator input, is an advanced minor-gain enhancement)
 - **Status:** open — re-measured at M16.5 WP3 (3.5), question KEPT per AC-18 (see the WP3 measurement above). Stays open.
 
+## Code-quality findings — paydown-2026-11-04-wp8-supervisor-and-status-cluster (2026-11-06)
+
+- **Pointer:** **3 MINOR** from the review of `4de4e70` (0 CRITICAL, 0 MAJOR): seed-once marks a project seeded on a failed (empty) read, and later mounts still read 2000 lines to discard them; the popover `:focus` CSS rule splits the left-anchor comment from its rule; a test comment claims `null` arrives off the wire when serde omits `None`.
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp8-supervisor-and-status-cluster — 2026-11-06`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** the seed item fits WP12 (it already moves the `Workspace.tsx` seed effect); the two comment items fit WP14's comment-convention pass.
+
 ## Code-quality findings — paydown-2026-11-04-wp4-run-lock-and-sync-guard (2026-11-04)
 
 - **Pointer:** **1 MAJOR + 4 MINOR** from the review of `190b3a2`. MAJOR: the process-group primitives (`StopOnDrop`, the grace constant, group kill + reap) are copied between `workflow_install::runner` and `adjudicator`, not shared, and only one copy documents its limits. MINOR: the grace path drops queued output; `run_streaming` has no output cap; there are three ways to release the run lock; the `spawn_blocking` hop is repeated.
@@ -33,19 +41,19 @@
 
 ## Code-quality findings — m16-5-wp3-supervisor-correctness (2026-10-27)
 
-- **Pointer:** **4 MINOR** from the review of `3e92860` (feature `565a363`; 0 CRITICAL). The MAJOR (the failure alarm counts per project) was closed **by design** 2026-11-04 (paydown sweep R2; `arch/workflow-supervisor.md` §F), and the clause-boundary docstring and alarm-tooltip MINORs were resolved by paydown WP2. MINOR: the probe runner skips production's model check; the activity feed dedupes by timestamp; the alarm seed races a live publish; one overlong JSDoc line.
+- **Pointer:** **2 MINOR** from the review of `3e92860` (feature `565a363`; 0 CRITICAL). The MAJOR (the failure alarm counts per project) was closed **by design** 2026-11-04 (paydown sweep R2; `arch/workflow-supervisor.md` §F), the clause-boundary docstring and alarm-tooltip MINORs were resolved by paydown WP2, and the timestamp dedupe and seed race by paydown WP8 (2026-11-06). MINOR: the probe runner skips production's model check; one overlong JSDoc line.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp3-supervisor-correctness — 2026-10-27`.
 - **Priority:** low (all)
 - **Status:** pending
-- **Pickup shape:** the 2026-11-04 paydown sweep (`backlog-paydown-wbs.md` WP2/WP8/WP9/WP14).
+- **Pickup shape:** the 2026-11-04 paydown sweep (`backlog-paydown-wbs.md` WP9 for the probe runner, WP14 for the JSDoc line).
 
 ## Code-quality findings — m16-5-wp4-status-channel-semantics (2026-10-26)
 
-- **Pointer:** **3 MINOR** from the review of `b69201d` (0 CRITICAL, 0 MAJOR; a 5th MINOR was fixed in place, and the overlay emit-order item was resolved 2026-11-04 by paydown WP2 as a corrected doc claim). The three: the PiP's `isAwaitingInput` re-implements the overlay rule; the unwaited separate tail read is unexplained; and a type-only import cycle between `verifyHumanPause` and `useSupervisor`.
+- **Pointer:** **1 MINOR** from the review of `b69201d` (0 CRITICAL, 0 MAJOR; a 5th MINOR was fixed in place, the overlay emit-order item was resolved 2026-11-04 by paydown WP2 as a corrected doc claim, and the PiP overlay re-implementation and the type cycle by paydown WP8, 2026-11-06). Remaining: the unwaited separate tail read is unexplained.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m16-5-wp4-status-channel-semantics — 2026-10-26`.
 - **Priority:** low (all)
 - **Status:** pending
-- **Pickup shape:** WP8's paydown.
+- **Pickup shape:** WP14's comment-convention pass (it is a one-sentence comment).
 
 ## Code-quality findings — m16-5-wp2-adjudicator-remeasure (2026-10-21)
 
@@ -91,17 +99,17 @@
 
 ## Code-quality findings — silent-supervisor (2026-09-28)
 
-- **Pointer:** **3 MINOR** remain from the review of `778fe72` (the stale "last possible moment" comment + reason list was resolved 2026-11-04 by paydown WP2, the dedupe-store reset by paydown WP3). (The MAJOR, no alarm for a CC transcript-format change, was resolved at M16.5 WP3, 2026-10-27.) The MINORs: a "stripped once" claim with two strip sites, a "user prose" floor that also counts `isMeta` skill bodies, and an ad-hoc widened `onTurnEnd` param. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# silent-supervisor — 2026-09-28`.
+- **Pointer:** **2 MINOR** remain from the review of `778fe72` (the stale "last possible moment" comment + reason list was resolved 2026-11-04 by paydown WP2, the dedupe-store reset by paydown WP3, the ad-hoc widened `onTurnEnd` param by paydown WP8 on 2026-11-06). (The MAJOR, no alarm for a CC transcript-format change, was resolved at M16.5 WP3, 2026-10-27.) The MINORs: a "stripped once" claim with two strip sites, and a "user prose" floor that also counts `isMeta` skill bodies. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# silent-supervisor — 2026-09-28`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 - **Pickup shape:** read the entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
 ## Code-quality findings — supervisor-activity-record (2026-09-28)
 
-- **Pointer:** **8 MINOR remain** from the review of `dece979` (the torn-append MAJOR was resolved by task `activity-log-append-tear`, 2026-09-28; the hand-kept-file-list guard MAJOR by paydown WP3, 2026-11-04). The MINORs: two stale comments, an ambiguous `sweep-threw` reason, a layering import, a 6-positional-param readout, a thrice-duplicated `2000` read limit, a `Workspace.tsx` extraction, and a popover Esc that may reach CC. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-activity-record — 2026-09-28`.
+- **Pointer:** **3 MINOR remain** from the review of `dece979` (the torn-append MAJOR was resolved by task `activity-log-append-tear`, 2026-09-28; the hand-kept-file-list guard MAJOR by paydown WP3, 2026-11-04; items 3, 4, 5, 6 and 8 by paydown WP8, 2026-11-06). The MINORs: two stale comments (WP14) and the `SupervisorHeaderControl` extraction from `Workspace.tsx` (WP12). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-activity-record — 2026-09-28`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
-- **Pickup shape:** the 2026-11-04 paydown sweep (`backlog-paydown-wbs.md` WP8, WP12, WP14).
+- **Pickup shape:** the 2026-11-04 paydown sweep (`backlog-paydown-wbs.md` WP12, WP14).
 
 ## Code-quality findings — paydown-wp3-boot-smoke-test (2026-09-23)
 
@@ -866,12 +874,3 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium if it reproduces in the installed build (a blank pane hides an awaiting question); low if dev-only
 - **Status:** pending
 
-## SURFACE-2026-11-04-QUOTA-AUTO-RESUME-FIRED-IS-AN-UNCLASSIFIED-NOTIFICATION-TYPE
-- **Source:** task:act (paydown WP1, the first run of the new `/release` vocabulary check)
-- **Target level:** product:wbs → `backlog-paydown-wbs.md` WP8 (status cluster)
-- **Type:** bug (low)
-- **Summary:** CC emits `notification_type: "quota_auto_resume_fired"` (9 events in the prod `time-analytics.sqlite`, 2026-09-21 → 2026-10-26). It is undocumented and in neither `INPUT_NEEDED_NOTIFICATION_TYPES` nor `INFORMATIONAL_NOTIFICATION_TYPES`, so `notification_awaits_input` falls back to AwaitingInput (blue).
-- **Context:** In all 9 sessions a `UserPromptSubmit` follows within 6–41 ms (CC auto-resumes the turn after a quota reset), so the wrong blue lasts about 40 ms on the live dot and in the reclassifier's AwaitingInput spans. Impact is negligible today, but the project rule is that every observed type is classified DELIBERATELY, never left to the fallback (the `agent_completed` lesson). The full vocabulary on 2026-11-04 was `idle_prompt` 4964 · `permission_prompt` 626 · `agent_completed` 21 · `agent_needs_input` 15 · `auth_success` 10 · `quota_auto_resume_fired` 9.
-- **Suggested action:** Add it to `INFORMATIONAL_NOTIFICATION_TYPES`, with a one-line why (the auto-resumed turn's own `UserPromptSubmit` drives the state). Keep `every_documented_notification_type_is_classified_deliberately` green. That test pins the DOCUMENTED nine, so either extend it with an "observed, undocumented" list or leave it unchanged and note why.
-- **Priority:** low
-- **Status:** pending

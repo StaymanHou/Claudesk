@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1–WP6b done 2026-11-04; WP7 done 2026-11-06
+status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP8 done 2026-11-06
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -287,7 +287,7 @@ Test-only, so it runs before any code WP; a de-flaked gate helps every WP after 
   used by the 3 `RightPanelHost` sites and the 1 `ProjectSearch` site. Do it first, so R1's
   query swap is a one-line change.
 
-## WP8: Supervisor and status cluster  `[impact: Med · effort: M · risk: Med]` · feature
+## WP8: Supervisor and status cluster  `[impact: Med · effort: M · risk: Med]` · feature · ✅ DONE 2026-11-06 (`4de4e70`; 5 findings resolved + 2 batches partially; review: 3 MINOR auto-backlogged)
 
 Files: `activityFeed.ts`, `failureAlarm.ts`, `useSupervisor.ts`, `src/cc/workspaceSupervisor.ts`,
 `pipLayout.ts`, and the `Workspace.tsx` seed effect. **Runs before WP12**, so the extraction moves

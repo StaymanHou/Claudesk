@@ -13,7 +13,7 @@ metadata:
 3. Immediately, while the work is in flight (confirm with `ps` that the child's PPID is the dev app): `sample <pid> 3 -file <scratch>/sample.txt`.
 4. Read it: `grep -n "com.apple.main-thread"` gives the main-thread section's line range; grep the command's frames (`run_command`, the command fn name) and check which thread section they fall in. Idle main thread = `mach_msg2_trap` / `__CFRunLoopRun`, and its only `claudesk_lib` frame is `claudesk_lib::run` (the event-loop root).
 5. Poll `window.__x` to prove the command still WORKS through the new path.
-6. **Positive control:** `cp` the command's file aside, write `git show HEAD:<file>` over it, let tauri:dev hot-rebuild (new PID), repeat 2–4, then restore by `cp` + `shasum -c`. The pre-fix sample must show the frames under the main thread — otherwise the method proves nothing.
+6. **Positive control:** `cp` the command's file aside, write `git show HEAD:<file>` over it, let tauri:dev hot-rebuild (new PID), repeat 2–4, then restore by `cp` + `shasum -c`. The pre-fix sample must show the frames under the main thread — otherwise the method proves nothing. ⚠️ If the feature moved an export that the HEAD file imports, the swapped-in file blanks the app instead; build the control from the fixed file with only the behaviour reverted ([[positive-control-from-head-can-break-on-moved-exports]]).
 7. Teardown: `driver_session stop`, `TaskStop` the dev task, check `lsof -nP -iTCP:1420 -iTCP:9223` is empty.
 
 **Measured (paydown 2026-09-23 WP9, `supervisor_adjudicate`):** pre-fix `supervisor_adjudicate → run_command` under `com.apple.main-thread` in **2327/2327** samples; post-fix (async + `spawn_blocking`) **0** — the frames sat on a `tokio-rt-worker` thread. A clean discriminator.

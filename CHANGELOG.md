@@ -6,6 +6,14 @@
 - **Backlog resolved:** SURFACE-2026-11-02-REPLACE-ALL-MATCHES-WHOLE-FILE-WHILE-SEARCH-MATCHES-PER-LINE — `replace_core` now routes through `replace_every_match_per_line`, so `^foo` / `foo$` replace exactly the search count (proven live and by a test the whole-file mutant fails) and a cross-line regex replaces nothing.
 - **Backlog resolved:** SURFACE-2026-11-02-QUALITY-WP6-REPLACE-ALL-USES-LIVE-QUERY — Replace All's confirm reads `findResultsShown.query`, like the row and file buttons, pinned by a live-harness test the live-query mutant fails.
 - **Backlog resolved:** SURFACE-2026-11-02-QUALITY-WP6-WIRE-QUERY-CONVERSION-REPEATED — `toWireQuery` in `searchModel.ts` replaces the four hand-built snake_case query objects.
+- **Feature shipped:** Paydown 2026-11-04 WP8 hardens the supervisor and status cluster: the failure alarm now survives a live decision that beats the relaunch replay, a throwing recycle is recorded as `recycle-threw` with its context, the activity popover keeps its Esc from reaching CC, the PiP's "needs me" sort reads the same overlay rule as its dot, and `quota_auto_resume_fired` no longer lights a false blue.
+- **Backlog resolved:** SURFACE-2026-10-27-QUALITY-WP3-ALARM-SEED-RACES-A-LIVE-PUBLISH — `seedActivity` folds the file replay in front of buffered live records, so a decision published before the async read lands no longer drops the replayed alarm.
+- **Backlog resolved:** SURFACE-2026-10-27-QUALITY-WP3-ACTIVITY-FEED-DEDUPES-BY-TIMESTAMP — `publishActivity` lost its timestamp clause; the seed merge dedupes by record identity, so distinct same-millisecond records are both folded.
+- **Backlog resolved:** SURFACE-2026-10-26-QUALITY-WP4-PIP-ISAWAITINGINPUT-REIMPLEMENTS-THE-OVERLAY-RULE — `isAwaitingInput` returns `displayStateFor(...) === "awaiting_input"`, pinned by a body guard in `pipFanoutWiring`.
+- **Backlog resolved:** SURFACE-2026-10-26-QUALITY-WP4-TYPE-CYCLE-VERIFYHUMANPAUSE-USESUPERVISOR — `Decision` now lives in the leaf `activityRecord.ts`, so `verifyHumanPause` no longer imports `useSupervisor`.
+- **Backlog resolved:** SURFACE-2026-11-04-QUOTA-AUTO-RESUME-FIRED-IS-AN-UNCLASSIFIED-NOTIFICATION-TYPE — the type is in `INFORMATIONAL_NOTIFICATION_TYPES`, and the vocabulary test now pins documented plus observed-undocumented types.
+- **Backlog resolved:** SURFACE-2026-09-28-QUALITY-SUPERVISOR-ACTIVITY-MINOR-BATCH (partial: items 3, 4, 5, 6, 8) — `recycle-threw` keeps the decision context, `relativeTime` moved to `src/state/timeFormat.ts`, the readout takes an options object, one read limit is pinned to Rust's, and the popover takes focus and scopes its Esc.
+- **Backlog resolved:** SURFACE-2026-09-28-QUALITY-SILENT-SUPERVISOR-MINOR-BATCH (partial: item 5) — `TurnEndSignal` declares `last_event_at`, replacing `onTurnEnd`'s ad hoc widened parameter.
 
 ## 2026-11-04
 

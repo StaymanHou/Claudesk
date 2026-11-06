@@ -4,6 +4,37 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# paydown-2026-11-04-wp8-supervisor-and-status-cluster — 2026-11-06
+
+*(feature-review-quality on ship commit `4de4e70`, window `4de4e70^..4de4e70`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 3 MINOR, all auto-backlogged; each claim re-checked against the source before filing.)*
+
+## SURFACE-2026-11-06-QUALITY-WP8-SEED-ONCE-SWALLOWS-A-FAILED-READ
+- **Severity:** MINOR
+- **Location:** `src/state/supervisor/activityFeed.ts` (`seedActivity`: `seeded.add` before the `merged.length === 0` return) + `src/components/workspace/Workspace.tsx` (the mount seed effect).
+- **Finding:** `readActivityLines` returns `[]` on an IPC failure, and `seedActivity` marks the project seeded even for an empty replay. So one failed first read disables the relaunch replay for that project for the rest of the app run (a second workspace's seed is a no-op). Also, every later mount still does the full 2000-line read only for the seed to discard it.
+- **Why it matters:** a narrow, silent loss of exactly the survives-a-relaunch property WP8 protected, plus a wasted IPC read per extra mount.
+- **Suggested action:** export an `isSeeded(projectPath)` and skip the read when true; and either do not mark a project seeded on an empty/failed read, or have `readActivityLines` distinguish "failed" from "empty".
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-06-QUALITY-WP8-POPOVER-FOCUS-RULE-SPLITS-THE-ANCHOR-COMMENT
+- **Severity:** MINOR
+- **Location:** `src/App.css` (`.supervisor-activity-popover:focus`).
+- **Finding:** the new `:focus` rule sits between the "⚠️ Anchored to the group's LEFT edge … x = -163" comment and the positioning rule that comment explains, so the warning now heads the `outline: none` rule.
+- **Why it matters:** a reader looking for why the panel is left-anchored finds the comment on the wrong rule.
+- **Suggested action:** move the `:focus` rule after the `.supervisor-activity-popover` positioning block.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-06-QUALITY-WP8-NULL-OFF-THE-WIRE-COMMENT-IS-FALSE
+- **Severity:** MINOR
+- **Location:** `src/pip/__tests__/pipLayout.test.ts` (the `nullOffTheWire` case).
+- **Finding:** the comment says "A `null` off the wire (serde's `None`)", but Rust's `attention` is `#[serde(skip_serializing_if = "Option::is_none", default)]`, so `None` is omitted and never arrives as `null`.
+- **Why it matters:** a false wire fact justifies the `as unknown as` cast; the case is still worth keeping, as a DEFENSIVE check (and `displayStateFor` makes the same `!= null` claim in its own comment, so check that line too).
+- **Suggested action:** reword both comments as defensive ("should a `null` ever arrive"), keep the test.
+- **Priority:** low
+- **Status:** pending
+
 # paydown-2026-11-04-wp4-run-lock-and-sync-guard — 2026-11-04
 
 *(feature-review-quality on ship commit `190b3a2`, window `00ebf92..190b3a2`; drive_mode=autopilot. 1 MAJOR + 4 MINOR auto-backlogged.)*
@@ -79,24 +110,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-10-27-QUALITY-WP3-ACTIVITY-FEED-DEDUPES-BY-TIMESTAMP
-- **Severity:** MINOR
-- **Location:** `src/state/supervisor/activityFeed.ts` (`!(held && held.ts === record.ts)`).
-- **Finding:** Duplicate records are detected by timestamp, and the `held !== record` part is redundant after the earlier return. Two distinct same-millisecond records for one project would be folded once.
-- **Why it matters:** Low impact today (`duplicate-turn-end` is neutral on both axes), but a timestamp stands in for record identity, and the redundant condition hides the intent.
-- **Suggested action:** Key on record identity, or say why ts suffices; drop the redundant condition.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-10-27-QUALITY-WP3-ALARM-SEED-RACES-A-LIVE-PUBLISH
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/Workspace.tsx` (the mount seed: `readActivityLines` → replay of the newest 50).
-- **Finding:** The replay is async. If a live decision for the project is published before it resolves, `publishActivity` drops all 50 replayed records as older than the held one, and the alarm silently restarts from zero.
-- **Why it matters:** That defeats "survives a relaunch" (operator decision P2.verify-human.2), silently, in a narrow window.
-- **Suggested action:** Fold the replay before accepting live records, or merge by ts.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-10-27-QUALITY-WP3-OVERLONG-JSDOC-LINE-IN-VERDICT
 - **Severity:** MINOR
 - **Location:** `src/state/supervisor/verdict.ts` (the one-line JSDoc on the applied mode, ~line 95).
@@ -110,30 +123,12 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit `b69201d` (feature `53141d4`), window `53141d4^..b69201d`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 5 MINOR. Four are auto-backlogged here; the 5th, a stale "drafted, unsent" line in `arch/status-channel-and-surfaces.md` §A.5, was fixed in place before archive.)*
 
-## SURFACE-2026-10-26-QUALITY-WP4-PIP-ISAWAITINGINPUT-REIMPLEMENTS-THE-OVERLAY-RULE
-- **Severity:** MINOR
-- **Location:** `src/pip/pipLayout.ts` `isAwaitingInput`
-- **Finding:** The overlay rule lives in three places: Rust `display_state`, TS `displayStateFor`, and `isAwaitingInput`, which re-implements `attention != null` instead of calling the funnel. Inside the PiP, the dot colour comes from `displayStateFor` but the attention ordering comes from `isAwaitingInput`, and the `pipFanoutWiring` single-source pin covers only the dot.
-- **Why it matters:** A future `Attention` variant that should not mean "needs me" would need three coordinated edits, and the PiP's sort and colour could drift apart.
-- **Suggested action:** Have `isAwaitingInput` call `displayStateFor(update) === "awaiting_input"`, and extend the `pipFanoutWiring` pin to the ordering.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-10-26-QUALITY-WP4-UNWAITED-SEPARATE-TAIL-READ-UNEXPLAINED
 - **Severity:** MINOR
 - **Location:** `src/state/supervisor/useSupervisor.ts`, the verify-human `readTail` fallback.
 - **Finding:** The separate read (supervisor toggle OFF, or no stored mode) calls `transcript_tail` within milliseconds of `Stop`, with no `isTurnComplete` flush wait. CC flushes the final line 74–109 ms after `Stop`. The read is probably still correct, since the late line is end-of-turn assistant text with no skill invocation, but nothing says so, and the adjacent comment cites the flush wait as the reason to reuse the decision's tail.
 - **Why it matters:** It invites a reader to "fix" a path that is fine, or to rely on it for a property it lacks.
 - **Suggested action:** Add one sentence on why the unwaited read is safe for this question (the last *invocation* precedes the flushed line). Or, if a skill-invoking last line is possible, apply the same wait.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-10-26-QUALITY-WP4-TYPE-CYCLE-VERIFYHUMANPAUSE-USESUPERVISOR
-- **Severity:** MINOR
-- **Location:** `src/state/supervisor/verifyHumanPause.ts` (`import type { Decision } from "./useSupervisor"`)
-- **Finding:** This is a type-only two-way module dependency: `useSupervisor.ts` imports `verifyHumanPause.ts`, which imports a type from `useSupervisor.ts`.
-- **Why it matters:** It is harmless at runtime, but it is low-cost tidy-up.
-- **Suggested action:** Move `Decision` into a leaf types module, or have `mayPromote` take its own `{ outcome; reason }` shape.
 - **Priority:** low
 - **Status:** pending
 
@@ -316,13 +311,13 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 *(feature-review-quality on ship commit `778fe72`, window `778fe72^..778fe72`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged.)*
 
 ## SURFACE-2026-09-28-QUALITY-SILENT-SUPERVISOR-MINOR-BATCH
-- **Severity:** MINOR ×3 (item 3 was resolved 2026-11-04 by paydown WP2 and item 4 by paydown WP3; the numbering is kept)
+- **Severity:** MINOR ×2 (item 3 was resolved 2026-11-04 by paydown WP2, item 4 by paydown WP3, and item 5 2026-11-06 by paydown WP8; the numbering is kept)
 - **Findings:**
   1. `ccInputRouting.ts` header, the `Workspace.tsx` comment and the commit message say terminal reports are stripped "here, once, for BOTH readers", but `foldInput` (`unsentInput.ts`) strips them again and its header says it "now strips them first". Two strip sites, two docs that disagree on the owner. Pick one owner, or document the second as defense in depth.
   2. `transcript.ts`: `lastUserProseIndex` / `isUserProseTurn` also count `isMeta` skill-body lines, so the `readTurn` floor can sit mid-turn after a chained `Skill` call, while the `readTurn` header says the boundary is "the last user prose line" and "tool results never … move the boundary". Rename (e.g. `lastTurnBoundaryIndex`) or state the `isMeta` case in the `readTurn` doc.
   3. *(resolved 2026-11-04, paydown WP2)*
   4. *(resolved 2026-11-04, paydown WP3: both files reset the claim store after each test)*
-  5. `useSupervisor.ts` `onTurnEnd`: the parameter is widened ad hoc to `TurnEndSignal & Pick<WorkspaceStatusUpdate, "last_event_at">` instead of adding `last_event_at` to `TurnEndSignal`, whose doc calls it "the slice the turn-end decision reads".
+  5. *(resolved 2026-11-06, paydown WP8: `TurnEndSignal` declares `last_event_at`)*
 - **Priority:** low
 - **Status:** pending
 
@@ -331,17 +326,17 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 *(feature-review-quality on ship commit `dece979`, window `dece979^..dece979`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 8 MINOR, all auto-backlogged. The torn-append MAJOR was resolved 2026-09-28 by task `activity-log-append-tear`; 1 MAJOR + 8 MINOR remain.)*
 
 ## SURFACE-2026-09-28-QUALITY-SUPERVISOR-ACTIVITY-MINOR-BATCH
-- **Severity:** MINOR ×8
+- **Severity:** MINOR ×3 (items 3, 4, 5, 6 and 8 were resolved 2026-11-06 by paydown WP8; the numbering is kept. Items 1–2 are WP14's comment pass, item 7 is WP12's `SupervisorHeaderControl` extraction)
 - **Findings:**
   1. `useSupervisor.ts` (`decideTurn`, the toggle check): the comment says the value is "read PER TURN for the same reason as the gate above", but after the extraction the gate (`host.enabled`) now sits in `onTurnEnd`, not above. Repoint the reference.
   2. `fanOut.ts`: the old `/** What happened for one workspace in a sweep. */` now sits directly above the new `FanOutReason` doc block. Two JSDoc blocks are stacked, and `FanOutOutcome` has lost its doc. Move it.
-  3. `useSupervisor.ts`: two catch sites share their warn text and both record `reason: "sweep-threw"`, so a throw from `fireOne` and a throw from the caller's `onRecycle` are indistinguishable in the record, and the `onRecycle` case drops the decision context it already had (edge, tokens, transcript). Give it its own reason and keep the context.
-  4. `src/cc/workspaceSupervisor.ts` and `SupervisorActivityPopover.tsx` both import `relativeTime` from `components/workspace/diff/diffModel`. A pure readout module now depends on the diff viewer's model. Extract a shared time-format helper.
-  5. `workspaceSupervisorReadout` takes six positional parameters, and call sites read like `(true, false, "x", false, null, origin)`, which is easy to transpose. Use an options object for the trailing four.
-  6. The read limit `2000` appears three times (the inline literal in `Workspace.tsx`'s seed effect, `READ_LINE_LIMIT` in the popover, `MAX_READ_LINES` in Rust). Every turn end in an UNSUPERVISED project also writes a `no-stored-mode` line into the shared file, which dilutes that window, so a quiet supervised project can show "No decisions recorded" although the file holds its records. Share one constant, and consider not recording `no-stored-mode`.
+  3. *(resolved 2026-11-06, paydown WP8: the `onRecycle` throw is its own `recycle-threw` reason and keeps the decision context)*
+  4. *(resolved 2026-11-06, paydown WP8: `relativeTime` lives in `src/state/timeFormat.ts`)*
+  5. *(resolved 2026-11-06, paydown WP8: the readout takes an options object)*
+  6. *(resolved 2026-11-06, paydown WP8: one `ACTIVITY_READ_LINE_LIMIT`, pinned to Rust's `MAX_READ_LINES`; `no-stored-mode` is still recorded, per default D3)*
   7. `Workspace.tsx` (1527 lines) grew by about 70 lines of inline header JSX, plus hint-clock state, popover state and a seed effect, gated in two places (`if (!workflowEnabled)` in the seed effect, `workflowEnabled && visible` in the readout). Extract a `SupervisorHeaderControl` component so the surface's state and gate sit together.
-  8. `SupervisorActivityPopover.tsx`: `role="dialog"` never takes focus, and Esc is handled by a `document` keydown listener. If focus stays in the xterm pane when `▾` is clicked (confirm in WKWebView), the Esc that closes the popover also reaches CC and could interrupt a running turn. Move focus into the popover, or scope the Esc handling.
-- **Priority:** low (#8 is worth a live check first: a leaked Esc is user-visible)
+  8. *(resolved 2026-11-06, paydown WP8: the popover takes focus, scopes its Esc and restores focus; checked live against a positive control)*
+- **Priority:** low
 - **Status:** pending
 
 # paydown-wp9-sync-command-blocking-guard — 2026-09-23

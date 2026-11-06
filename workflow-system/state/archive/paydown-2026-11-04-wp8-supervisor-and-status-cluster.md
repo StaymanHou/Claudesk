@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: Sweep WP8 — Supervisor and status cluster
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-11-06
 **Created:** 2026-11-06
 
 ## Problem Statement
@@ -128,10 +128,10 @@ WP8 fixes them all before WP12 extracts the `Workspace.tsx` code that hosts some
   - [x] verify-codify — no new tests needed: the consuming surface is covered by `supervisorActivityLive.test.tsx` on the real `Workspace` (focus taken, Esc scoped, focus restored, no far-off close), plus the `pipFanoutWiring` ordering pin and the quota Rust test; each was mutation-proved at build and agreed with the live check. Full suite: `pnpm test` → 284 files / 3687 tests passed; Rust unchanged since verify-auto (1069 passed).
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality (ship commit below)
+- **Path:** Feature > finalize (complete)
+- **Active scope:** none (archived)
 - **Blocked:** none
-- **Unvisited:** review-quality → finalize
+- **Unvisited:** none
 - **Open discoveries:** none
 
 ## Test Triage — "Esc closes the popover" (supervisorActivityLive.test.tsx)
@@ -154,6 +154,41 @@ Action: replaced during build P2.3 by "opening takes focus; Esc closes it WITHOU
 - **P2.2** `quota_auto_resume_fired` in `INFORMATIONAL_NOTIFICATION_TYPES` (`[&str; 6]`) with its why; the vocabulary test now pins documented ∪ `OBSERVED_UNDOCUMENTED`; new `quota_auto_resume_fired_is_informational_not_by_fallback` asserts the predicate AND the membership. Mutant (entry removed) → 2 fail. `arch/status-channel-and-surfaces.md` gating line updated; the `/release` vocabulary check reads the Rust lists, so it needs no change.
 - **P2.3** The popover focuses itself (`tabIndex={-1}`), handles Esc in its own `onKeyDown` (`preventDefault` + `stopPropagation`), restores focus to the prior element on close when focus is still its own (or was lost with it), and the `document` keydown listener is gone; `:focus { outline: none }` in `App.css`. Neither document-capture Esc handler interferes (App's acts only on its own overlays; Workspace's handles zoom chords). The old "Esc closes the popover" test dispatched Esc on `document`, which is the leaking design; it was replaced by "opening takes focus; Esc closes WITHOUT reaching the page; focus goes back" and "an Esc aimed at the terminal no longer closes the popover from afar". Four mutants (no focus / Esc bubbles / no restore / document listener back) → each fails.
 
+## Code-Quality Review — paydown-2026-11-04-wp8-supervisor-and-status-cluster
+
+*(ship `4de4e70`, window `4de4e70^..4de4e70`; 0 CRITICAL, 0 MAJOR, 3 MINOR, all auto-backlogged per drive_mode=autopilot after re-checking each claim against the source.)*
+
+### Strengths
+- `seedActivity` fixes the race at its root: replay ∪ buffered live records, merged by a stated identity key, sorted, re-folded from `NO_FAILURES`; the ts-equality dedupe in `publishActivity` was removed rather than patched.
+- `recycle-threw` is its own `HostReason`, with the decision context kept, classified beside `context-pressure-recycle`, and the narrowed `sweep-threw` meaning recorded in arch §F.
+- The new guards follow `source-text-guards.md`: the TS↔Rust pin anchors on the whole declaration and asserts exactly one; the `isAwaitingInput` pin strips comments and asserts the BODY plus a negative `attention` check; the quota test asserts predicate AND membership.
+- Caller-level coverage: a live test publishes before the real `Workspace` mounts.
+- The readout options object removes positional fillers from ~31 call sites and keeps the 3-arg `.length` contract.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [`activityFeed.ts` `seedActivity` + `Workspace.tsx` seed effect] A failed first read (`[]`) still marks the project seeded, so the relaunch replay is lost for that project for the rest of the run; later mounts still read 2000 lines only to discard them. → `SURFACE-2026-11-06-QUALITY-WP8-SEED-ONCE-SWALLOWS-A-FAILED-READ`
+- [`App.css`] The `:focus` rule splits the left-anchor ⚠️ comment from the rule it explains. → `SURFACE-2026-11-06-QUALITY-WP8-POPOVER-FOCUS-RULE-SPLITS-THE-ANCHOR-COMMENT`
+- [`pipLayout.test.ts`] "A `null` off the wire (serde's `None`)" is false: `attention` is `skip_serializing_if = "Option::is_none"`. → `SURFACE-2026-11-06-QUALITY-WP8-NULL-OFF-THE-WIRE-COMMENT-IS-FALSE`
+
+### Assessment
+Well built and debt-reducing: each of the eleven findings is closed at its root, behaviour changes are documented where a reader will look, tests are strong with recorded mutation evidence. The one design gap is that seed-once does not distinguish "read nothing" from "read failed" (minor in practice); the other two are small comment/placement fixes.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives the WIP.
+
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
+
+## Retrospect
+- **What changed in our understanding:** The seed race was not just "re-publish is dropped as older": fixing it properly needed live records BUFFERED until the seed lands, because the alarm fold is order-dependent. Once the merge existed, the ts-equality dedupe had no job left, so two findings closed with one mechanism. The popover leak was real and observable (`Escape@xterm-helper-textarea`) only because a positive control was run first.
+- **Assumptions that held:** every finding was still present at its symbol (none had silently resolved since filing); the value check for `last_event_at` already existed (the dedupe tests), so no new double was needed; `workspaceStatus.ts` imports nothing, so routing the PiP through it kept `pipLayout.ts` pure.
+- **Assumptions that were wrong:** (1) The first positive control used the literal HEAD popover, which imports `relativeTime` from where P1.1 had just moved it, and blanked the app: a control taken from HEAD can break on THIS feature's own export moves. It was rebuilt from the fixed file with only the old behaviour put back. (2) The first "second seed folds nothing" test was an equivalent mutant (re-seeding the same replay recomputes the same alarm); it needed a clearing record between seeds to discriminate. (3) The review found that seed-once also swallows a FAILED read; backlogged for WP12.
+- **Approach delta:** As planned, plus a caller-level live test (`supervisorActivityLive`, publish before mount) that the plan did not list; the plan named only feed-level tests, which cannot see `Workspace.tsx` reverting to per-record publish.
