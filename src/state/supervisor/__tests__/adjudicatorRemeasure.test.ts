@@ -8,8 +8,9 @@
 // ⚠️ WHAT IT PINS IS THE VERDICT, NOT A TARGET. On 2026-10-21 the shipped adjudicator (the
 // shipped prompt, `sonnet` → `claude-sonnet-5-5`) held 95/103 AWAITING turns but let only
 // 126/188 real breaks fire, so it FAILS R-6's 0.80/0.80 bar on the break axis. A change to the
-// prompt or the model makes these recorded answers stale; the remedy is to re-run the probe
-// (`tooling/adjudicator-probe/`) and replace the set, never to edit the expected numbers here.
+// prompt, the tail length or the model makes these recorded answers stale, and the first test
+// fails when one does. The remedy is to re-run the probe (`tooling/adjudicator-probe/`) and
+// replace the set, never to edit the expected numbers here.
 //
 // ⚠️ NON-CIRCULAR BY CONSTRUCTION. Every scored truth is the operator's (a card review, a ruling,
 // or both blind readers agreeing on AWAITING/SKIP) or a mechanical content-free prod that the
@@ -17,13 +18,18 @@
 // 1.000 by identity (`[[detector-scored-against-its-own-table-is-circular]]`).
 
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { ADJUDICATOR_MODEL, adjudicationPrompt } from "../adjudicator";
+import { TAIL_CHARS } from "../fanOut";
 import {
   score,
   type Answer,
   type ScoreItem,
 } from "../../../../tooling/adjudicator-probe/score";
+// The probe's exclusion, which reads production's `SUPERVISED_WORKFLOWS`.
+import { isPolicyExcluded } from "../../../../tooling/adjudicator-probe/triage";
 
 const SET_PATH = resolve(
   __dirname,
@@ -39,7 +45,14 @@ interface CommittedRecord {
   answers?: string[];
 }
 
-const { records } = JSON.parse(readFileSync(SET_PATH, "utf8")) as {
+const { _meta, records } = JSON.parse(readFileSync(SET_PATH, "utf8")) as {
+  _meta: {
+    measuredAgainst?: {
+      promptSha256: string;
+      tailChars: number;
+      model: string;
+    };
+  };
   records: CommittedRecord[];
 };
 const scored = records.filter((r) => r.scoredTruth !== undefined);
@@ -60,6 +73,18 @@ const answers: Answer[] = scored.flatMap((r) =>
 );
 
 describe("the adjudicator re-measurement (M16.5 WP2, frozen evidence)", () => {
+  it("⚠️ measured the adjudicator that ships: same prompt, same tail length, the pinned model", () => {
+    const stale =
+      "the recorded answers measured a different adjudicator; re-run the probe";
+    expect(_meta.measuredAgainst, stale).toEqual({
+      promptSha256: createHash("sha256")
+        .update(adjudicationPrompt(""))
+        .digest("hex"),
+      tailChars: TAIL_CHARS,
+      model: ADJUDICATOR_MODEL,
+    });
+  });
+
   it("is the set the probe scored: 291 turns, 103 AWAITING / 188 BREAK, three runs each", () => {
     expect(scored).toHaveLength(291);
     expect(scored.filter((r) => r.scoredTruth === "AWAITING")).toHaveLength(
@@ -73,7 +98,7 @@ describe("the adjudicator re-measurement (M16.5 WP2, frozen evidence)", () => {
     for (const r of scored) {
       if (r.labelSource !== undefined) expect(allowed).toContain(r.labelSource);
       else expect(r.truthBasis).toMatch(/^prod-(text|command|complaint)$/);
-      expect(r.edgeId).not.toMatch(/^[PI]/);
+      expect(isPolicyExcluded(r.edgeId)).toBe(false);
     }
   });
 

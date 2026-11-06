@@ -27,9 +27,32 @@ export interface Answer {
   readonly run: number;
   /** The parsed answer, or null when the call failed or was unparseable. */
   readonly answer: Adjudication | null;
-  readonly basis: "model" | "error" | "timeout" | "unparseable";
+  /** `model-mismatch`: answered by anything but the pin alone (`answeredByPinOnly`). */
+  readonly basis:
+    | "model"
+    | "error"
+    | "timeout"
+    | "unparseable"
+    | "model-mismatch";
   readonly models: readonly string[];
   readonly raw: string;
+}
+
+/**
+ * Whether a resume must ask again. A spawn or CC error measures the machine or the account (a
+ * usage-limit outage returns `is_error` with zero tokens), and a mismatch measures another model,
+ * so neither is a measurement of the prompt. A timeout and an unparseable reply ARE: production
+ * withholds on both. `score()` keeps the LAST answer per key, so a retry supersedes.
+ */
+export function isRetryable(a: Pick<Answer, "basis">): boolean {
+  return a.basis === "error" || a.basis === "model-mismatch";
+}
+
+/** The distinct run numbers, in NUMERIC order (a bare `.sort()` puts run 10 before run 2). */
+export function distinctRuns(
+  answers: readonly Pick<Answer, "run">[],
+): number[] {
+  return [...new Set(answers.map((a) => a.run))].sort((a, b) => a - b);
 }
 
 /** What production does with an answer: anything but an explicit PROCEED withholds. */
@@ -93,6 +116,7 @@ export function score(
     error: 0,
     timeout: 0,
     unparseable: 0,
+    "model-mismatch": 0,
   };
   for (const item of items) {
     const a = byKey.get(item.key);

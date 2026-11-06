@@ -6,7 +6,7 @@
 // ⚠️ Every piece of row data reaches the DOM through `textContent`, never `innerHTML`. A tail is
 // arbitrary transcript text, so it can contain markup; it must render as text.
 
-import type { Label, Proposal, SheetRow } from "./labelSheet";
+import { LABELS, type Label, type Proposal, type SheetRow } from "./labelSheet";
 
 export interface Card extends SheetRow {
   readonly proposal: Proposal;
@@ -24,8 +24,6 @@ export function embedJson(value: unknown): string {
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029");
 }
-
-const LABELS: readonly Label[] = ["AWAITING", "BREAK", "SKIP"];
 
 /** Shown on every card: the operator asked what the labels mean at the first sample. */
 export const LEGEND =

@@ -195,6 +195,18 @@ export function assertPinnedModel(actual: string | null | undefined): void {
   }
 }
 
+/**
+ * Whether a reply came from EXACTLY the pin, alone. An extra model (an auxiliary call CC starts
+ * making) is as unmeasured as a different one. Shared with the adjudicator probe's runner, so a
+ * re-measurement rejects the replies production would.
+ */
+export function answeredByPinOnly(
+  models: readonly string[],
+  pin: string = ADJUDICATOR_MODEL,
+): boolean {
+  return models.length === 1 && models[0] === pin;
+}
+
 /** What the caller supplies to run one adjudication. Injected so this module stays pure. */
 export interface AdjudicatorDeps {
   /**
@@ -286,9 +298,8 @@ export async function adjudicate(
       resolved,
     );
   }
-  // ⚠️ EXACTLY the pin, alone. An extra model (an auxiliary call CC starts making) is as
-  // unmeasured as a different one, so it withholds too, and the badge alarm makes it loud.
-  if (envelope.models.length !== 1 || envelope.models[0] !== model) {
+  // ⚠️ Anything but the pin alone withholds, and the badge alarm makes it loud.
+  if (!answeredByPinOnly(envelope.models, model)) {
     return withheld(
       "withheld-on-model-mismatch",
       `answered by ${resolved ?? "an unreported model"}, pinned "${model}". Re-measure before changing the pin.`,

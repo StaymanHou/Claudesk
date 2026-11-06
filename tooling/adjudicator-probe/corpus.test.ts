@@ -64,6 +64,18 @@ describe("projectClassOf", () => {
     );
     expect(projectClassOf("-")).toBe("other");
   });
+
+  it("⚠️ keeps tails only for the exact claudesk slugs, never a sibling claudesk-* dir", () => {
+    expect(projectClassOf("-Users-stayman-Personal-projects-claudesk")).toBe(
+      "claudesk",
+    );
+    for (const sibling of [
+      "-Users-stayman-Personal-projects-claudesk-scratch-scratch-a",
+      "-Users-stayman-Personal-projects-claudesk-worktree",
+      "-Users-stayman-Personal-projects-claudeskfork",
+    ])
+      expect(projectClassOf(sibling)).toBe("personal");
+  });
 });
 
 describe("isScratchSlug", () => {

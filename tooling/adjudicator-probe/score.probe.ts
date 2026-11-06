@@ -27,17 +27,21 @@ import { adjudicateOnce } from "./runner";
 import type { Candidate } from "./corpus";
 import type { SheetRow } from "./labelSheet";
 import { keyOf } from "./redact";
-import { BARS, flipRate, score, type Answer, type ScoreItem } from "./score";
+import {
+  BARS,
+  distinctRuns,
+  flipRate,
+  isRetryable,
+  score,
+  type Answer,
+  type ScoreItem,
+} from "./score";
 import { isPolicyExcluded } from "./triage";
-import { OUT, REPO } from "./paths";
+import { OUT, wipOrArchive } from "./paths";
+import { frozenLabelsRefusal } from "./wp3";
 
-const WIP = join(
-  REPO,
-  "workflow-system",
-  "state",
-  "wip",
-  "m16-5-wp2-adjudicator-remeasure.md",
-);
+// WP2's WIP records the frozen labels' sha256; it is in `archive/` once finalize has run.
+const WP2_WIP = "m16-5-wp2-adjudicator-remeasure.md";
 const CONCURRENCY = 4;
 
 const read = <T>(name: string): T =>
@@ -49,11 +53,12 @@ interface Frozen {
 
 it("set", () => {
   const body = readFileSync(join(OUT, "labels.frozen.json"), "utf8");
+  const refusal = frozenLabelsRefusal(
+    body,
+    readFileSync(wipOrArchive(WP2_WIP), "utf8"),
+  );
+  if (refusal) throw new Error(refusal);
   const sha = createHash("sha256").update(body).digest("hex");
-  if (!readFileSync(WIP, "utf8").includes(sha))
-    throw new Error(
-      `labels.frozen.json hashes to ${sha}, which the WIP does not record — refusing`,
-    );
   const frozen = JSON.parse(body) as Frozen;
   const rows = new Map(read<SheetRow[]>("rows.json").map((r) => [r.id, r]));
   const { candidates, m15Truth } = read<{
@@ -111,7 +116,7 @@ it("score", async () => {
   const { items } = read<{ items: ScoreItem[] }>("score-set.json");
   const done = new Set(
     readAnswers()
-      .filter((a) => a.run === run)
+      .filter((a) => a.run === run && !isRetryable(a))
       .map((a) => a.key),
   );
   // WP2_LIMIT caps a run for a smoke test; the rest resumes on the next invocation.
@@ -139,7 +144,7 @@ it("report", () => {
     frozenSha256: string;
   }>("score-set.json");
   const answers = readAnswers();
-  const runs = [...new Set(answers.map((a) => a.run))].sort();
+  const runs = distinctRuns(answers);
   const models: Record<string, number> = {};
   for (const a of answers)
     for (const m of a.models) models[m] = (models[m] ?? 0) + 1;

@@ -112,6 +112,27 @@ describe("triage + assemble", () => {
     expect(labels.R2).toEqual({ label: "AWAITING", source: "operator-ruling" });
   });
 
+  it("excludes every product and incident edge the real corpus carries, and nothing else", () => {
+    // The 27 distinct edge ids in WP2's mined candidates (2026-10-21).
+    const corpus =
+      "F10 F10b F14 F15 F16 F23 F38 F39 F40 F5 F6 F7 F8 F9b I14 I17 I18 P3 P5 P7 P9 S22 S23 T2 T5a T5b T6".split(
+        " ",
+      );
+    expect(corpus.filter(isPolicyExcluded)).toEqual([
+      "I14",
+      "I17",
+      "I18",
+      "P3",
+      "P5",
+      "P7",
+      "P9",
+    ]);
+  });
+
+  it("excludes an id the machine does not know", () => {
+    expect(isPolicyExcluded("F999")).toBe(true);
+  });
+
   it("excludes product and incident edges only", () => {
     expect(["P3", "I18", "F8", "T2", "S6"].map(isPolicyExcluded)).toEqual([
       true,
@@ -127,6 +148,22 @@ describe("triage + assemble", () => {
     expect(sampleIds(ids, 10, 3)).toEqual(sampleIds(ids, 10, 3));
     expect(sampleIds(ids, 10, 3)).not.toEqual(sampleIds(ids, 10, 4));
     expect(sampleIds(ids, 99, 3)).toHaveLength(50);
+  });
+
+  it("draws the same sample it drew before the PRNG was shared (pinned output)", () => {
+    const ids = Array.from({ length: 50 }, (_, i) => `R${i}`);
+    expect(sampleIds(ids, 10, 3)).toEqual([
+      "R10",
+      "R18",
+      "R19",
+      "R2",
+      "R23",
+      "R34",
+      "R4",
+      "R43",
+      "R48",
+      "R5",
+    ]);
   });
 });
 

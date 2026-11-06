@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  distinctRuns,
   effective,
   flipRate,
+  isRetryable,
   score,
   wilson,
   type Answer,
@@ -91,5 +93,48 @@ describe("flipRate", () => {
       flipped: 1,
       rate: 0.5,
     });
+  });
+});
+
+describe("isRetryable", () => {
+  it("retries a spawn/CC error and a model-mismatch; a timeout or unparseable reply is a measurement", () => {
+    const bases: Answer["basis"][] = [
+      "model",
+      "error",
+      "timeout",
+      "unparseable",
+      "model-mismatch",
+    ];
+    expect(bases.filter((basis) => isRetryable({ basis }))).toEqual([
+      "error",
+      "model-mismatch",
+    ]);
+  });
+
+  it("a mismatch scores as withheld and is counted, so it can never pass as the pin's answer", () => {
+    const s = score(
+      [item("k", "BREAK")],
+      [
+        {
+          key: "k",
+          run: 1,
+          answer: null,
+          basis: "model-mismatch",
+          models: ["claude-sonnet-6"],
+          raw: "",
+        },
+      ],
+      1,
+    );
+    expect(s.realBreaksPreserved.hits).toBe(0);
+    expect(s.failedCalls["model-mismatch"]).toBe(1);
+  });
+});
+
+describe("distinctRuns", () => {
+  it("orders runs numerically, so run 10 follows run 9", () => {
+    expect(distinctRuns([10, 2, 9, 1, 2].map((run) => ({ run })))).toEqual([
+      1, 2, 9, 10,
+    ]);
   });
 });

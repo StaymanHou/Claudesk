@@ -1,6 +1,6 @@
 // M16.5 WP2 Phase 1 — mine the fire candidates (WIP P1.2–P1.5).
 //
-// Writes `tmp/adjudicator-probe/candidates.json`, full tails and all. It is gitignored; the
+// Writes `OUT/candidates.json` (`paths.ts`), full tails and all. `OUT` is outside the repo; the
 // committable, redacted set is `redact.probe.ts`'s job.
 
 import { it } from "vitest";

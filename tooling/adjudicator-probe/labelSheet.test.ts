@@ -54,4 +54,12 @@ describe("buildRows", () => {
       keys,
     );
   });
+
+  it("builds the same rows it built before the PRNG was shared (pinned order)", () => {
+    expect(Object.values(keys).map((k) => k.key)).toEqual(
+      "s15 s1 s19 s4 s9 s29 s13 s21 s111 s26 s6 s27 s8 s133 s18 s28 s3 s5 s25 s20 s101 s22 s7 s16 s17 s24 s126 s11 s10 s23 s2 s0 s14 s12"
+        .split(" ")
+        .map((s) => `${s}:${s.slice(1)}`),
+    );
+  });
 });

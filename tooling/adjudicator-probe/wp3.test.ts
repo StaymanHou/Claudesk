@@ -39,13 +39,14 @@ describe("frozenLabelsRefusal", () => {
 });
 
 describe("scoredKeys", () => {
-  it("counts model, timeout and unparseable rows as done, but retries error rows", () => {
+  it("counts model, timeout and unparseable rows as done, but retries error and mismatch rows", () => {
     const done = scoredKeys(
       [
         row("model", "model"),
         row("timeout", "timeout"),
         row("unparseable", "unparseable"),
         row("error", "error"),
+        row("mismatch", "model-mismatch"),
       ],
       "h5",
       "heldOut",

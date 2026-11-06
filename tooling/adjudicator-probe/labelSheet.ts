@@ -38,8 +38,11 @@ export interface Proposal {
   readonly reason: string;
 }
 
-/** A deterministic PRNG, so a rebuilt sheet has the same rows in the same order. */
-function mulberry32(seed: number): () => number {
+/**
+ * mulberry32: a small, seedable PRNG, so a rebuilt sheet, sample or split is identical. The one
+ * copy every seeded step in this probe uses (`buildRows`, `sampleIds`, `wp3.probe.ts`'s split).
+ */
+export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -50,7 +53,8 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function shuffle<T>(xs: readonly T[], rand: () => number): T[] {
+/** Fisher-Yates over a copy, drawing from `rand`. */
+export function shuffle<T>(xs: readonly T[], rand: () => number): T[] {
   const out = [...xs];
   for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));

@@ -22,36 +22,19 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { CANDIDATES, candidateHash } from "./candidates";
+import { mulberry32, shuffle } from "./labelSheet";
 import { adjudicateOnce } from "./runner";
-import { score, type ScoreItem } from "./score";
+import { distinctRuns, score, type ScoreItem } from "./score";
 import { frozenLabelsRefusal, scoredKeys, type WP3Answer } from "./wp3";
-import { OUT, REPO } from "./paths";
+import { OUT, wipOrArchive } from "./paths";
 
-const WIP = join(
-  REPO,
-  "workflow-system/state/wip/m16-5-wp3-supervisor-correctness.md",
-);
+const WIP = "m16-5-wp3-supervisor-correctness.md";
 const SPLIT = join(OUT, "wp3-split.json");
 const ANSWERS = join(OUT, "wp3-answers.jsonl");
-// WP2 recorded the frozen labels' sha256 in its WIP, which is archived now.
-const WP2_WIP = join(
-  REPO,
-  "workflow-system/state/archive/m16-5-wp2-adjudicator-remeasure.md",
-);
+// WP2 recorded the frozen labels' sha256 in its WIP.
+const WP2_WIP = "m16-5-wp2-adjudicator-remeasure.md";
 const SEED = 20261026;
 const CONCURRENCY = 4;
-
-/** mulberry32: a small, seedable PRNG, so the split is reproducible from the recorded seed. */
-function rng(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 interface Split {
   readonly seed: number;
@@ -80,7 +63,7 @@ function readAnswers(): WP3Answer[] {
 function assertFrozenLabels(): void {
   const refusal = frozenLabelsRefusal(
     readFileSync(join(OUT, "labels.frozen.json"), "utf8"),
-    readFileSync(WP2_WIP, "utf8"),
+    readFileSync(wipOrArchive(WP2_WIP), "utf8"),
   );
   if (refusal) throw new Error(refusal);
 }
@@ -91,18 +74,18 @@ it("split", () => {
     throw new Error(
       `${SPLIT} exists — the split is written once and never re-rolled`,
     );
-  const next = rng(SEED);
+  // ONE generator across both strata, in this order, so the split matches the recorded seed.
+  const next = mulberry32(SEED);
   const dev: string[] = [];
   const heldOut: string[] = [];
   for (const truth of ["AWAITING", "BREAK"] as const) {
-    const keys = items()
-      .filter((i) => i.truth === truth)
-      .map((i) => i.key)
-      .sort();
-    for (let i = keys.length - 1; i > 0; i--) {
-      const j = Math.floor(next() * (i + 1));
-      [keys[i], keys[j]] = [keys[j], keys[i]];
-    }
+    const keys = shuffle(
+      items()
+        .filter((i) => i.truth === truth)
+        .map((i) => i.key)
+        .sort(),
+      next,
+    );
     const half = Math.ceil(keys.length / 2);
     dev.push(...keys.slice(0, half));
     heldOut.push(...keys.slice(half));
@@ -148,7 +131,7 @@ it("final", async () => {
   if (!candidate || process.env.WP3_FINAL !== "1")
     throw new Error("set WP3_CANDIDATE and WP3_FINAL=1");
   const hash = candidateHash(candidate);
-  if (!readFileSync(WIP, "utf8").includes(hash))
+  if (!readFileSync(wipOrArchive(WIP), "utf8").includes(hash))
     throw new Error(
       `candidate "${candidate}" (${hash}) is not recorded in the WIP — record the choice before the held-out run`,
     );
@@ -173,7 +156,7 @@ it("report", () => {
     ];
     const keys = new Set(split[half]);
     const its = all.filter((i) => keys.has(i.key));
-    const runs = [...new Set(as.map((a) => a.run))].sort();
+    const runs = distinctRuns(as);
     const scores = runs.map((r) => score(its, as, r));
     const mean = (f: (s: (typeof scores)[number]) => number) =>
       scores.reduce((t, s) => t + f(s), 0) / scores.length;

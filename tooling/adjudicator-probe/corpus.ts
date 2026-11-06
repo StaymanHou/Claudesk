@@ -42,9 +42,18 @@ export function isScratchSlug(slug: string): boolean {
 export type ProjectClass = "claudesk" | "personal" | "work" | "other";
 
 /** Which tails may be committed is decided by this, so it is deliberately coarse. */
+/**
+ * The ONLY slugs whose tails may be committed unredacted: this repo and its `src-tauri` cwd.
+ * ⚠️ Exact, never a prefix: a sibling `claudesk-*` directory (a worktree, a fork, the scratch
+ * workspaces' new home) would otherwise be committed with no forbidden-token scan.
+ */
+export const CLAUDESK_SLUGS: ReadonlySet<string> = new Set([
+  "-Users-stayman-Personal-projects-claudesk",
+  "-Users-stayman-Personal-projects-claudesk-src-tauri",
+]);
+
 export function projectClassOf(slug: string): ProjectClass {
-  if (slug.startsWith("-Users-stayman-Personal-projects-claudesk"))
-    return "claudesk";
+  if (CLAUDESK_SLUGS.has(slug)) return "claudesk";
   if (slug.includes("-Work-")) return "work";
   if (slug.startsWith("-Users-stayman-Personal-")) return "personal";
   return "other";

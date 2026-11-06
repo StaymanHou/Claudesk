@@ -10,7 +10,15 @@
 // policy rulings ("product / incident workflow shouldn't auto chain"); those workflows leave the
 // adjudicator set, because a fire there is wrong whatever the turn's text says.
 
-import type { Label, Proposal, SheetRow } from "./labelSheet";
+import { SUPERVISED_WORKFLOWS } from "../../src/state/supervisor/verdict";
+import { edgeById } from "../../src/state/workflowMachine/edges";
+import {
+  mulberry32,
+  shuffle,
+  type Label,
+  type Proposal,
+  type SheetRow,
+} from "./labelSheet";
 
 /** The bar the uncontested sample must clear (operator ruling, WIP P2.6). */
 export const SAMPLE_AGREEMENT_BAR = 0.9;
@@ -30,12 +38,14 @@ export function hasNoEvidence(row: Pick<SheetRow, "nextText">): boolean {
 }
 
 /**
- * Workflows the supervisor must not chain at all (design prior
- * `supervisor-chains-execution-workflows-only`). Their rows measure the policy, not the
- * adjudicator, so they are excluded from its score.
+ * An edge in a workflow the supervisor never chains (production's `SUPERVISED_WORKFLOWS`, design
+ * prior `supervisor-chains-execution-workflows-only`). Its rows measure the policy, not the
+ * adjudicator, so they are excluded from its score. Keyed on the edge's workflow, as production
+ * is, never on the id's letter; an unknown id is excluded, since production cannot supervise it.
  */
 export function isPolicyExcluded(edgeId: string): boolean {
-  return edgeId.startsWith("P") || edgeId.startsWith("I");
+  const edge = edgeById(edgeId);
+  return edge === undefined || !SUPERVISED_WORKFLOWS.has(edge.workflow);
 }
 
 export interface Triage {
@@ -117,20 +127,9 @@ export function sampleIds(
   n: number,
   seed: number,
 ): string[] {
-  let a = seed >>> 0;
-  const rand = () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  const pool = [...ids];
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  return pool.slice(0, Math.min(n, pool.length)).sort();
+  return shuffle(ids, mulberry32(seed))
+    .slice(0, Math.min(n, ids.length))
+    .sort();
 }
 
 export type LabelSource =

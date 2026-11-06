@@ -2,7 +2,7 @@
 // (the probe file itself is excluded from `verify:auto` because it spawns `claude -p`).
 
 import { createHash } from "node:crypto";
-import type { Answer } from "./score";
+import { isRetryable, type Answer } from "./score";
 
 export interface WP3Answer extends Answer {
   readonly candidate: string;
@@ -27,9 +27,8 @@ export function frozenLabelsRefusal(
 
 /**
  * The keys already scored for one candidate, half and run, so a re-run scores only the rest.
- * ⚠️ An `error` row is RETRIED, not done: a usage-limit outage returns `is_error` with zero
- * tokens and scores as AWAITING, which measured the account instead of the prompt (v3 lost 37
- * rows, v4 all 146, on 2026-10-26). `score()` keeps the LAST answer per key, so a retry supersedes.
+ * ⚠️ A retryable row ({@link isRetryable}) is not done: a usage-limit outage scored as AWAITING
+ * once measured the account instead of the prompt (v3 lost 37 rows, v4 all 146, on 2026-10-26).
  */
 export function scoredKeys(
   answers: readonly WP3Answer[],
@@ -44,7 +43,7 @@ export function scoredKeys(
           a.hash === hash &&
           a.half === half &&
           a.run === run &&
-          a.basis !== "error",
+          !isRetryable(a),
       )
       .map((a) => a.key),
   );

@@ -5,7 +5,7 @@
 // read the turn twice: with the REAL `readTurn` (the emitted-token rule,
 // `extractEmittedTransitionId`), and with the pre-3.1 rule
 // (the last `TRANSITION:` anywhere in the message), reimplemented below as the baseline.
-// Writes `tmp/adjudicator-probe/token-split.json` and prints the split. Every turn the new
+// Writes `OUT/token-split.json` (`paths.ts`) and prints the split. Every turn the new
 // rule withholds is listed with its offending line, so the real verdicts it loses can be read.
 
 import { it } from "vitest";

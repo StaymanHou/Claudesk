@@ -40,6 +40,11 @@
    "total": 96,
    "refound": 77
   },
+  "measuredAgainst": {
+   "promptSha256": "d16e986d1f38be734744d7f52fbf7d8c2d5f7c59d37052ca4a20e54fef60e282",
+   "tailChars": 1200,
+   "model": "claude-sonnet-5-5"
+  },
   "redaction": "Only claudesk records carry tails and the operator's reply. Every other record keeps workflow vocabulary and an opaque key; rebuild its text locally with mine.probe.ts."
  },
  "records": [

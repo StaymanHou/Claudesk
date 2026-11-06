@@ -1,9 +1,12 @@
-// M16.5 WP2 — build the committable set (WIP P1.6) from `tmp/adjudicator-probe/candidates.json`.
+// M16.5 WP2 — build the committable set (WIP P1.6) from `OUT/candidates.json` (`paths.ts`).
 // Re-run after each later phase; it carries whatever labels and answers exist by then.
 
 import { it } from "vitest";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { adjudicationPrompt } from "../../src/state/supervisor/adjudicator";
+import { TAIL_CHARS } from "../../src/state/supervisor/fanOut";
 import type { Candidate } from "./corpus";
 import { redact, redactionViolations } from "./redact";
 import { COMMITTED_SET, OUT } from "./paths";
@@ -51,6 +54,7 @@ it("redact", () => {
     ).map((i) => [i.key, i.truth]),
   );
   const answers = new Map<string, Record<number, string>>();
+  const resolvedModels = new Set<string>();
   const answersPath = join(OUT, "answers.jsonl");
   if (existsSync(answersPath))
     for (const line of readFileSync(answersPath, "utf8").split("\n")) {
@@ -59,7 +63,9 @@ it("redact", () => {
         key: string;
         run: number;
         answer: string | null;
+        models: string[];
       };
+      for (const m of a.models) resolvedModels.add(m);
       if (!answers.has(a.key)) answers.set(a.key, {});
       answers.get(a.key)![a.run] = a.answer ?? "FAILED";
     }
@@ -78,7 +84,7 @@ it("redact", () => {
         ? {
             answers: Object.keys(runs)
               .map(Number)
-              .sort()
+              .sort((a, b) => a - b)
               .map((n) => runs[n]),
           }
         : {}),
@@ -91,11 +97,30 @@ it("redact", () => {
   if (violations.length > 0)
     throw new Error(`redaction failed:\n${violations.slice(0, 20).join("\n")}`);
 
+  // ⚠️ What the recorded answers measured. The replay test asserts these equal the live values,
+  // so a changed prompt, tail length or pin fails it ("re-run the probe") instead of leaving it
+  // green about an adjudicator that no longer ships. Run this right after `score`.
+  if (resolvedModels.size > 1)
+    throw new Error(
+      `answers came from ${[...resolvedModels].join(", ")} — one set must measure one model`,
+    );
+  const measuredAgainst =
+    resolvedModels.size === 1
+      ? {
+          promptSha256: createHash("sha256")
+            .update(adjudicationPrompt(""))
+            .digest("hex"),
+          tailChars: TAIL_CHARS,
+          model: [...resolvedModels][0],
+        }
+      : undefined;
+
   const { m15, ...meta } = src._meta as { m15: Record<string, unknown> };
   const out = {
     _meta: {
       ...meta,
       m15: { total: m15.total, refound: m15.refound },
+      ...(measuredAgainst ? { measuredAgainst } : {}),
       redaction:
         "Only claudesk records carry tails and the operator's reply. Every other record keeps " +
         "workflow vocabulary and an opaque key; rebuild its text locally with mine.probe.ts.",
