@@ -19,11 +19,16 @@
 // switch, which is the whole point of WP0's ruling 3 (*do NOT flip `workflow_features_enabled` as
 // a stopgap* — the blunt gate also hides the Docs panel and the rest of the workflow layer).
 //
-// ## ⚠️ PHASE 3 EXTENDS THIS FUNCTION — it does not add a second one
-// D-5's suppressed-state marker is a THIRD state of this same readout, not a new derivation.
-// Arm 6 of the OFF-invariant guard polices registries by subject; a second derivation would be a
-// second subject to register and a second place the gate could be forgotten. When Phase 3 lands,
-// add its state to {@link WorkspaceSupervisorReadout} here.
+// ## ⚠️ ONE DERIVATION PER SURFACE — extend it, do not add a sibling
+// D-5's suppressed-state marker is a THIRD state of the header readout, not a new derivation.
+// Arm 6 of the OFF-invariant guard polices registries by subject; a second derivation for the
+// same surface would be a second subject to register and a second place the gate could be
+// forgotten. So header state goes into {@link WorkspaceSupervisorReadout}.
+//
+// The turn readout's `⚙` is a DIFFERENT surface (terminal chrome, rendered by `Workspace`), so it
+// has its own gated derivation, {@link supervisorTurnBadge}, registered as arm 6's third subject.
+// Folding it into the header readout made each surface call that one function with only half its
+// inputs, which left fields that are always empty (paydown 2026-11-04 WP13b).
 
 import {
   describeDecision,
@@ -63,15 +68,6 @@ export interface WorkspaceSupervisorReadout {
   readonly title: string;
   /** `aria-label` for the control; names the workspace so screen readers disambiguate. */
   readonly label: string;
-  /**
-   * Turn attribution — the `⚙` the turn readout shows when the SELECTED turn was started by the
-   * supervisor, or `null` when it was not (or nothing is selected).
-   *
-   * ⚠️ **Part of THIS readout, not a second derivation** (this module's header rule): the turn
-   * readout itself is ungated terminal chrome, so the `⚙` beside it must inherit the gate from
-   * here. With the gate OFF the whole readout is `null`, and so is this.
-   */
-  readonly turnBadge: SupervisorTurnBadge | null;
   /**
    * M16.5 WP3 — the structural-failure alarm, or `null`: a short marker text and the sentence
    * the tooltip leads with. Part of THIS readout, so it inherits the gate (no seventh arm).
@@ -130,8 +126,6 @@ export interface WorkspaceSupervisorReadoutOptions {
     readonly record: ActivityRecord;
     readonly nowMs: number;
   } | null;
-  /** The supervisor's origin for the turn the turn readout has selected. */
-  readonly turnOrigin?: SupervisorOrigin | null;
   /** The project's structural-failure alarm (`failureAlarm.ts`). */
   readonly failure?: SupervisorAlarm | null;
 }
@@ -163,7 +157,6 @@ export function workspaceSupervisorReadout(
   {
     unsentInput = false,
     last = null,
-    turnOrigin = null,
     failure = null,
   }: WorkspaceSupervisorReadoutOptions = {},
 ): WorkspaceSupervisorReadout | null {
@@ -222,14 +215,32 @@ export function workspaceSupervisorReadout(
     label:
       `Workflow supervisor for ${workspaceName}: ${enabled ? "on" : "off"}` +
       `${suppressed ? ", currently held back by unsent input" : ""}. Click to toggle.`,
-    // ⚠️ Shown whatever the toggle says NOW: the mark is history ("the supervisor started this
-    // turn"), and turning supervision off afterwards does not change who started it.
-    turnBadge: turnOrigin
-      ? {
-          text: SUPERVISOR_TURN_GLYPH,
-          title: `The workflow supervisor started this turn (it ran ${turnOrigin.command}).`,
-        }
-      : null,
     alarm,
+  };
+}
+
+/**
+ * Derive the turn readout's supervisor mark: the `⚙` shown when the SELECTED turn was started by
+ * the supervisor, or `null` when it was not (or nothing is selected).
+ *
+ * ⚠️ **Returns `null` when the gate is OFF.** The turn readout itself is UNGATED terminal chrome,
+ * so the mark beside it must take its gate from here; reading the origin directly at the render
+ * site would show it with workflow features off. Arm 6 of the OFF-invariant guard registers this
+ * as its own subject.
+ *
+ * ⚠️ **It does NOT take the project's supervisor toggle.** The mark is history ("the supervisor
+ * started this turn"), and turning supervision off afterwards does not change who started it.
+ *
+ * @param gateEnabled `workflow_features_enabled` (and centre stage) — when false there is no mark
+ * @param turnOrigin the supervisor's origin for the selected turn, or `null`
+ */
+export function supervisorTurnBadge(
+  gateEnabled: boolean,
+  turnOrigin: SupervisorOrigin | null,
+): SupervisorTurnBadge | null {
+  if (!gateEnabled || !turnOrigin) return null;
+  return {
+    text: SUPERVISOR_TURN_GLYPH,
+    title: `The workflow supervisor started this turn (it ran ${turnOrigin.command}).`,
   };
 }

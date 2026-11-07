@@ -417,8 +417,9 @@ started, it shows `⚙` with a tooltip naming the command. Mechanism (`src/state
   misclassification that raised the unsent-input watermark. `routeCcInput` now strips them once,
   for both readers (`src/state/supervisor/terminalReports.ts`), and `Workspace` ignores a chunk
   that was reports only. The PTY still receives every byte.
-- **Gated through the readout**: the `⚙` renders from `workspaceSupervisorReadout(…).turnBadge`,
-  never from the pane's origin directly, because the turn readout itself is ungated.
+- **Gated through its own derivation**: the `⚙` renders from `supervisorTurnBadge(gate, origin)`
+  (`src/cc/workspaceSupervisor.ts`), never from the pane's origin directly, because the turn readout
+  itself is ungated. It takes no supervisor toggle: the mark records who started the turn.
 - Not tagged: the command a context-pressure recycle defers into the fresh session.
 
 ---
@@ -434,13 +435,16 @@ fire is the irreversible half.
 
 ⚠️ **The reversing condition, and how it actually played out:** M15 recorded that an
 operator-visible supervisor surface would own a SEVENTH arm. **In practice every such surface
-derives from ONE function, `workspaceSupervisorReadout`, policed as arm 6's `WORKSPACE-SUPERVISOR`
-subject.** That covers the toggle (M14 WP0), the suppressed badge (WP0 Phase 3), and the
-activity hint, `▾` trigger and popover (2026-09-25), all rendered inside the block that derivation
-gates, and the turn readout's `⚙` (2026-09-28), which renders outside that block but only from the
-readout's `turnBadge` field. The readout's own header requires extending it rather than adding a second derivation, so
-the `armSubjects` pin (`offInvariantGuard.test.ts` → `it("still polices all six registries")`)
-stays at **9**. ⚠️ **A supervisor surface that does NOT render from that readout would still own a
+derives from a gated function policed as an arm-6 subject**, so none owns an arm. The header
+surfaces derive from `workspaceSupervisorReadout` (subject `WORKSPACE-SUPERVISOR`): the toggle (M14
+WP0), the suppressed badge (WP0 Phase 3), and the activity hint, `▾` trigger and popover
+(2026-09-25), all rendered inside the block that derivation gates. The turn readout's `⚙`
+(2026-09-28) renders on a different surface, the turn nav, and derives from `supervisorTurnBadge`
+(subject `WORKSPACE-TURN-MARK`). It was a `turnBadge` field of the header readout until paydown
+2026-11-04 WP13b, which left each surface calling the readout with half its inputs, so WP13b split
+it out and bumped the `armSubjects` pin (`offInvariantGuard.test.ts` → `it("still polices all six
+registries")`) from 9 to **10**. The rule the readout's header now states: one derivation per
+surface, extended rather than given a sibling. ⚠️ **A supervisor surface that does NOT render from that readout would still own a
 new subject, and the pin must bump in the same change.** The backstop is real but
 partial: the guard's allowlist is **all of `src/**`**, so a supervisor panel/menu-id/chord *of a
 shape arms 1–3 already select on* trips today — a genuinely novel shape would not.
@@ -496,7 +500,7 @@ and the supervisor did not fire, it asks the backend for the display overlay
 | Detector vs. the real corpus | `verdictReplay.test.ts` — the real `decideVerdict` over the frozen 2,284-record fixture, **34/36** on the non-circular set, both misses pinned as correct, non-vacuity guard |
 | Negative arm | `verdict.test.ts` — PAUSE, `ESCALATE`, unmapped edge, no-stored-mode, already-chained, and the **verify-human GATE** |
 | Recycle conditions | `verdict.test.ts` — all three FIRE-not-recycle arms + strictly-greater threshold |
-| Gate OFF | `offInvariantGuard.test.ts` (6 arms / 9 subjects) + Rust-side fail-closed `resolve_gate_enabled` |
+| Gate OFF | `offInvariantGuard.test.ts` (6 arms / 10 subjects) + Rust-side fail-closed `resolve_gate_enabled` |
 
 ⚠️ **SCORING AGAINST THE FULL FIXTURE WOULD BE CIRCULAR** — its 2,284 labels were produced by the
 **same policy table** the detector uses, so a 1.000 there is an arithmetic identity, not evidence.

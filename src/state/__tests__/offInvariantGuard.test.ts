@@ -7,7 +7,10 @@ import { MENU_IDS } from "../../menu/menuBridge";
 import { cellLines } from "../../cc/driveMode";
 // ARM 6 (M13.5 WP4) — imported from production, not stubbed, same as the arms above.
 import { workspaceDriveModeReadout } from "../../cc/workspaceDriveMode";
-import { workspaceSupervisorReadout } from "../../cc/workspaceSupervisor";
+import {
+  supervisorTurnBadge,
+  workspaceSupervisorReadout,
+} from "../../cc/workspaceSupervisor";
 import { rowAffordances } from "../../components/picker/announceRow";
 // ARM 5 (M13 WP2) — the skill-button row. Imported from production, not stubbed; the
 // not-vacuous section below pins that.
@@ -61,8 +64,9 @@ import type { AnnounceMap } from "../predictAction";
 //   5. SKILL-ROW  — the workspace header's skill-button row: `showSkillButtons(…, false)`
 //                   plus `SKILL_BUTTONS`, AND `showRecycleButton(…, false)` as its own second
 //                   subject (M13 WP3's Recycle extension — a SEPARATE predicate, not a member of
-//                   the array). ⚠️ So arms 4, 5 AND 6 each own TWO subjects, which is why the
-//                   arm-count pin below reconciles NINE subjects against SIX registries.
+//                   the array). ⚠️ So arms 4 and 5 own TWO subjects each and arm 6 owns THREE
+//                   (the turn mark joined it at paydown 2026-11-04 WP13b), which is why the
+//                   arm-count pin below reconciles TEN subjects against SIX registries.
 //                   ⚠️ CORRECTED 2026-09-18 (M14 WP4): this header said "SEVEN subjects against
 //                   FIVE registries" — true only before arm 6 landed (M13.5 WP4) and gained its
 //                   second subject (M14 WP0). The CODE was always right; only this prose lied,
@@ -829,20 +833,24 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
     ).toBe("fired /feature-plan · 1m ago");
   });
 
-  it("the supervisor TURN mark rides the same gated subject: absent OFF, present ON", () => {
-    // Turn attribution (2026-09-28): the `⚙` beside the turn readout. The readout itself is
-    // UNGATED terminal chrome, so the mark must take its gate from this derivation; reading the
-    // origin directly at the render site would show it with the gate OFF. Same subject as above,
-    // so deliberately NOT titled "renders no …".
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // ARM 6, THIRD SUBJECT (paydown 2026-11-04 WP13b) — the turn readout's supervisor `⚙`.
+  //
+  // ⚠️ **NOT a seventh arm**, for the same reason as the toggle above: it is gated by the same
+  // seam and registers nothing. It was a FIELD of the toggle's readout until WP13b, which left
+  // `Workspace` and the header control each calling that readout with half its inputs. The turn
+  // readout itself is UNGATED terminal chrome, so the mark must take its gate from its own
+  // derivation; reading the origin at the render site would show it with the gate OFF.
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  it("renders no supervisor TURN mark beside the turn readout while the gate is OFF", () => {
     const origin = { command: "/feature-verify-auto", firedAt: 1_000 };
     expect(
-      workspaceSupervisorReadout(true, false, "x", { turnOrigin: origin }),
+      supervisorTurnBadge(false, origin),
+      "the turn mark must not exist while the gate is OFF, even for a supervisor-started turn",
     ).toBeNull();
     // Anti-vacuity: with the gate ON the same origin produces the mark.
-    expect(
-      workspaceSupervisorReadout(true, true, "x", { turnOrigin: origin })
-        ?.turnBadge?.text,
-    ).toBe("⚙");
+    expect(supervisorTurnBadge(true, origin)?.text).toBe("⚙");
   });
 
   it("the drive-mode readout is genuinely gate-DERIVED, not a constant that ignores the gate", () => {
@@ -1048,18 +1056,23 @@ describe("the guard is not vacuous", () => {
         "6 WORKSPACE-SUPERVISOR",
         () => workspaceSupervisorReadout(false, false, "x"),
       ],
+      // Paydown 2026-11-04 WP13b — arm 6's THIRD subject, the turn readout's `⚙`.
+      [
+        "6 WORKSPACE-TURN-MARK",
+        () => supervisorTurnBadge(false, { command: "/x", firedAt: 0 }),
+      ],
     ];
 
-    // ⚠️ NINE subjects, not six: arm 4 owns TWO derivations, arm 5 owns TWO predicates
+    // ⚠️ TEN subjects, not six: arm 4 owns TWO derivations, arm 5 owns TWO predicates
     // (`showSkillButtons` and `showRecycleButton` are separate functions with identical
     // bodies — a mutation to one does not exercise the other, which is the "the set is not
-    // the caller" shape arm 5 was written to catch). Arm 6 owns TWO — the drive-mode
-    // readout (M13.5 WP4) and the supervisor toggle (M14 WP0).
+    // the caller" shape arm 5 was written to catch). Arm 6 owns THREE — the drive-mode
+    // readout (M13.5 WP4), the supervisor toggle (M14 WP0) and the turn mark (paydown WP13b).
     expect(
       armSubjects.length,
       "an OFF-state arm subject was removed — every registry this app surfaces UI through " +
         "must stay policed; see the registry table at the top of this file",
-    ).toBe(9);
+    ).toBe(10);
 
     // Each subject must be really callable and really defined — a subject that threw or
     // resolved to undefined would make its arm's assertions vacuous rather than absent.

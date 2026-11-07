@@ -217,6 +217,25 @@ describe("the apply's respawn takes turn-respawn by REF, at spawn time (paydown 
     ).toBeNull();
   });
 
+  it("with no pane handle, Apply leaves NO override behind for the next unrelated spawn", async () => {
+    // The override is one-shot. Set with no relaunch to take it, it would sit in the ref until
+    // the next spawn (Retry, `cc-relaunch`, Recycle) and turn that one into a `turn-respawn`.
+    const el = await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      statusState: "idle",
+      detachedPane: true,
+    });
+    await choose(el, "fsd");
+    await click(el.querySelector('[data-testid="drivemode-confirm-apply"]'));
+    expect(pane.relaunches).toBe(0);
+    expect(pane.props?.spawnIntentRef?.current).toBeNull();
+    // The apply still finished: it is not left queued.
+    expect(
+      el.querySelector('[data-testid="workspace-header-drivemode-pending"]'),
+    ).toBeNull();
+  });
+
   it("with no apply, nothing relaunches and no override is pending (positive control)", async () => {
     await mountWorkspace({ gate: true, statusState: "idle" });
     expect(pane.relaunches).toBe(0);

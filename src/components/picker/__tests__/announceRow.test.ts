@@ -464,9 +464,17 @@ describe("the component's structure (source guards — STRUCTURE only, never run
     const calls =
       squeezed.match(/invoke<[^>]*>\("picker_announce_actions"/g) ?? [];
     expect(calls.length).toBe(1);
-    // Not per row: the row component (paydown 2026-11-04 WP13) makes NO IPC call at all; it
-    // receives the announce map as a prop. (This used to be an ordering check against the
-    // row map inside ProjectPicker; the map now lives in another file.)
+    // Not per row, half 1: the per-ROW loop is still the picker's own `pickerItems.map`, so
+    // the call must sit before it. A count of 1 alone would pass with the one call moved into
+    // the loop. `lastIndexOf`, so no mention of the command (the call or its failure warning)
+    // may follow the loop's start.
+    const callAt = code.lastIndexOf("picker_announce_actions");
+    const loopAt = code.indexOf("pickerItems.map");
+    expect(callAt).toBeGreaterThan(-1);
+    expect(loopAt).toBeGreaterThan(-1);
+    expect(callAt).toBeLessThan(loopAt);
+    // Not per row, half 2: the row component (paydown 2026-11-04 WP13) makes NO IPC call at
+    // all; it receives the announce map as a prop.
     expect(rowCode).toContain("announceMap");
     expect(rowCode).not.toContain("picker_announce_actions");
     expect(rowCode).not.toMatch(/\binvoke\b/);

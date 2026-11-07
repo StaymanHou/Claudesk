@@ -150,12 +150,12 @@ describe("the two entry points (operator, 2026-07-31: BOTH are supported)", () =
   });
 });
 
-describe("the panel consumes the decision rather than re-deriving it", () => {
+describe("the workflow-features group consumes the decision rather than re-deriving it", () => {
   // The value tests above pin the DECISION; this pins its CONSUMPTION. A panel that branched
   // inline would leave every assertion above true while the real toggle did something else.
   // Comment-stripped (a guard reading raw source matches its own prose) and identifier-level
   // (never a formatted multi-line expression).
-  const PANEL = readFileSync(
+  const BODY = readFileSync(
     fileURLToPath(new URL("../WorkflowFeaturesSettings.tsx", import.meta.url)),
     "utf8",
   )
@@ -167,38 +167,38 @@ describe("the panel consumes the decision rather than re-deriving it", () => {
     .join("\n");
 
   it("routes the checkbox through the interception handler", () => {
-    expect(PANEL).toContain("onGateToggle(e.target.checked)");
+    expect(BODY).toContain("onGateToggle(e.target.checked)");
   });
 
   it("asks the pure decision instead of testing provenance inline", () => {
-    expect(PANEL).toContain("gateToggleAction(nextValue, provenance)");
+    expect(BODY).toContain("gateToggleAction(nextValue, provenance)");
   });
 
   it("applies intents through the shared outcome table", () => {
-    expect(PANEL).toContain("outcomeForIntent(intent)");
+    expect(BODY).toContain("outcomeForIntent(intent)");
   });
 
   it("offers the uninstall button ONLY for a managed substrate", () => {
     // The provenance rule at the affordance layer: `developer` (the operator's live repo, a
     // hand-clone, or a damaged record) must never be offered removal, and `absent` has nothing
     // to remove. Mirrors `offersInstallWizard`'s absent-only rule in the other direction.
-    expect(PANEL).toContain('provenance === "managed" ? (');
-    expect(PANEL).toContain('data-testid="substrate-uninstall-button"');
+    expect(BODY).toContain('provenance === "managed" ? (');
+    expect(BODY).toContain('data-testid="substrate-uninstall-button"');
   });
 
   it("records WHICH entry point opened the dialog", () => {
     // Passed explicitly, never inferred — two arrivals into one destructive dialog
     // distinguishable only by invisible state is the inferred-mode failure this project has
     // hit before.
-    expect(PANEL).toContain('setUninstallTrigger("button")');
-    expect(PANEL).toContain('setUninstallTrigger("toggle")');
-    expect(PANEL).toContain("trigger={uninstallTrigger}");
+    expect(BODY).toContain('setUninstallTrigger("button")');
+    expect(BODY).toContain('setUninstallTrigger("toggle")');
+    expect(BODY).toContain("trigger={uninstallTrigger}");
   });
 
   it("skips the gate write when the outcome says to write nothing", () => {
     // The cancel path, as code: a null check guarding the set. Without it, `set(null)` would
     // be a type error — but a refactor to `set(outcome.persistGate ?? true)` would compile and
     // silently reintroduce the write-then-revert window this design removes.
-    expect(PANEL).toContain("outcome.persistGate !== null");
+    expect(BODY).toContain("outcome.persistGate !== null");
   });
 });

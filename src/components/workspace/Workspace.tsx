@@ -90,7 +90,7 @@ import { recycleSession, waitForFreshSessionId } from "./recycleSession";
 import { useSupervisor } from "../../state/supervisor/useSupervisor";
 import { UnsentInputWatermark } from "../../state/supervisor/unsentInput";
 import { SupervisorHeaderControl } from "./SupervisorHeaderControl";
-import { workspaceSupervisorReadout } from "../../cc/workspaceSupervisor";
+import { supervisorTurnBadge } from "../../cc/workspaceSupervisor";
 import {
   getProjectSupervisorEnabled,
   setProjectSupervisorEnabled,
@@ -273,15 +273,12 @@ export function Workspace({
     origin: null,
   });
 
-  // The turn-nav `⚙` attribution. Derived through the same gated readout as the header badge,
-  // so it cannot show with workflow features OFF.
-  const supervisorTurnBadge =
-    workspaceSupervisorReadout(
-      supervisorEnabled ?? true,
-      workflowEnabled && visible,
-      workspace.display_name,
-      { turnOrigin: turnNav.origin },
-    )?.turnBadge ?? null;
+  // The turn-nav `⚙` attribution. Its own gated derivation, so it cannot show with workflow
+  // features OFF even though the turn readout beside it is ungated.
+  const turnSupervisorMark = supervisorTurnBadge(
+    workflowEnabled && visible,
+    turnNav.origin,
+  );
   const driveModeReadout = workspaceDriveModeReadout(
     storedDriveMode,
     runningDriveMode,
@@ -1133,19 +1130,19 @@ export function Workspace({
             title={
               turnNav.total > 0
                 ? `Turn ${turnNav.ordinal} of ${turnNav.total}` +
-                  (supervisorTurnBadge ? ` — ${supervisorTurnBadge.title}` : "")
+                  (turnSupervisorMark ? ` — ${turnSupervisorMark.title}` : "")
                 : undefined
             }
           >
             {/* Turn attribution — the `⚙` comes from the GATED supervisor readout, never from
                 `turnNav.origin` directly: this readout is ungated terminal chrome, so reading the
                 origin here would show the mark with workflow features OFF. */}
-            {turnNav.total > 0 && supervisorTurnBadge && (
+            {turnNav.total > 0 && turnSupervisorMark && (
               <span
                 className="workspace-turn-origin"
                 data-testid="workspace-turn-origin"
               >
-                {supervisorTurnBadge.text}{" "}
+                {turnSupervisorMark.text}{" "}
               </span>
             )}
             {turnNav.total > 0 ? `${turnNav.ordinal}/${turnNav.total}` : ""}

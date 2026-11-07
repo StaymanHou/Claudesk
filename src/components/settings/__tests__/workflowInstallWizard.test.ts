@@ -147,18 +147,18 @@ describe("post-install refresh — the stale-status bug found at verify-human", 
   // identifiers inside one handler body, per the repo rule about `?raw` guards —
   // never a formatted multi-line expression.
   // ═══════════════════════════════════════════════════════════════════════════
-  const PANEL = readFileSync(
+  const BODY = readFileSync(
     fileURLToPath(new URL("../WorkflowFeaturesSettings.tsx", import.meta.url)),
     "utf8",
   );
 
   /** The `onFinished` handler body — the one place both refreshes must appear. */
   function onFinishedBody(): string {
-    const at = PANEL.indexOf("onFinished={(result)");
+    const at = BODY.indexOf("onFinished={(result)");
     if (at === -1) return "";
     // Bounded by the next prop on the same element.
-    const end = PANEL.indexOf("onEnableAndClose", at);
-    return PANEL.slice(at, end === -1 ? at + 1200 : end);
+    const end = BODY.indexOf("onEnableAndClose", at);
+    return BODY.slice(at, end === -1 ? at + 1200 : end);
   }
 
   it("refreshes BOTH substrate state sources after an install", () => {
@@ -179,7 +179,7 @@ describe("post-install refresh — the stale-status bug found at verify-human", 
     // WP3 only needed this at mount (a directory does not appear on its own). The wizard makes
     // it appear, so the read has to be callable again — if this collapses back into an
     // effect-only read, the refresh above has nothing to call.
-    expect(PANEL).toContain("const refreshSubstratePresent = useCallback");
+    expect(BODY).toContain("const refreshSubstratePresent = useCallback");
   });
 
   it("offers enable-and-close only as a distinct, explicit action", () => {
@@ -213,7 +213,7 @@ describe("install-affordance POSITION — under the status line, above the manua
     fileURLToPath(new URL("../WorkflowSubstrateInfo.tsx", import.meta.url)),
     "utf8",
   );
-  const PANEL_SRC = readFileSync(
+  const BODY_SRC = readFileSync(
     fileURLToPath(new URL("../WorkflowFeaturesSettings.tsx", import.meta.url)),
     "utf8",
   );
@@ -272,16 +272,16 @@ describe("install-affordance POSITION — under the status line, above the manua
     // inserting a sibling <WorkflowInstallWizard /> before the block left the index form
     // PASSING. So assert there is exactly ONE render of the wizard and that it lives inside the
     // slot's bounds.
-    const renders = PANEL_SRC.match(/<WorkflowInstallWizard\b/g) ?? [];
+    const renders = BODY_SRC.match(/<WorkflowInstallWizard\b/g) ?? [];
     expect(
       renders.length,
       "the wizard must be rendered exactly ONCE — a second render site means one of them is " +
         "a detached sibling",
     ).toBe(1);
 
-    const infoAt = PANEL_SRC.indexOf("<WorkflowSubstrateInfo");
-    const slotAt = PANEL_SRC.indexOf("installAction={", infoAt);
-    const wizardAt = PANEL_SRC.indexOf("<WorkflowInstallWizard");
+    const infoAt = BODY_SRC.indexOf("<WorkflowSubstrateInfo");
+    const slotAt = BODY_SRC.indexOf("installAction={", infoAt);
+    const wizardAt = BODY_SRC.indexOf("<WorkflowInstallWizard");
     expect(slotAt, "the slot must exist").toBeGreaterThan(-1);
     expect(
       wizardAt,
@@ -294,9 +294,9 @@ describe("install-affordance POSITION — under the status line, above the manua
     // The sibling form is the shipped mistake. If someone re-adds a standalone
     // <button className="substrate-install-button"> outside the slot, the position guarantee
     // silently breaks while both assertions above still pass.
-    expect(PANEL_SRC).toContain("installAction={");
-    const infoAt = PANEL_SRC.indexOf("<WorkflowSubstrateInfo");
-    const buttonAt = PANEL_SRC.indexOf('className="substrate-install-button"');
+    expect(BODY_SRC).toContain("installAction={");
+    const infoAt = BODY_SRC.indexOf("<WorkflowSubstrateInfo");
+    const buttonAt = BODY_SRC.indexOf('className="substrate-install-button"');
     expect(buttonAt).toBeGreaterThan(infoAt);
   });
 });

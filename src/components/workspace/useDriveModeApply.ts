@@ -164,8 +164,14 @@ export function useDriveModeApply({
         // injects `/session-handoff` + `/session-restore`, restoring from notes rather than
         // keeping this conversation. The intent is set FIRST, so the spawn that this relaunch
         // causes takes it (`cc/spawnArgs.ts`).
-        spawnIntentRef.current = "turn-respawn";
-        ccPaneRef.current?.relaunch();
+        // ⚠️ Only when there IS a pane to relaunch: the override is one-shot, so set with no
+        // relaunch to take it, it would wait for the next unrelated spawn (Retry, `cc-relaunch`,
+        // Recycle) and turn that into a `turn-respawn`.
+        const pane = ccPaneRef.current;
+        if (pane) {
+          spawnIntentRef.current = "turn-respawn";
+          pane.relaunch();
+        }
         setRespawnWanted(false);
       })();
     },

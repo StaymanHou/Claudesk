@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import panelSrc from "../WorkflowFeaturesSettings.tsx?raw";
+import bodySrc from "../WorkflowFeaturesSettings.tsx?raw";
 import infoSrc from "../WorkflowSubstrateInfo.tsx?raw";
 import {
   substrateArmFor,
@@ -91,28 +91,28 @@ describe("the consuming surface renders the block (integration boundary)", () =>
   // behavior changed. Per the integration-boundary rule the test set must exercise that
   // consuming surface by name, not just the new module in isolation. Since paydown 2026-11-04
   // WP13 the block's state and mount live in `WorkflowFeaturesSettings.tsx` (the group's body),
-  // which is what `panelSrc` reads. WHERE that body sits — inside the workflow-features group,
+  // which is what `bodySrc` reads. WHERE that body sits — inside the workflow-features group,
   // before Analytics — is a DOM question, so it is asserted on a live mount of the real panel
   // in `settingsPanelGroupsRender.test.tsx`, not by splicing two files' source.
 
   it("the workflow-features body mounts WorkflowSubstrateInfo", () => {
-    expect(panelSrc).toContain("<WorkflowSubstrateInfo");
+    expect(bodySrc).toContain("<WorkflowSubstrateInfo");
   });
 
   it("seeds presence from the read-only backend command", () => {
-    expect(panelSrc).toContain("getWorkflowSubstrateInstalled");
+    expect(bodySrc).toContain("getWorkflowSubstrateInstalled");
   });
 
   it("starts at null so nothing renders before the check resolves", () => {
     // The pre-resolve default, pinned at the call site as well as in the pure function — this
     // is what makes the LOAD-BEARING null arm reachable in practice rather than theoretical.
-    expect(panelSrc).toContain("useState<SubstratePresence>(null)");
+    expect(bodySrc).toContain("useState<SubstratePresence>(null)");
   });
 
   it("guards the async seed against StrictMode's double mount", () => {
     // `useSettingControl`'s one applicable discipline, kept even though the rest of that hook
     // does not apply to a read-only probe with no setter and no broadcast event.
-    expect(panelSrc).toContain("cancelled");
+    expect(bodySrc).toContain("cancelled");
   });
 
   it("does NOT invent a broadcast event or poll for a directory's existence", () => {
@@ -120,7 +120,7 @@ describe("the consuming surface renders the block (integration boundary)", () =>
     // once in a user's lifetime, so there is no event to listen to and polling would be waste.
     // If a future edit adds either, it should be a conscious decision, not a copy-paste of the
     // settings-control shape.
-    expect(panelSrc).not.toContain("SUBSTRATE_INSTALLED_EVENT");
-    expect(panelSrc).not.toContain("setInterval");
+    expect(bodySrc).not.toContain("SUBSTRATE_INSTALLED_EVENT");
+    expect(bodySrc).not.toContain("setInterval");
   });
 });

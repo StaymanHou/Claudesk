@@ -116,6 +116,9 @@ export const pane: PaneRecord = {
   spawnIntents: [],
 };
 
+/** Set by `mountWorkspace`'s `detachedPane` option: the stub exposes no imperative handle. */
+const paneHandle = { detached: false };
+
 function XtermPaneStub(props: StubPaneProps, ref: Ref<unknown>) {
   const id = props.workspaceId ?? "(no workspaceId prop)";
   // In an effect, not during render: react-hooks rejects a render-time write to shared state.
@@ -124,28 +127,32 @@ function XtermPaneStub(props: StubPaneProps, ref: Ref<unknown>) {
   useEffect(() => {
     recordFor(id).props = props;
   });
-  useImperativeHandle(ref, () => ({
-    focus() {},
-    refit() {},
-    setFontSize() {},
-    relaunch() {
-      const rec = recordFor(id);
-      rec.relaunches += 1;
-      // The real relaunch spawns asynchronously, but nothing writes the override between the
-      // call and the spawn, so taking it here reads the same value.
-      const { intent } = takeSpawnArgs(
-        "cc_spawn",
-        "/stub",
-        props.openIntent ?? "fire",
-        props.spawnIntentRef,
-      );
-      if (intent) rec.spawnIntents.push(intent);
-    },
-    stepTurn(dir: "prev" | "next") {
-      recordFor(id).steps.push(dir);
-    },
-    turnNavState: () => recordFor(id).navAfterStep,
-  }));
+  useImperativeHandle(ref, () =>
+    paneHandle.detached
+      ? null
+      : {
+          focus() {},
+          refit() {},
+          setFontSize() {},
+          relaunch() {
+            const rec = recordFor(id);
+            rec.relaunches += 1;
+            // The real relaunch spawns asynchronously, but nothing writes the override
+            // between the call and the spawn, so taking it here reads the same value.
+            const { intent } = takeSpawnArgs(
+              "cc_spawn",
+              "/stub",
+              props.openIntent ?? "fire",
+              props.spawnIntentRef,
+            );
+            if (intent) rec.spawnIntents.push(intent);
+          },
+          stepTurn(dir: "prev" | "next") {
+            recordFor(id).steps.push(dir);
+          },
+          turnNavState: () => recordFor(id).navAfterStep,
+        },
+  );
   return <div data-testid="xterm-stub" />;
 }
 
@@ -220,6 +227,11 @@ export interface MountOptions {
   profile?: string | null;
   /** Extra IPC answers by command name, for commands the harness does not otherwise stub. */
   ipcAnswers?: Record<string, unknown>;
+  /**
+   * The stub pane exposes NO imperative handle, so `ccPaneRef.current` stays `null`: the state a
+   * drive-mode apply must survive without leaving its one-shot spawn override behind.
+   */
+  detachedPane?: boolean;
 }
 
 let root: Root | null = null;
@@ -247,6 +259,7 @@ export async function mountWorkspace(opts: MountOptions) {
   pane.props = null;
   pane.relaunches = 0;
   pane.spawnIntents = [];
+  paneHandle.detached = opts.detachedPane ?? false;
   panes.set(MOUNTED_ID, pane);
   const model = {
     id: MOUNTED_ID,

@@ -65,7 +65,7 @@ nothing on screen to say so. So:
 raw gate**: the spawn's `CLAUDESK_DRIVE_MODE`, the picker's `/session-restore` announce arm, the
 drive-mode line, the skill row, and the supervisor. The frontend takes the profile from the **live
 session** once one exists (`useWorkspaceProfile` → `cc_session_profile`), and from the stored row
-before that. The OFF-invariant pin is unchanged at 6 arms / 9 subjects. Profile-scoped suppression
+before that. F-b left the OFF-invariant pin unchanged (6 arms / 9 subjects then; 10 since paydown 2026-11-04 WP13b). Profile-scoped suppression
 has its own caller guard (`workflowApplicableGuard.test.ts`).
 
 ## Status channel — persistent per-profile hook registration (ruling 3)

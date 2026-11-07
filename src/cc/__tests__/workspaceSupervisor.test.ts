@@ -9,6 +9,7 @@ import {
   SUPERVISOR_OFF_LABEL,
   SUPERVISOR_ON_LABEL,
   SUPERVISOR_TURN_GLYPH,
+  supervisorTurnBadge,
   workspaceSupervisorReadout,
 } from "../workspaceSupervisor";
 
@@ -155,27 +156,28 @@ describe("the SUPPRESSED copy", () => {
   });
 });
 
-describe("the TURN mark (turn attribution)", () => {
+describe("supervisorTurnBadge — the TURN mark (turn attribution)", () => {
   const origin = { command: "/feature-verify-auto", firedAt: 1_000 };
 
   it("is absent when the selected turn has no supervisor origin", () => {
-    expect(workspaceSupervisorReadout(true, true, "x")?.turnBadge).toBeNull();
+    expect(supervisorTurnBadge(true, null)).toBeNull();
   });
 
   it("is the header's own gear, and its tooltip names the command the supervisor ran", () => {
-    const badge = workspaceSupervisorReadout(true, true, "x", {
-      turnOrigin: origin,
-    })?.turnBadge;
+    const badge = supervisorTurnBadge(true, origin);
     expect(badge?.text).toBe(SUPERVISOR_TURN_GLYPH);
     expect(SUPERVISOR_TURN_GLYPH).toBe("⚙");
     expect(badge?.title).toContain("supervisor started this turn");
     expect(badge?.title).toContain("/feature-verify-auto");
   });
 
-  it("⚠️ stays shown after the project is turned OFF: it records who started that turn", () => {
-    expect(
-      workspaceSupervisorReadout(false, true, "x", { turnOrigin: origin })
-        ?.turnBadge?.text,
-    ).toBe("⚙");
+  it("is absent with the gate OFF, even for a supervisor-started turn", () => {
+    expect(supervisorTurnBadge(false, origin)).toBeNull();
+  });
+
+  it("⚠️ takes no supervisor toggle: it records who started that turn, whatever the toggle says now", () => {
+    // The signature is the property: a toggle parameter would let a project turned OFF after a
+    // fire erase the record of it.
+    expect(supervisorTurnBadge.length).toBe(2);
   });
 });
