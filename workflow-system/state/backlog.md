@@ -17,19 +17,19 @@
 
 ## Code-quality findings — paydown-2026-11-04-wp13-settings-split-and-picker-row (2026-11-06)
 
-- **Pointer:** **4 MINOR** from the review of `0e7c138` (0 CRITICAL, 0 MAJOR). The announce-once guard lost its ordering half, and its new comment is wrong. Three re-pointed guards keep panel-era names. The picker's five live tests share no harness. Four moved JSX comments in `PickerRow.tsx` kept their old indentation.
+- **Pointer:** **2 MINOR** remain from the review of `0e7c138` (0 CRITICAL, 0 MAJOR). The picker's five live tests share no harness. Four moved JSX comments in `PickerRow.tsx` kept their old indentation. (The guard-ordering and guard-rename MINORs were resolved at paydown WP13b, 2026-11-07.)
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp13-settings-split-and-picker-row — 2026-11-06`.
 - **Priority:** low (all)
 - **Status:** pending
-- **Pickup shape:** the guard fix and the renames fit the small post-WP13 task (D5, with WP12's leftovers); the indentation fits WP14; the shared harness is its own small task.
+- **Pickup shape:** the indentation fits WP14; the shared harness is its own small task (left out of WP13b, decision D4: migrating five files is not small).
 
 ## Code-quality findings — paydown-2026-11-04-wp12-workspace-extractions (2026-11-06)
 
-- **Pointer:** **1 MAJOR + 2 MINOR** from the review of `82856a4` (0 CRITICAL). The MAJOR: the supervisor readout is split across two half-filled `workspaceSupervisorReadout` calls, with its gate repeated in `Workspace.tsx` and `SupervisorHeaderControl.tsx`. The MINORs: the spawn-intent ref is set before the pane handle is confirmed; two pointer comments describe history.
+- **Pointer:** **1 MINOR** remains from the review of `82856a4` (0 CRITICAL): two pointer comments describe history. (The supervisor-readout MAJOR and the spawn-intent MINOR were resolved at paydown WP13b, 2026-11-07.)
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp12-workspace-extractions — 2026-11-06`.
-- **Priority:** medium (MAJOR); low (MINORs)
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** the MAJOR and the spawn-intent MINOR fit WP13 (the next component extraction) or a small task; the comment MINOR fits WP14's comment-convention pass.
+- **Pickup shape:** WP14's comment-convention pass.
 
 ## Code-quality findings — paydown-2026-11-04-wp8-supervisor-and-status-cluster (2026-11-06)
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-07
+
+- **Task closed:** Paydown 2026-11-04 WP13b closes the WP12 and WP13 review leftovers: the turn readout's supervisor `⚙` now comes from its own gated `supervisorTurnBadge` (arm 6's third OFF-invariant subject, pin 9 → 10), a drive-mode apply sets its one-shot respawn override only when there is a pane to relaunch, the announce-once guard checks ordering against the picker's row loop again, and three settings guards lost their panel-era names.
+- **Backlog resolved:** SURFACE-2026-11-06-QUALITY-WP12-SUPERVISOR-READOUT-SPLIT-ACROSS-TWO-CALLS — the turn mark left `workspaceSupervisorReadout` for its own gated function, so `Workspace` and the header control each make one complete call and the gate is no longer repeated.
+- **Backlog resolved:** SURFACE-2026-11-06-QUALITY-WP12-SPAWN-INTENT-SET-BEFORE-PANE-CONFIRMED — `spawnIntentRef` is set inside the same non-null-pane branch as `relaunch()`, pinned by a live test with no pane handle (the optional restore-on-cancel half was not taken).
+- **Backlog resolved:** SURFACE-2026-11-06-QUALITY-WP13-ANNOUNCE-ONCE-GUARD-LOST-ITS-ORDERING-CHECK — the guard again requires every `picker_announce_actions` mention to precede `pickerItems.map`, proven by moving the call into the loop with the count kept at 1.
+- **Backlog resolved:** SURFACE-2026-11-06-QUALITY-WP13-REPOINTED-GUARDS-KEEP-PANEL-NAMES — `uninstallIntercept`, `workflowInstallWizard` and `workflowSubstratePresence` now name their binding `BODY` / `BODY_SRC` / `bodySrc`, with no assertion changed.
+
 ## 2026-11-06
 
 - **Task closed:** Paydown 2026-11-04 WP7 makes Find and Replace follow one rule (ruling R1): Replace All now matches per line on the query that produced the shown results, so it only ever touches what search could show, and every search/replace call builds its IPC query through one `toWireQuery`.

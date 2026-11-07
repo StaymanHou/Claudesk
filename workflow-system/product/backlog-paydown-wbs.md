@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP12 done 2026-11-06
+status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP13 done 2026-11-06; WP13b done 2026-11-07
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -406,7 +406,7 @@ R4.
     unchanged.
 - **Proof:** render-unchanged against a HEAD worktree for both files.
 
-## WP13b: WP12 and WP13 review leftovers  `[impact: Low–Med · effort: S · risk: Low]` · task
+## WP13b: WP12 and WP13 review leftovers  `[impact: Low–Med · effort: S · risk: Low]` · task · ✅ DONE 2026-11-07 (`f5809b4`; 4 entries resolved; the turn mark → its own gated `supervisorTurnBadge`, OFF-invariant pin 9 → 10; the shared picker harness left open, D4)
 
 Inserted at WP13's plan (decision D5: these are behavioural fixes in other files, so they stayed
 out of WP13's "nothing rendered changed" diff).

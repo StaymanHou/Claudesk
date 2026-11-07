@@ -8,24 +8,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit `0e7c138`, window `fea480e..0e7c138`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 4 MINOR, all auto-backlogged; finding 1 re-checked against the source before filing.)*
 
-## SURFACE-2026-11-06-QUALITY-WP13-ANNOUNCE-ONCE-GUARD-LOST-ITS-ORDERING-CHECK
-- **Severity:** MINOR
-- **Location:** `src/components/picker/__tests__/announceRow.test.ts` ("the announce call is made ONCE, not per row").
-- **Finding:** WP13 replaced "the `picker_announce_actions` call precedes the row map" with "`PickerRow.tsx` makes no IPC call". The new comment says "the map now lives in another file", but only the per-CELL map (`PICKER_ROW_CELLS.map`) moved. The per-ROW loop, `pickerItems.map`, is still in `ProjectPicker.tsx` (verified: line 545 at `0e7c138`). Moving the single invoke into that loop would keep the count at 1 and pass.
-- **Why it matters:** a small hole in the N+1 guard, and the comment tells the next reader that the hole cannot exist.
-- **Suggested action:** restore the ordering half against the picker's own loop, `indexOf("picker_announce_actions") < indexOf("pickerItems.map")` (non-vacuity: both > -1). Keep the row-makes-no-IPC half. Correct the comment. Mutation-prove it by moving the invoke into the loop.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-06-QUALITY-WP13-REPOINTED-GUARDS-KEEP-PANEL-NAMES
-- **Severity:** MINOR
-- **Location:** `uninstallIntercept.test.ts` (`PANEL`, `describe("the panel consumes the decision…")`), `workflowInstallWizard.test.ts` (`PANEL`, `PANEL_SRC`), `workflowSubstratePresence.test.ts` (`panelSrc`).
-- **Finding:** these guards now read `WorkflowFeaturesSettings.tsx` but keep their panel-era names. The other three re-pointed guards in the same commit renamed their binding to `groupSrc`.
-- **Why it matters:** a reader who wants to know which file is pinned checks the wrong one.
-- **Suggested action:** rename the bindings (e.g. `BODY` / `bodySrc`) and the one `describe`. No assertion changes.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-11-06-QUALITY-WP13-PICKER-LIVE-TESTS-HAVE-NO-SHARED-HARNESS
 - **Severity:** MINOR
 - **Location:** `src/components/picker/__tests__/*Live.test.tsx` (five files, two of them new in WP13); `pickerRowCallbacksLive.test.tsx` writes out the native value-setter idiom three times.
@@ -47,24 +29,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 # paydown-2026-11-04-wp12-workspace-extractions — 2026-11-06
 
 *(feature-review-quality on ship commit `82856a4`, window `f42796f..82856a4`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 2 MINOR, all auto-backlogged; each claim re-checked against the source before filing.)*
-
-## SURFACE-2026-11-06-QUALITY-WP12-SUPERVISOR-READOUT-SPLIT-ACROSS-TWO-CALLS
-- **Severity:** MAJOR
-- **Location:** `src/components/workspace/Workspace.tsx` (`supervisorTurnBadge`) and `src/components/workspace/SupervisorHeaderControl.tsx` (its `workspaceSupervisorReadout` call and its header comment).
-- **Finding:** `workspaceSupervisorReadout` is now called twice, and each call fills only half its options. `Workspace` passes only `turnOrigin`, so its suppressed/alarm/lastAction fields are always empty. The control omits `turnOrigin`, so its `turnBadge` is always `null`. The gate arguments (`supervisorEnabled ?? true`, `workflowEnabled && visible`) are repeated in both files, which contradicts the control's header ("both of its gates sit in one place").
-- **Why it matters:** a future read of a field that is always empty never errors, it silently renders nothing. The two copies of the gate can also drift apart.
-- **Suggested action:** extract a gated `supervisorTurnBadge(gateOn, turnOrigin)` that `workspaceSupervisorReadout` also uses, so each surface makes one call. Alternatively, lift the readout into `Workspace` and pass the readout object to the control. Keep arm 6 of `offInvariantGuard`, which asserts the readout's gate as a value, pointed at whichever function owns the gate. Re-check the turn-`⚙` gate-OFF live test (mutant C4) after the change.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-11-06-QUALITY-WP12-SPAWN-INTENT-SET-BEFORE-PANE-CONFIRMED
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/useDriveModeApply.ts` (the relaunch step of `startApply`); `src/cc/spawnArgs.ts` (`takeSpawnArgs`).
-- **Finding:** `spawnIntentRef.current = "turn-respawn"` is set before `ccPaneRef.current?.relaunch()`. If the pane ref were null, the override would persist, and the next unrelated spawn (Retry, `cc-relaunch`, Recycle) would take `turn-respawn`. A spawn run that is cancelled (a path or command re-run) also consumes the override, leaving the surviving run on the original door.
-- **Why it matters:** these are rare paths: the abort already covers unmount, and the pane is otherwise always mounted. But a one-shot that can persist removes the guarantee that the respawn's own spawn takes it.
-- **Suggested action:** set the ref only when `ccPaneRef.current` is non-null, inside the same branch as `relaunch()`. Optionally restore a taken override in `XtermPane`'s `cancelled` branch.
-- **Priority:** low
-- **Status:** pending
 
 ## SURFACE-2026-11-06-QUALITY-WP12-POINTER-COMMENTS-DESCRIBE-HISTORY
 - **Severity:** MINOR
