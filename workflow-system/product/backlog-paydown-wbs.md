@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-04
 created: 2026-11-04
-status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP13 done 2026-11-06; WP13b done 2026-11-07
+status: in-progress  # WP1–WP6b done 2026-11-04; WP7–WP13 done 2026-11-06; WP13b + WP14 done 2026-11-07 (fold-back pending)
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 parent-wp: M16.5 WP8 (workflow-system/product/wbs.md → WP8, task 8.3 executes this file)
 ---
@@ -416,7 +416,7 @@ out of WP13's "nothing rendered changed" diff).
   `11-06-QUALITY-WP13-REPOINTED-GUARDS-KEEP-PANEL-NAMES` (both MINOR, test-only).
 - Optional, if it stays small: `11-06-QUALITY-WP13-PICKER-LIVE-TESTS-HAVE-NO-SHARED-HARNESS`.
 
-## WP14: The comment-convention pass  `[impact: Med (closes about 20 entries) · effort: M · risk: Low]` · feature
+## WP14: The comment-convention pass  `[impact: Med (closes about 20 entries) · effort: M · risk: Low]` · feature · ✅ DONE 2026-11-07 (`20930c3`; 26 QF entries + 4 stubs + the BL resolved; guard `singleAuthority.test.ts`: 16 `once` + 7 `absent` rules; review: 1 MAJOR + 5 MINOR auto-backlogged)
 
 R3. `08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED` (BL) and its roster.
 - **Guard FIRST.** Copy the single-authority pin pattern from `recycleSession.test.ts` ("the measured
