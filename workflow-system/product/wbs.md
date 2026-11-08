@@ -302,7 +302,7 @@ sessions through the skill symlinks, not the Claudesk release).
       feed the operator's `claudesk` workspace foreign hook events (folded into
       `SURFACE-2026-08-21-STATUS-PATH-KEYS-ON-CWD-ALONE-COLLAPSING-SESSIONS`, raised to medium).
 
-### WP8: Code-quality paydown (LAST)
+### WP8: Code-quality paydown (LAST) ✅ SHIPPED 2026-11-07 (sweep of 15 WPs, last close commit 44c7a98)
 
 **Milestone:** M16.5
 **Dependencies:** WP3–WP7 (it runs last so it also sweeps this bucket's own review findings)
@@ -318,8 +318,15 @@ them, and its temporary WBS lives inside this WP.
   - `paydown-wp9` MAJOR 1 (a real defect that can leave the single-run lock stuck; medium-high)
   - the `analytics-week-export` MAJORs
   - ✅ **Swept 2026-11-04 → `workflow-system/product/backlog-paydown-wbs.md`** (14 WPs, Mode 3). 0 GONE of 91 findings. Operator rulings R1–R4 there: Replace All per-line + shown query; the failure alarm stays per-project (closed by design); the comment pass is the sweep's last WP; all four extractions in. Both priority inputs are WP4 (the single-run lock: real, never observed; needs a deadline + group kill, not `spawn_blocking` alone) and WP5 (analytics export).
-- [ ] 8.3 Execute the sweep's plan. Each resolved finding is deleted from both backlog files with
+- [x] 8.3 Execute the sweep's plan. Each resolved finding is deleted from both backlog files with
       a `**Backlog resolved:**` line.
+  - ✅ **Done 2026-11-07:** WP1–WP14 + WP6b + WP13b shipped (WP14, the comment-convention pass, last:
+    `20930c3`). Fold-back checked: every finding a sweep WP named is resolved, except WP11's two
+    expected partials (rewritten to their residuals) and the shared picker harness (left open by WP13b
+    decision D4). The findings still in the backlog were born during the sweep (the WP4 and WP14
+    reviews, a flake, an operator ask) or sit in its §Scope list. The sweep file was deleted on
+    completion, as it instructs; its full text, rulings R1–R4 included, is at
+    `git show 44c7a98:workflow-system/product/backlog-paydown-wbs.md`.
 
 ## Dependency map
 

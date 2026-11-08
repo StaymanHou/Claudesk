@@ -125,6 +125,7 @@
 
 - [never-propose-brew-upgrade-to-verify-a-release.md](never-propose-brew-upgrade-to-verify-a-release.md) — ⚠️ Never propose `brew upgrade` to verify a release: it kills every running Claudesk. Verify the downloaded artifacts; when to install is the operator's call.
 - [release-is-three-artifacts-verify-each.md](release-is-three-artifacts-verify-each.md) — A release is THREE artifacts (.app / .dmg / .app.tar.gz payload); verifying two proves nothing about the third, and the PAYLOAD is what self-updaters get (v0.5.2: payload unstapled).
+- [stage-around-operator-edits-via-blob.md](stage-around-operator-edits-via-blob.md) — Operator's unstaged edit in the same hunk as yours: `git apply --cached` can't split it; stage a computed blob via `git update-index --cacheinfo`.
 
 ## Dev-time side effects (macOS focus)
 

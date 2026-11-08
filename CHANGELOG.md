@@ -39,6 +39,7 @@
 - **Backlog resolved:** `time-tracking-offline-local-only-copy` comment-density stub — the copy-guard test's audit labels are cut (63 → 56 comment lines), with the whitespace-normalization comment kept.
 - **Backlog resolved:** `m10.9-wp2-workflow-features-gate` comment-density stub — no edit needed: the milestone rationale is already single-homed (`useWorkflowFeaturesEnabled.ts`, `workflow_gate/mod.rs`) and the other sites only cite the invariant's name.
 - **Backlog resolved:** `m12-wp1-probe-flag-store-and-announce` stub item (2) — the redundant paragraph on the Rust hazard test's doc is gone; its reopening-condition paragraph stays.
+- **Milestone:** M16.5 WP8 — Code-quality paydown: the 2026-11-04 sweep's 16 work packages shipped and its temporary WBS was folded back and deleted.
 
 ## 2026-11-06
 
