@@ -422,7 +422,7 @@ describe("AC-1: exactly one record per turn end, one per exit", () => {
     "recycle %s: the caller's status is the recorded outcome",
     async (status, outcome) => {
       await mount({
-        tail: () => tailFor("F5", RECYCLE_TOKEN_THRESHOLD + 1),
+        tail: () => tailFor("F15", RECYCLE_TOKEN_THRESHOLD + 1),
         wip: WIP_AT_BOUNDARY,
         onRecycle: () => status,
       });
@@ -432,16 +432,38 @@ describe("AC-1: exactly one record per turn end, one per exit", () => {
       expect(records[0]).toMatchObject({
         outcome,
         reason: "context-pressure-recycle",
-        command: "/feature-plan",
+        command: "/feature-build",
         tokens: RECYCLE_TOKEN_THRESHOLD + 1,
       });
       expect(injected).toEqual([]);
     },
   );
 
+  it("⚠️ M16.5 WP9: a MID-PHASE edge over the threshold is a plain `fired` record carrying its tokens", async () => {
+    // The deferred recycle stays visible in the log without a new reason: the edge chained, and
+    // the reading that WOULD have recycled at a boundary is on the line. F10 is one of the two
+    // edges every pre-WP9 field recycle happened on.
+    await mount({
+      tail: () => tailFor("F10", RECYCLE_TOKEN_THRESHOLD + 1),
+      wip: WIP_AT_BOUNDARY,
+      onRecycle: () => "started",
+    });
+    await turnEnd();
+    expect(recycles).toEqual([]);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      outcome: "fired",
+      reason: null,
+      edgeId: "F10",
+      command: "/feature-verify-self",
+      tokens: RECYCLE_TOKEN_THRESHOLD + 1,
+    });
+    expect(injected).toHaveLength(1);
+  });
+
   it("a throwing onRecycle is recorded once, as recycle-threw, WITH the decision's context", async () => {
     await mount({
-      tail: () => tailFor("F5", RECYCLE_TOKEN_THRESHOLD + 1),
+      tail: () => tailFor("F15", RECYCLE_TOKEN_THRESHOLD + 1),
       wip: WIP_AT_BOUNDARY,
       onRecycle: () => {
         throw new Error("boom");
@@ -452,8 +474,8 @@ describe("AC-1: exactly one record per turn end, one per exit", () => {
     expect(records[0]).toMatchObject({
       outcome: "error",
       reason: "recycle-threw",
-      edgeId: "F5",
-      command: "/feature-plan",
+      edgeId: "F15",
+      command: "/feature-build",
       tokens: RECYCLE_TOKEN_THRESHOLD + 1,
     });
     expect(records[0].transcriptPath).not.toBeNull();

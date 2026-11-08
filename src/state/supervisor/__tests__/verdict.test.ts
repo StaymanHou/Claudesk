@@ -11,6 +11,7 @@ import {
   decideSupervised,
   decideVerdict,
   FireLedger,
+  RECYCLE_BOUNDARY_EDGES,
   turnKeyOf,
   type TurnKey,
   type Verdict,
@@ -559,10 +560,13 @@ describe("⚠️ decideSupervised — the HYBRID's ordering", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // M15 WP4 Phase 3 — THE RECYCLE BRANCH.
 //
-// ⚠️ The three conditions are tested INDIVIDUALLY FALSIFIED, not just jointly satisfied. A
-// three-way `&&` passes a "all three true → recycle" test no matter which arms are actually
+// ⚠️ The four conditions are tested INDIVIDUALLY FALSIFIED, not just jointly satisfied. A
+// four-way `&&` passes a "all four true → recycle" test no matter which arms are actually
 // wired, so each test below turns exactly ONE condition off and asserts the verdict falls back
 // to `fire` — that is what proves each arm is load-bearing.
+//
+// ⚠️ **The condition tests emit F15** (M16.5 WP9), the one boundary edge. Emitted on any other
+// edge, a "FIRES when X is false" test would pass because of the EDGE and stop proving X.
 describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
   const tailDeps = (answer: string) => ({
     run: async () => claudeJsonReply(answer),
@@ -596,7 +600,7 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
   const decide = (over: unknown) =>
     decideSupervised(
       {
-        lines: emitted("F5"),
+        lines: emitted("F15"),
         storedMode: "autopilot",
         tail: "Done.",
         ...(over as object),
@@ -604,7 +608,7 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
       tailDeps("PROCEED"),
     );
 
-  it("recycles when ALL THREE conditions hold", async () => {
+  it("recycles at F15 when ALL FOUR conditions hold", async () => {
     const r = await decide({
       contextTokens: OVER,
       wip: featureAtBoundary,
@@ -613,7 +617,7 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
     if (r.kind !== "recycle") return;
     // ⚠️ The deferred skill is carried, not dropped: an unattended recycle must be explainable.
     expect(r.skill).toBeTruthy();
-    expect(r.edgeId).toBe("F5");
+    expect(r.edgeId).toBe("F15");
     expect(r.tokens).toBe(OVER);
   });
 
@@ -678,13 +682,14 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
   });
 
   it("⚠️ a mechanical WITHHOLD is NEVER promoted to a recycle", async () => {
-    // ⚠️ THE ORDERING PROPERTY, restated for the new branch. F3 is PAUSE in orchestrated mode;
+    // ⚠️ THE ORDERING PROPERTY, restated for the new branch. F15 is PAUSE in stepping mode, and it
+    // is the one edge that could recycle, so only the withhold can be what stops it;
     // every reason not to CHAIN is equally a reason not to END THE SESSION. A recycle that
     // could promote a withhold would be strictly worse than the fire it replaced.
     const r = await decideSupervised(
       {
-        lines: emitted("F3"),
-        storedMode: "orchestrated",
+        lines: emitted("F15"),
+        storedMode: "stepping",
         tail: "Done.",
         contextTokens: OVER,
         wip: featureAtBoundary,
@@ -700,7 +705,7 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
     // the very question it was waiting on. Withhold must win.
     const r = await decideSupervised(
       {
-        lines: emitted("F5"),
+        lines: emitted("F15"),
         storedMode: "autopilot",
         tail: "Which option do you want?",
         contextTokens: OVER,
@@ -713,11 +718,76 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
     expect(r.reason).toBe("adjudicator-says-awaiting");
   });
 
+  it.each(["F8", "F9", "F9b", "F10", "F10b"])(
+    "⚠️ M16.5 WP9: a MID-PHASE edge (%s) over the threshold in Phase 2+ FIRES, it does not recycle",
+    async (edge) => {
+      // ⚠️ The defect WP9 fixes: the boundary used to be read off the WIP's STATE alone, so every
+      // AUTO fire inside Phase 2+ recycled, handing off mid-phase. All four recycles in the
+      // installed build's log (2026-11) were on F8 or F10. The WIP and the reading here satisfy
+      // every other condition, so only the EDGE can be what withholds the recycle.
+      const r = await decideSupervised(
+        {
+          lines: emitted(edge),
+          storedMode: "autopilot",
+          tail: "Done.",
+          contextTokens: OVER,
+          wip: featureAtBoundary,
+        },
+        tailDeps("PROCEED"),
+      );
+      expect(r.kind).toBe("fire");
+      if (r.kind !== "fire") return;
+      expect(r.edgeId).toBe(edge);
+    },
+  );
+
   it("does not recycle at exactly the threshold (strictly greater)", async () => {
     const r = await decide({
       contextTokens: RECYCLE_TOKEN_THRESHOLD,
       wip: featureAtBoundary,
     });
     expect(r.kind).toBe("fire");
+  });
+
+  it("⚠️ M16.5 WP9: over the threshold, a firing feature edge recycles IFF it is a boundary edge", async () => {
+    // ⚠️ BOTH DIRECTIONS over the whole population of feature edges that fire in autopilot, so
+    // neither an edge wrongly added to the set nor a member wrongly dropped can pass. The firing
+    // set is derived from the graph, not listed, so a new AUTO edge is covered on arrival.
+    const firing = EDGES.filter(
+      (e) =>
+        e.workflow === "feature" &&
+        decideVerdict({ lines: emitted(e.id), storedMode: "autopilot" })
+          .kind === "fire",
+    ).map((e) => e.id);
+    // Non-vacuous: the mid-phase edges WP9 exists for, and the boundary itself, are in it.
+    expect(firing).toEqual(expect.arrayContaining(["F8", "F10", "F15"]));
+
+    const recycled: string[] = [];
+    for (const id of firing) {
+      const r = await decideSupervised(
+        {
+          lines: emitted(id),
+          storedMode: "autopilot",
+          tail: "Done.",
+          contextTokens: OVER,
+          wip: featureAtBoundary,
+        },
+        tailDeps("PROCEED"),
+      );
+      if (r.kind === "recycle") recycled.push(id);
+      else expect(r.kind).toBe("fire");
+    }
+    expect(recycled).toEqual(["F15"]);
+    expect([...RECYCLE_BOUNDARY_EDGES]).toEqual(["F15"]);
+  });
+
+  it("⚠️ M16.5 WP9: every boundary edge is a real FEATURE edge in the graph", () => {
+    // A typo ("F 15") or a non-feature ID would make the recycle silently never happen.
+    for (const id of RECYCLE_BOUNDARY_EDGES) {
+      const edge = EDGES.find((e) => e.id === id);
+      expect(edge, id).toBeDefined();
+      expect(edge?.workflow, id).toBe("feature");
+    }
+    expect(RECYCLE_BOUNDARY_EDGES.size).toBeGreaterThan(0);
   });
 });

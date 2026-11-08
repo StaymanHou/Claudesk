@@ -274,8 +274,48 @@ catches 25/29 at a cost of 6/41.
 
 ## E. Context-pressure recycle (WP4)
 
-At a **feature-workflow phase boundary that is not the last phase**, above **400,000 tokens**, the
-supervisor recycles the session (handoff → fresh CC → restore) instead of chaining.
+Above **400,000 tokens**, on the **F15** edge only (`verify-codify → build`, more phases remain),
+the supervisor recycles the session (handoff → fresh CC → restore into `/feature-build`) instead
+of chaining. Every other edge chains as usual over the threshold.
+
+### The boundary is the fired EDGE (M16.5 WP9, 2026-11-07)
+
+`recycleTokens` (`verdict.ts`) requires **all four**, in this order:
+1. the fired edge is in **`RECYCLE_BOUNDARY_EDGES`** (`= {"F15"}`). This is the decision;
+2. the context reading is over the threshold;
+3. the WIP is a feature WIP;
+4. `atNonFinalPhaseBoundary` (`wipPhases.ts`): ≥1 phase done and ≥1 open. ⚠️ **A second guard,
+   not the boundary rule.** F15's "more phases remain" is the agent's claim in a token; the
+   checkboxes are independent evidence, and when they disagree, or the WIP is unreadable, the
+   turn chains instead.
+
+⚠️ **Before WP9 there was no condition 1**, so the "boundary" was a WIP-state check that is true
+at every step inside Phase 2+. All **4** recycles in the installed build's activity log
+(2026-09 → 2026-11) were mid-phase: F10 at 508,028 and 512,541 tokens, F8 at 488,911 and 605,115.
+
+**Why F15 alone** (measured over 3,115 CC transcripts, tokens emitted above 400k; upper bounds,
+since the count includes mentioned tokens):
+
+| Edge | >400k | Ruling |
+|---|---:|---|
+| **F15** codify → build | 136 (101 sessions) | **In**: a new phase starts with nothing half-done. |
+| F11 / F13 verify-human → codify | 52 / 212 | Out. ⚠️ **They never fire at all**: PAUSE in every mode, since the operator's reply drives codify. Even as a recycle point, F15 comes one short step later, and in the last phase they lead to ship. |
+| F7 plan → build | 12 | Out: rare, and no phase has finished. |
+| F8 / F9 / F9b / F10 / F10b | 2–287 | Out: mid-phase, the defect itself. |
+| F16, F38, F39 (codify → ship → review → finalize) | 98–146 | Out: the feature is nearly done; a restore costs more than it saves. |
+| Task (T2 / T5a / T5b) | ≤9 | Out: rare; the recycle stays feature-only. |
+
+**Accepted cost:** a session that crosses 400k inside phase N chains until that phase's F15, at
+most one phase late. A session that crosses it in the last phase never recycles.
+
+**No new activity-log reason.** A mid-phase fire over the threshold records as `fired` with its
+`tokens`, which is what shows a recycle was deferred rather than lost.
+
+**Guards** (`verdict.test.ts`, the recycle-branch describe): every firing feature edge in autopilot
+recycles **iff** it is a member (both directions, the population derived from `EDGES`); every
+member is a real feature edge (a typo cannot silently disable the recycle); the four conditions
+are each falsified individually **on F15**, because on any other edge a "chains when X is false"
+test would pass because of the edge and stop proving X.
 
 ⚠️ **THE THRESHOLD IS AN ABSOLUTE TOKEN COUNT, NOT A PERCENTAGE** (ruling **R-2**; value from
 **R-7**). Two refutations forced this and must not be rebuilt on:
@@ -501,7 +541,7 @@ and the supervisor did not fire, it asks the backend for the display overlay
 |---|---|
 | Detector vs. the real corpus | `verdictReplay.test.ts` — the real `decideVerdict` over the frozen 2,284-record fixture, **34/36** on the non-circular set, both misses pinned as correct, non-vacuity guard |
 | Negative arm | `verdict.test.ts` — PAUSE, `ESCALATE`, unmapped edge, no-stored-mode, already-chained, and the **verify-human GATE** |
-| Recycle conditions | `verdict.test.ts` — all three FIRE-not-recycle arms + strictly-greater threshold |
+| Recycle conditions | `verdict.test.ts` — all four FIRE-not-recycle arms (on F15) + the edge-membership population guard + strictly-greater threshold |
 | Gate OFF | `offInvariantGuard.test.ts` (6 arms / 10 subjects) + Rust-side fail-closed `resolve_gate_enabled` |
 
 ⚠️ **SCORING AGAINST THE FULL FIXTURE WOULD BE CIRCULAR** — its 2,284 labels were produced by the

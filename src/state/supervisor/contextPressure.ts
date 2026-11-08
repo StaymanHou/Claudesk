@@ -39,10 +39,10 @@ import type { TranscriptLine } from "./transcript";
  * is expected to move once the recycle has been observed firing in practice.
  *
  * Measured at decomposition: 400,000 fires on **≤37.7% of sessions as an UPPER BOUND** — the
- * real trigger additionally requires a **non-final phase boundary** AND the **feature
- * workflow**, so observed firing is strictly lower. Deliberately **not** the median (340,730)
- * and **not** p90 (626,024): the median would recycle half of all sessions, and p90 would
- * almost never fire.
+ * real trigger additionally requires a **boundary edge** (F15 since M16.5 WP9, see
+ * `RECYCLE_BOUNDARY_EDGES`) AND the **feature workflow**, so observed firing is strictly lower.
+ * Deliberately **not** the median (340,730) and **not** p90 (626,024): the median would
+ * recycle half of all sessions, and p90 would almost never fire.
  *
  * ⚠️ **The next rung down, if this proves too eager, is 500,000 (21.7% of sessions).** Recorded
  * so a future tuning pass moves to a measured value rather than an invented one.

@@ -109,9 +109,11 @@ export function parseWip(text: string | null | undefined): ParsedWip | null {
  * - *No incomplete phase* → the last phase is done. Recycling here hands a fresh session a
  *   feature with no work left, and the very next step is ship/finalize.
  *
- * ⚠️ This deliberately does NOT ask whether the CURRENT phase just ended — it asks whether the
- * file is in a state where a later phase exists. The turn-end trigger supplies the "a phase just
- * ended" half; conflating the two here would duplicate that signal in a second place.
+ * ⚠️ **A SECOND GUARD, NOT THE BOUNDARY DECISION (M16.5 WP9).** This asks only whether the file
+ * is in a state where a later phase exists, which is true at EVERY step inside Phase 2+. Before
+ * WP9 it was the whole boundary rule, so every mid-phase fire over the threshold recycled. The
+ * "a phase just ended" half is now the fired edge (`RECYCLE_BOUNDARY_EDGES` in `verdict.ts`);
+ * this check confirms the edge's claim from the checkboxes.
  */
 export function atNonFinalPhaseBoundary(parsed: ParsedWip | null): boolean {
   if (parsed === null || parsed.phases.length === 0) return false;

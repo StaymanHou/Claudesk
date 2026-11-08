@@ -505,7 +505,7 @@ export async function decideSupervised(
   //     more than it may be chained — recycling it would destroy the very question the operator
   //     was about to answer. Placing this check BEFORE the adjudicator would do exactly that,
   //     and it is the single most damaging ordering mistake available in this function.
-  const tokens = recycleTokens(input);
+  const tokens = recycleTokens(input, mechanical.edgeId);
   if (tokens !== null) {
     return {
       kind: "recycle",
@@ -520,26 +520,46 @@ export async function decideSupervised(
 }
 
 /**
+ * The edges at which a context-pressure recycle may happen: the clean workflow boundaries.
+ *
+ * ⚠️ **F15 ONLY (M16.5 WP9, 2026-11-07).** F15 is `verify-codify → build` with more phases
+ * remaining: one phase is finished and tested, and the next has not started, so a fresh session
+ * restores into `/feature-build` with nothing half-done. Every other edge chains as usual over the
+ * threshold. A session that crosses it mid-phase recycles at that phase's F15, at most one phase
+ * later.
+ *
+ * ⚠️ **Before WP9 there was no edge rule**, and every AUTO fire inside Phase 2+ recycled. All four
+ * recycles in the installed build's log were mid-phase (F8, F10). Why each other candidate is out,
+ * with the transcript measurement: `arch/workflow-supervisor.md` §E.
+ *
+ * ⚠️ Every member must be a feature edge in `workflowMachine/edges.ts` (guarded by a test), so a
+ * typo cannot silently disable the recycle.
+ */
+export const RECYCLE_BOUNDARY_EDGES: ReadonlySet<string> = new Set(["F15"]);
+
+/**
  * Should this would-be fire recycle the session instead of chaining? Returns the context reading
  * that justifies the recycle, or `null` for no recycle. Returning the NUMBER rather than a boolean
  * is what lets the caller build the `recycle` verdict without a cast: `null` has to be handled
  * because the type requires it, not because a comment says so (paydown WP8, D1).
  *
- * ⚠️ **ALL THREE CONDITIONS, AND EACH IS SEPARATELY NECESSARY.** Extracted as a named predicate
- * rather than inlined as a three-way `&&` so a test can drive each condition's falsification
- * independently — this repo's standing defect shape is *a mechanism correct in itself behind a
- * caller that does not honor it*, and a bare inline conjunction is exactly what makes the
- * individual arms untestable.
+ * ⚠️ **ALL FOUR CONDITIONS, AND EACH IS SEPARATELY NECESSARY.** Extracted as a named predicate
+ * rather than inlined so a test can drive each condition's falsification independently. This
+ * repo's standing defect shape is *a mechanism correct in itself behind a caller that does not
+ * honor it*, and a bare inline conjunction is exactly what makes the individual arms untestable.
  *
- *   1. **Over the context threshold.** ⚠️ A `null` (unreadable) reading is NOT over — see
- *      `isOverPressure`. The recycle is the destructive branch; no evidence means no recycle.
- *   2. **The feature workflow.** Task/incident/product WIPs have no phase structure, so the
- *      boundary rule is meaningless for them. Auto-chain enforcement still applies — this gates
- *      only the recycle.
- *   3. **At a non-final phase boundary.** Work completed AND work remaining. A fresh WIP has
- *      nothing to recycle at; a finished one is headed for ship, not a new session.
+ *   1. **The fired edge is a boundary** (`RECYCLE_BOUNDARY_EDGES`). This is the decision.
+ *   2. **Over the context threshold.** ⚠️ A `null` (unreadable) reading is NOT over (see
+ *      `isOverPressure`). The recycle is the destructive branch; no evidence means no recycle.
+ *   3. **The feature workflow.** Auto-chain enforcement still applies elsewhere; this gates only
+ *      the recycle.
+ *   4. **The WIP agrees a later phase exists** (`atNonFinalPhaseBoundary`). ⚠️ A SECOND GUARD,
+ *      not the boundary decision: F15 already claims "more phases remain", but that claim is the
+ *      agent's token. The checkboxes are independent evidence, and when the two disagree (or the
+ *      WIP is unreadable) the turn chains instead, which is the safe direction.
  */
-function recycleTokens(input: VerdictInput): number | null {
+function recycleTokens(input: VerdictInput, edgeId: string): number | null {
+  if (!RECYCLE_BOUNDARY_EDGES.has(edgeId)) return null;
   const tokens = input.contextTokens ?? null;
   const wip = input.wip ?? null;
   if (tokens === null) return null;

@@ -518,15 +518,15 @@ describe("fireOne — the M15 WP4 recycle arm", () => {
   it("reports a recycle and injects NOTHING", async () => {
     // ⚠️ The zero-injection assertion is the load-bearing half. A recycle that ALSO injected the
     // skill command would run the next phase in the very session it was about to end.
-    const h = harness(() => overThresholdTail("F5"));
+    const h = harness(() => overThresholdTail("F15"));
     const r = await fireOne(ws(), {
       ...h,
       readWip: async () => featureAtBoundary,
     });
 
     expect(r.recycle).toBeDefined();
-    expect(r.recycle?.skill).toBe("feature-plan");
-    expect(r.recycle?.edgeId).toBe("F5");
+    expect(r.recycle?.skill).toBe("feature-build");
+    expect(r.recycle?.edgeId).toBe("F15");
     expect(r.recycle?.tokens).toBe(RECYCLE_TOKEN_THRESHOLD + 1);
     expect(h.injected).toEqual([]);
   });
@@ -535,7 +535,7 @@ describe("fireOne — the M15 WP4 recycle arm", () => {
     // ⚠️ `fired` means "a slash command went into the PTY". A recycle hands off to
     // `recycleSession()` instead, and reporting it as `fired: true` would make the two
     // indistinguishable in a diagnostic.
-    const h = harness(() => overThresholdTail("F5"));
+    const h = harness(() => overThresholdTail("F15"));
     const r = await fireOne(ws(), {
       ...h,
       readWip: async () => featureAtBoundary,
@@ -549,8 +549,8 @@ describe("fireOne — the M15 WP4 recycle arm", () => {
     // would fall through to `no(verdict.reason)` and report `undefined`. Conversely if the arms
     // were swapped, a withhold could be mislabelled `context-pressure-recycle`. Asserting BOTH
     // directions is what pins the ordering behaviorally rather than by field layout.
-    const h = harness(() => tailFor("F3"), "PROCEED");
-    const r = await fireOne(ws({ storedMode: "orchestrated" }), {
+    const h = harness(() => overThresholdTail("F15"), "PROCEED");
+    const r = await fireOne(ws({ storedMode: "stepping" }), {
       ...h,
       readWip: async () => featureAtBoundary,
     });
@@ -563,7 +563,7 @@ describe("fireOne — the M15 WP4 recycle arm", () => {
   it("⚠️ omitting `readWip` disables the recycle entirely and the skill FIRES", async () => {
     // The opt-in property: WP3's chain-only behavior is preserved for every caller that does not
     // supply the dep, with no edits to those callers.
-    const h = harness(() => overThresholdTail("F5"));
+    const h = harness(() => overThresholdTail("F15"));
     const r = await fireOne(ws(), h);
     expect(r.fired).toBe(true);
     expect(r.recycle).toBeUndefined();
@@ -573,7 +573,7 @@ describe("fireOne — the M15 WP4 recycle arm", () => {
   it("⚠️ a THROWING `readWip` degrades to chaining, never to a recycle or a dead sweep", async () => {
     // ⚠️ The withholding direction: an unreadable WIP must never be the reason a session is
     // ended, and must not abort the sweep either.
-    const h = harness(() => overThresholdTail("F5"));
+    const h = harness(() => overThresholdTail("F15"));
     const r = await fireOne(ws(), {
       ...h,
       readWip: async () => {
@@ -585,7 +585,7 @@ describe("fireOne — the M15 WP4 recycle arm", () => {
   });
 
   it("⚠️ an UNDER-threshold turn at the same boundary chains instead of recycling", async () => {
-    const h = harness(() => tailFor("F5"));
+    const h = harness(() => tailFor("F15"));
     const r = await fireOne(ws(), {
       ...h,
       readWip: async () => featureAtBoundary,
