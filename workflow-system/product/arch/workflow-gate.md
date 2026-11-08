@@ -40,8 +40,8 @@ claim's nouns, not a known-wrong number.
    neither "recycle" nor "session", so a `RECYCLE_SESSION` menu id would register unseen by arms
    1–3: `SURFACE-2026-08-18-GUARD-VOCABULARY-MISSES-RECYCLE-AND-SESSION`, open and unexercised).
    The M13 WP4 per-subject probe went red via each subject's own arm. The supervisor authored no
-   surface that would exercise the gap; its only `recycle`-named export is the numeric
-   `RECYCLE_TOKEN_THRESHOLD` (→ [workflow-supervisor](workflow-supervisor.md) §G).
+   surface that would exercise the gap; its `recycle`-named exports are data, not surfaces:
+   the numeric `RECYCLE_TOKEN_THRESHOLD` and the edge set `RECYCLE_BOUNDARY_EDGES` (M16.5 WP9) (→ [workflow-supervisor](workflow-supervisor.md) §G).
 
 2. **Enable is a pure Claudesk UI-state flip touching NOTHING in `~/.claude/`** — *except* through an explicit, user-driven wizard (property 2's revised form, changed by the WP3.5 insert). Verified live at WP5 by `md5`-hashing every file under `~/.claude/` **around each toggle**: byte-identical in both directions.
 3. **A one-time evangelistic invite**, shown only while OFF. Fires on first launch with **≥1 project** (a fresh install has none, so the pitch would have no referent); three outcomes — primary **routes to Settings** (it does *not* flip the gate), `[Later]` persists nothing and returns next launch, `[Dismiss]` is permanent.

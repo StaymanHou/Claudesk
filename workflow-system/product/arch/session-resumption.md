@@ -336,6 +336,18 @@ the resting-label rule and the gate collapse, as a **value** rather than a nest 
   you can read** — and never verify clipping with `scrollWidth > clientWidth` (integer-rounded,
   therefore blind to precisely the sub-pixel overflow that triggers an ellipsis).
 
+### The picker's row ORDER (M16.5 WP5, 2026-11-02 — operator ruling)
+
+- **Not-open projects lead, most recently CLOSED first** (`last_closed_at`, `config_store`), falling
+  back to `last_opened_at` for a project never closed since the field existed. ⚠️ **Not
+  `last_opened_at`**: an open stamp only records the order the morning's workspaces were clicked in.
+- `last_closed_at` is stamped on a workspace **close AND on app quit** (`lib.rs`, the quit path
+  stamps every open workspace), so a relaunch orders by the session just ended.
+- **Open workspaces go LAST, in a marked "Open" group.** Clicking one focuses its workspace; it is not
+  re-opened. (Prior `chooser-leads-with-what-you-can-act-on`.)
+- The order is the pure `pickerOrder.ts` (`available` / `open`), unit- and live-tested apart from
+  the component.
+
 ### The OFF-invariant guard's FOURTH arm (WP5)
 
 M12's surfaces — a picker cell and a spawn-time action — are neither a panel, a menu id, nor a chord,

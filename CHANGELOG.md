@@ -4,6 +4,7 @@
 
 - **Feature shipped:** M16.5 WP9 makes the context-pressure recycle key on the fired edge: above 400k tokens the supervisor recycles only at F15 (verify-codify → build, a new phase starting), where before every AUTO fire inside Phase 2+ recycled mid-phase, as all four recycles in the installed build's log did.
 - **Milestone:** WP9: Recycle only at clean boundaries
+- **Product cycle complete:** Milestone 16.5, supervisor hardening + QoL + paydown (9 WPs): only execution workflows auto-chain, only an emitted transition token counts and adjudicator failures are loud, an artifact watch reads idle and every verify-human pause reads blue, the QoL batch and per-result replace shipped, a 15-WP paydown cleared the carried code-quality findings, and the context-pressure recycle now fires only at F15; the M15 on-screen checks and WP9's installed check are deferred to dogfooding, not passed.
 
 ## 2026-11-07
 

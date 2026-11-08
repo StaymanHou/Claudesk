@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-04  # WP8 sweep emitted (backlog-paydown-wbs.md); was: WP6 shipped (per-result + per-file replace from Find Results; overlay z-order + CM6 find-bar autocorrect side fixes)
+updated: 2026-11-08  # WP9 shipped (recycle keys on the fired edge, F15 only); was: 2026-11-06 WP9 inserted (recycle only at clean boundaries); was: 2026-11-04 WP8 sweep emitted (backlog-paydown-wbs.md); was: WP6 shipped (per-result + per-file replace from Find Results; overlay z-order + CM6 find-bar autocorrect side fixes)
 cycle: milestone-16-5-supervisor-hardening-qol-and-paydown
 ---
 
@@ -328,6 +328,61 @@ them, and its temporary WBS lives inside this WP.
     completion, as it instructs; its full text, rulings R1–R4 included, is at
     `git show 44c7a98:workflow-system/product/backlog-paydown-wbs.md`.
 
+### WP9: Recycle only at clean boundaries (operator insert, 2026-11-06) ✅ SHIPPED 2026-11-08 (commit b999081)
+
+**Milestone:** M16.5
+**Dependencies:** none in code (WP3/WP4 shipped). Independent of WP8's remaining sweep WPs; may
+run before or after them. ⚠️ It lands after the paydown sweep was emitted, so its own review
+findings go to the backlog like any other, not into WP8.
+**Size:** S–M · **Workflow:** feature, **starts at `/feature-spec`** (the boundary set is decided
+there, see 9.1).
+**Problem (operator ask):** the context-pressure recycle should fire only at a clean workflow
+boundary, most often right before a new phase starts.
+
+⚠️ **The gate today is a WIP-STATE check, not an EDGE check — measured from source 2026-11-06.**
+`arch/workflow-supervisor.md` §E describes the recycle as "at a feature-workflow phase boundary that
+is not the last phase", but `atNonFinalPhaseBoundary` (`src/state/supervisor/wipPhases.ts`) returns
+true whenever the WIP has **≥1 phase done AND ≥1 phase open**. `recycleTokens` (`verdict.ts`) never
+looks at the edge being fired. So once Phase 1 is ticked and context is over 400k, **every AUTO
+fire inside Phase 2+ is a recycle candidate**: build → verify-auto, verify-auto → verify-self, and
+so on. A recycle at those edges hands off mid-phase, which is the opposite of clean. The doc and the
+code disagree, and the doc describes what the operator wants.
+
+**Tasks:**
+- [x] 9.1 **Spec: choose the boundary set.** The default member is **F15** (`verify-codify → build`,
+      "tests written, more phases remain"), the start of a new phase. Candidates to decide at spec,
+      each with its edge ID and a reason in or out:
+  - `verify-human → verify-codify` (F11/F13): the operator just approved, a natural rest point, but
+    codify still needs that phase's context.
+  - entry to `ship` (F16) or `finalize`: probably out, since the feature is nearly done and a
+    restore costs more than it saves.
+  - task/incident/product workflows: today the recycle is feature-only by ruling. Whether a clean
+    boundary exists in them (e.g. task `plan → act`) is a spec question, not a default.
+  - Measure before ruling: how often each candidate edge is reached over 400k in the CC
+    transcripts (the M15 fixture method), so the set is chosen from frequency, not intuition.
+- [x] 9.2 Make the recycle key on the **edge being fired** (`mechanical.edgeId`), checked against
+      an explicit allow-list from 9.1. Keep the threshold, the feature-workflow gate (unless 9.1
+      widens it), and the "after the adjudicator" ordering. Every edge outside the list chains as
+      usual.
+- [x] 9.3 Decide whether `atNonFinalPhaseBoundary` stays as a second guard or is deleted. It is
+      redundant for F15 (F15 already means "more phases remain"). If deleted, check it has no
+      other caller.
+- [x] 9.4 Tests: each allow-listed edge recycles over the threshold; a **non-boundary edge inside
+      Phase 2+ over the threshold FIRES and does not recycle** (the case that recycles today and
+      must fail on current code first); mutation-prove the allow-list membership one edge at a time.
+- [x] 9.5 Fix `arch/workflow-supervisor.md` §E, the `recycleTokens` doc (its condition 3), and the
+      activity-log reason vocabulary if a new withhold reason is added.
+
+**Acceptance:** over 400k, a mid-phase AUTO edge chains instead of recycling; F15 (and any edge
+9.1 adds) recycles. Installed-build observation is deferred to dogfooding, as with WP7.
+
+**Outcome (2026-11-08, `b999081`):** the boundary set is **F15 only** (`RECYCLE_BOUNDARY_EDGES` in
+`verdict.ts`), chosen from 3,115 transcripts; F11/F13 turned out to be PAUSE in every mode, so they
+never fire at all. 9.3: `atNonFinalPhaseBoundary` is KEPT as a second guard on F15's claim. All 4
+field recycles in the installed log were mid-phase (F8/F10) and now replay as fires. As-built:
+`arch/workflow-supervisor.md` §E. The installed-build check is deferred to dogfooding (every
+`recycle-started` should carry `edgeId: "F15"`). Review: 1 MAJOR + 3 MINOR (comments) backlogged.
+
 ## Dependency map
 
 ```
@@ -336,6 +391,7 @@ WP2 (probe: adjudicator) ··· gates only option (c) of WP3.1      │
 WP3 (supervisor correctness) ────────────────────────────────────┼──► /release ──► WP7 (installed acceptance) ──► WP8 (paydown)
 WP5 (QoL batch) ─────────────────────────────────────────────────┤
 WP6 (per-result replace) ────────────────────────────────────────┘
+WP9 (recycle at clean boundaries) — independent; spec → build, any time
 ```
 
 - **The critical path is WP1 → WP4 → release → WP7 → WP8.** WP2, WP3, WP5 and WP6 are parallel
@@ -364,6 +420,8 @@ WP6 (per-result replace) ──────────────────�
 - `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` is closed on the installed
   build, or rewritten to what is still unseen.
 - The paydown sweep has run and its plan is executed.
+- Over 400k, the context-pressure recycle fires only at the WP9 boundary edges (F15 at minimum);
+  every other AUTO edge chains.
 
 ## Probe outcomes
 

@@ -8,7 +8,7 @@
 - **Context:** the error means `el` was not an `HTMLInputElement` of the realm whose prototype the setter came from: either the query found a different element under load, or the setter came from another jsdom window (a cross-test realm leak). Either way the test can report a false failure, which costs a gate re-run and invites "fixing" an unrelated change.
 - **Suggested action:** take the setter from the element's own realm (`Object.getPrototypeOf(el)` or `el.ownerDocument.defaultView.HTMLInputElement.prototype`) and assert the element's tag before setting; check whether `liveWorkspace`/`livePicker`-style helpers share the same idiom (the picker's `setNativeValue` copies, see `SURFACE-2026-11-06-QUALITY-WP13-PICKER-LIVE-TESTS-HAVE-NO-SHARED-HARNESS`). Reproduce first: loop the full vitest run a few times.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
 
 ## SURFACE-2026-10-21-ADJUDICATOR-FAILS-THE-BREAK-AXIS-ON-ASK-SHAPED-TURNS
 
@@ -30,7 +30,7 @@
 - **Pointer:** **1 MAJOR + 3 MINOR** from the review of `b999081` (M16.5 WP9). MAJOR: the "before WP9 every Phase 2+ fire recycled; the four field recycles were F8/F10" history is narrated in four code/test sites as well as arch §E, against the comment-budget rule. MINOR: the recycle-branch test comments use the old condition numbering; `RECYCLE_BOUNDARY_EDGES` is string-typed; the docstring carries a date.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# recycle-at-clean-boundaries — 2026-11-08`.
 - **Priority:** medium (MAJOR) / low (the rest)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
 - **Pickup shape:** one small comments-only task: cut the four comments to the invariant + a pointer to arch §E, renumber the test comments, drop the date. Prove comments-only with the parser-token diff.
 
 ## Code-quality findings — paydown-2026-11-04-wp14-comment-convention-pass (2026-11-07)
@@ -38,7 +38,7 @@
 - **Pointer:** **1 MAJOR + 5 MINOR** from the review of `20930c3` (0 CRITICAL). MAJOR: `singleAuthority.test.ts`'s `absent` rules match raw, case-sensitive text and drop their patterns' flags, so wrapped or capitalized labels evade them while the header claims normalized matching. MINORs: no permanent positive control per `absent` rule; a header overclaim; bare-digit fingerprints; a misaimed `workflow-gate.md` pointer; the comment budget does not name the guard.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp14-comment-convention-pass — 2026-11-07`.
 - **Priority:** medium (MAJOR) / low (MINORs)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
 - **Pickup shape:** one small task on `singleAuthority.test.ts` (MAJOR + the control + the two header/fingerprint MINORs together); the two doc pointers fold into it.
 
 ## Code-quality findings — paydown-2026-11-04-wp13-settings-split-and-picker-row (2026-11-06)
@@ -46,7 +46,7 @@
 - **Pointer:** **1 MINOR** remains from the review of `0e7c138` (0 CRITICAL, 0 MAJOR): the picker's five live tests share no harness. (The guard-ordering and guard-rename MINORs were resolved at paydown WP13b, and the `PickerRow.tsx` comment indentation at WP14, both 2026-11-07.)
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp13-settings-split-and-picker-row — 2026-11-06`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
 - **Pickup shape:** its own small task (left out of WP13b, decision D4: migrating five files is not small).
 
 ## Code-quality findings — paydown-2026-11-04-wp4-run-lock-and-sync-guard (2026-11-04)
@@ -54,7 +54,7 @@
 - **Pointer:** **1 MAJOR + 4 MINOR** from the review of `190b3a2`. MAJOR: the process-group primitives (`StopOnDrop`, the grace constant, group kill + reap) are copied between `workflow_install::runner` and `adjudicator`, not shared, and only one copy documents its limits. MINOR: the grace path drops queued output; `run_streaming` has no output cap; there are three ways to release the run lock; the `spawn_blocking` hop is repeated.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp4-run-lock-and-sync-guard — 2026-11-04`.
 - **Priority:** medium (MAJOR) / low (the rest)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
 - **Pickup shape:** one small task: a shared `subprocess` module (group spawn, kill + reap, stop-on-drop, grace, output cap, limits doc) that both runners use, plus the grace-path drain. The lock-release unification and the hop helper are independent one-liners.
 
 ## SURFACE-2026-09-28-IS-TURN-START-FIRES-ON-MID-TURN-DEQUEUES
@@ -187,7 +187,7 @@
   `supervisor-activity.log` (an `unsent-input-present` withhold is the observable for checks 1–2),
   then decide probe Q2.
 - **Priority:** medium (no longer a suspect for the silence)
-- **Status:** open — rewritten 2026-09-28; unblocked, waiting on a release containing `778fe72`
+- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*: runnable since `v0.7.1` (contains `778fe72`) is installed; waiting on dogfooding (M16.5 WP7 deferred its checks there). Was: open — rewritten 2026-09-28
 
 ## SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION
 - **Source:** feature:verify-human (M15 WP4 Phase 4). Re-framed 2026-09-25 as a probable bug.
@@ -236,7 +236,7 @@
 - **Related items:** `SURFACE-2026-09-28-A-LEAKED-WORKSPACE-SUBSCRIPTION-DUPLICATES-TURN-ENDS-AND-STEALS-THE-GEAR` (Buried 2026-11-04 to `backlog-archived.md`: dev-build-only). (The quoted-token and format-alarm items it once listed were resolved at M16.5 WP3, 2026-10-27; the format alarm now makes the CC-format-change regression loud.)
 - **Priority:** medium (a release containing `778fe72` — `v0.7.1` — is installed as of 2026-09-29; per this entry's own rule it drops from high). Was: high until a release containing `778fe72` is installed (the field build is still
   silent); medium after that.
-- **Status:** pending — ⚠️ **M16.5 WP7 (2026-11-04) did NOT run the on-screen checks: the operator deferred them to ordinary dogfooding** ("if I notice something while using it, I'll give feedback or add to backlog"). So checks 1–3, ESCALATE → no fire, and WP4's on-screen dot behavior (an artifact watch alone reads grey: no `monitor`-type `Stop` has ever appeared in the installed `status-channel.log`; every verify-human pause reads blue) stay **unseen, NOT passed**. A probe design that provokes each on purpose is in the archived WIP `workflow-system/state/archive/m16-5-wp7-installed-acceptance.md` if anyone wants to run it. As of 2026-11-04 the installed 0.8.1 has logged **0 plain fires** (first 0.8.1 record 01:19Z). Earlier: **a plain fire IS now observed on the installed build:** `v0.7.1` fired four times on 2026-10-12 (`bluecg-maps`, autopilot, P3→P5→P7→P9 in `supervisor-activity.log`), on top of the 2026-09-29 recycle. What remains is the on-screen half (a fire with its `⚙`, a fire with another app focused, Esc recovery); scheduled to close in **M16.5** (roadmap, 2026-10-20; WP7 closed it as deferred to dogfooding, see above). Earlier: fix shipped in `v0.7.1` (2026-09-29). Checks 1–4 and 6 were deferred to dogfooding on the installed release (now `v0.7.1`).
+- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*, open until seen in dogfooding — ⚠️ **M16.5 WP7 (2026-11-04) did NOT run the on-screen checks: the operator deferred them to ordinary dogfooding** ("if I notice something while using it, I'll give feedback or add to backlog"). So checks 1–3, ESCALATE → no fire, and WP4's on-screen dot behavior (an artifact watch alone reads grey: no `monitor`-type `Stop` has ever appeared in the installed `status-channel.log`; every verify-human pause reads blue) stay **unseen, NOT passed**. A probe design that provokes each on purpose is in the archived WIP `workflow-system/state/archive/m16-5-wp7-installed-acceptance.md` if anyone wants to run it. As of 2026-11-04 the installed 0.8.1 has logged **0 plain fires** (first 0.8.1 record 01:19Z). Earlier: **a plain fire IS now observed on the installed build:** `v0.7.1` fired four times on 2026-10-12 (`bluecg-maps`, autopilot, P3→P5→P7→P9 in `supervisor-activity.log`), on top of the 2026-09-29 recycle. What remains is the on-screen half (a fire with its `⚙`, a fire with another app focused, Esc recovery); scheduled to close in **M16.5** (roadmap, 2026-10-20; WP7 closed it as deferred to dogfooding, see above). Earlier: fix shipped in `v0.7.1` (2026-09-29). Checks 1–4 and 6 were deferred to dogfooding on the installed release (now `v0.7.1`).
 - **Also in that release (2026-09-28, task `f-b-quality-cleanup`):** the supervisor's transcript read
   now names CC's session id (it had passed the PTY id, so every read took the newest-modified file)
   and follows the LIVE profile's config root. When reading a fire's `transcriptPath` in the activity
@@ -624,7 +624,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Ready-made repro (2026-11-06):** paydown WP11 moved the scratch workspaces to `../claudesk-scratch/`, so CC sees `scratch-a`, `scratch-b` and `restore-test` as never-trusted folders. (`scratch-c` was trusted during the WP11 probe.) Put a `.session.md` in one, open it, and the auto-fired `/session-restore` should land on the trust prompt.
 - **Suggested action:** Pick one: (a) skip or defer the auto-fire until a first hook event proves CC reached its prompt (a `SessionStart` hook, if the channel sees one before input), or (b) detect a never-trusted folder (`~/.claude.json` → `projects[<path>].hasTrustDialogAccepted`) and announce instead of firing. Note that (a) must not parse PTY output (the CLAUDE.md rule).
 - **Priority:** low (first open of a new folder only; recovery is one Re-launch plus accepting trust)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
 
 ## SURFACE-2026-11-04-REOPENED-WORKSPACE-CC-PANE-NEVER-PAINTS
 - **Source:** inbox live check (drive-mode picker, `/session-start` half, 2026-11-04), dev build
