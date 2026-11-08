@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: Recycle only at clean boundaries (M16.5 WP9)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-11-08
 **Created:** 2026-11-07
 **Entry:** spec (complex feature — WBS WP9 names spec as its entry: the boundary set is a spec decision)
 
@@ -232,11 +232,48 @@ reverse, and it is presented here for the spec-review pause instead of as a sepa
     — evidence: `pnpm verify:auto` → exit 0, 49s: `Test Files 292 passed`, `Tests 3800 passed`, cargo test 1069 passed, clippy + fmt + check:link clean (1 pre-existing lint warning, XtermPane.tsx:943)
     — no new tests: every approved behavior already has a regression-catching test written at build (mid-phase `it.each`, F15 recycle, the IFF population guard, AC-5 membership, the `activityFunnel` consuming-surface test through the real `useSupervisor`). The field replay was not codified: its four readings exercise the same branch as threshold+1, already covered by the population guard.
 
+## Code-Quality Review — recycle-at-clean-boundaries
+
+*(ship commit `b999081`, window `b999081^..b999081`; drive_mode=autopilot → MAJOR + MINOR auto-backlogged to `backlog-quality-findings.md` → `# recycle-at-clean-boundaries — 2026-11-08`.)*
+
+### Strengths
+- A one-line guard at the top of `recycleTokens` changes the policy without touching `decideSupervised`'s ordering (mechanical fire → adjudicator → recycle).
+- The condition tests were re-anchored on F15, where each condition is what decides; the `fanOut` withhold-ordering test got stronger (over-threshold F15 in stepping instead of an under-threshold F3).
+- A two-directional population guard derived from `EDGES`, plus a membership guard against typos (lessons entry 13's shape).
+- `atNonFinalPhaseBoundary` kept and re-documented as a second guard; disagreement or an unreadable WIP chains (the safe direction).
+- Arch §E records the measurement and the in/out reason per edge; a deferred recycle stays visible as a `fired` record with `tokens`.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [verdict.ts `RECYCLE_BOUNDARY_EDGES` doc, wipPhases.ts `atNonFinalPhaseBoundary` doc, verdict.test.ts mid-phase `it.each` comment, activityFunnel.test.tsx MID-PHASE comment] The pre-WP9 history and the four field recycles are narrated in four code/test sites plus arch §E — against the comment-budget rule, two commits after WP14 consolidated this pattern; `singleAuthority.test.ts` matches exact phrases only, so paraphrases pass. → `SURFACE-2026-11-08-QUALITY-WP9-RECYCLE-HISTORY-NARRATED-IN-FOUR-SITES`
+
+**MINOR**
+- [verdict.test.ts recycle-branch describe] Test comments use the old condition numbering ("Condition 1 falsified, other two held" …), now off by one. → `…-WP9-TEST-COMMENTS-USE-OLD-CONDITION-NUMBERS`
+- [verdict.ts] `RECYCLE_BOUNDARY_EDGES` is `ReadonlySet<string>`; validity is a runtime test only. → `…-WP9-BOUNDARY-SET-IS-STRING-TYPED`
+- [verdict.ts] The docstring carries a date (provenance in code). → `…-WP9-DOCSTRING-CARRIES-A-DATE`
+
+### Assessment
+The defect is fixed at the right layer: the fired edge is the decision, with the WIP check kept as an independent safety check. The test changes are the strongest part. The debt is in the comments: the same history in four source files, and stale condition numbers in the test file. Neither affects behavior; both will drift when the boundary set is tuned.
+
+### If you disagree
+Mark a finding `[DISMISSED]` in this section before `/feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** the WBS framed the defect as "a recycle at mid-phase edges *could* happen"; the installed activity log showed it already HAD, every time: all 4 field recycles were F8/F10. Also, F11/F13 are PAUSE in every drive mode, so they were never candidates; the transcript frequency alone (212 over 400k) would have made F13 look like the best boundary.
+- **Assumptions that held:** F15 as the default member; keeping `atNonFinalPhaseBoundary` as a second guard; no new log reason (a `fired` record already carries `tokens`); a single phase.
+- **Assumptions that were wrong:** the spec's AC-7 said the existing recycle tests stay "unmodified". Every one of them emitted F5, which can no longer recycle, so each "fires when X is false" test would have passed on the EDGE and stopped proving X (lessons entry 15). They all had to move to F15.
+- **Approach delta:** added a two-directional population guard derived from `EDGES` (not in the plan's task list, which named only per-edge mutants). A scripted test re-key hit the wrong `describe` once (the HYBRID block's F5 veto test), caught by the next run and reverted.
+
+**Closure:** Feature complete: M16.5 WP9 "recycle only at clean boundaries" has shipped. Above 400k the supervisor now recycles only at F15 (the start of a new phase); every mid-phase edge chains as usual. Verify in dogfooding: every `recycle-started` line in `supervisor-activity.log` should carry `edgeId: "F15"`. Requester = operator, closure notice for self-record.
+
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality (ship commit = HEAD after this commit)
+- **Path:** Feature > done
+- **Active scope:** none (finalized 2026-11-08)
 - **Blocked:** none
-- **Unvisited:** review-quality, finalize
+- **Unvisited:** none
 - **Open discoveries:** none
 
 ## Discoveries

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-08
+
+- **Feature shipped:** M16.5 WP9 makes the context-pressure recycle key on the fired edge: above 400k tokens the supervisor recycles only at F15 (verify-codify → build, a new phase starting), where before every AUTO fire inside Phase 2+ recycled mid-phase, as all four recycles in the installed build's log did.
+- **Milestone:** WP9: Recycle only at clean boundaries
+
 ## 2026-11-07
 
 - **Task closed:** Paydown 2026-11-04 WP13b closes the WP12 and WP13 review leftovers: the turn readout's supervisor `⚙` now comes from its own gated `supervisorTurnBadge` (arm 6's third OFF-invariant subject, pin 9 → 10), a drive-mode apply sets its one-shot respawn override only when there is a pane to relaunch, the announce-once guard checks ordering against the picker's row loop again, and three settings guards lost their panel-era names.

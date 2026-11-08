@@ -25,6 +25,14 @@
 - **Priority:** low (lowered from high 2026-10-27 per design prior `simple-version-first-when-the-source-fix-shrank-the-problem`: breaks are now rare at source, and the next lever, richer adjudicator input, is an advanced minor-gain enhancement)
 - **Status:** open — re-measured at M16.5 WP3 (3.5), question KEPT per AC-18 (see the WP3 measurement above). Stays open.
 
+## Code-quality findings — recycle-at-clean-boundaries (2026-11-08)
+
+- **Pointer:** **1 MAJOR + 3 MINOR** from the review of `b999081` (M16.5 WP9). MAJOR: the "before WP9 every Phase 2+ fire recycled; the four field recycles were F8/F10" history is narrated in four code/test sites as well as arch §E, against the comment-budget rule. MINOR: the recycle-branch test comments use the old condition numbering; `RECYCLE_BOUNDARY_EDGES` is string-typed; the docstring carries a date.
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# recycle-at-clean-boundaries — 2026-11-08`.
+- **Priority:** medium (MAJOR) / low (the rest)
+- **Status:** pending
+- **Pickup shape:** one small comments-only task: cut the four comments to the invariant + a pointer to arch §E, renumber the test comments, drop the date. Prove comments-only with the parser-token diff.
+
 ## Code-quality findings — paydown-2026-11-04-wp14-comment-convention-pass (2026-11-07)
 
 - **Pointer:** **1 MAJOR + 5 MINOR** from the review of `20930c3` (0 CRITICAL). MAJOR: `singleAuthority.test.ts`'s `absent` rules match raw, case-sensitive text and drop their patterns' flags, so wrapped or capitalized labels evade them while the header claims normalized matching. MINORs: no permanent positive control per `absent` rule; a header overclaim; bare-digit fingerprints; a misaimed `workflow-gate.md` pointer; the comment budget does not name the guard.
