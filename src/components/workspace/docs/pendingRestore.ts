@@ -1,13 +1,13 @@
-// M11 WP4 P3.3 — the hold-and-retry state machine for a deferred scroll restore.
+// M11 — the hold-and-retry state machine for a deferred scroll restore.
 //
 // ── Why this is a module and not two `useRef`s in the effect ─────────────────────
-// The Phase 2 verify-self subagent named this exact seam as the highest-risk part of WP4:
-// Phase 2 proved the *decision* logic (`planRestore` returns `apply: false` when the box is
-// unmeasurable), but nothing proved the CALLER honors it — that the offset is actually HELD
-// and RE-ATTEMPTED rather than quietly dropped. It flagged it as where the
-// `strictmode-remount-deadlocks-an-unreleased-fetch-latch` defect class hides.
+// This seam is the highest-risk part of live reload. The pure layer proves the *decision* logic
+// (`planRestore` returns `apply: false` when the box is unmeasurable), but nothing there proves
+// the CALLER honors it — that the offset is actually HELD and RE-ATTEMPTED rather than quietly
+// dropped. It is where the `strictmode-remount-deadlocks-an-unreleased-fetch-latch` defect
+// class hides.
 //
-// That warning is earned. The predecessor bug in this very component was a latch SET before
+// That risk is earned. The predecessor bug in this very component was a latch SET before
 // an await and never RELEASED on the cancelled path, which deadlocked under StrictMode's
 // mount → unmount → remount and rendered a permanently blank panel — while `tsc`, lint, a
 // 1600-test suite and a clean build were all green. The lesson recorded from it is that a

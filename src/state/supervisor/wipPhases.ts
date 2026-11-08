@@ -84,19 +84,9 @@ export function parseWip(text: string | null | undefined): ParsedWip | null {
     named && KNOWN_WORKFLOWS.has(named) ? (named as WipWorkflow) : null;
 
   const phases: WipPhase[] = [];
-  // `lastIndex` reset — DEFENSIVE, and deliberately kept despite being unobservable today.
-  //
-  // ⚠️ **Honest status: this is an EQUIVALENT-MUTANT site.** Removing this line changes no
-  // behavior reachable through `parseWip`, and a mutation run proved it (19/19 still green).
-  // The reason is that the loop below always runs to exhaustion — `exec` returns `null` on the
-  // final attempt and resets `lastIndex` to 0 itself, so a module-level `g` regex is already
-  // back at 0 by the time the next call starts.
-  //
-  // ⚠️ It stays because it becomes load-bearing the moment anyone adds a `break`, an early
-  // `return`, or a `phases.length` cap to that loop — at which point the regex WOULD retain a
-  // non-zero `lastIndex` and the NEXT call would silently find fewer phases. That failure is
-  // invisible (a short phase list reads as a valid parse), and this line costs nothing.
-  // ⚠️ Do not "clean it up" as dead code without also proving the loop still exhausts.
+  // Module-level `/g` regex: reset in case a future early exit (`break`, a cap) leaves
+  // `lastIndex` non-zero, which would make the NEXT call silently find fewer phases. Removing it
+  // is an equivalent mutant today (the loop always exhausts), so keep it deliberately.
   PHASE_LINE.lastIndex = 0;
   for (let m = PHASE_LINE.exec(text); m !== null; m = PHASE_LINE.exec(text)) {
     phases.push({

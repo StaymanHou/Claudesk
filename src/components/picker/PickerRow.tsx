@@ -63,12 +63,12 @@ export function PickerRow({
       data-open={isOpen ? "true" : undefined}
     >
       {/* The row's cells are emitted by mapping PICKER_ROW_CELLS, so their ORDER
-                and — critically — their FLATNESS live in one asserted value rather than in
-                JSX indentation. The model cell (M11.5 WP1) must be a SIBLING of the
-                open-project button: nested inside it, every click meant for the model
-                would open the project instead. A source-text guard for that rule was
-                written first and provably failed to catch a deliberately nested cell, so
-                the structure is data now. See pickerRowOrder.ts. */}
+         and — critically — their FLATNESS live in one asserted value rather than in
+         JSX indentation. The model cell (M11.5 WP1) must be a SIBLING of the
+         open-project button: nested inside it, every click meant for the model
+         would open the project instead. A source-text guard for that rule was
+         written first and provably failed to catch a deliberately nested cell, so
+         the structure is data now. See pickerRowOrder.ts. */}
       {PICKER_ROW_CELLS.map((cell) => {
         switch (cell) {
           case "open": {
@@ -103,13 +103,13 @@ export function PickerRow({
               >
                 <span className="picker-recent-text">
                   {/* The announcement sits on the NAME's line (operator decision,
-                            2026-08-04), settled by measuring rather than by taste: on the
-                            path's line the badge took 140px and halved the path
-                            (369→184px), while names have real slack (~80-180px).
-                            ⚠️ The original comment here also claimed the path then "keeps
-                            its FULL width — identical on every row." That was MEASURED
-                            FALSE at verify-human (2026-08-05) and is why the gutter below
-                            is now reserved unconditionally: see `.picker-recent-gutter`. */}
+                     2026-08-04), settled by measuring rather than by taste: on the
+                     path's line the badge took 140px and halved the path
+                     (369→184px), while names have real slack (~80-180px).
+                     ⚠️ The original comment here also claimed the path then "keeps
+                     its FULL width — identical on every row." That was MEASURED
+                     FALSE at verify-human (2026-08-05) and is why the gutter below
+                     is now reserved unconditionally: see `.picker-recent-gutter`. */}
                   <span className="picker-recent-headline">
                     <span className="picker-recent-name">{labelFor(r)}</span>
                     {isOpen && (
@@ -134,24 +134,24 @@ export function PickerRow({
                   <span className="picker-recent-path">{r.project_path}</span>
                 </span>
                 {/* ⚠️ THE GUTTER IS ALWAYS RENDERED — this is the P3.9 fix
-                          (operator decision, 2026-08-05), and it is load-bearing.
-                          Previously `{showNoFireDoor && <span .../>}` put the control
-                          directly here as a sibling of `.picker-recent-text`, which has
-                          `flex: 1 1 auto` — so on a row with NO prediction the text stack
-                          ABSORBED the control's width. Measured: 369px without a badge vs
-                          331px with one, meaning a 37-char name truncated mid-word while a
-                          LONGER 35-char name on the adjacent row showed in full. Rows
-                          disagreed about how much name you get, for a reason invisible to
-                          the reader.
-                          Reserving the box unconditionally makes every row share one
-                          geometry, so names truncate at the same length everywhere. The
-                          cost is deliberate and accepted: non-announcing rows also give up
-                          the 38px.
-                          Note the conditional moved INWARD rather than being deleted —
-                          `showNoFireDoor` still governs whether the *control* exists (the
-                          contract `announceRow.ts` pins: no prediction ⇒ no control, since
-                          both doors would be identical). An empty gutter is spacing, not a
-                          control: no role, no tabIndex, no handler, aria-hidden. */}
+                   (operator decision, 2026-08-05), and it is load-bearing.
+                   Previously `{showNoFireDoor && <span .../>}` put the control
+                   directly here as a sibling of `.picker-recent-text`, which has
+                   `flex: 1 1 auto` — so on a row with NO prediction the text stack
+                   ABSORBED the control's width. Measured: 369px without a badge vs
+                   331px with one, meaning a 37-char name truncated mid-word while a
+                   LONGER 35-char name on the adjacent row showed in full. Rows
+                   disagreed about how much name you get, for a reason invisible to
+                   the reader.
+                   Reserving the box unconditionally makes every row share one
+                   geometry, so names truncate at the same length everywhere. The
+                   cost is deliberate and accepted: non-announcing rows also give up
+                   the 38px.
+                   Note the conditional moved INWARD rather than being deleted —
+                   `showNoFireDoor` still governs whether the *control* exists (the
+                   contract `announceRow.ts` pins: no prediction ⇒ no control, since
+                   both doors would be identical). An empty gutter is spacing, not a
+                   control: no role, no tabIndex, no handler, aria-hidden. */}
                 <span
                   className="picker-recent-gutter"
                   aria-hidden={!showNoFireDoor}
@@ -183,19 +183,19 @@ export function PickerRow({
                       }}
                     >
                       {/* ⚠️ `⊘` (U+2298), NOT a play triangle. The glyph was `⏵` until the
-                                operator rejected it 2026-08-05, and the objection is a real
-                                semantic inversion rather than taste: a play icon promises "run
-                                this", and this control's entire purpose is to open WITHOUT
-                                running the announced command. It advertised the thing it
-                                withholds.
+                         operator rejected it 2026-08-05, and the objection is a real
+                         semantic inversion rather than taste: a play icon promises "run
+                         this", and this control's entire purpose is to open WITHOUT
+                         running the announced command. It advertised the thing it
+                         withholds.
 
-                                `⊘` reads as suppression — and the row's announcement one span
-                                over is `↻ <command>`, so the pair reads "would re-run X" /
-                                "don't". Deliberately not `⤓`/`↴` (motion metaphors that can be
-                                misread as "just go, faster") and not `↷` (too close to `↻` to
-                                distinguish at 0.72rem). The ACCESSIBLE name is carried by
-                                `aria-label`/`title` below, so the glyph never has to be
-                                self-explanatory to a screen reader. */}
+                         `⊘` reads as suppression — and the row's announcement one span
+                         over is `↻ <command>`, so the pair reads "would re-run X" /
+                         "don't". Deliberately not `⤓`/`↴` (motion metaphors that can be
+                         misread as "just go, faster") and not `↷` (too close to `↻` to
+                         distinguish at 0.72rem). The ACCESSIBLE name is carried by
+                         `aria-label`/`title` below, so the glyph never has to be
+                         self-explanatory to a screen reader. */}
                       ⊘
                     </span>
                   )}

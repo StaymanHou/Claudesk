@@ -1,9 +1,9 @@
-// M13 WP3 Phase 2 — Recycle Session as a CALLABLE OPERATION.
+// M13 WP3 — Recycle Session as a CALLABLE OPERATION.
 //
 // ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️ THIS IS THE ONE FUNNEL. EVERY CALLER ENTERS HERE.
 //
-// The button (Phase 3) is ONE caller; M15's context-pressure recycle will be another, and it
+// The button is ONE caller; M15's context-pressure recycle is another, and it
 // is not a click. So the sequence lives in a function that takes explicit inputs, NOT in a
 // click handler with the steps inlined — retrofitting a programmatic entry point later is the
 // predictable-and-avoidable version of this cost.
@@ -13,9 +13,8 @@
 // explicit parameters, no registry.
 //
 // ⚠️ WHY A SINGLE FUNNEL MATTERS HERE SPECIFICALLY. The standing defect in this codebase is a
-// correct mechanism behind a caller that does not honor it — hit four times, once shipped as a
-// CRITICAL, and *again in this WP's own Phase 1* (a temp-path predicate with zero production
-// callers, caught at verify-self). Funnelling every send through one function is what makes
+// correct mechanism behind a caller that does not honor it (its history:
+// `state/supervisor/turnEnd.ts`'s header). Funnelling every send through one function is what makes
 // "a caller that skips a step" a thing a test can see: guard THIS function, not the primitives.
 //
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -41,11 +40,11 @@
 // a clean `Stop` and a question, having written nothing — must never be treated as "done",
 // because recycling there destroys the very work the handoff was meant to preserve.
 //
-// ⚠️ THE OPERATION IS ABORTABLE (paydown WP7). It runs up to 3 minutes and its caller genuinely
+// ⚠️ THE OPERATION IS ABORTABLE. It runs up to 3 minutes and its caller genuinely
 // unmounts when the operator closes the workspace, so `signal` is checked at three points — after
 // the completion wait, between the clean mark and the respawn, and after the settle. Each site
-// carries its own reason; the middle one implements ruling D1 and is the one most likely to be
-// "fixed" wrongly by a future reader.
+// carries its own reason; the middle one is a deliberate operator ruling and is the one most
+// likely to be "fixed" wrongly by a future reader.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -94,7 +93,7 @@ export const RESTORE_COMMAND = "/session-restore";
  * | slowest handoff, prompt → terminal `Stop` | **51.9s** (write at 39.7s) | WP1 run 1 |
  * | observed range to the terminal `Stop` | **28–52s** | WP1, three runs |
  * | write-to-`Stop` tail — the write lands this far BEFORE the skill finishes | **9–12s** | WP1 |
- * | live end-to-end confirmation, click → write | **38s** | WP4 Phase 3, real session |
+ * | live end-to-end confirmation, click → write | **38s** | M13 WP4, real session |
  *
  * ⚠️ Derived from measurement, not taste: ~3.5× the 51.9s worst case. Generous on purpose — the
  * cost of waiting too long is a late failure message the operator can see, while the cost of
@@ -105,8 +104,8 @@ export const RECYCLE_TIMEOUT_MS = 180_000;
 /**
  * Why a Recycle attempt did not fully succeed, beyond the machine's own two reasons.
  *
- * ⚠️ These two are NOT interchangeable, and collapsing them into one string was a real defect
- * caught at verify-self. They have **opposite operator consequences**:
+ * ⚠️ These two are NOT interchangeable, and collapsing them into one string was a real defect.
+ * They have **opposite operator consequences**:
  *
  *   • `no-session`           — nothing happened. No handoff, no kill, no work at risk.
  *   • `restore-not-injected` — the handoff SUCCEEDED, the clean-exit flag was marked, and CC was
@@ -186,7 +185,7 @@ export interface RecycleInputs {
   readonly awaitFreshSessionId: () => Promise<string | null>;
   /**
    * Called on every state change so a caller can render progress. Optional: the operation is
-   * correct without it, and Phase 3 decides what (if anything) to show.
+   * correct without it, and the button decides what (if anything) to show.
    */
   readonly onProgress?: (state: RecycleState) => void;
   /**
@@ -218,7 +217,7 @@ export interface RecycleInputs {
    */
   readonly completionTimeoutMs?: number;
   /**
-   * Abort the operation early — wired to the caller's unmount (paydown WP7).
+   * Abort the operation early — wired to the caller's unmount.
    *
    * ⚠️ **WHY THIS IS NOT OPTIONAL POLISH.** The operation runs for up to
    * {@link RECYCLE_TIMEOUT_MS} (3 minutes), and its caller is a `<Workspace>` that genuinely
@@ -238,8 +237,8 @@ export interface RecycleInputs {
 /**
  * M12's measured cold-spawn settle, **imported rather than restated**.
  *
- * ⚠️ An earlier revision hardcoded `1_500` here with a comment saying it mirrored M12. That is a
- * silent-drift seam: retuning `INJECT_SETTLE_MS` after measuring a slower spawn would leave this
+ * ⚠️ Never hardcode a copy here (`1_500` "mirroring M12" was one). A copy is a silent-drift
+ * seam: retuning `INJECT_SETTLE_MS` after measuring a slower spawn would leave this
  * copy stale, and the symptom — a restore typed into a TUI not yet reading stdin — is a dropped
  * command with no error. There is no reason to copy a value the same bundle can import.
  *
@@ -359,12 +358,12 @@ async function awaitCompletion(
       // This machine needs "a `Stop` hook event arrived". ⚠️ It reads `is_turn_end`, the
       // backend's own classification (`event_is_turn_end`), and NOT `state`.
       //
-      // It used to match `state === "idle" || "background_work"` (every state a `Stop` maps
-      // to, M13.5 WP2). M16.5 WP4 broke that proxy: the verify-human overlay re-emits the
-      // workspace's last update with the SAME `state` (`idle` / `background_work`) and the
-      // turn markers cleared, so a state match would read that re-emit as a second `Stop`
-      // and advance the machine early. `is_turn_end` is true on the real `Stop` alone, in
-      // both of its states, and on nothing else (`[[derived-state-is-not-a-proxy-for-its-event]]`).
+      // Never match `state === "idle" || "background_work"` (every state a `Stop` maps to): the
+      // verify-human overlay re-emits the workspace's last update with the SAME `state` (`idle` /
+      // `background_work`) and the turn markers cleared, so a state match would read that re-emit
+      // as a second `Stop` and advance the machine early. `is_turn_end` is true on the real `Stop`
+      // alone, in both of its states, and on nothing else
+      // (`[[derived-state-is-not-a-proxy-for-its-event]]`).
       if (event.payload.is_turn_end === true) {
         feed({ kind: "stop" });
       }
@@ -382,7 +381,7 @@ async function awaitCompletion(
  *
  * Resolves `{ok:true}` only when the handoff verifiably completed AND the session was
  * respawned. Never throws: every failure is a value, because a caller that forgets a `.catch`
- * would otherwise lose the failure silently (the WP6 picker MAJOR).
+ * would otherwise lose the failure silently.
  */
 export async function recycleSession(
   inputs: RecycleInputs,
@@ -434,8 +433,8 @@ export async function recycleSession(
   // to prevent.
   markSessionClean(projectPath, "recycle-session");
 
-  // ⚠️ ABORT AFTER THE MARK, BEFORE THE RESPAWN — and **THE CLEAN MARK STAYS.** (Paydown WP7,
-  // ruling D1 / Option A. Decided deliberately; do NOT "fix" it back.)
+  // ⚠️ ABORT AFTER THE MARK, BEFORE THE RESPAWN — and **THE CLEAN MARK STAYS.** (An operator
+  // ruling, decided deliberately; do NOT "fix" it back.)
   //
   // The temptation is to see a cleared flag on a session that never respawned as corruption and
   // to re-set it. It is not, and re-setting it would be the wrong offer: the handoff SUCCEEDED
@@ -490,7 +489,7 @@ export async function recycleSession(
   if (freshSessionId === null) {
     // ⚠️ A DISTINCT reason from `no-session`. The handoff DID complete, the flag IS correctly
     // clear, and the session WAS recycled — only the restore injection was missed. Reporting
-    // this as `no-session` (as an earlier revision did) would tell the caller "nothing
+    // this as `no-session` would tell the caller "nothing
     // happened" about the one case where something very much did, and the operator needs to
     // run `/session-restore` by hand. `.session.md` is on disk, so the work is recoverable —
     // but only if the message says so.

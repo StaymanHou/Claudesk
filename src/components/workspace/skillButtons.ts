@@ -74,15 +74,10 @@ export interface SkillButton {
 /**
  * The fixed set — **FIVE skill commands.**
  *
- * ⚠️ **Recycle Session is the row's sixth affordance and is NOT in this list**, because it is
- * WP3's *operation* (a `CleanExitRoute`), not a slash command — and this array holds slash
- * commands only. WP2 deliberately ships without it; rendering it early-and-disabled was
- * rejected, since this repo uses `disabled` for *capability* limits reflecting real current
- * state (`canOpenTerminal`, a collapsed split), never as a promise about unbuilt work.
- * ⚠️ A `DECIDED_ROW_SIZE = 6` constant lived here to stop that sixth member being forgotten;
- * it was **removed at code-quality review** as unsound in both directions — see the long note
- * in `__tests__/skillButtons.test.ts` before rebuilding anything like it. The obligation lives
- * in `wbs.md` → WP3, which is a place that cannot misfire.
+ * ⚠️ **Recycle Session is the row's sixth affordance and is NOT in this list**: this array holds
+ * slash commands only (`recycleButton.ts` says why Recycle is not one). Do not add a row-size
+ * constant to remember it: one was built and removed (the autopsy is in
+ * `__tests__/skillButtons.test.ts`).
  *
  * ⚠️ **No member is conditional.** Dropping one is a scope reduction that needs its own
  * decision, not an implementation detail — recorded because three of these were fired ≤3

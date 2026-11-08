@@ -3,9 +3,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️ WHY A CALLER-SIDE GUARD, AND WHY IT IS A DIFFERENT TEST FROM EVERY OTHER ONE HERE
 //
-// The standing local defect shape — *a mechanism correct in itself behind a caller that
-// does not honor it* — has bitten this repo four times (`arch.md` → Verification method),
-// twice in M11 WP4 with one shipped CRITICAL. The WBS names it for this exact WP:
+// The standing local defect shape is *a mechanism correct in itself behind a caller that
+// does not honor it* (its history: `supervisor/turnEnd.ts`'s header). The WBS names it for
+// this exact WP:
 //
 //   "Enumerating the cells as data makes the SET testable but does NOT prove each cell
 //    has a CALLER. Funnel every policy read through ONE function and guard THAT."

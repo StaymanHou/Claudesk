@@ -11,14 +11,13 @@
 //      `[click]()` — a live `<a href="">` — reloaded the app shell.
 //   2. Its replacement counted `return` tokens above `preventDefault()`. Also a PROXY:
 //      folding the empty-href bail into the anchor guard keeps the count at 1 and passes,
-//      reopening the identical hole. Measured at code review, with the full 1645-test
-//      suite green.
+//      reopening the identical hole, with the full 1645-test suite green.
 //
 // Both failures share one cause: **the property is behavioral and was being asserted
 // structurally.** A source-text predicate can only encode the shapes you thought of. So the
 // handler now lives here as a factory over its dependencies, and `docsLinkHandling.test.ts`
 // imports and drives THIS function with real DOM events — mutating the real code, not a
-// copy of it. That is the difference the review named: probe the component, not the replica.
+// copy of it: probe the component, not the replica.
 
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { DocEntry } from "../docsOrder";
@@ -98,7 +97,7 @@ export function makeDocLinkClickHandler(
 
     if (kind === "external") {
       // Clear any stale note first: a successful navigation of ANY kind should not leave
-      // the previous link's message on screen (observed live at Phase 3 verify-self — a
+      // the previous link's message on screen (observed live — a
       // "not one of this project's docs" note persisted through a later successful
       // external open, making the successful click look like it had failed).
       deps.setLinkNote(null);
@@ -134,8 +133,8 @@ export function makeDocLinkClickHandler(
     // ⚠️ The fragment of a cross-doc link (`wbs.md#probe-outcomes`) — land on the SECTION,
     // not merely the file. `resolveDocLink` has always split this off and the caller always
     // dropped it, so such links silently landed at the top while the module's own comment
-    // said otherwise (caught at code review — a comment promising behavior the code did not
-    // perform is worse than an unimplemented feature).
+    // said otherwise (a comment promising behavior the code does not perform is worse than an
+    // unimplemented feature).
     //
     // Deferred by a frame because the target document has not rendered yet: `setChosen`
     // only schedules the switch, and its content arrives after an async `docs_read`. A

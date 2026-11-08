@@ -205,14 +205,11 @@ fn push_if_present(out: &mut Vec<DocEntry>, root: &Path, path: &Path, kind: &str
 
     // Dedupe on the resolved relative path so one physical file is never listed twice.
     //
-    // DEFENSIVE, and currently UNREACHABLE — stated honestly rather than implied to be
-    // load-bearing. No input reaches it today: no `PRODUCT_DOCS`/`STATE_DOCS` name
-    // contains `wbs` (so the fixed lists can't collide with the `*wbs*.md` glob), and the
-    // state files live in a different directory from the `wip/` glob. It is kept because
-    // the collision it prevents is a one-line change away — adding any `*wbs*`-matching
-    // name to `PRODUCT_DOCS`, or widening a glob to overlap a fixed name, makes it live
-    // immediately. `dedupes_a_file_matched_twice` pins the behavior by driving
-    // `push_if_present` directly, since `discover` cannot currently produce the collision.
+    // DEFENSIVE, and currently UNREACHABLE: no fixed doc name contains `wbs`, so the fixed lists
+    // cannot collide with the `*wbs*.md` glob (pinned by
+    // `the_fixed_doc_lists_are_disjoint_from_the_wbs_glob`), and the state files live in a
+    // different directory from the `wip/` glob. Kept because one added `*wbs*` name makes it
+    // live; `dedupes_a_file_matched_twice` pins what it does then.
     if out.iter().any(|e| e.rel_path == rel_path) {
         return;
     }
@@ -393,14 +390,9 @@ mod tests {
 
     #[test]
     fn the_fixed_doc_lists_are_disjoint_from_the_wbs_glob() {
-        // ⚠️ **Pins the PREMISE the dedup branch's "currently UNREACHABLE" claim rests on**
-        // (paydown WP4, 2026-08-18). That claim is load-bearing documentation — it is why the
-        // sibling test below drives `push_if_present` directly instead of through `discover` —
-        // but nothing asserted it, so adding any `*wbs*`-matching name to `PRODUCT_DOCS` would
-        // silently make the branch live and leave the comment lying. This is the smaller
-        // assertion the original finding asked for, kept ALONGSIDE the branch test rather than
-        // replacing it: this one pins *why* the branch is unreachable, that one pins *what the
-        // branch does* if it ever becomes reachable. Neither substitutes for the other.
+        // ⚠️ **Pins the PREMISE the dedup branch's "currently UNREACHABLE" claim rests on.**
+        // This one pins *why* the branch is unreachable; `dedupes_a_file_matched_twice` pins
+        // *what it does* if it ever becomes reachable. Neither substitutes for the other.
         for (file, _kind) in PRODUCT_DOCS.iter().chain(STATE_DOCS.iter()) {
             let name = Path::new(file)
                 .file_name()
@@ -418,10 +410,8 @@ mod tests {
     #[test]
     fn dedupes_a_file_matched_twice() {
         // Drives `push_if_present` DIRECTLY, because `discover` cannot currently produce
-        // a collision (see the guard's comment). Without this, the dedup branch is
-        // uncovered and deleting it leaves the suite green — the guard-hole the WP1
-        // lesson warns about. Asserting the branch here means a future overlap between
-        // a fixed doc name and a glob is protected by a test that already exists.
+        // a collision. Without this the dedup branch is uncovered, and deleting it leaves the
+        // suite green.
         let dir = TempDir::new().unwrap();
         touch(dir.path(), "workflow-system/product/wbs.md");
         let path = dir.path().join("workflow-system/product/wbs.md");

@@ -1,17 +1,14 @@
 //! Main-window geometry persistence (M13.5 WP1).
 //!
-//! The main window was hardcoded to 1280×800 on every launch (`tauri.conf.json` →
-//! `app.windows[0]`, mirrored in the `tauri.dev.json` overlay) with nothing about its
-//! geometry persisted, so the operator resized it on essentially every launch (their
-//! display is 1920×1080, so the default occupies about a third of the screen). This
-//! module owns the `tauri-plugin-window-state` registration policy: WHICH state we
-//! persist and WHICH windows are in scope.
+//! Owns the `tauri-plugin-window-state` registration policy: WHICH state we persist and
+//! WHICH windows are in scope. The default size comes from `tauri.conf.json` →
+//! `app.windows[0]` (mirrored in the `tauri.dev.json` overlay) and applies until a state
+//! has been saved.
 //!
-//! ⚠️ **"Fullscreen" in the operator's ask means MAXIMIZED (the green-button/zoomed
-//! state), NOT macOS native fullscreen** — clarified by screenshot 2026-08-05 (traffic
-//! lights visible, system menu bar visible, window filling the display but not in its
-//! own Space). So we persist `SIZE | POSITION | MAXIMIZED` and deliberately omit
-//! `FULLSCREEN`: the two states restore through different APIs, and relaunching into a
+//! ⚠️ **"Fullscreen" in the operator's ask means MAXIMIZED (the green-button/zoomed state), NOT
+//! macOS native fullscreen** (traffic lights and system menu bar visible, window filling the
+//! display but not in its own Space). So we persist `SIZE | POSITION | MAXIMIZED` and deliberately
+//! omit `FULLSCREEN`: the two states restore through different APIs, and relaunching into a
 //! separate Space is a more disorienting behavior than the one asked for.
 //!
 //! ## Why this is a module and not two inline builder lines
@@ -32,14 +29,13 @@
 //!   `lib.rs`'s builder chain.
 //!
 //! ## ⚠️ Four properties of the plugin, read out of its source (2.4.1), that its
-//! ## README and our own backlog entry got wrong or omitted
+//! ## README gets wrong or omits
 //!
-//! 1. **It reads/writes `app_config_dir()`, NOT `app_data_dir()`.** The backlog entry
-//!    (`SURFACE-2026-08-05-WINDOW-SIZE-AND-POSITION-NOT-PERSISTED`) says the state must
-//!    live in the per-identity `app_data_dir()`. On macOS both resolve to
-//!    `~/Library/Application Support/<identifier>/`, so the required dev/prod isolation
+//! 1. **It reads/writes `app_config_dir()`, NOT `app_data_dir()`.** On macOS both resolve
+//!    to `~/Library/Application Support/<identifier>/`, so the required dev/prod isolation
 //!    (`com.claudesk.app` vs `com.claudesk.app.dev`, which run concurrently by design)
-//!    holds anyway — but it holds for a different reason than the backlog states.
+//!    holds anyway — but because the two dirs coincide, not because the plugin uses the
+//!    data dir.
 //! 2. **Off-screen safety is skip-if-no-monitor-intersects, NOT clamping.**
 //!    `restore_state` calls `set_position` only inside
 //!    `if m.intersects(position, size)`, looping `available_monitors()` with no `break`;
@@ -51,9 +47,8 @@
 //!    `CloseRequested` handler updates just its in-memory cache. Claudesk's quit path is
 //!    not an ordinary close — `on_window_event` holds it (`api.prevent_close()`), the
 //!    frontend confirms, then `quit_now` → `perform_quit_teardown` → `app.exit(0)`.
-//!    `app.exit(0)` does emit `RunEvent::Exit`, so the save lands; this was verified
-//!    live at P1.3 rather than assumed, because the feature is worthless if it does not
-//!    and `cargo test` cannot see it.
+//!    `app.exit(0)` does emit `RunEvent::Exit`, so the save lands. Verified live, not
+//!    assumed: the feature is worthless if it does not, and `cargo test` cannot see it.
 //! 4. **`on_window_ready` fires for the PiP NSPanel too**, so the denylist below is
 //!    mandatory rather than cosmetic — see [`denylist`].
 
@@ -65,7 +60,7 @@ use tauri_plugin_window_state::{Builder, StateFlags};
 /// `SIZE | POSITION | MAXIMIZED` — and deliberately NOT:
 ///
 /// - **`FULLSCREEN`** — the operator's "launch fullscreen" ask means *maximized*, not
-///   macOS native fullscreen (screenshot-clarified 2026-08-05). Persisting it would
+///   macOS native fullscreen. Persisting it would
 ///   relaunch the app into its own Space, which is a different and more disorienting
 ///   behavior than the one requested.
 /// - **`VISIBLE`** — `restore_state` calls `show()` + `set_focus()` when this flag is
@@ -178,7 +173,7 @@ mod tests {
 
     /// The operator's ask was MAXIMIZED, not macOS native fullscreen. If `FULLSCREEN`
     /// is ever added, the app relaunches into its own Space — a behavior change the
-    /// screenshot clarification (2026-08-05) explicitly ruled out.
+    /// operator explicitly ruled out.
     #[test]
     fn persists_size_position_maximized_and_not_fullscreen() {
         let flags = state_flags();
@@ -215,10 +210,7 @@ mod tests {
         );
     }
 
-    /// The plugin's `on_window_ready` fires for runtime-created windows too, so the PiP
-    /// panel is in scope unless denylisted. A regression here would let generic
-    /// save/restore fight M10.5 WP1's top-right anchor and read panel geometry during
-    /// the teardown that closes it.
+    /// The PiP panel must stay denylisted; [`denylist`]'s doc says why.
     #[test]
     fn denylists_the_pip_panel_by_its_own_constant() {
         let deny = denylist();

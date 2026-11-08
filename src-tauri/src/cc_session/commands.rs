@@ -216,12 +216,10 @@ pub fn cc_resize(
 /// Terminate a session (`/exit\r`, then SIGKILL fallback) and drop it.
 ///
 /// ⚠️⚠️ **THE TEARDOWN RUNS ON A WORKER THREAD, AND THAT IS THE WHOLE POINT — do not "simplify"
-/// this back to a direct `reg.kill(..)` call.** A synchronous `#[tauri::command]` body is
-/// dispatched by Tauri on the **main thread**, and [`PtyCcSession::kill`] polls with
-/// `thread::sleep` between `try_wait` calls. So the old direct call ran a sleeping loop on the UI
-/// thread and **froze the entire single-window app** whenever a leader was slow to reap — the
-/// P1 filed 2026-08-25 (`sample` caught `cc_kill` → `SessionRegistry::kill` → `poll_reaped` under
-/// `com.apple.main-thread`, ~977ms of sleep in one 5s window with the process still alive).
+/// this back to a direct `reg.kill(..)` call.** A synchronous command runs on the main thread, and
+/// [`PtyCcSession::kill`] polls with `thread::sleep`, so a direct call froze the whole app whenever
+/// a leader was slow to reap (the 2026-08-25 P1; the chain and the guard that now fails on it are
+/// in `tests/sync_commands_do_not_block.rs`).
 ///
 /// ⚠️ **`kill_all` was ALREADY threaded** (`SessionRegistry::kill_all`) to overlap its grace
 /// windows, so app-quit was protected and this single-close path was not. That asymmetry is why

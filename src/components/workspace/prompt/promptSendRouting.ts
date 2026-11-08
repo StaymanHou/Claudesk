@@ -6,8 +6,9 @@
 //
 // The decision has FOUR inputs (is the Prompt panel front · is a send handler registered · is
 // this the auto-submit chord · is it the stage-only chord) and it guards a property with no
-// undo: `injectCommand` has no retry and no pre-send cancel window, so a send fired while the
-// operator is looking at the editor is an unrecoverable write into a live conversation.
+// undo (a send cannot be retried or cancelled: `injectCommand`'s doc), so a send fired while
+// the operator is looking at the editor is an unrecoverable write into a live conversation.
+// Recovery would be CC's Esc.
 //
 // Inline in a ~900-line component that decision was unreachable by any test. `RightPanelHost`
 // registers a capture-phase `document` listener over a tree containing CM6, xterm and PTY
@@ -18,10 +19,8 @@
 // cleverer source-text predicate that can only encode shapes someone thought of.
 //
 // ⚠️ THE HOST REMAINS THE ONLY CALLER, and it must stay that way. This module decides; it does
-// not act. `promptSendRouting.test.ts` asserts the host actually calls it — the
-// `[[extracted-machine-needs-a-live-caller-guard]]` lesson, where `planPanelChange` shipped
-// exported, documented and fully tested with ZERO callers, so its module promised a guarantee
-// the panel never provided.
+// not act. `promptSendRouting.test.ts` asserts the host actually calls it (the live-caller
+// lesson: `promptDraftSync.ts`'s header).
 
 import { isAutoSubmitChord, isStageOnlyChord } from "./promptSendChord";
 import type { ChordEvent } from "../chordEvent";

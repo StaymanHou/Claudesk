@@ -39,7 +39,7 @@ pub enum AdjudicateError {
     Spawn(String),
     /// It succeeded but wrote more than [`MAX_OUTPUT`] bytes to stdout. ⚠️ An error, never a
     /// truncated `Ok`: a verdict written after the cap would otherwise vanish from an answer
-    /// that looks complete (paydown WP9 verify-self, re-verify 4).
+    /// that looks complete.
     OutputTooLarge(usize),
 }
 
@@ -107,15 +107,15 @@ fn adjudicator_command(model: &str) -> Command {
 /// program other than `claude`; `run_adjudicator` only chooses the program and its args.
 ///
 /// ⚠️ **All three pipes are serviced on their OWN threads, and the deadline starts before any of
-/// them.** Before paydown 2026-09-23 WP9 the prompt was written on this thread and both output
-/// pipes were read only after exit, so this hung past `timeout_ms` or forever:
+/// them.** With the prompt written on this thread and both output pipes read only after exit,
+/// this would hang past `timeout_ms` or forever:
 /// - a child that wrote more than a pipe buffer (64 KB) before exiting blocked on its own write
 ///   and never exited;
 /// - a child that never read stdin blocked `write_all` before the deadline even started.
 ///
 /// Each shape has a test below.
 ///
-/// ⚠️ **What this deliberately does NOT do** (measured at paydown WP9 verify-self, re-verify 4):
+/// ⚠️ **What this deliberately does NOT do** (each measured, not assumed):
 /// - **It does not chase processes that leave the group.** A grandchild that calls `setsid`, or a
 ///   background job under shell job control (`set -m`), is in another group and survives a
 ///   timeout. Catching it would need descendant tracking.
@@ -201,10 +201,10 @@ fn run_command(mut cmd: Command, prompt: &str, timeout_ms: u64) -> Result<String
     // wrote is in their buffers or about to be. A grandchild it left behind (`cmd &`) can still
     // hold a pipe open, so EOF may never come. Wait for both drains, but only for a short grace,
     // and keep whatever arrived. Waiting for EOF instead discarded a good answer, lost the
-    // stderr of a failure, and overran the timeout ~3x (paydown WP9 verify-self, probes A and B).
+    // stderr of a failure, and overran the timeout ~3x.
     let (out, err) = collect_both(&stdout_drain, &stderr_drain, Instant::now() + DRAIN_GRACE);
     if !status.success() {
-        // The one diagnostic an operator gets for a failing `claude -p` (paydown WP8, E3). A cut
+        // The one diagnostic an operator gets for a failing `claude -p`. A cut
         // stderr says so; it is a diagnostic, so its head is still worth returning.
         let mut stderr = String::from_utf8_lossy(&err).into_owned();
         if stderr_drain.overflowed() {
@@ -226,7 +226,7 @@ const DRAIN_GRACE: Duration = Duration::from_millis(250);
 
 /// The most output kept per pipe. A `claude -p` verdict is a few hundred bytes. The cap exists
 /// because a grandchild can hold a pipe and write without end, and an unbounded buffer turned
-/// that into a 1.9 GB allocation (paydown WP9 verify-self, probe P4). Past it, bytes are dropped.
+/// that into a 1.9 GB allocation. Past it, bytes are dropped.
 const MAX_OUTPUT: usize = 4 * 1024 * 1024;
 
 /// SIGKILL the child's whole process group (it leads one, via `process_group(0)`), then reap it.
@@ -257,9 +257,8 @@ impl Drop for StopOnDrop {
 ///
 /// ⚠️ **The thread must never stop reading while the child runs.** A pipe the reader stops
 /// emptying fills (64 KB), and then the CHILD blocks on its own write and never exits. That
-/// deadlock is what the first bounded version of this had: a `sync_channel` nobody drained
-/// during the wait (paydown WP9 verify-self re-verify 3; ~45–205 KB of the child's own output
-/// was enough). So memory is bounded by DISCARDING past [`MAX_OUTPUT`], never by
+/// deadlock is what a `sync_channel` nobody drained during the wait produced (~45–205 KB of the
+/// child's own output was enough). So memory is bounded by DISCARDING past [`MAX_OUTPUT`], never by
 /// backpressure on the pipe.
 struct Drain {
     buf: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
@@ -399,8 +398,7 @@ mod tests {
 
     // The tests below drive `run_command` — the SAME spawn/stdin/wait/kill code
     // `run_adjudicator` runs — with `sh -c <script>` standing in for `claude`. They replaced two
-    // hand-copied helpers that re-implemented the loop and so proved only the copies (paydown
-    // 2026-09-23 WP7, E2).
+    // hand-copied helpers that re-implemented the loop and so proved only the copies.
     fn sh(script: &str) -> Command {
         let mut cmd = Command::new("sh");
         cmd.arg("-c").arg(script);
@@ -459,8 +457,8 @@ mod tests {
     fn a_child_that_fills_its_stdout_pipe_returns_all_of_it() {
         // ⚠️ 1 MiB, not 200 KB. A reader that stalls during the wait lets the child write the
         // pipe buffer plus whatever the reader has queued before it blocks. That was ~205 KB for
-        // the bounded-channel version, so a 200 KB fixture passed it by 4.8 KB and pinned
-        // nothing (re-verify 3). The size must be far past ANY plausible in-flight buffer.
+        // a bounded-channel reader, so a 200 KB fixture passed it by 4.8 KB and pinned
+        // nothing. The size must be far past ANY plausible in-flight buffer.
         let out = run_command(sh("head -c 1048576 /dev/zero | tr '\\0' x"), "", 5_000)
             .expect("a large stdout must be Ok");
         assert_eq!(out.len(), 1_048_576);
@@ -527,7 +525,7 @@ mod tests {
     fn a_grandchild_holding_the_pipes_does_not_discard_a_failing_exit() {
         // `sleep 6 &` inherits both pipes, so neither reaches EOF when the shell exits. The exit
         // code and the stderr already written must still come back, well inside the timeout
-        // plus the drain grace (verify-self probe A, paydown WP9).
+        // plus the drain grace.
         let start = Instant::now();
         let err = run_command(sh("echo boom >&2; sleep 6 & exit 3"), "", 1_000)
             .expect_err("exit 3 must be an Err");
@@ -562,11 +560,11 @@ mod tests {
     #[test]
     fn a_grandchild_flooding_a_pipe_cannot_stretch_the_wait_or_the_memory() {
         // `yes` never stops writing, so a drain loop that only checks the grace between empty
-        // reads never sees it, and an unbounded buffer grows without limit. Verify-self probe
-        // P4 measured 1.58s and a 1.9 GB `Ok` before the bound (paydown WP9).
+        // reads never sees it, and an unbounded buffer grows without limit: 1.58s and a 1.9 GB
+        // `Ok` were measured before the bound.
         //
         // On its own thread with a deadline: a regression here HANGS (the drain never reaches
-        // EOF), and a hung test stalls the gate instead of failing it (mutant R3 did exactly that).
+        // EOF), and a hung test stalls the gate instead of failing it (a mutant did exactly that).
         let start = Instant::now();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
@@ -576,7 +574,7 @@ mod tests {
             .recv_timeout(Duration::from_secs(3))
             .expect("run_command hung on a flooding grandchild");
         // Past the cap the answer cannot be trusted to be whole, so it is an error, not a
-        // truncated `Ok` (re-verify 4).
+        // truncated `Ok`.
         assert_eq!(result, Err(AdjudicateError::OutputTooLarge(MAX_OUTPUT)));
         assert!(
             start.elapsed() < Duration::from_millis(1_400),
@@ -587,7 +585,7 @@ mod tests {
 
     #[test]
     fn a_timeout_kills_the_grandchildren_too() {
-        // Verify-self probe P7: killing only the direct child left its `sleep` running, adopted
+        // Killing only the direct child left its `sleep` running (measured), adopted
         // by launchd. `claude` starts hook and MCP subprocesses, so one leaked per timed-out fire.
         let dir = tempfile::TempDir::new().expect("tempdir");
         let pidfile = dir.path().join("pid");
@@ -661,7 +659,7 @@ mod tests {
         let kept = d.buf.lock().expect("lock").len();
         assert_eq!(kept, MAX_OUTPUT, "the cap was not reached, or not enforced");
         // ⚠️ Well PAST the cap, not merely past it: a drain that quits at the cap still performs
-        // one read beyond it, and `> MAX_OUTPUT` passed that mutant (R1).
+        // one read beyond it, and `> MAX_OUTPUT` passed that mutant.
         let kept_reading = (0..100).any(|_| {
             std::thread::sleep(Duration::from_millis(10));
             read.load(std::sync::atomic::Ordering::SeqCst) > 3 * MAX_OUTPUT

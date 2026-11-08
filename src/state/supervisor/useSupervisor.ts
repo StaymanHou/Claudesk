@@ -177,15 +177,16 @@ export async function decideTurn(
     reason,
   });
 
-  // ⚠️ M14 WP0 — THE THIRD CONDITION, its ref read PER TURN for the same reason as the gate
-  // above: the operator flips this toggle precisely *because* the supervisor is misbehaving,
-  // and a value captured at subscribe time would keep firing for the rest of the session. The
-  // fire is the irreversible half (`injectCommand` has no retry and no pre-send cancel window),
-  // so this is read once per turn end, not once per subscribe. ⚠️ It is NOT read at the last
-  // possible moment: the ≤2 s completion wait and the ~3 s adjudication both sit between this
-  // read and the inject, so a toggle flipped inside that window takes effect on the next turn.
-  // ⚠️ Nor does reading the ref make its VALUE fresh — the host refills it only on reveal and on
-  // its own toggle write (`supervisorToggleIpc.ts` says why that suffices today).
+  // ⚠️ M14 WP0 — THE THIRD CONDITION, its ref read PER TURN for the same reason as the
+  // `host.enabled` re-check in `onTurnEnd` (in `useSupervisor`): the operator flips this toggle
+  // precisely *because* the supervisor is misbehaving, and a value captured at subscribe time would
+  // keep firing for the rest of the session. The fire is the irreversible half (`injectCommand` has
+  // no retry and no pre-send cancel window), so this is read once per turn end, not once per
+  // subscribe. ⚠️ It is NOT read at the last possible moment: the ≤2 s completion wait and the ~3 s
+  // adjudication both sit between this read and the inject, so a toggle flipped inside that window
+  // takes effect on the next turn. ⚠️ Nor does reading the ref make its VALUE fresh — the host
+  // refills it only on reveal and on its own toggle write (`supervisorToggleIpc.ts` says why that
+  // suffices today).
   if (host.supervisorEnabledRef.current === false)
     return withheld("supervisor-toggled-off");
 
@@ -428,6 +429,9 @@ export function useSupervisor(host: SupervisorHost): void {
           // ⚠️ Reuse the decision's own read when it made one: same turn, already past the
           // flush wait, and no second 512 KiB read. Read separately only when `decideTurn`
           // exited before reading (toggle OFF, no stored mode), where the dot must still work.
+          // That read skips the flush wait safely: the line CC flushes late closes the turn (a
+          // terminal `stop_reason`, see `isTurnComplete`), so it never carries a `Skill` call,
+          // and the most recent invocation, which is all this question asks, is already on disk.
           readTail: async (args) => {
             const reused = decisionTail;
             if (reused) return reused;

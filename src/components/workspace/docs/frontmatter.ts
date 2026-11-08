@@ -38,7 +38,7 @@ export interface SplitDoc {
  *     leading THEMATIC BREAK is misread as frontmatter: `---\n\nProse.\n\n---\n` matches,
  *     capturing `\nProse.\n` as "YAML" and deleting a real paragraph from the body. WP1
  *     named this edge case; the obvious pattern does NOT actually handle it (measured
- *     here, not assumed — the first draft of this module failed exactly that test). YAML
+ *     here, not assumed: the obvious pattern fails exactly that test). YAML
  *     frontmatter opens with a `key:` line, never a blank one, so requiring a non-newline
  *     immediately after the opening fence separates the two shapes cleanly.
  */

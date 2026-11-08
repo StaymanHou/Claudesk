@@ -2,8 +2,8 @@
 //
 // ⚠️ **WHAT IS BEING TESTED HERE IS THE WIRING, NOT THE DECISION.** The verdict, the parser and
 // the fan-out each have their own suites; the failure this file exists to catch is the standing
-// local shape — *a mechanism correct in itself behind a caller that does not honor it*, which
-// has bitten this repo four times with one shipped CRITICAL.
+// local shape — *a mechanism correct in itself behind a caller that does not honor it* (its
+// history: `turnEnd.ts`'s header).
 //
 // ⚠️ `useSupervisor` itself is a React hook and is not unit-driven here (the same posture every
 // other listener seam in this repo takes). What IS driven is `readWipFor` — the one piece of

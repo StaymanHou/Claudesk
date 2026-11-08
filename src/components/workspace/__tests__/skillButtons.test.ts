@@ -284,10 +284,9 @@ describe("wiring — properties no value can observe (source guards)", () => {
   });
 
   it("the Recycle button is NOT a SKILL_BUTTONS member — it is a sibling", () => {
-    // ⚠️ The WBS's standing scope decision, asserted against the real array. `SKILL_BUTTONS`
-    // holds slash commands routed to `injectCommand`; Recycle is an operation. If a future edit
-    // "tidies" it into the array, its click would be sent as a literal slash command named
-    // "recycle" — CC would print "unknown command" and the operation would never run.
+    // ⚠️ The standing scope decision (`recycleButton.ts`), asserted against the real array. If a
+    // future edit "tidies" Recycle into the array, its click would be sent as a literal slash
+    // command named "recycle" — CC would print "unknown command" and the operation would never run.
     //
     // ⚠️ This is NOT the removed `DECIDED_ROW_SIZE` guard. That one asserted a future COUNT
     // (unsatisfiable, and a test cannot enforce a future scope decision). This asserts a

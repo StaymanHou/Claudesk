@@ -10,9 +10,9 @@
 // the scarce resource), and a single-workspace supervisor would meet no exit criterion.
 //
 // ⚠️ **EVERY FIRE GOES THROUGH `fireOne`. THE GUARD IS ON THAT FUNCTION.**
-// The standing local defect shape — *a mechanism correct in itself behind a caller that does
-// not honor it* — has bitten this repo four times, twice in M11 WP4 with one shipped CRITICAL.
-// Enumerating the rules as data makes the SET testable but does NOT prove each has a caller.
+// The standing local defect shape is *a mechanism correct in itself behind a caller that does
+// not honor it* (its history: `turnEnd.ts`'s header). Enumerating the rules as data makes the
+// SET testable but does NOT prove each has a caller.
 // So there is exactly one place that injects, and it is the place that checks the ledger.
 //
 // ⚠️ **ONE WORKSPACE'S FAILURE MUST NOT ABORT THE OTHERS.** A rejected `invoke`, a wedged
@@ -152,7 +152,6 @@ export interface FanOutDeps {
   readonly warn?: (message: string) => void;
 }
 
-/** What happened for one workspace in a sweep. */
 /**
  * Every reason `fireOne` / `fanOut` can report for not firing. A closed union (it was a bare
  * `string`) so the activity record's reasons stay exhaustive; `activityRecord.ts` composes it
@@ -171,6 +170,7 @@ export type FanOutReason =
   | "context-pressure-recycle"
   | "sweep-threw";
 
+/** What happened for one workspace in a sweep. */
 export interface FanOutOutcome {
   readonly workspaceId: string;
   readonly fired: boolean;

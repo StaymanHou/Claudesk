@@ -30,18 +30,14 @@ import type { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeatures
 
 /** The gate's value, typed as exactly what the seam hook returns.
  *
- * ── Why this indirection exists (it is not decoration) ──
- * This module is PURE (no React), so it cannot call `useWorkflowFeaturesEnabled()` itself
- * — its callers do, and pass the result in. But "the caller promises to pass the gate" is
- * a convention, and the M10.9 OFF-invariant guard rightly refuses to accept a convention:
- * its chord arm strips comments before matching, so a module that names a workflow term
- * must reference the seam in EXECUTABLE source, not in prose.
+ * This module is PURE (no React), so its callers call `useWorkflowFeaturesEnabled()` and pass
+ * the result in. Deriving the parameter type from the hook's return type makes that dependency
+ * structural: if the seam changes shape (say to `{enabled, loading}`), every `enabled`
+ * parameter here breaks at compile time instead of silently accepting the wrong value.
  *
- * Deriving the parameter type from the hook's own return type makes that reference real
- * and machine-checked. If the seam ever changes shape (say to a `{enabled, loading}`
- * object), every `enabled` parameter in this file breaks at compile time instead of
- * silently accepting the wrong value. The dependency is structural, which is precisely
- * what the guard is asking for.
+ * ⚠️ It is also what satisfies the OFF-invariant guard's chord arm, which strips comments
+ * before matching: a module that names a workflow term must reference the seam in EXECUTABLE
+ * source, not prose. So this type-only import is load-bearing, not decoration.
  */
 type WorkflowGateValue = ReturnType<typeof useWorkflowFeaturesEnabled>;
 

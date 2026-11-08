@@ -3,11 +3,8 @@
 //
 // SCOPE: the view, draft persistence (WP3) and SENDING (WP4 Phase 2).
 //
-// ⚠️ WP3's header said "SENDING is WP4 — nothing here imports `injectCommand`", and a guard in
-// `promptDraftSync.test.ts` enforced that. WP4 Phase 2 OPENED that seam deliberately, and the
-// guard was INVERTED in the same change rather than deleted — it now asserts the send path is
-// present AND that there is exactly ONE `injectCommand` call site here. Deleting it would have
-// traded a real invariant for nothing.
+// ⚠️ There is exactly ONE `injectCommand` call site here. `promptDraftSync.test.ts` asserts it,
+// and records why that guard was inverted rather than deleted when the send seam opened.
 //
 // ⚠️ THE SEND HAS ONE IMPLEMENTATION AND FOUR TRIGGERS (two buttons, two hotkeys). All four
 // route through `send(mode)`, whose only decision-making lives in `sendStagedDraft.planSend`.
@@ -209,11 +206,9 @@ export function PromptPanel({
 
   // Flush when the operator tabs AWAY from the Prompt panel.
   //
-  // ⚠️ This closes a real window, and it was MISSING until code review caught it: panels
-  // stay mounted (CLAUDE.md), so leaving the tab neither unmounts the panel nor cancels the
-  // debounce timer — but an operator who tabs to Editor and quits inside the 400ms window
-  // loses that text. `planPanelChange` existed and was tested from the start; nothing
-  // called it, so the module documented a guarantee the panel never actually provided.
+  // ⚠️ This closes a real window: panels stay mounted (CLAUDE.md), so leaving the tab neither
+  // unmounts the panel nor cancels the debounce timer, and an operator who tabs to Editor and
+  // quits inside the 400ms window would lose that text.
   //
   // `panelFront` is the panel's view of the host's selection, so "no longer front" is the
   // signal available here. The plan is computed by the same machine as every other write.

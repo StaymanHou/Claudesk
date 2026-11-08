@@ -98,7 +98,7 @@ export function anchorSelector(href: string): string {
  * GitHub-style slug for a heading's text — the `id` an in-doc anchor targets.
  *
  * ⚠️ **This exists because `react-markdown` emits NO heading `id`s by default**, which
- * makes every in-doc `#anchor` link a dead click. Found live at Phase 3 verify-self, not by
+ * makes every in-doc `#anchor` link a dead click. Found live in the running app, not by
  * unit tests: `anchorSelector`'s tests proved the SELECTOR was well-formed but never that
  * anything existed to select. Long WBS/WIP docs lean on their tables of contents, so this
  * is the common case, not an edge one.

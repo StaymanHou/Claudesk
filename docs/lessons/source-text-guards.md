@@ -478,15 +478,9 @@ arm, which is exactly when the bypass is tempting.
 **Found at paydown 2026-09-23 WP3 plan, and it refuted the WBS's own "Done" criterion.** The WBS asked
 for a jsdom test that "loads the real app entry graph and fails on a missing-export `SyntaxError`".
 Under Vitest that test cannot exist. The module runner rewrites `import { x } from "./y"` into a
-property read on the module object, so a missing `x` is silently **`undefined`**:
-
-```
-// consumer.ts:  import { present, missing } from "./lib";  export const out = [present, missing];
-await import("./consumer")   // → { out: [1, null] }, no error
-```
-
-In the webview the same import is `SyntaxError: Importing binding name 'missing' is not found`, and
-module evaluation aborts before React mounts. That is the M13.5 WP3 blank app. So **any Vitest test
+property read on the module object, so a missing `x` is silently **`undefined`**, while the webview
+aborts module evaluation before React mounts (the M13.5 WP3 blank app). The probe and the exact
+error are recorded once, in [`verify-auto-gate.md`](verify-auto-gate.md) §check:link. So **any Vitest test
 whose claim is "the graph imports, therefore no export is missing" checks nothing**, whether it
 imports or renders, and with jsdom or without. Two tests in this repo carried that claim
 (`moduleGraphBoot.test.ts`, `turnNavExportContract.test.ts`); both headers are now narrowed.

@@ -32,7 +32,9 @@
 // ⚠️ **BUT THE CHOKEPOINT ALSO CARRIES TERMINAL-GENERATED REPORTS** (focus in/out, device
 // attributes, cursor position), which xterm sends through `onData` as if typed. They raised the
 // watermark on every workspace open and every focus change until silent-supervisor Phase 2.
-// `foldInput` now strips them first (`terminalReports.ts` has the live capture).
+// `routeCcInput` (`ccInputRouting.ts`) owns the strip; `foldInput` strips again as defence in
+// depth, so a caller passing a raw chunk cannot move the watermark (`terminalReports.ts` has the
+// live capture).
 //
 // ⚠️ **WHAT REMAINS AN INFERENCE, STATED PLAINLY:** CC's TUI owns its own input buffer and
 // Claudesk cannot see it. This module tracks what was *sent in*, never what CC currently

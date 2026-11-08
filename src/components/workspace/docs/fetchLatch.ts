@@ -3,7 +3,7 @@
 // ── Why this is a module and not three lines inside the effect ──────────────────
 // It shipped as three lines inside the effect and was BROKEN — it deadlocked under React
 // StrictMode's mount → unmount → remount cycle and rendered a permanently blank panel
-// (caught at verify-human, 2026-08-02). The bug was invisible to every gate: `tsc`, lint,
+// (caught live, 2026-08-02). The bug was invisible to every gate: `tsc`, lint,
 // 1538 tests and a production build all passed, because nothing modelled the remount
 // sequence. Effect lifecycle is ordering-dependent async behavior, and this repo's own
 // rule is that such logic must be a pure function asserted as a VALUE rather than trusted

@@ -29,7 +29,7 @@ export type DocLinkResolution =
  * guard.
  *
  * ⚠️ **Exported solely so the clamp can be TESTED.** It is not part of the module's
- * intended API. Measured at verify-self: the clamp is **unobservable through
+ * intended API. Measured: the clamp is **unobservable through
  * `resolveDocLink`** — every candidate AND the reported `attempted` all pass through this
  * function, so no input distinguishes clamped from unclamped output. A test that drove the
  * outer function and asserted `attempted` had no `..` was therefore testing normalization,

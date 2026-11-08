@@ -32,8 +32,8 @@
 //!
 //! ⚠️ `run_on_main_thread` is deliberately NOT a boundary. A sync command already runs on the
 //! main thread, so a closure it marshals there runs on the main thread too and freezes the UI
-//! just the same. Cutting it would exempt a real freeze (found at WP9 verify-self, where a
-//! `run_on_main_thread(|| thread::sleep(..))` mutant passed).
+//! just the same. Cutting it would exempt a real freeze: a
+//! `run_on_main_thread(|| thread::sleep(..))` mutant passed while it was a boundary.
 //!
 //! ## What this does NOT cover (stated so it is not assumed)
 //!
@@ -668,8 +668,8 @@ fn work_handed_to_a_worker_is_not_flagged_but_the_same_call_inline_is() {
 
 #[test]
 fn work_marshalled_to_the_main_thread_is_still_flagged() {
-    // A sync command is already ON the main thread, so this freezes the UI just the same. Found
-    // as a hole at WP9 verify-self, when `run_on_main_thread` was briefly treated as a boundary.
+    // A sync command is already ON the main thread, so this freezes the UI just the same. It was
+    // a hole while `run_on_main_thread` was treated as a boundary.
     let found = flag_fixture(
         r#"
         #[tauri::command]

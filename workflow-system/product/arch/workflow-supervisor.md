@@ -246,8 +246,10 @@ catches 25/29 at a cost of 6/41.
 3. ✅ **DISCHARGED at M16.5 WP2 (2026-10-21) — and the margin is gone.** Q2 had come back
    `SEPARABLE` on a **+1-record margin** (sonnet 25/29 against a ≥24 bar), with 70 of 96 records
    scorable. On **291 operator-labelled turns** the shipped prompt holds 95/103 real waits (0.92)
-   but fires only **126/188 real breaks (0.67, CI 0.60–0.73)**, so it **FAILS 0.80/0.80 on the
-   break axis**. The bar was kept (operator); the failure is the safe, withholding direction.
+   but fires only **126/188 real breaks (0.67, CI 0.60–0.73; stable 0.665–0.676 over 3 runs)**,
+   so it **FAILS 0.80/0.80 on the break axis**. Breaks whose turn ends by asking ("shall I
+   proceed?") fire ~8/29 (an approximate heuristic; strictly `?`-ended, 8/21). The bar was kept
+   (operator); the failure is the safe, withholding direction.
    ⚠️ M15 had scored a different prompt, and the `sonnet` alias moved to `claude-sonnet-5-5` on
    2026-09-29 (condition 1 cannot see a moving alias). Follow-ups: WBS WP3 3.5 (revise the
    question) and 3.6 (a loud pin). Evidence: `wbs.md` → "Probe outcomes" → WP2,

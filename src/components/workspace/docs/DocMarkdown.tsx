@@ -15,7 +15,7 @@
 // `__TAURI_INTERNALS__` IPC surface. There is no second line of defense behind this file.
 //
 // TWO INDEPENDENT CONTROLS, and it is worth knowing they are REDUNDANT rather than
-// layered — measured at WP3 verify-self across three configurations, scoring the parsed
+// layered — measured across three configurations, scoring the parsed
 // DOM of an 11-section hostile fixture:
 //
 //   raw + sanitize  → 0 live vectors   (sanitizer catches what raw admits)
@@ -60,7 +60,7 @@ function textOf(node: ReactNode): string {
 /** Heading renderers that attach a GitHub-style `id`, so in-doc anchors have a target.
  *
  * ⚠️ Without these, `react-markdown` emits headings with NO id and every `#anchor` link in
- * a doc is a dead click — found live at Phase 3 verify-self. Defined at module scope (not
+ * a doc is a dead click — found live. Defined at module scope (not
  * inline in the JSX) so the object identity is stable across renders and does not force
  * the renderer to rebuild its component map on every keystroke-driven re-render.
  */

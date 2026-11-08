@@ -1,4 +1,4 @@
-// M13 WP3 Phase 1 — the Recycle completion state machine.
+// M13 WP3 — the Recycle completion state machine.
 //
 // ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️ WHY THIS IS A MACHINE OVER A SEQUENCE AND NOT A FILE POLL
@@ -60,11 +60,12 @@
 //
 // No filesystem, no Tauri, no clock. Inputs are VALUES, so every arm — including the ones
 // that took a live CC session and ~50s to observe — is a unit test that runs in
-// microseconds. The caller (Phase 2) owns sampling the baseline, subscribing to the two
+// microseconds. The caller (`recycleSession`) owns sampling the baseline, subscribing to the two
 // real signal sources, and translating their payloads into this alphabet.
 //
-// ⚠️ Extracting a pure machine proves the MACHINE, not its CALLER — hit twice in M11 WP4,
-// one a shipped CRITICAL. Phase 2 funnels every send through ONE function and guards THAT.
+// ⚠️ Extracting a pure machine proves the MACHINE, not its CALLER (its history:
+// `supervisor/turnEnd.ts`'s header). `recycleSession` funnels every send through ONE function
+// and is guarded there.
 
 /**
  * The input alphabet — **only signals WP1 actually observed**, plus the caller's timeout.
@@ -80,13 +81,13 @@ export type RecycleSignal =
    * evidence, NOT the event's arrival time (an event can be debounced or delivered late;
    * the mtime is what the filesystem recorded).
    *
-   * ⚠️ `path` is carried so the machine ITSELF can reject the Edit tool's temp+rename
-   * artifacts. An earlier revision left `isTempArtifactPath` as a caller-side predicate the
-   * machine never invoked — which made the exclusion **dead code a caller was free to
-   * forget**, and the machine would then have accepted `…/.session.md.tmp.<pid>.<hash>` as
-   * a real fresh write. That is the standing project hazard in its exact shape: *extracting
-   * a pure state machine proves the MACHINE, not its CALLER.* Carrying the path moves the
-   * exclusion inside the thing that is mutation-proven, so no caller can omit it.
+   * ⚠️ `path` is carried so the machine ITSELF can reject the Edit tool's temp+rename artifacts.
+   * Never move `isTempArtifactPath` out to a caller-side predicate the machine does not invoke: the
+   * exclusion becomes **dead code a caller is free to forget**, and the machine would then accept
+   * `…/.session.md.tmp.<pid>.<hash>` as a real fresh write. That is the standing project hazard in
+   * its exact shape: *extracting a pure state machine proves the MACHINE, not its CALLER.* Carrying
+   * the path moves the exclusion inside the thing that is mutation-proven, so no caller can omit
+   * it.
    */
   | {
       readonly kind: "session-md-write";
@@ -248,12 +249,12 @@ export function recycleTransition(
       // latest FRESH mtime as evidence; the machine still waits for the next `Stop`.
       //
       // ⚠️ The freshness check is applied HERE TOO, and the asymmetry it removes is the point:
-      // an earlier revision kept `signal.mtimeMs` unconditionally, so a STALE write arriving in
-      // this phase would overwrite the real evidence with an older timestamp (measured: 100 → 5).
-      // `awaiting-fresh-write` rejected exactly that write, so the machine's two phases disagreed
-      // about what counts as evidence. It never changed the succeeded/failed verdict — which is
-      // precisely why no behavioral test caught it and why the field's diagnostic value was the
-      // only casualty. Found by enumerating the full state × signal matrix at verify-codify.
+      // keeping `signal.mtimeMs` unconditionally lets a STALE write arriving in this phase
+      // overwrite the real evidence with an older timestamp (measured: 100 → 5).
+      // `awaiting-fresh-write` rejects exactly that write, so without this check the machine's two
+      // phases would disagree about what counts as evidence. It would never change the
+      // succeeded/failed verdict — which is why no behavioral test can see it, and why the
+      // field's diagnostic value is the only casualty. The state × signal matrix test pins it.
       return isFreshWrite(signal.mtimeMs, baselineMtimeMs)
         ? { phase: "awaiting-stop", freshWriteMtimeMs: signal.mtimeMs }
         : state;

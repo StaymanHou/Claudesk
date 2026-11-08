@@ -147,8 +147,8 @@ export function slashCommandPayload(command: string): string {
  * CC's output, which `arch.md` forbids outright, and a double-fire risks running the command
  * twice. The terminal IS the evidence: the user is sitting at a live prompt and can type
  * anything. Mitigation for a wrong fire is **Esc** (CC's own interrupt) — note that is
- * *interrupt a running command*, not *cancel before send*; there is no pre-send window and
- * the docs must not imply one.
+ * *interrupt a running command*, not *cancel before send*; there is no pre-send cancel window
+ * and the docs must not imply one.
  *
  * ⚠️ `label` names the CALLER for the diagnostic, and it exists because it had to. M13 WP2
  * reused this funnel for the skill-button row, which inherited a hardcoded `auto-resume:`

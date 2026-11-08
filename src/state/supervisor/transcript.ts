@@ -232,6 +232,8 @@ export interface TurnReading {
  * last user prose line** (trap 1 — the token must come off an assistant text block, never a
  * user line; and it must be THIS turn's), then scans FORWARD from there for a
  * `Skill` call (trap 2: tool results never end the turn, so they never move the boundary).
+ * "User prose" includes an injected skill body (an `isMeta` text line), so after a chained
+ * `Skill` call the floor can sit mid-turn; see {@link lastUserProseIndex} for why that is safe.
  *
  * ⚠️ The forward scan starts at the verdict line ITSELF, because an assistant message can
  * carry the `TRANSITION:` text block and the `Skill` tool_use block in the SAME message —

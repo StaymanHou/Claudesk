@@ -1,10 +1,8 @@
 // M11 — the Docs panel: a workflow-ordered list of the project's conventional strategic
 // docs (WP2) above the selected one, rendered read-only (WP3).
 //
-// SCOPE as of WP3: list + render + auto-select-on-open + link navigation. Still no
-// `fs-change` listener — live reload is WP4's, and WP4 also adds "jump to a doc that newly
-// APPEARS" (an operator decision at WP3 verify-human; see `wbs.md` task 4.3, which was
-// amended for it). Adding the subscription now would be an untested seam nothing consumes.
+// SCOPE: list + render + auto-select-on-open + link navigation + live reload on `fs-change`,
+// including the jump to a doc that newly APPEARS (an operator decision).
 //
 // The heavy lifting lives in pure siblings so it is testable as values rather than trusted
 // inside hooks: `docsOrder` (order/label/which-view), `fetchLatch` (the StrictMode-safe
@@ -71,14 +69,12 @@ interface DocsPanelProps {
    * a zero-height box silently ignores a `scrollTop` write, so an offset that cannot be applied
    * is HELD and re-applied when this flips true.
    *
-   * ⚠️ CORRECTED at WP5: this used to say the motivating case is "a reload that lands while the
-   * panel is hidden." It is NOT — the reload is *skipped* while hidden (see the `!visibleRef`
-   * gate in the `fs-change` handler) and replayed by the catch-up effect after re-fronting, when
-   * the box is measurable, so that path takes the `"applied"` arm. The deferred arm is reached by
-   * a RACE: a reload that starts while front, then a panel switch during the
-   * `docs_list`→`docs_read` round trip. The old wording caused a WP5 experiment to be designed
-   * against the wrong path — see
-   * `SURFACE-2026-08-02-BROWSER-SUPPLIES-THE-ANSWER-SO-SCROLL-RESTORE-CHECKS-ARE-VACUOUS`.
+   * ⚠️ The motivating case is NOT "a reload that lands while the panel is hidden": the reload
+   * is *skipped* while hidden (see the `!visibleRef` gate in the `fs-change` handler) and
+   * replayed by the catch-up effect after re-fronting, when the box is measurable, so that path
+   * takes the `"applied"` arm. The deferred arm is reached by a RACE: a reload that starts while
+   * front, then a panel switch during the `docs_list`→`docs_read` round trip. Design any
+   * experiment on this arm around that race.
    */
   panelFront: boolean;
 }
@@ -127,11 +123,11 @@ export function DocsPanel({
   // re-orienting — which is the one job it has.
   const [jumpedTo, setJumpedTo] = useState<string | null>(null);
 
-  // WP5 P3.2 — the LATCHED auto-resolution ("pin once resolved", operator decision).
+  // The LATCHED auto-resolution ("pin once resolved", operator decision).
   //
   // ⚠️ Without this, the bottom tier of `selectedDoc` recomputes `pickInitialDoc(docs)` every
   // render, and since `docs` is refreshed with fresh mtimes on every `fs-change`, editing a
-  // file the reader is NOT looking at moved the selection. Measured live (WP5 P3.1): reading
+  // file the reader is NOT looking at moved the selection. Measured live: reading
   // `older-feature.md` at scrollTop 600, a touch of the sibling `newer-feature.md` swapped the
   // rendered doc and dropped the reader at scrollTop 0 — with NO reload arm running, so
   // nothing captured or restored the position.
@@ -163,7 +159,7 @@ export function DocsPanel({
   // anywhere. Cleared on the next successful reload.
   const [reloadNote, setReloadNote] = useState<string | null>(null);
 
-  // The scroll box. WP4 restores `scrollTop` on this element; P2.4 scopes
+  // The scroll box. The reload restores `scrollTop` on this element, and link navigation scopes
   // anchor-scrolling to it so a `#fragment` scrolls the panel, not the app shell.
   const contentRef = useRef<HTMLDivElement | null>(null);
 
@@ -179,11 +175,9 @@ export function DocsPanel({
   // (SURFACE-2026-08-01-QUALITY-WP2-DOCSPANEL-FETCH-LATCH-ENTANGLED-WITH-DATA). A ref, not
   // state: flipping it must not schedule a render.
   //
-  // ⚠️ The latch MUST be released by the cleanup — load-bearing, not tidiness. Set-before-await
-  // and never-released deadlocks under StrictMode's mount → unmount → remount and renders a
-  // permanently blank panel while every automated gate stays green. The transition table and the
-  // full account live in `fetchLatch.ts`, which owns this machine as a pure function so the
-  // sequence is asserted as a VALUE (`fetchLatch.test.ts`) rather than trusted inside a hook.
+  // ⚠️ The latch MUST be released by the cleanup — load-bearing, not tidiness. The StrictMode
+  // deadlock it prevents and the transition table live in `fetchLatch.ts`, which owns this
+  // machine as a pure function so the sequence is asserted as a VALUE (`fetchLatch.test.ts`).
   //
   // The ref is deliberately never reset on a `projectPath` change: `CenterStage` keys each
   // `Workspace` by `ws.id`, so one mounted host is one project for its whole lifetime. The dep
@@ -198,7 +192,7 @@ export function DocsPanel({
         if (cancelled) return;
         latchRef.current = latchNext(latchRef.current, "settle");
         setDocs(entries);
-        // WP5 P3.2 — LATCH the auto-resolution here, where it first becomes possible.
+        // LATCH the auto-resolution here, where it first becomes possible.
         // `pickInitialDoc` is pure, so this is the same answer the render would derive; fixing
         // it now is what stops later mtime churn from moving it. Nothing higher can be set yet
         // on this path (a user cannot have picked before the list existed), so no guard is
@@ -247,7 +241,7 @@ export function DocsPanel({
   // THE selection: the user's explicit pick, else the auto-selected landing doc. Computed
   // before the content effect so that effect sees the auto-selection on the very first
   // render that has docs — which is what makes the panel open on a rendered document with
-  // no click (P2.2, `[PRIOR: primary-surface-is-zero-ceremony-not-a-mode]`).
+  // no click (`[PRIOR: primary-surface-is-zero-ceremony-not-a-mode]`).
   const selected = selectedDoc(chosen, docs, jumpedTo, settled);
 
   // WP4 — a "re-read the SAME path" signal. Bumped when `fs-change` reports the selected
@@ -406,7 +400,7 @@ export function DocsPanel({
                 // first jump disabled every later one — a shipped CRITICAL. See the
                 // `jumpedTo` declaration for the full account.
                 setJumpedTo(decision.selected);
-                // WP5 P3.2 — release the latch. This upholds the module's load-bearing
+                // Release the latch. This upholds the module's load-bearing
                 // invariant: **`settled !== null` implies `settled` IS the selection.** Both
                 // higher tiers clear it when they take over, which is what makes a stale
                 // `settled` pointing at a doc nobody is showing unreachable.
@@ -526,7 +520,7 @@ export function DocsPanel({
     current?.error ?? null,
   );
 
-  // ── P2.4 — link navigation, via ONE delegated handler on the content container ──
+  // ── Link navigation, via ONE delegated handler on the content container ──
   //
   // Delegated rather than a `components={{ a }}` renderer override: WP1 chose this because
   // it is renderer-agnostic (a future renderer swap keeps working) and because there is
@@ -537,9 +531,10 @@ export function DocsPanel({
   // nothing with. Claudesk's window has no back button, so a webview that navigates away
   // is an unrecoverable state — "block first, then decide" is the only safe order.
   //
-  // ⚠️ `[[slug]]` links are NOT handled here and structurally CANNOT be (P2.5): WP1
+  // ⚠️ `[[slug]]` links are NOT handled here and structurally CANNOT be: it was
   // measured that the renderer emits them as literal text with no `<a>` element at all, so
-  // this handler never sees them. Decision + rationale in the WIP.
+  // this handler never sees them. Decision + rationale: the archived
+  // `workflow-system/state/archive/m11-wp3-docs-render-and-navigation.md`.
   // The handler lives in its own module so tests can drive THE REAL CODE with real DOM
   // events rather than a re-implementation. Two prior guards for its central invariant
   // ("no doc-content click ever performs its default action") were source-text proxies and
@@ -617,7 +612,7 @@ export function DocsPanel({
         </div>
       )}
 
-      {/* ── LAYOUT (WP3 task P1.6) ────────────────────────────────────────────────
+      {/* ── LAYOUT ────────────────────────────────────────────────
           The list sits in a FIXED-HEIGHT scrollable strip along the top, with the
           rendered doc filling the remaining space below it.
 

@@ -1737,9 +1737,7 @@ mod tests {
     }
 
     /// M12 WP1 Verdict (a) — the fact that disqualified storing the unclean-exit flag on
-    /// [`Project`]. Pinned as a test because the verdict *reasons from it*, and a future
-    /// refactor that made `projects.json` writes per-record would silently invalidate the
-    /// recorded rejection without anything failing.
+    /// [`Project`] (the verdict is recorded in `session_state`'s module doc).
     ///
     /// The property: [`write_projects`] serializes the WHOLE slice, so two interleaved
     /// read-modify-write callers **lose each other's edits** — last `rename` wins. (The

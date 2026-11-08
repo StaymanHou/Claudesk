@@ -26,8 +26,9 @@
 
 // ⚠️ **AND THE WATERMARK SIDE IS THE OPERATOR'S INPUT ONLY** (silent-supervisor Phase 2). The chunk
 // also carries terminal-generated reports (focus in/out, device attributes, cursor position),
-// which are stripped here, once, for BOTH readers: the watermark and the turn-attribution cancel.
-// The pty still gets every byte, because CC asked for those reports.
+// which are stripped here for BOTH readers: the watermark and the turn-attribution cancel. This is
+// the owning strip; `foldInput` strips again only as defence in depth. The pty still gets every
+// byte, because CC asked for those reports.
 
 import { stripTerminalReports } from "../../state/supervisor/terminalReports";
 

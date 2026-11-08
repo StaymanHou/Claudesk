@@ -1,4 +1,4 @@
-// M13 WP3 P3.2 — the Recycle button's presentation contract.
+// M13 WP3 — the Recycle button's presentation contract.
 //
 // ⚠️ SEPARATE FROM `skillButtons.ts` ON PURPOSE, AND THIS IS THE WP'S STANDING SCOPE DECISION.
 // `SKILL_BUTTONS` is typed `{command, label, title}` where `command` is a literal slash command
@@ -7,12 +7,9 @@
 // unclean-exit flag → kill + respawn CC → inject `/session-restore`). It renders as a SIBLING in
 // the same `.workspace-skill-row`, wired to `recycleSession`.
 //
-// ⚠️ A `DECIDED_ROW_SIZE = 6` constant plus a test asserting this was BUILT AT WP2 AND REMOVED at
-// code-quality review as unsound in both directions — do not rebuild it. `SKILL_BUTTONS.length
-// === 6` is unsatisfiable given "Recycle is not a skill," and its "WP3 has landed" trigger matched
-// only a literal string in `src/**`, invisible to a typed-parameter or Rust-side caller. The full
-// autopsy is in `__tests__/skillButtons.test.ts`. **A test cannot enforce a future scope
-// decision** — the WBS line was the enforcement, and this module is that line satisfied.
+// ⚠️ Do not rebuild a row-size constant or a count test for this: one was built and removed
+// (the autopsy is in `__tests__/skillButtons.test.ts`). **A test cannot enforce a future scope
+// decision.**
 
 /** The Recycle button's visible label. Terse to match the row's other five. */
 export const RECYCLE_LABEL = "recycle";
@@ -31,22 +28,21 @@ export const RECYCLE_TESTID = "workspace-recycle";
  * requiring the workflow substrate on disk, which the skill row explicitly does NOT require —
  * would silently change the skill row too).
  *
- * ⚠️ **But the divergence is NOT reachable at today's render site, and this doc used to imply it
- * was.** The button renders in `Workspace.tsx` *inside* the `showSkillButtons(…) &&` block
- * (find it by that symbol — line cites here drifted twice) — so the row's gate **strictly
- * dominates** this predicate, and since both are byte-identical one-liners, relaxing this one
- * alone changes nothing observable. The separation
- * above is therefore **forward-looking insurance, not a live behavioral difference.** ⚠️ Do NOT
- * "fix" the nesting by un-nesting the button: sharing the row's container is correct (same row,
- * same look), and a diverging Recycle precondition would be expressed by hoisting the render out
- * of the row's gate at that time. The claim narrowed here is the doc's, not the code's.
+ * ⚠️ **But the divergence is NOT reachable at today's render site.** The button renders in
+ * `Workspace.tsx` *inside* the `showSkillButtons(…) &&` block (find it by that symbol) — so the
+ * row's gate **strictly dominates** this predicate, and since both are byte-identical one-liners,
+ * relaxing this one alone changes nothing observable. The separation above is therefore
+ * **forward-looking insurance, not a live behavioral difference.** ⚠️ Do NOT "fix" the nesting by
+ * un-nesting the button: sharing the row's container is correct (same row, same look), and a
+ * diverging Recycle precondition would be expressed by hoisting the render out of the row's gate at
+ * that time. The claim narrowed here is the doc's, not the code's.
  *
  * ⚠️ `workflowEnabled` is a GATE, not a disable: with the gate off the button must be ABSENT, not
  * greyed. Recycle drives two companion-workflow skills, so it is meaningless without them, and
  * M10.9's invariant is that OFF is byte-identical to a build that never had the feature.
  *
  * ⚠️ `ccSessionId !== null` is the dead-click guard, mirroring the skill row's: a null id means the
- * spawn has not resolved (or failed), and firing into it would be the WP6 picker MAJOR.
+ * spawn has not resolved (or failed), and firing into it fails with nothing to show for it.
  */
 export function showRecycleButton(inputs: {
   workflowEnabled: boolean;

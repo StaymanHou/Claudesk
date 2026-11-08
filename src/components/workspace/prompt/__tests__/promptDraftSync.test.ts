@@ -254,11 +254,9 @@ describe("PromptPanel funnels every write through one call site", () => {
 describe("every plan function has a live caller", () => {
   // ⚠️ THIS SUITE EXISTS BECAUSE A MUTANT SURVIVED, AND BECAUSE THE DEFECT SHIPPED ONCE.
   //
-  // `planPanelChange` was exported, documented and tested from the start — and called by
-  // NOTHING, so this module promised a flush-on-tab-away that the panel never performed. Code
-  // review caught it. After wiring it, deleting the call site again was mutation-tested: all
-  // 44 tests still passed. The pure-function tests cannot see an unwired plan, by
-  // construction — they call it themselves.
+  // `planPanelChange` once shipped with no caller (`promptDraftSync.ts`'s header). After wiring it,
+  // deleting the call site again was mutation-tested: all 44 tests still passed. The pure-function
+  // tests cannot see an unwired plan, by construction — they call it themselves.
   //
   // ⚠️ A source guard is the honest instrument here, NOT a render test: a server render cannot
   // transition `panelFront`, so "does leaving the tab flush?" is unreachable in jsdom. The

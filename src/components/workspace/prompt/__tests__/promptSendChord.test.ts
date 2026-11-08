@@ -5,9 +5,8 @@ import type { ChordEvent } from "../../chordEvent";
 // F-a WP4 Phase 2 (task 4.2) — the send chords' disjointness.
 //
 // ⚠️ The property that matters is not "⌘↵ returns true" but that the two predicates are
-// MUTUALLY EXCLUSIVE and inert everywhere else. A send has no undo (`injectCommand` has no
-// retry and no pre-send cancel window), so a predicate that fires one key too widely is an
-// unrecoverable write into a live conversation.
+// MUTUALLY EXCLUSIVE and inert everywhere else. A send has no undo (`promptSendRouting.ts`'s
+// header), so a predicate that fires one key too widely sends into a live conversation.
 
 /** A keydown with everything off unless overridden. */
 function ev(over: Partial<ChordEvent>): ChordEvent {

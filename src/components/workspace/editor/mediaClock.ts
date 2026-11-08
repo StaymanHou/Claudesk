@@ -6,7 +6,7 @@
 // ⚠️ ONE module for the fps value and every time↔frame conversion. Frame-step and the
 // timecode both read it, so they cannot disagree about which frame is showing (spec AC-12).
 //
-// Measured in the real WKWebView (WIP → Research, 2026-10-20):
+// Measured in the real WKWebView (2026-10-20):
 // - `videoTracks[i].configuration.framerate` gives the rate with no playback, but with float
 //   noise (24.000000384, 23.976022720…), hence `snapFps`.
 // - Seeking to a frame's START is unreliable in WebKit: forward never advances, backward

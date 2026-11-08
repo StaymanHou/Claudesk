@@ -11,9 +11,7 @@ import type { ChordEvent } from "../../chordEvent";
 //
 // verify-human confirmed in the live app that ⌘↵ / ⇧⌘↵ send from the Prompt panel. What no test
 // covered was the SCOPING: that those chords are inert everywhere else. That is a safety
-// property, not a nicety — `injectCommand` has no retry and no pre-send cancel window, so a send
-// fired while the operator is looking at the editor is an unrecoverable write into a live
-// conversation, recoverable only by CC's Esc.
+// property, not a nicety (`promptSendRouting.ts`'s header says why).
 //
 // The decision was inline in `RightPanelHost`'s ~900-line keydown router, unreachable by any
 // test. It was extracted to `promptSendRouting.ts` at codify precisely so this file could drive
@@ -134,10 +132,8 @@ describe("the panel-front scoping — the safety property", () => {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️ THE LIVE-CALLER GUARD. A pure decision module's own tests CANNOT see that nothing calls it
-// — they call it themselves. `planPanelChange` shipped exported, documented and fully tested
-// with ZERO callers, so its module promised a flush the panel never performed
-// (`[[extracted-machine-needs-a-live-caller-guard]]`). Extracting this router out of
-// `RightPanelHost` created exactly that risk, so the caller is asserted here.
+// — they call it themselves (`promptDraftSync.ts`'s header has the instance). Extracting this
+// router out of `RightPanelHost` created exactly that risk, so the caller is asserted here.
 const hostSource = readFileSync(
   fileURLToPath(new URL("../../RightPanelHost.tsx", import.meta.url)),
   "utf8",

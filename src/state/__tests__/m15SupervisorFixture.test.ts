@@ -16,16 +16,9 @@ import { resolve } from "node:path";
 // Python, TypeScript or Rust. So this file is the SPEC WP3's reader must satisfy, expressed
 // against the frozen evidence that produced it.
 //
-// Each property below encodes a real defect found and fixed during Phase 1. Every one was a
-// false-positive generator that a plausible implementation gets wrong, and each is recorded
-// with the measured effect it had on the break count:
-//
-//   223 breaks  (naive: policy cell alone)
-//   -> 127      after property 2 (an AUTO cell does not imply a dispatchable target)
-//   ->  96      after property 3 (the chain-detection window must not close early)
-//
-// Evidence for every number: `workflow-system/state/wip/m15-wp1-supervisor-probe.md`
-// (Discoveries) and the three 2026-09-07 entries in `workflow-system/state/backlog.md`.
+// Each property below encodes a false-positive generator that a plausible implementation gets
+// wrong. The measured effect of each on the break count is recorded in the archived WP1 record
+// (`workflow-system/state/archive/m15-wp1-supervisor-probe.md`, Discoveries).
 
 const FIXTURE_PATH = resolve(
   __dirname,
@@ -72,12 +65,12 @@ describe("M15 WP1 break fixture — integrity", () => {
   });
 
   it("records that the corpus is LIVE, so counts drift across time but not within a run", () => {
-    // ⚠️ The corpus contains the probe session's OWN transcript, still being appended as
-    // the probe runs: the scanned total was observed going 2282 -> 2284 -> 2286 inside one
-    // session. Without this caveat the numbers read as irreproducible. WP3 inherits the
-    // property — a supervisor reading the transcript of the session it supervises sees its
-    // own writes, so "have I already fired for this turn?" must key on the TURN, never on
-    // a corpus-wide count.
+    // ⚠️ The corpus contains the probe session's OWN transcript, still being appended as the probe
+    // runs, so the scanned total drifts inside one session (measured at `transcript/mod.rs` →
+    // `TAIL_BYTES`). Without this caveat the numbers read as irreproducible. WP3 inherits the
+    // property — a supervisor reading the transcript of the session it supervises sees its own
+    // writes, so "have I already fired for this turn?" must key on the TURN, never on a corpus-wide
+    // count.
     expect(fixture._meta.frozen_at).toBeTruthy();
     expect(fixture._meta.live_corpus_caveat).toMatch(/live/i);
   });
@@ -108,7 +101,7 @@ describe("M15 WP1 property 1 — the parse is assistant-scoped (the A-2 hazard)"
 });
 
 describe("M15 WP1 property 2 — an AUTO policy cell does NOT imply a dispatchable target", () => {
-  // ⚠️ The defect: labelling on the mode cell alone marked 223 breaks. Most were
+  // ⚠️ The defect: labelling on the mode cell alone over-counts breaks. Most were
   // terminal / SURFACE / meta-op edges whose FROM-state's row says AUTO but whose TARGET
   // is not a dispatchable skill. The policy cell answers "may the orchestrator chain
   // without pausing?" — it does NOT answer "is there anything to chain to?". Those are
@@ -149,8 +142,8 @@ describe("M15 WP1 property 3 — the chain-detection window must not close early
   it("labels the proven false-positive case NO_FIRE — it chained two Bash calls later", () => {
     // Session 06eb0e92 turn 504 emitted `TRANSITION: F10` and DID chain correctly: the
     // Skill call landed at line 511, after two Bash calls and two narration lines. An
-    // early-closing window labelled it a break. This is the single case that took the
-    // count 127 -> 96, so it is asserted by identity, not by aggregate.
+    // early-closing window labelled it a break. It is the defect's one proven case, so it is
+    // asserted by identity, not by aggregate.
     const sfIndex = fixture._meta.session_files.findIndex((f) =>
       f.startsWith("06eb0e92"),
     );
@@ -261,13 +254,12 @@ describe("M15 WP1 Phase 2 — naive-vs-discriminating attribution", () => {
   it.each(["F10", "F13", "F19"])(
     "confirms %s contributes no FALSE positive",
     (edge) => {
-      // ⚠️ Asserts the FALSE-positive arm only, deliberately. An earlier version
-      // of this test also asserted `fixture.fire` held no record for these
-      // edges, and failed: F10 has 3 GENUINE breaks in `fire[]`, one of them
-      // operator-corroborated (GROUND_TRUTH_BREAK). "Appears in fire" and "is a
-      // false positive" are different properties, and only the second is what
-      // the over-flag guard actually verified. Asserting the first would have
-      // pinned a claim that a real break does not exist.
+      // ⚠️ Asserts the FALSE-positive arm only, deliberately. Do NOT also assert that
+      // `fixture.fire` holds no record for these edges: F10 has 3 GENUINE breaks in
+      // `fire[]`, one of them operator-corroborated (GROUND_TRUTH_BREAK). "Appears in
+      // fire" and "is a false positive" are different properties, and only the second
+      // is what the over-flag guard verified; the first would pin a claim that a real
+      // break does not exist.
       expect(
         naiveFalsePositives.filter((r) => r.edge_id === edge),
       ).toHaveLength(0);
@@ -279,7 +271,7 @@ describe("M15 WP1 Phase 2 — Q5 idempotency, pinned to its measured value", () 
   it("counts 1675 AUTO verdicts that had already chained", () => {
     // The earlier Q5 test asserts only that the population is non-empty. This
     // pins the number, because a drop means the chain-detection window closed
-    // early again (the 127 -> 96 defect) and the supervisor would fire
+    // early again (property 3's defect) and the supervisor would fire
     // duplicates into turns that already chained correctly.
     const chained = fixture.no_fire.filter((r) =>
       r.label_basis.endsWith(":already-chained"),

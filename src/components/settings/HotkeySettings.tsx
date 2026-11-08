@@ -1,12 +1,9 @@
 // M14 WP3 — the hotkey reference.
 //
 // ## Why this group renders from the registry rather than a hand-written list
-// The chord map used to be a COMMENT BLOCK in editor/paletteCommands.ts. It could not be
-// rendered, could not be tested against the code it described, and drifted silently — WP3
-// Phase 1 promoted it to typed data (`chordRegistry.ts`) with two guards, one per drift
-// direction. This group is the payoff: the user-facing surface reads the same data the
-// guards check, so a chord cannot appear here without being wired, or be wired without
-// appearing here.
+// It reads the same typed data the registry's two guards check (`chordRegistry.ts`; its header
+// says why the map is data), so a chord cannot appear here without being wired, or be wired
+// without appearing here.
 //
 // ## The gate (P2.3)
 // Entries are read through `visibleChords(enabled)`, which OMITS gate-dependent chords when

@@ -92,7 +92,10 @@ export type Verdict =
       readonly edgeId: string;
       /** The slash command to inject, WITHOUT the leading slash. */
       readonly skill: string;
-      /** The mode actually applied. (The funnel forces Mode 2 for incidents, but an incident edge never fires: see `SUPERVISED_WORKFLOWS`.) */
+      /**
+       * The mode actually applied. (The funnel forces Mode 2 for incidents, but an incident edge
+       * never fires: see `SUPERVISED_WORKFLOWS`.)
+       */
       readonly mode: DriveMode;
     }
   | {
@@ -201,8 +204,8 @@ export function decideVerdict(input: VerdictInput): Verdict {
   // ⚠️ Checked BEFORE the policy lookup: a turn that already chained needs no verdict at
   // all, and asking the policy first would invite reading its answer as permission to
   // re-fire. ⚠️ Keyed on the TURN (the reader's window), never on a corpus-wide count — the
-  // corpus is live and includes the supervising session's own transcript, observed drifting
-  // 2282 → 2284 → 2286 within one session.
+  // corpus is live and includes the supervising session's own transcript (the drift is
+  // measured at `transcript/mod.rs` → `TAIL_BYTES`).
   if (reading.alreadyChained) {
     return withhold(
       "already-chained",
@@ -309,9 +312,8 @@ export function decideFromRaw(
 // reads "AUTO, dispatchable, not chained" and would fire again.
 //
 // ⚠️ THE KEY IS THE TURN, NEVER A CORPUS-WIDE COUNT. The corpus is LIVE and includes the
-// supervising session's own transcript — the WP1 probe watched a scanned total drift
-// 2282 -> 2284 -> 2286 within a single session. Anything keyed on "how many verdicts have I
-// seen" is therefore wrong by construction.
+// supervising session's own transcript (the drift is measured at `transcript/mod.rs` →
+// `TAIL_BYTES`), so anything keyed on "how many verdicts have I seen" is wrong by construction.
 //
 // A turn is identified by (workspace, transcript file, edge, verdict line index). The line
 // index is what makes a REPEATED edge distinguishable: a feature that runs `F8` once per
@@ -395,10 +397,8 @@ export class FireLedger {
 // cleared.
 //
 // ⚠️ THE ADJUDICATOR RUNS ON **EVERY** FIRE CANDIDATE, NOT A SELECTED CLASS.
-// The narrow edge-class router (verify-human-adjacent only) sends 40 of 96 and **misses 10 of
-// 32 awaiting-turns** — which would then fire silently with no adjudication at all. The
-// 70%-concentration finding is a DENSITY fact, not a COVERAGE fact, and building the router
-// on it is the measured mistake this ordering avoids.
+// A narrow edge-class router would miss awaiting-turns, which would then fire silently with no
+// adjudication at all (measured in `adjudicator.ts`'s header).
 //
 // ⚠️ IT RUNS **AFTER** THE MECHANICAL RULE, NEVER INSTEAD OF IT. The rule decides ~1,900 of
 // ~2,284 turns on its own; the adjudicator is a veto on what the rule already cleared, never

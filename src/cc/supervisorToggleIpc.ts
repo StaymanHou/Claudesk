@@ -1,11 +1,9 @@
 // M14 WP0 Phase 2 — the per-project supervisor toggle's IPC pair.
 //
-// ⚠️ **A SEPARATE MODULE FROM `driveModeIpc.ts`, not a pair of functions bolted onto it.** That
-// module's header carries a specific caution about per-ROW reads (M11.5's repair (B) removed
-// them), and its two getters answer *stored vs running* — a distinction this value does not have,
-// because the supervisor consults it at fire time rather than baking it into the spawn. Merging
-// them would invite a reader to assume this value has a "running" counterpart it must reconcile.
-// It does not.
+// ⚠️ **A SEPARATE MODULE FROM `driveModeIpc.ts`**, for the reason `workspaceSupervisor.ts`'s
+// header gives for keeping the two derivations apart. The IPC-level difference: that module's
+// two getters answer *stored vs running*, and this value has no running counterpart, because the
+// supervisor consults it at fire time rather than baking it into the spawn.
 //
 // ⚠️ **"At fire time" is the READ, not the FRESHNESS.** The supervisor reads a ref on every turn
 // end, but `Workspace.tsx` refills that ref from disk only on a `visible` edge and on this

@@ -10,10 +10,8 @@
 // (send or not, which bytes, which label) is made HERE as data, and the panel's only job is to
 // execute the plan it is handed.
 //
-// ⚠️ A `plan*` function with no live caller is worse than no function at all — `planPanelChange`
-// shipped exported, documented and tested but UNWIRED, so its module promised a flush the panel
-// never performed. `[[extracted-machine-needs-a-live-caller-guard]]`. If you add a function here,
-// wire it in the same change.
+// ⚠️ If you add a function here, wire it in the same change (the unwired-`plan*` lesson:
+// `promptDraftSync.ts`'s header).
 //
 // ⚠️ WHAT THIS MODULE DELIBERATELY DOES NOT DO: verify that the send LANDED. `injectCommand` has
 // no retry and no readback, and parsing CC's output is forbidden outright by `arch.md`. The

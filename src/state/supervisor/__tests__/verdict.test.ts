@@ -478,8 +478,8 @@ describe("⚠️ decideSupervised — the HYBRID's ordering", () => {
   });
 
   it("⚠️ adjudicates EVERY fire candidate, not a selected edge class", async () => {
-    // The narrow router sends 40 of 96 and misses 10 of 32 awaiting-turns. Drive several
-    // unrelated firing edges and assert each one was adjudicated.
+    // A narrow router misses awaiting-turns (measured in `adjudicator.ts`'s header). Drive
+    // several unrelated firing edges and assert each one was adjudicated.
     const adjudicated: string[] = [];
     const d = {
       run: async ({ prompt }: { prompt: string }) => {

@@ -182,8 +182,8 @@ describe("M16.5 WP4 — a verify-human overlay is a PiP 'needs me' cue", () => {
       ),
     ).toBe(true);
     expect(isAwaitingInput({ a: { state: "idle" } }, "a")).toBe(false);
-    // A `null` off the wire (serde's `None`) is outside the TS type; it must not read as an
-    // overlay.
+    // Defensive: serde omits `None` rather than sending `null`, but should a `null` ever arrive
+    // (it is outside the TS type), it must not read as an overlay.
     const nullOffTheWire = {
       a: { state: "idle", attention: null },
     } as unknown as WorkspaceStatusMap;

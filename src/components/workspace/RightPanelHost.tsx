@@ -910,10 +910,8 @@ export function RightPanelHost({
       }
       // F-a WP4 (task 4.2) — ⌘↵ / ⇧⌘↵ send the staged prompt.
       //
-      // ⚠️ SCOPED TO THE PROMPT PANEL BEING FRONT. These chords are inert everywhere else, and
-      // that is a safety property rather than tidiness: `injectCommand` has no retry and no
-      // pre-send cancel window, so a send fired while the operator is looking at the editor
-      // would be an unrecoverable write into a live conversation. Recovery would be CC's Esc.
+      // ⚠️ SCOPED TO THE PROMPT PANEL BEING FRONT. These chords are inert everywhere else, which
+      // is a safety property rather than tidiness (`prompt/promptSendRouting.ts` says why).
       //
       // ⚠️ Placed BEFORE the panel-select branch but it cannot shadow anything: Enter is not a
       // letter or a digit, so it is disjoint from every other chord in this router by key alone.

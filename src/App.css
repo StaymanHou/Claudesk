@@ -695,12 +695,6 @@ body,
 /* ⚠️ Anchored to the group's LEFT edge. The badge sits near the header's left end, so a
    right-anchored panel extends past the window's left edge and clips its own content (seen live at
    verify-self: x = -163). */
-/* The popover takes focus programmatically (so its Esc cannot reach the terminal); it is a
-   container, not a control, so it shows no focus ring. */
-.supervisor-activity-popover:focus {
-  outline: none;
-}
-
 .supervisor-activity-popover {
   position: absolute;
   top: calc(100% + 4px);
@@ -716,6 +710,12 @@ body,
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
   text-align: left;
   white-space: normal;
+}
+
+/* The popover takes focus programmatically (so its Esc cannot reach the terminal); it is a
+   container, not a control, so it shows no focus ring. */
+.supervisor-activity-popover:focus {
+  outline: none;
 }
 
 .supervisor-activity-title {

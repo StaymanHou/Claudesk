@@ -181,10 +181,10 @@ function unmappedReason(edge: Edge): UnmappedReason {
  * THE SINGLE FUNNEL. Every policy read in Claudesk goes through this function.
  *
  * ⚠️ Phase 4 adds the caller-side guard that enforces the funnel. The standing local
- * defect shape — *a mechanism correct in itself behind a caller that does not honor it*
- * — has bitten this repo four times, twice in M11 WP4 with one shipped CRITICAL.
- * Enumerating the cells as data makes the SET testable; it does NOT prove each cell has
- * a caller. One funnel, guarded, is what makes that provable.
+ * defect shape is *a mechanism correct in itself behind a caller that does not honor it*
+ * (its history: `supervisor/turnEnd.ts`'s header). Enumerating the cells as data makes the
+ * SET testable; it does NOT prove each cell has a caller. One funnel, guarded, is what makes
+ * that provable.
  *
  * ⚠️ `context` is required for a correct verdict on the ONE conditional cell
  * (feature/verify-human in autopilot). Omitting it does not silently auto-skip: the

@@ -254,7 +254,8 @@ export function displayStateFor(
   map: WorkspaceStatusMap,
   workspaceId: string,
 ): WireWorkspaceState {
-  // `!= null`, not `!== undefined`: a `null` off the wire must not read as an overlay.
+  // `!= null`, not `!== undefined`, defensively: serde omits `None`, but should a `null` ever
+  // arrive it must not read as an overlay.
   return map[workspaceId]?.attention != null
     ? "awaiting_input"
     : stateFor(map, workspaceId);

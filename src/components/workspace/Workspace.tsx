@@ -81,9 +81,7 @@ import {
   CLEAR_TITLE,
   showClearButton,
 } from "./clearButton";
-// M13 WP3 P3.1 — the Recycle operation. ⚠️ NOT a skill button: it is a multi-step operation
-// (two injections + a completion wait + a flag clear + a respawn), so it is a sibling in the
-// same row rather than a `SKILL_BUTTONS` member.
+// The Recycle operation: a sibling in the skill row, not a skill button (`recycleButton.ts`).
 import { recycleSession, waitForFreshSessionId } from "./recycleSession";
 // M15 WP4 — the workflow supervisor's per-workspace host. ⚠️ `fanOut` is deliberately NOT wired
 // here; see `useSupervisor`'s header for why the host must be per-workspace.
@@ -99,10 +97,8 @@ import { supervisorToggleAction } from "../../cc/supervisorToggleAction";
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 import { isWorkflowApplicable } from "../../state/workflowApplicable";
 import { useWorkspaceProfile } from "../../state/useWorkspaceProfile";
-// M13.5 WP3 — the nav state the prev/next controls render from. ⚠️ The old `inertAfter`
-// inert-state machine is DELETED: it existed to explain a dead click, and a correct `disabled`
-// state (driven by `canPrev`/`canNext`) makes a dead click impossible, so keeping both would be
-// two mechanisms for one job. Do not reintroduce it.
+// The nav state the prev/next controls render from. ⚠️ The old `inertAfter` inert-state machine
+// is DELETED; do not reintroduce it (`App.css`, above `.workspace-turn-nav-btn`, says why).
 import type { TurnNavView } from "./XtermPane";
 import { cancelOrigin, claimOrigin } from "../../state/supervisor/turnOrigin";
 import {
@@ -498,10 +494,8 @@ export function Workspace({
   /**
    * Run the Recycle operation for this workspace, on an explicit click only.
    *
-   * ⚠️ This is NOT a skill button and does NOT go through `fireSkill`. `SKILL_BUTTONS` holds
-   * slash commands routed to `injectCommand`; Recycle is a multi-step OPERATION that injects two
-   * different commands, waits on a composite completion signal, clears the unclean-exit flag,
-   * and respawns CC. It is a sibling affordance in the same row, wired to `recycleSession`.
+   * ⚠️ This is NOT a skill button and does NOT go through `fireSkill` (`recycleButton.ts` says
+   * why); it is wired to `recycleSession`.
    *
    * ⚠️ The failure arm is surfaced, not swallowed. `recycleSession` never throws — every failure
    * is a value — so the only way a refused handoff becomes visible is if this caller reads it.
@@ -663,7 +657,6 @@ export function Workspace({
   // settle (the non-obvious bit — mirrors XtermPane's own rAF-then-focus). focus() only,
   // never a PTY byte, so a switch can't inject a spurious prompt line. (See commit + WIP
   // for the operator decision to always focus CC-left for v1.)
-  // (`ccPaneRef` itself is declared with the drive-mode hook above, which relaunches through it.)
   // M6 WP10 — handle for the RIGHT-panel second terminal (TerminalPane → XtermPane),
   // threaded down through RightPanelHost. Lives here beside ccPaneRef + the zoom router
   // so both terminal handles are co-located with the keydown listener that targets them.
@@ -1056,10 +1049,8 @@ export function Workspace({
                 </button>
               </Fragment>
             ))}
-            {/* M13 WP3 P3.1 — THE SIXTH AFFORDANCE. ⚠️ Rendered as a SIBLING of the mapped
-                skill buttons, NOT as a `SKILL_BUTTONS` member: that array holds slash commands
-                routed to `injectCommand`, and Recycle is an operation. Same row, same look,
-                different wiring — see `recycleButton.ts`. */}
+            {/* The sixth affordance: a SIBLING of the mapped skill buttons, not a member.
+                Same row, same look, different wiring (`recycleButton.ts`). */}
             {showRecycleButton({
               workflowEnabled,
               ccSessionId: workspace.cc_session_id,

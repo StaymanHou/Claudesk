@@ -101,7 +101,7 @@ export function pickInitialDoc(entries: readonly DocEntry[]): string | null {
  * 4.3, "disappear" row), which clears the sentinel rather than re-pointing it — see that
  * task for why re-pointing would forge a fake user choice.
  *
- * ## FOUR tiers (a fourth added at WP5 P3.2 — operator decision)
+ * ## FOUR tiers (the fourth by operator decision)
  * `chosen` (user) > `jumpedTo` (machine jump) > `settled` (latched auto-resolution) >
  * `pickInitialDoc` (live default).
  *
@@ -115,8 +115,8 @@ export function pickInitialDoc(entries: readonly DocEntry[]): string | null {
  * ⚠️ `settled` fixes a REPRODUCED defect (`SURFACE-2026-08-02-QUALITY-WP4-SIBLING-EDIT-MOVES-
  * AUTOSELECTION`). Without it the bottom tier recomputes `pickInitialDoc(docs)` on every
  * render, and because the caller refreshes `docs` (with new mtimes) on every `fs-change`,
- * editing a file the reader is NOT looking at silently moved the selection: measured live at
- * WP5 P3.1 — reading `older-feature.md` at `scrollTop` 600, a touch of the sibling
+ * editing a file the reader is NOT looking at silently moved the selection. Measured live:
+ * reading `older-feature.md` at `scrollTop` 600, a touch of the sibling
  * `newer-feature.md` swapped the rendered doc and dropped the reader at `scrollTop` 0. No
  * reload arm ran, so nothing captured or restored the position. Latching the first
  * resolution means **only an appear/disappear may move an auto-selection** — the operator's

@@ -1,6 +1,7 @@
 // M16 WP3 — the review player: the body of an editor `"file"` tab holding audio or video under
 // the 4 GiB cap (`displayFor` → `{ kind: "player" }`). MediaView renders it; the transport,
-// the root confinement and the disk-change reload are WP2's and are not repeated here.
+// the root confinement and the disk-change reload belong to the media-tab plumbing (`MediaView`
+// and the backend) and are not repeated here.
 //
 // Layout: the same top `.media-toolbar` readout as the image viewer (file info), the native
 // element with its own controls, and a Claudesk strip below it (timecode; review controls).
@@ -47,7 +48,7 @@ interface MediaPlayerProps {
   stat: MediaStat;
   path: string;
   media: "video" | "audio";
-  /** The element fired `error` (WP1: a fast event, never a hang) → the info card. */
+  /** The element fired `error` (measured: a fast event, never a hang) → the info card. */
   onRenderError: () => void;
   /**
    * Where the player last was, OWNED BY MediaView so it outlives this component: a regenerate
@@ -148,8 +149,8 @@ export function MediaPlayer({
    * geometry: a zero rect (a `display:none` half / panel / tab) or one wholly off-viewport (a
    * workspace off center stage). ⚠️ NOT an IntersectionObserver: WebKit delivers its callbacks
    * on throttled rendering updates, so the pause came 97 ms to 3.4 s late or not at all
-   * (measured, P3 verify-self). ⚠️ And NOT `visibilitychange`: a covered window keeps playing
-   * (AC-18), which geometry cannot see by construction.
+   * (measured). ⚠️ And NOT `visibilitychange`: a covered window keeps playing, which geometry
+   * cannot see by construction.
    */
   const pauseIfHidden = useCallback(() => {
     const el = elRef.current;
@@ -204,7 +205,7 @@ export function MediaPlayer({
       );
       return true;
     }
-    // Unknown rate: step by the guard (operator decision A, P1.verify-human.3).
+    // Unknown rate: step by the guard (an operator decision).
     const fps = loaded.fps ?? FALLBACK_FPS;
     const current = pendingFrameRef.current ?? frameIndexAt(time, fps);
     const next = stepFrameIndex(
@@ -286,7 +287,7 @@ export function MediaPlayer({
     controls: true,
     // ⚠️ "auto", not "metadata": with "metadata" WebKit never reaches `loadeddata`, paints
     // black on open and after a paused seek, and (for mp4) never populates the track lists the
-    // readout and the frame rate come from (measured, WIP → Research OQ-1/OQ-2).
+    // readout and the frame rate come from (measured in the real WKWebView).
     preload: "auto" as const,
     onLoadedData,
     onRateChange: () => {

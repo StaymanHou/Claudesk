@@ -135,7 +135,3 @@ describe("the workspace-list hook carries the action to the reducer", () => {
     expect(hook).toMatch(/openIntent:\s*OpenIntent/);
   });
 });
-
-// The P4.6 block that pinned "the open INTENT reaches cc_spawn" lived here as a regex over
-// `XtermPane.tsx`. Since paydown 2026-11-04 WP12 the payload is built by `takeSpawnArgs`, and its
-// value tests plus the call-shape guard now live in `src/cc/__tests__/spawnArgs.test.ts`.

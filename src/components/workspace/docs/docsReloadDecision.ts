@@ -20,7 +20,7 @@
 // open question ("does `notify` coalesce delete+create?") needs no empirical answer to build
 // against — the diff is correct under either behavior. (Worth knowing, not worth blocking on.)
 //
-// ── The four outcomes (wbs.md task 4.3, amended at WP3 verify-human) ─────────────
+// ── The four outcomes (`appear` → JUMP was added by operator decision) ──────────────
 //   appear      → JUMP. A doc showing up is the "a new phase started" signal, and landing on
 //                 it is the re-orientation the panel exists for.
 //   content     → re-render in place, selection untouched. CC rewrites WIP files many times

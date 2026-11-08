@@ -127,10 +127,8 @@ libc = "0.2"
 # a dependency + a registration + a StateFlags/denylist choice, not hand-rolled
 # persistence. The registration POLICY (which flags, which windows) lives in
 # `window_state/` as pure fns the registration itself calls, so a test drives the real
-# values; see that module's docs for the four plugin properties read out of its source
-# that its README and our backlog entry got wrong (config-vs-data dir, skip-vs-clamp
-# off-screen handling, save-only-on-RunEvent::Exit, and on_window_ready firing for the
-# runtime-created PiP panel).
+# values. That module's docs list four plugin properties read out of its source that
+# its README gets wrong.
 tauri-plugin-window-state = "2.4.1"
 
 # M5 WP2 (PROBE — agent UI-driver adopt/reject): the MCP bridge plugin that drives
