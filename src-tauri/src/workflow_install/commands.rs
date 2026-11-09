@@ -188,7 +188,8 @@ const UNINSTALL_PANIC_MESSAGE: &str = "The uninstall stopped unexpectedly. Check
 /// construction, so the install and uninstall workers share one boundary implementation.
 struct RunGuard {
     app: AppHandle,
-    ctl: Arc<InstallControl>,
+    /// Released FIRST in `Drop`, before any fallback emit (see there).
+    lock: Option<HeldRunLock>,
     /// Set once a real outcome has been emitted, so `Drop` stays silent on the happy path.
     reported: bool,
     /// The event this run reports its terminal state on.
@@ -208,8 +209,9 @@ impl RunGuard {
 impl Drop for RunGuard {
     fn drop(&mut self) {
         // Always release the lock — this is the half that would otherwise wedge the wizard for the
-        // whole process lifetime.
-        self.ctl.running.store(false, Ordering::SeqCst);
+        // whole process lifetime. Released before the fallback emit, so a wizard that retries on
+        // the terminal event finds it free.
+        drop(self.lock.take());
 
         if self.reported {
             return;
@@ -223,29 +225,17 @@ impl Drop for RunGuard {
     }
 }
 
-/// Start an install into `dest`, cloning from `url`.
-///
-/// Returns immediately; progress arrives on [`INSTALL_OUTPUT_EVENT`] and the outcome on
-/// [`INSTALL_FINISHED_EVENT`]. `dest` comes from the wizard's location picker, so it is the
-/// user's choice — but it is passed as a parameter all the way down, never re-derived.
-#[tauri::command]
-pub fn workflow_install_start(
-    app: AppHandle,
-    control: State<'_, Arc<InstallControl>>,
-    url: String,
-    dest: String,
-) -> Result<(), String> {
-    if control.running.swap(true, Ordering::SeqCst) {
-        return Err("an install is already running".to_string());
-    }
+/// The install command's synchronous half: take the single-run lock, then validate. Every
+/// refusal returns before the worker exists, and the lock it took is released by drop, so no
+/// early return can wedge the wizard into "already running".
+fn begin_install(
+    control: &Arc<InstallControl>,
+    dest: &str,
+) -> Result<(HeldRunLock, PathBuf, PathBuf), String> {
+    let lock = HeldRunLock::try_acquire(control)
+        .ok_or_else(|| "an install is already running".to_string())?;
     control.cancelled.store(false, Ordering::SeqCst);
-
-    // `inspect_err`, not `map_err`: the error passes through untransformed — the closure exists
-    // only to release the single-run lock we just took, so that a failure here does not wedge the
-    // wizard into "an install is already running" for the rest of the session.
-    let root = claudesk_root().inspect_err(|_| {
-        control.running.store(false, Ordering::SeqCst);
-    })?;
+    let root = claudesk_root()?;
 
     // Reject anything that is not an absolute path, BEFORE any subprocess runs.
     //
@@ -260,15 +250,30 @@ pub fn workflow_install_start(
     //
     // Caught at code review; the adjacent Settings copy displays `~/dev/...` paths, so typing a
     // tilde is the natural user move rather than an exotic one.
-    let dest = PathBuf::from(&dest);
+    let dest = PathBuf::from(dest);
     if !dest.is_absolute() {
-        control.running.store(false, Ordering::SeqCst);
         return Err(format!(
             "The install location must be an absolute path (got {:?}). \
              A leading ~ is not expanded — use the full path, or pick a folder with Browse.",
             dest.display().to_string()
         ));
     }
+    Ok((lock, root, dest))
+}
+
+/// Start an install into `dest`, cloning from `url`.
+///
+/// Returns immediately; progress arrives on [`INSTALL_OUTPUT_EVENT`] and the outcome on
+/// [`INSTALL_FINISHED_EVENT`]. `dest` comes from the wizard's location picker, so it is the
+/// user's choice — but it is passed as a parameter all the way down, never re-derived.
+#[tauri::command]
+pub fn workflow_install_start(
+    app: AppHandle,
+    control: State<'_, Arc<InstallControl>>,
+    url: String,
+    dest: String,
+) -> Result<(), String> {
+    let (lock, root, dest) = begin_install(control.inner(), &dest)?;
     let ctl = Arc::clone(&control);
     let now = now_rfc3339();
 
@@ -292,7 +297,7 @@ pub fn workflow_install_start(
         // claiming a substrate, which is `terminal.rs`'s load-bearing invariant.
         let mut guard = RunGuard {
             app: app.clone(),
-            ctl: Arc::clone(&ctl),
+            lock: Some(lock),
             reported: false,
             terminal_event: INSTALL_FINISHED_EVENT,
             panic_payload: serde_json::to_value(InstallFinished {
@@ -337,11 +342,24 @@ pub fn workflow_install_cancel(control: State<'_, Arc<InstallControl>>) {
     control.cancelled.store(true, Ordering::SeqCst);
 }
 
-/// Holds the single-run lock and releases it when dropped, on every path including a panic.
+/// Holds the single-run lock and releases it when dropped, on every path including a panic. The
+/// ONE place it is released.
 ///
-/// The dry run takes the lock on the IPC side and moves this into its blocking worker, so the
-/// lock lives exactly as long as the work does, even if the IPC future is dropped first.
+/// Every substrate-touching command takes it on the IPC side and moves it into its worker
+/// (`RunGuard` for the install and uninstall, `finish_on_worker` for the dry run), so the lock
+/// lives exactly as long as the work does, even if the IPC future is dropped first.
 struct HeldRunLock(Arc<InstallControl>);
+
+impl HeldRunLock {
+    /// Take the single-run lock, or `None` when a run already holds it. The ONE place the lock
+    /// is taken: acquiring and holding are a single step, so no path can take it and forget it.
+    fn try_acquire(control: &Arc<InstallControl>) -> Option<Self> {
+        if control.running.swap(true, Ordering::SeqCst) {
+            return None;
+        }
+        Some(Self(Arc::clone(control)))
+    }
+}
 
 impl Drop for HeldRunLock {
     fn drop(&mut self) {
@@ -378,10 +396,9 @@ impl Drop for HeldRunLock {
 pub async fn workflow_uninstall_dry_run(
     control: State<'_, Arc<InstallControl>>,
 ) -> Result<String, String> {
-    if control.running.swap(true, Ordering::SeqCst) {
-        return Err("an install or uninstall is already running".to_string());
-    }
-    finish_on_worker(HeldRunLock(Arc::clone(&control)), || {
+    let lock = HeldRunLock::try_acquire(control.inner())
+        .ok_or_else(|| "an install or uninstall is already running".to_string())?;
+    finish_on_worker(lock, || {
         let home = dirs_home()?;
         let root = claudesk_root()?;
         let record = provenance::read_record(&root);
@@ -401,12 +418,24 @@ async fn finish_on_worker<F>(lock: HeldRunLock, work: F) -> Result<String, Strin
 where
     F: FnOnce() -> Result<String, String> + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::blocking::on_blocking_worker("the removal preview", move || {
         let _lock = lock;
         work()
     })
     .await
-    .map_err(|e| format!("the removal preview stopped unexpectedly: {e}"))?
+}
+
+/// The uninstall command's synchronous half, the same shape as [`begin_install`]: take the lock,
+/// then resolve the roots; an early error releases the lock by drop.
+fn begin_uninstall(
+    control: &Arc<InstallControl>,
+) -> Result<(HeldRunLock, PathBuf, PathBuf), String> {
+    let lock = HeldRunLock::try_acquire(control)
+        .ok_or_else(|| "an install or uninstall is already running".to_string())?;
+    control.cancelled.store(false, Ordering::SeqCst);
+    let home = dirs_home()?;
+    let root = claudesk_root()?;
+    Ok((lock, home, root))
 }
 
 /// Start the real uninstall of the recorded managed clone.
@@ -422,25 +451,7 @@ pub fn workflow_uninstall_start(
     app: AppHandle,
     control: State<'_, Arc<InstallControl>>,
 ) -> Result<(), String> {
-    if control.running.swap(true, Ordering::SeqCst) {
-        return Err("an install or uninstall is already running".to_string());
-    }
-    control.cancelled.store(false, Ordering::SeqCst);
-
-    let home = match dirs_home() {
-        Ok(h) => h,
-        Err(e) => {
-            control.running.store(false, Ordering::SeqCst);
-            return Err(e);
-        }
-    };
-    let root = match claudesk_root() {
-        Ok(r) => r,
-        Err(e) => {
-            control.running.store(false, Ordering::SeqCst);
-            return Err(e);
-        }
-    };
+    let (lock, home, root) = begin_uninstall(control.inner())?;
     let ctl = Arc::clone(&control);
 
     std::thread::spawn(move || {
@@ -449,7 +460,7 @@ pub fn workflow_uninstall_start(
         // get to skip it.
         let mut guard = RunGuard {
             app: app.clone(),
-            ctl: Arc::clone(&ctl),
+            lock: Some(lock),
             reported: false,
             terminal_event: UNINSTALL_FINISHED_EVENT,
             panic_payload: serde_json::to_value(UninstallFinished {
@@ -633,8 +644,13 @@ mod tests {
         let drop_body = drop_impl.split("\n}").next().unwrap_or(drop_impl);
 
         assert!(
-            drop_body.contains("running.store(false"),
+            drop_body.contains("self.lock.take()"),
             "Drop must release the single-run lock, or a panic wedges every later run"
+        );
+        assert!(
+            drop_body.find("self.lock.take()") < drop_body.find("self.terminal_event"),
+            "the lock must be released BEFORE the fallback emit, so a wizard retrying on the \
+             terminal event finds it free"
         );
         assert!(
             drop_body.contains("self.terminal_event"),
@@ -682,8 +698,7 @@ mod tests {
         let (started_tx, started_rx) = std::sync::mpsc::channel();
         let (finish_tx, finish_rx) = std::sync::mpsc::channel::<()>();
 
-        ctl.running.store(true, Ordering::SeqCst);
-        let lock = HeldRunLock(Arc::clone(&ctl));
+        let lock = HeldRunLock::try_acquire(&ctl).expect("the lock starts free");
         let run = std::thread::spawn(move || {
             tauri::async_runtime::block_on(finish_on_worker(lock, move || {
                 started_tx.send(()).unwrap();
@@ -705,11 +720,10 @@ mod tests {
             "released after the run"
         );
 
-        ctl.running.store(true, Ordering::SeqCst);
-        let result =
-            tauri::async_runtime::block_on(finish_on_worker(HeldRunLock(Arc::clone(&ctl)), || {
-                panic!("script handling blew up")
-            }));
+        let lock = HeldRunLock::try_acquire(&ctl).expect("free again after the run");
+        let result = tauri::async_runtime::block_on(finish_on_worker(lock, || {
+            panic!("script handling blew up")
+        }));
         assert!(
             result
                 .as_ref()
@@ -729,25 +743,100 @@ mod tests {
         // preview could read a tree that `run_uninstall` was mid-`remove_dir_all` on. The
         // three commands that touch the substrate must all serialize; the two that only read
         // Claudesk's own state (`default_location`, `install_state`) need not.
+        //
+        // The lock is taken in ONE place (`HeldRunLock::try_acquire`) and released in ONE place
+        // (its `Drop`). Each command reaches `try_acquire` directly or through its `begin_*`.
         let code =
             crate::workflow_install::source_guard::production_code(include_str!("commands.rs"));
-
-        for command in [
-            "pub fn workflow_install_start",
-            "pub fn workflow_uninstall_start",
-            "pub async fn workflow_uninstall_dry_run",
-        ] {
-            let at = code.find(command).unwrap_or_else(|| {
-                panic!("{command} must exist — did it get renamed?");
-            });
+        let body_of = |signature: &str| -> &str {
+            let at = code
+                .find(signature)
+                .unwrap_or_else(|| panic!("{signature} must exist — did it get renamed?"));
             // The lock acquisition sits in the first few lines of each body.
-            let body = &code[at..(at + 400).min(code.len())];
+            &code[at..(at + 400).min(code.len())]
+        };
+
+        for (command, takes_it_via) in [
+            ("pub fn workflow_install_start", "begin_install("),
+            ("pub fn workflow_uninstall_start", "begin_uninstall("),
+            (
+                "pub async fn workflow_uninstall_dry_run",
+                "HeldRunLock::try_acquire(",
+            ),
+            ("fn begin_install(", "HeldRunLock::try_acquire("),
+            ("fn begin_uninstall(", "HeldRunLock::try_acquire("),
+        ] {
             assert!(
-                body.contains("running.swap(true"),
-                "{command} must take the single-run lock — a substrate-touching command \
-                 outside the exclusion model can race a delete"
+                body_of(command).contains(takes_it_via),
+                "{command} must take the single-run lock (via `{takes_it_via}`): a \
+                 substrate-touching command outside the exclusion model can race a delete"
             );
         }
+
+        assert_eq!(
+            code.matches("running.swap(true").count(),
+            1,
+            "the lock is taken only in `HeldRunLock::try_acquire`"
+        );
+        assert!(body_of("fn try_acquire(").contains("running.swap(true"));
+        assert_eq!(
+            code.matches("running.store(false").count(),
+            1,
+            "the lock is released only in `HeldRunLock`'s Drop"
+        );
+        assert!(body_of("impl Drop for HeldRunLock").contains("running.store(false"));
+    }
+
+    #[test]
+    fn a_second_run_is_refused_while_the_lock_is_held_and_allowed_after() {
+        // Through the commands' own synchronous half, not a re-implementation of it.
+        use super::*;
+        let ctl = Arc::new(InstallControl::default());
+        let held = begin_uninstall(&ctl).expect("the first run takes the lock");
+
+        let install = begin_install(&ctl, "/tmp/claudesk-vendor");
+        assert_eq!(
+            install.err().as_deref(),
+            Some("an install is already running"),
+            "a second install must be refused while a run holds the lock"
+        );
+        let uninstall = begin_uninstall(&ctl);
+        assert_eq!(
+            uninstall.err().as_deref(),
+            Some("an install or uninstall is already running")
+        );
+        assert!(
+            ctl.running.load(Ordering::SeqCst),
+            "a refused attempt must not release the OTHER run's lock"
+        );
+
+        drop(held);
+        assert!(
+            begin_install(&ctl, "/tmp/claudesk-vendor").is_ok(),
+            "the lock is free once the run's guard is dropped"
+        );
+    }
+
+    #[test]
+    fn an_early_refusal_after_taking_the_lock_releases_it() {
+        // The shape a manual `running.store(false)` on an early return used to guard: a relative
+        // destination is refused AFTER the lock is taken. The lock must be free again.
+        use super::*;
+        let ctl = Arc::new(InstallControl::default());
+        let refused = begin_install(&ctl, "~/vendor");
+        assert!(
+            refused.as_ref().is_err_and(|e| e.contains("absolute path")),
+            "got {:?}",
+            refused.err()
+        );
+        assert!(
+            !ctl.running.load(Ordering::SeqCst),
+            "a refused install must not wedge the wizard into \"already running\""
+        );
+        assert!(
+            HeldRunLock::try_acquire(&ctl).is_some(),
+            "the next run may start"
+        );
     }
 
     #[test]

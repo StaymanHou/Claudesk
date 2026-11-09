@@ -105,12 +105,11 @@ pub fn delete_file(app: AppHandle, root: String, path: String) -> Result<(), Str
 /// entry is what keeps this async.
 #[tauri::command]
 pub async fn trash_path(app: AppHandle, root: String, path: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::blocking::on_blocking_worker("the trash move", move || {
         let root = validate_frontend_root(&app, &root)?;
         trash_path_core(&root, Path::new(&path)).map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| format!("the trash worker stopped unexpectedly: {e}"))?
 }
 
 /// Create a directory (and any missing intermediate dirs) under the workspace `root`

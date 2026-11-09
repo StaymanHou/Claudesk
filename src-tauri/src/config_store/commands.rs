@@ -499,13 +499,12 @@ pub fn profile_create(
 #[tauri::command]
 pub async fn profile_delete(app: AppHandle, name: String) -> Result<(), String> {
     let dir = resolve_data_dir(&app)?;
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::blocking::on_blocking_worker("the profile delete", move || {
         super::profile_create::delete_created(&dir, &name, |p| {
             trash::delete(p).map_err(|e| format!("couldn't move {} to the Trash: {e}", p.display()))
         })
     })
-    .await
-    .map_err(|e| format!("profile delete worker failed: {e}"))??;
+    .await?;
     let _ = app.emit(PROFILES_CHANGED_EVENT, ());
     Ok(())
 }

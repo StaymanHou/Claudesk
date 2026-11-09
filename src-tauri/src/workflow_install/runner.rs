@@ -44,12 +44,15 @@
 //! need a guard-approved target, which a failed install by definition lacks a record for).
 
 use std::io::{BufRead, BufReader, Read};
-use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
+use std::process::{Command, Stdio};
+use std::sync::atomic::Ordering;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
+
+use crate::subprocess::{
+    in_own_group, kill_and_reap, kill_group, StopOnDrop, DRAIN_GRACE, MAX_OUTPUT,
+};
 
 use thiserror::Error;
 
@@ -205,10 +208,6 @@ pub const UNINSTALL_DEADLINE: Duration = Duration::from_secs(300);
 /// How long `uninstall.sh --dry-run` may run. It normally finishes in well under a second.
 pub const DRY_RUN_DEADLINE: Duration = Duration::from_secs(60);
 
-/// How long after the child exits to keep reading output that is still in flight. Past it, the
-/// process group is killed, because something the child left behind is holding a pipe open.
-const DRAIN_GRACE: Duration = Duration::from_millis(250);
-
 /// How often the wait loop checks the child and the clock while no output arrives.
 const POLL: Duration = Duration::from_millis(20);
 
@@ -219,13 +218,12 @@ enum Stream {
     Err,
 }
 
-/// Set on drop, so every return path of [`run_streaming`] tells its readers to stop.
-#[derive(Default)]
-struct StopOnDrop(Arc<AtomicBool>);
-
-impl Drop for StopOnDrop {
-    fn drop(&mut self) {
-        self.0.store(true, Ordering::SeqCst);
+impl Stream {
+    fn index(self) -> usize {
+        match self {
+            Stream::Out => 0,
+            Stream::Err => 1,
+        }
     }
 }
 
@@ -233,6 +231,8 @@ impl Drop for StopOnDrop {
 ///
 /// ⚠️ The thread never stops reading while the child runs: a pipe nobody empties fills at 64 KB
 /// and the child then blocks on its own write. The channel is unbounded for the same reason.
+/// So a line is bounded at [`MAX_OUTPUT`] bytes (the rest, up to its newline, is read and
+/// dropped), and invalid UTF-8 is decoded lossily rather than ending the read.
 /// The thread ends at EOF, when the receiver is gone, or at the next line after `stop` is set.
 fn start_line_reader<R: Read + Send + 'static>(
     pipe: Option<R>,
@@ -240,13 +240,27 @@ fn start_line_reader<R: Read + Send + 'static>(
     tx: mpsc::Sender<(Stream, String)>,
     stop: &StopOnDrop,
 ) -> std::io::Result<()> {
-    let stop = Arc::clone(&stop.0);
+    let stop = stop.flag();
     std::thread::Builder::new().spawn(move || {
         let Some(pipe) = pipe else { return };
-        for line in BufReader::new(pipe).lines().map_while(Result::ok) {
-            if stop.load(Ordering::SeqCst) {
+        let mut reader = BufReader::new(pipe);
+        let mut buf = Vec::new();
+        while !stop.load(Ordering::SeqCst) {
+            buf.clear();
+            let Ok(n) = read_bounded_line(&mut reader, &mut buf) else {
+                break;
+            };
+            if n == 0 {
                 break;
             }
+            // Strip the terminator exactly as `BufRead::lines` does: one `\n`, then one `\r`.
+            if buf.last() == Some(&b'\n') {
+                buf.pop();
+                if buf.last() == Some(&b'\r') {
+                    buf.pop();
+                }
+            }
+            let line = String::from_utf8_lossy(&buf).into_owned();
             if tx.send((stream, line)).is_err() {
                 break;
             }
@@ -255,25 +269,121 @@ fn start_line_reader<R: Read + Send + 'static>(
     Ok(())
 }
 
-/// SIGKILL the process group `pgid` (the child leads it, via `process_group(0)`).
-///
-/// Works after the leader has been reaped too: a group lives while any member does, and the
-/// members still alive are exactly what this is for.
-fn kill_group(pgid: u32) {
-    if let Ok(pgid) = libc::pid_t::try_from(pgid) {
-        // SAFETY: a negative pid addresses the process group `pgid`. A failure (the group is
-        // already gone) is harmless.
-        unsafe {
-            libc::kill(-pgid, libc::SIGKILL);
+/// Read one line into `buf`, keeping at most [`MAX_OUTPUT`] bytes of it and discarding the rest
+/// up to its newline. Returns the number of bytes consumed from `reader` (0 at EOF).
+fn read_bounded_line<R: BufRead>(reader: &mut R, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+    let limit = u64::try_from(MAX_OUTPUT).unwrap_or(u64::MAX);
+    let mut consumed = reader.by_ref().take(limit).read_until(b'\n', buf)?;
+    if consumed == 0 || buf.last() == Some(&b'\n') {
+        return Ok(consumed);
+    }
+    // Over-long (or the stream ended without a newline): drop the rest of the line, in chunks.
+    loop {
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            return Ok(consumed);
+        }
+        let (take, done) = match available.iter().position(|b| *b == b'\n') {
+            Some(i) => (i + 1, true),
+            None => (available.len(), false),
+        };
+        reader.consume(take);
+        consumed += take;
+        if done {
+            return Ok(consumed);
         }
     }
 }
 
-/// Kill the child's whole group, then reap the child.
-fn kill_and_reap(child: &mut Child) {
-    kill_group(child.id());
-    let _ = child.kill();
-    let _ = child.wait();
+/// How many of the most recent dropped lines a truncated run still shows, per stream.
+const TAIL_LINES: usize = 200;
+/// The byte cap on each stream's tail, so it stays small even when the dropped lines are long.
+const TAIL_BYTES: usize = 64 * 1024;
+
+/// The accumulated-output budget of one [`run_streaming`] call, shared by both streams.
+///
+/// It keeps a clean PREFIX of [`MAX_OUTPUT`] bytes and, once that is spent, a rolling TAIL of the
+/// most recent dropped lines of EACH stream ([`TAIL_LINES`] / [`TAIL_BYTES`] apiece). The tail is
+/// what still shows why a flooding script died: `set -euo pipefail`'s error is the last thing it
+/// writes, to stderr.
+///
+/// ⚠️ One tail per stream, not one shared tail: lines arrive in the order the two reader threads
+/// deliver them, not the order the script wrote them. A shared tail let a single stderr line,
+/// delivered at once, be pushed out by megabytes of earlier stdout the other reader was still
+/// working through (measured: the error was evicted).
+#[derive(Default)]
+struct OutputBudget {
+    used: usize,
+    dropped: usize,
+    /// Indexed by [`Stream::index`].
+    tails: [Tail; 2],
+}
+
+/// The most recent dropped lines of one stream.
+#[derive(Default)]
+struct Tail {
+    lines: std::collections::VecDeque<String>,
+    bytes: usize,
+}
+
+impl Tail {
+    fn push(&mut self, line: &str) {
+        let line = last_bytes(line, TAIL_BYTES);
+        self.bytes += line.len();
+        self.lines.push_back(line.to_string());
+        while self.lines.len() > TAIL_LINES || self.bytes > TAIL_BYTES {
+            if let Some(old) = self.lines.pop_front() {
+                self.bytes -= old.len();
+            }
+        }
+    }
+}
+
+impl OutputBudget {
+    /// Whether `line` belongs to the kept prefix. Once a line does not fit, nothing more is
+    /// admitted (so the prefix is clean, not a sample); every later line goes to its stream's
+    /// tail.
+    fn admit(&mut self, stream: Stream, line: &str) -> bool {
+        let cost = line.len() + 1;
+        if self.dropped == 0 && self.used + cost <= MAX_OUTPUT {
+            self.used += cost;
+            return true;
+        }
+        self.dropped += 1;
+        self.tails[stream.index()].push(line);
+        false
+    }
+
+    /// The note and the tail to append (stdout's, then stderr's, so stderr ends the output as it
+    /// does on an untruncated run), or `None` when nothing was dropped.
+    fn finish(self) -> Option<(String, Vec<String>)> {
+        if self.dropped == 0 {
+            return None;
+        }
+        let [out, err] = self.tails;
+        let tail: Vec<String> = out.lines.into_iter().chain(err.lines).collect();
+        Some((truncation_note(self.dropped, tail.len()), tail))
+    }
+}
+
+/// At most the last `max` bytes of `line`, cut on a character boundary.
+fn last_bytes(line: &str, max: usize) -> &str {
+    if line.len() <= max {
+        return line;
+    }
+    let mut start = line.len() - max;
+    while !line.is_char_boundary(start) {
+        start += 1;
+    }
+    &line[start..]
+}
+
+/// Appended once when [`OutputBudget`] dropped output, just before the tail.
+fn truncation_note(dropped: usize, shown: usize) -> String {
+    format!(
+        "[output truncated at {} MiB; {dropped} later lines were dropped, the last {shown} follow]",
+        MAX_OUTPUT / (1024 * 1024)
+    )
 }
 
 /// Run one command, streaming its output into `sink`, and return `(exit_code, combined)`.
@@ -285,7 +395,14 @@ fn kill_and_reap(child: &mut Child) {
 ///
 /// If the child exits but something it started still holds a pipe open, EOF never comes. The
 /// output is read for [`DRAIN_GRACE`] more, then the group is killed and the run returns with
-/// the child's own exit code.
+/// the child's own exit code. Both kill exits keep every line the readers had already sent.
+///
+/// ## Output is capped
+/// At most [`MAX_OUTPUT`] bytes of output (both streams together) reach the sink and the result,
+/// in arrival order. Past it, lines are dropped; at the end one truncation note is appended, then
+/// the last dropped lines (see [`OutputBudget`]), so a flooding child cannot grow memory without
+/// bound and a failing one still shows its last words. The pipes are read to the end, never
+/// throttled. The sink and the result always carry the same lines.
 ///
 /// Before this, the function read stdout until EOF with no deadline. A child that never exited,
 /// or a grandchild holding the pipe, hung the run forever, and the single-run lock stayed set
@@ -309,8 +426,8 @@ fn run_streaming(
     cmd.args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .stdin(Stdio::null())
-        .process_group(0);
+        .stdin(Stdio::null());
+    in_own_group(&mut cmd);
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
@@ -328,6 +445,21 @@ fn run_streaming(
 
     let mut combined = Vec::new();
     let mut stderr = Vec::new();
+    let mut budget = OutputBudget::default();
+    // One line from a reader: stdout goes to the sink live, stderr is held for the end.
+    let mut take =
+        |stream: Stream, line: String, combined: &mut Vec<String>, stderr: &mut Vec<String>| {
+            if !budget.admit(stream, &line) {
+                return;
+            }
+            match stream {
+                Stream::Out => {
+                    sink.line(&line);
+                    combined.push(line);
+                }
+                Stream::Err => stderr.push(line),
+            }
+        };
     let mut readers_done = false;
     let mut exited: Option<(std::process::ExitStatus, Instant)> = None;
 
@@ -337,11 +469,7 @@ fn run_streaming(
             std::thread::sleep(POLL);
         } else {
             match rx.recv_timeout(POLL) {
-                Ok((Stream::Out, line)) => {
-                    sink.line(&line);
-                    combined.push(line);
-                }
-                Ok((Stream::Err, line)) => stderr.push(line),
+                Ok((stream, line)) => take(stream, line, &mut combined, &mut stderr),
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => readers_done = true,
             }
@@ -361,21 +489,19 @@ fn run_streaming(
         match exited {
             Some((status, _)) if readers_done => break Some(status),
             Some((status, grace_end)) if Instant::now() >= grace_end => {
-                // The child is gone but a pipe is still held: kill what it left behind.
+                // The child is gone but a pipe is still held: kill what it left behind, and keep
+                // the lines already queued (each pass above consumes only one).
                 kill_group(child.id());
+                while let Ok((stream, line)) = rx.try_recv() {
+                    take(stream, line, &mut combined, &mut stderr);
+                }
                 break Some(status);
             }
             None if started.elapsed() >= deadline => {
                 kill_and_reap(&mut child);
                 // The readers end once the group is dead; keep the lines they already sent.
                 while let Ok((stream, line)) = rx.try_recv() {
-                    match stream {
-                        Stream::Out => {
-                            sink.line(&line);
-                            combined.push(line);
-                        }
-                        Stream::Err => stderr.push(line),
-                    }
+                    take(stream, line, &mut combined, &mut stderr);
                 }
                 break None;
             }
@@ -386,6 +512,14 @@ fn run_streaming(
     for line in stderr {
         sink.line(&line);
         combined.push(line);
+    }
+    if let Some((note, tail)) = budget.finish() {
+        sink.line(&note);
+        combined.push(note);
+        for line in tail {
+            sink.line(&line);
+            combined.push(line);
+        }
     }
     let Some(status) = status else {
         let note = format!(
@@ -1445,6 +1579,197 @@ mod tests {
             is_dead(recorded[0]),
             "the grandchild holding the pipe was left running"
         );
+    }
+
+    #[test]
+    fn a_burst_still_queued_when_the_drain_grace_ends_is_kept() {
+        // A grandchild holds stdout, so the run leaves through the drain-grace exit. The sink is
+        // SLOW (0.5 ms a line), so most of the burst is still queued in the channel when the
+        // grace ends: consuming 2,000 lines takes ~1 s against a 250 ms grace. That exit must
+        // keep them, as the deadline exit already did. (With a fast sink the loop empties the
+        // channel inside the grace, and the test cannot tell the two exits apart.)
+        struct SlowSink(Mutex<Vec<String>>);
+        impl OutputSink for SlowSink {
+            fn line(&self, line: &str) {
+                std::thread::sleep(Duration::from_micros(500));
+                self.0.lock().unwrap().push(line.to_string());
+            }
+        }
+        const LINES: usize = 2_000;
+        let dir = tempfile::TempDir::new().unwrap();
+        let pids = KillPidsOnDrop(dir.path().join("pids"));
+        let script = format!(
+            "sleep 600 & echo $! >> '{p}'; seq 1 {LINES}; exit 0",
+            p = pids.0.display()
+        );
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let sink = SlowSink(Mutex::new(Vec::new()));
+            let result = run_streaming(
+                "/bin/sh",
+                &["-c".into(), script],
+                None,
+                &sink,
+                Duration::from_secs(60),
+            );
+            let _ = tx.send((result, sink.0.into_inner().unwrap()));
+        });
+        let (result, lines) = rx
+            .recv_timeout(Duration::from_secs(30))
+            .expect("run_streaming did not return");
+        let (code, output) = result.expect("the script spawns");
+
+        assert_eq!(code, 0);
+        assert_eq!(lines.len(), LINES, "the sink lost queued lines");
+        assert_eq!(
+            output.lines().count(),
+            LINES,
+            "the result lost queued lines"
+        );
+        assert_eq!(lines.last().map(String::as_str), Some("2000"));
+        assert!(is_dead(pids.pids()[0]), "the pipe holder was left running");
+    }
+
+    #[test]
+    fn a_flood_past_the_cap_keeps_the_start_a_note_and_the_last_lines() {
+        // `seq 1 700000` is ~4.8 MB against the 4 MiB cap, and every line is distinct, so the
+        // test can tell the kept start, the note and the tail apart.
+        const LINES: usize = 700_000;
+        let ((code, output), lines, _) =
+            run_script_with_watchdog(&format!("seq 1 {LINES}; exit 0"), Duration::from_secs(60));
+        assert_eq!(code, 0, "a truncated run keeps the child's exit code");
+        assert_eq!(
+            output,
+            lines.join("\n"),
+            "the sink and the result carry the same lines"
+        );
+
+        let notes: Vec<usize> = (0..lines.len())
+            .filter(|i| lines[*i].starts_with("[output truncated at 4 MiB;"))
+            .collect();
+        assert_eq!(notes.len(), 1, "exactly one note");
+        let (kept, rest) = lines.split_at(notes[0]);
+        let tail = &rest[1..];
+
+        // The start is a clean prefix: 1, 2, 3, … with no gap.
+        assert_eq!(kept.first().map(String::as_str), Some("1"));
+        assert!(kept
+            .iter()
+            .enumerate()
+            .all(|(i, l)| *l == (i + 1).to_string()));
+        // The tail is the LAST lines of the run, in order, and bounded.
+        assert_eq!(tail.len(), TAIL_LINES);
+        assert_eq!(tail.last().map(String::as_str), Some("700000"));
+        assert_eq!(tail.first().map(String::as_str), Some("699801"));
+        // The note counts what was dropped and what is shown.
+        let dropped = LINES - kept.len();
+        assert_eq!(
+            rest[0],
+            truncation_note(dropped, TAIL_LINES),
+            "the note names the dropped and shown counts"
+        );
+        assert!(
+            output.len() <= MAX_OUTPUT + rest[0].len() + 2 * (TAIL_BYTES + TAIL_LINES) + 1,
+            "kept {} bytes",
+            output.len()
+        );
+    }
+
+    #[test]
+    fn a_flooding_script_that_fails_still_shows_why_it_died() {
+        // The case the tail exists for (operator ruling C): stdout floods past the cap, THEN the
+        // script writes its error to stderr and exits non-zero, as `set -e` does.
+        let ((code, output), lines, _) = run_script_with_watchdog(
+            "seq 1 700000; echo 'install.sh: line 42: permission denied' >&2; exit 1",
+            Duration::from_secs(60),
+        );
+        assert_eq!(code, 1);
+        assert_eq!(
+            lines.last().map(String::as_str),
+            Some("install.sh: line 42: permission denied"),
+            "the error written after the budget ran out must still be the last line shown"
+        );
+        assert!(output.ends_with("install.sh: line 42: permission denied"));
+    }
+
+    #[test]
+    fn the_tail_is_bounded_in_lines_and_in_bytes_per_stream() {
+        let mut budget = OutputBudget {
+            used: MAX_OUTPUT, // the prefix is already full
+            ..OutputBudget::default()
+        };
+        for i in 0..1_000 {
+            assert!(!budget.admit(Stream::Out, &i.to_string()));
+        }
+        assert!(!budget.admit(Stream::Err, "the error"));
+        assert_eq!(budget.dropped, 1_001);
+        let out = &budget.tails[Stream::Out.index()];
+        assert_eq!(out.lines.len(), TAIL_LINES, "bounded in lines");
+        assert_eq!(out.lines.back().map(String::as_str), Some("999"));
+        assert_eq!(
+            budget.tails[Stream::Err.index()].lines,
+            ["the error"],
+            "stdout volume cannot evict a stderr line"
+        );
+
+        // One dropped line longer than the byte cap keeps only its last TAIL_BYTES bytes, and
+        // multi-byte characters are never split.
+        budget.admit(Stream::Out, &"é".repeat(TAIL_BYTES));
+        let out = &budget.tails[Stream::Out.index()];
+        assert!(out.bytes <= TAIL_BYTES, "bounded in bytes: {}", out.bytes);
+        let kept = out.lines.back().unwrap();
+        assert!(kept.len() <= TAIL_BYTES && kept.chars().all(|c| c == 'é'));
+
+        let (note, tail) = budget.finish().expect("something was dropped");
+        assert_eq!(note, truncation_note(1_002, tail.len()));
+        assert_eq!(
+            tail.last().map(String::as_str),
+            Some("the error"),
+            "stderr's tail comes last"
+        );
+    }
+
+    #[test]
+    fn nothing_dropped_means_no_note_and_no_tail() {
+        let mut budget = OutputBudget::default();
+        assert!(budget.admit(Stream::Out, "one line"));
+        assert!(budget.finish().is_none());
+    }
+
+    #[test]
+    fn a_line_longer_than_the_cap_is_bounded_and_the_next_line_still_arrives() {
+        let mut input = vec![b'x'; MAX_OUTPUT + 10];
+        input.extend_from_slice(b"\nnext\n");
+        let mut reader = BufReader::new(&input[..]);
+        let mut buf = Vec::new();
+        let n = read_bounded_line(&mut reader, &mut buf).unwrap();
+        assert_eq!(buf.len(), MAX_OUTPUT, "the kept part is bounded");
+        assert_eq!(
+            n,
+            MAX_OUTPUT + 11,
+            "the rest of the line, newline included, is consumed"
+        );
+        buf.clear();
+        read_bounded_line(&mut reader, &mut buf).unwrap();
+        assert_eq!(buf, b"next\n");
+        buf.clear();
+        assert_eq!(
+            read_bounded_line(&mut reader, &mut buf).unwrap(),
+            0,
+            "then EOF"
+        );
+    }
+
+    #[test]
+    fn invalid_utf8_does_not_end_the_read() {
+        // `BufRead::lines` stopped at the first non-UTF-8 line, so every later line was lost and
+        // the pipe stopped being emptied.
+        let ((code, _), lines, _) = run_script_with_watchdog(
+            "printf 'a\\377b\\nafter\\n'; exit 0",
+            Duration::from_secs(60),
+        );
+        assert_eq!(code, 0);
+        assert_eq!(lines, vec!["a\u{FFFD}b".to_string(), "after".to_string()]);
     }
 
     #[test]

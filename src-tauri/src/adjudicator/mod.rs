@@ -22,9 +22,10 @@
 pub mod commands;
 
 use std::io::Write;
-use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
+
+use crate::subprocess::{in_own_group, kill_and_reap, StopOnDrop, DRAIN_GRACE, MAX_OUTPUT};
 
 /// Why an adjudication attempt produced no answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,24 +116,16 @@ fn adjudicator_command(model: &str) -> Command {
 ///
 /// Each shape has a test below.
 ///
-/// ⚠️ **What this deliberately does NOT do** (each measured, not assumed):
-/// - **It does not chase processes that leave the group.** A grandchild that calls `setsid`, or a
-///   background job under shell job control (`set -m`), is in another group and survives a
-///   timeout. Catching it would need descendant tracking.
-/// - **It does not kill grandchildren on a NORMAL exit.** The group kill runs only on the
-///   timeout and error paths; a clean exit's background jobs are the child's business.
-/// - **A drain or writer thread whose pipe a quiet grandchild holds** stays parked until that
-///   grandchild exits. The caller never waits on it. A parked drain holds at most one capped
-///   buffer; a parked writer holds one copy of the prompt (uncapped, as the prompt is the
-///   caller's own input).
+/// ⚠️ What the group kill cannot reach is listed once, in `crate::subprocess`. Specific to here:
+/// - **A parked drain or writer** (its pipe held by a quiet grandchild) holds at most one capped
+///   buffer, or one copy of the prompt (uncapped, as the prompt is the caller's own input).
 /// - **A grandchild writing to the same pipe** during the grace is mixed into the output. If it
 ///   floods past [`MAX_OUTPUT`], the result is [`AdjudicateError::OutputTooLarge`], not the
 ///   answer.
 fn run_command(mut cmd: Command, prompt: &str, timeout_ms: u64) -> Result<String, AdjudicateError> {
     let deadline = Instant::now() + Duration::from_millis(timeout_ms);
-    // Its own process group, so a timeout can kill everything it started (see `kill_tree`).
-    let mut child = match cmd
-        .process_group(0)
+    // Its own process group, so a timeout can kill everything it started.
+    let mut child = match in_own_group(&mut cmd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -150,7 +143,7 @@ fn run_command(mut cmd: Command, prompt: &str, timeout_ms: u64) -> Result<String
     // ⚠️ Every thread spawn below can fail, and a failure after the child exists must not leave
     // it running: `reap` kills and waits before the error returns.
     let reap = |child: &mut Child, e: std::io::Error| {
-        kill_tree(child);
+        kill_and_reap(child);
         AdjudicateError::Spawn(e.to_string())
     };
     if let Some(mut stdin) = child.stdin.take() {
@@ -185,13 +178,13 @@ fn run_command(mut cmd: Command, prompt: &str, timeout_ms: u64) -> Result<String
                     // ⚠️ Kill the whole group, then reap. Otherwise every timeout leaves a zombie
                     // and any subprocess `claude` started (hooks, MCP servers), and the supervisor
                     // runs this per fire across every open workspace.
-                    kill_tree(&mut child);
+                    kill_and_reap(&mut child);
                     return Err(AdjudicateError::TimedOut(timeout_ms));
                 }
                 std::thread::sleep(Duration::from_millis(POLL_MS));
             }
             Err(e) => {
-                kill_tree(&mut child);
+                kill_and_reap(&mut child);
                 return Err(AdjudicateError::Spawn(e.to_string()));
             }
         }
@@ -219,38 +212,6 @@ fn run_command(mut cmd: Command, prompt: &str, timeout_ms: u64) -> Result<String
         return Err(AdjudicateError::OutputTooLarge(MAX_OUTPUT));
     }
     Ok(String::from_utf8_lossy(&out).into_owned())
-}
-
-/// How long after the child exits to keep reading output that is still in flight.
-const DRAIN_GRACE: Duration = Duration::from_millis(250);
-
-/// The most output kept per pipe. A `claude -p` verdict is a few hundred bytes. The cap exists
-/// because a grandchild can hold a pipe and write without end, and an unbounded buffer turned
-/// that into a 1.9 GB allocation. Past it, bytes are dropped.
-const MAX_OUTPUT: usize = 4 * 1024 * 1024;
-
-/// SIGKILL the child's whole process group (it leads one, via `process_group(0)`), then reap it.
-fn kill_tree(child: &mut Child) {
-    if let Ok(pgid) = libc::pid_t::try_from(child.id()) {
-        // SAFETY: a negative pid addresses the process group `pgid`, which this child leads.
-        // A failure (the group is already gone) is harmless, and the direct kill below covers it.
-        unsafe {
-            libc::kill(-pgid, libc::SIGKILL);
-        }
-    }
-    let _ = child.kill();
-    let _ = child.wait();
-}
-
-/// Set on drop. Shared by the drains of one `run_command` call so that every return path, the
-/// early error ones included, tells them to stop.
-#[derive(Default)]
-struct StopOnDrop(std::sync::Arc<std::sync::atomic::AtomicBool>);
-
-impl Drop for StopOnDrop {
-    fn drop(&mut self) {
-        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
-    }
 }
 
 /// One pipe, read continuously on its own thread from the moment the child spawns.
@@ -283,7 +244,7 @@ impl Drain {
             d.buf.clone(),
             d.done.clone(),
             d.overflowed.clone(),
-            stop.0.clone(),
+            stop.flag(),
         );
         std::thread::Builder::new().spawn(move || {
             if let Some(mut p) = pipe {

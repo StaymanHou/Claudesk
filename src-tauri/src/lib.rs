@@ -3,6 +3,8 @@
 // custom items emit a `menu` event the frontend bridge acts on (see app_menu).
 mod adjudicator;
 mod app_menu;
+// The one hop from an `async` command onto a blocking worker (`on_blocking_worker`).
+mod blocking;
 mod cc_session;
 mod config_store;
 // M11 WP2: workflow-docs discovery — enumerates a project's conventional strategic
@@ -61,6 +63,8 @@ mod status_broadcaster;
 // probe) — readable from the launchd-launched prod `.app` where stderr is invisible.
 mod status_log;
 mod sublime;
+// Process-group primitives shared by the subprocess runners (`workflow_install`, `adjudicator`).
+mod subprocess;
 // Supervisor activity record: one JSONL line per supervisor turn-end decision, in the app-data
 // dir. File IO only (R-4); the schema and the decision live TS-side in `activityRecord.ts`.
 mod supervisor_activity;

@@ -36,9 +36,10 @@ async fn on_worker<F>(work: F) -> Result<String, String>
 where
     F: FnOnce() -> Result<String, AdjudicateError> + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(move || work().map_err(|e| e.to_string()))
-        .await
-        .map_err(|e| format!("adjudicator worker failed: {e}"))?
+    crate::blocking::on_blocking_worker("the adjudicator", move || {
+        work().map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[cfg(test)]

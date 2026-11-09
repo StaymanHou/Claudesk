@@ -665,12 +665,11 @@ pub async fn time_analytics_query(
     scope: String,
     window: QueryWindow,
 ) -> Result<TimeAnalyticsResult, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::blocking::on_blocking_worker("the analytics query", move || {
         let store = app.try_state::<SharedTimeStore>();
         run_analytics_query(store.as_deref(), &scope, &window)
     })
     .await
-    .map_err(|e| format!("time_analytics_query worker failed: {e}"))?
 }
 
 /// The body of [`time_analytics_query`], minus the `AppHandle` hop and the worker, so tests
