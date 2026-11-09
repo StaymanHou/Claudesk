@@ -28,6 +28,7 @@
 - **Backlog resolved:** SURFACE-2026-11-04-QUALITY-WP4-SPAWN-BLOCKING-HOP-REPEATED — `on_blocking_worker` replaces all five `spawn_blocking` hops, with one error wording for a panicked worker.
 - **Feature shipped:** Backlog-paydown 2026-11-08 WP5 stops auto-resume from typing `/session-restore` into Claude Code's folder-trust prompt: the fire now reads CC's own trust record (the live profile's `.claude.json`, ancestor walk, any doubt withholds) and withholds on an untrusted folder, and the picker row shows that command in amber with no `⊘` so the operator trusts the folder and types it.
 - **Backlog resolved:** SURFACE-2026-11-03-AUTO-RESUME-FIRES-INTO-THE-FOLDER-TRUST-PROMPT — the inject arm withholds unless CC's trust record says the folder (or an ancestor) is trusted, so its `\r` can no longer answer "No, exit"; the side observation it noted is filed separately as SURFACE-2026-11-09-NEXT-OPEN-INDICATOR-PREDICTS-CONTINUE-WITH-NO-TRANSCRIPT.
+- **Task closed:** The 2026-11-08 backlog-paydown sweep is folded back and its temporary WBS deleted: all six WPs shipped, every resolved finding has its CHANGELOG line, and the one surviving obligation (re-running the installed-build GUI-PATH smoke for the adjudicator spawn that WP6 moved) is now check 6 of the supervisor release-gate backlog entry.
 
 ## 2026-11-08
 
