@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-11-08
+updated: 2026-11-09
 ---
 
 # Runtime Registry
@@ -31,13 +31,14 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 49s (2026-11-08, M16.5 WP9 P1 codify, EXIT=0)
-- **Use timeout:** 207000
+- **Last:** 135s (2026-11-09, paydown-2026-11-08 WP2, EXIT=0; post-release cold cargo cache)
+- **Use timeout:** 263000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 135s — 2026-11-09 (paydown-2026-11-08 WP2; first run after the v0.8.2 release build)
   - 49s — 2026-11-08 (WP9 P1 codify)
   - 43s — 2026-11-07 (WP9 P1 verify-auto)
   - 50s — 2026-11-07 (WP14 P3 codify)

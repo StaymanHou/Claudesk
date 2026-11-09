@@ -4,6 +4,11 @@
 
 - **Task closed:** Backlog-paydown 2026-11-08 WP1 buries the adjudicator ask-shaped-turn entry by operator ruling (wording cannot clear the bar on tail-only input; the next lever is richer input) and re-measures F10b, finding the post-fix hand-back rate is 0 of 257 once the measurement's FSD misclassification is corrected.
 - **Backlog resolved:** SURFACE-2026-09-17-F10B-STOPPED-BEFORE-VERIFY-HUMAN-INSTEAD-OF-CHAINING-INTO-IT — every post-fix "stop" (3 at the 2026-11-04 reading, 5 since) was an FSD turn that correctly chained into verify-codify, so the real rate after the upstream fix is 0 of 257 autopilot/FSD F10b turns.
+- **Task closed:** Backlog-paydown 2026-11-08 WP2 cuts the recycle-boundary comments in `verdict.ts`, `wipPhases.ts` and two supervisor test files down to the F15-only invariant with a pointer to arch §E, names each falsified recycle condition instead of numbering it, and drops a dated docstring, with every code token unchanged.
+- **Backlog resolved:** SURFACE-2026-11-08-QUALITY-WP9-RECYCLE-HISTORY-NARRATED-IN-FOUR-SITES — the before-WP9 history and field-recycle measurement now live only in arch §E; the four code and test comments state the invariant and point there.
+- **Backlog resolved:** SURFACE-2026-11-08-QUALITY-WP9-TEST-COMMENTS-USE-OLD-CONDITION-NUMBERS — the recycle-branch test comments name the falsified condition (threshold, feature workflow, WIP boundary), so a renumber cannot stale them.
+- **Backlog resolved:** SURFACE-2026-11-08-QUALITY-WP9-DOCSTRING-CARRIES-A-DATE — the `RECYCLE_BOUNDARY_EDGES` docstring no longer carries "M16.5 WP9, 2026-11-07".
+- **Backlog resolved:** SURFACE-2026-11-08-QUALITY-WP9-BOUNDARY-SET-IS-STRING-TYPED — closed as won't-do: edge IDs are `string` project-wide, so typing this one set alone would be inconsistent, and the runtime guard that every member is a real feature edge stays.
 
 ## 2026-11-08
 

@@ -522,15 +522,13 @@ export async function decideSupervised(
 /**
  * The edges at which a context-pressure recycle may happen: the clean workflow boundaries.
  *
- * ⚠️ **F15 ONLY (M16.5 WP9, 2026-11-07).** F15 is `verify-codify → build` with more phases
- * remaining: one phase is finished and tested, and the next has not started, so a fresh session
- * restores into `/feature-build` with nothing half-done. Every other edge chains as usual over the
- * threshold. A session that crosses it mid-phase recycles at that phase's F15, at most one phase
- * later.
+ * ⚠️ **F15 ONLY.** F15 is `verify-codify → build` with more phases remaining: one phase is
+ * finished and tested, and the next has not started, so a fresh session restores into
+ * `/feature-build` with nothing half-done. Every other edge chains as usual over the threshold. A
+ * session that crosses it mid-phase recycles at that phase's F15, at most one phase later.
  *
- * ⚠️ **Before WP9 there was no edge rule**, and every AUTO fire inside Phase 2+ recycled. All four
- * recycles in the installed build's log were mid-phase (F8, F10). Why each other candidate is out,
- * with the transcript measurement: `arch/workflow-supervisor.md` §E.
+ * Why each other candidate edge is out, with the transcript measurement:
+ * `arch/workflow-supervisor.md` §E.
  *
  * ⚠️ Every member must be a feature edge in `workflowMachine/edges.ts` (guarded by a test), so a
  * typo cannot silently disable the recycle.

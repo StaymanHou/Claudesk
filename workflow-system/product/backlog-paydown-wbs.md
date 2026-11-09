@@ -139,6 +139,7 @@ plan → build → ship → review → finalize run takes about a day and is **M
 - `WP9-BOUNDARY-SET-IS-STRING-TYPED` (QF): close as won't-do (D3).
 - **Prove comments-only** with the parser-token diff (filter JSDoc kinds; include a positive control).
 - **Resolves:** all 4 WP9 QF bodies + the `recycle-at-clean-boundaries` pointer stub (BL).
+- ✅ **DONE 2026-11-09.** Comments-only, proven by the parser-token diff (4 files IDENTICAL; positive control caught a one-token change). The test TITLES still carry "M16.5 WP9:" (string literals, outside the findings). The optional `once` rule was left for WP3.
 
 ## WP3: `singleAuthority` guard repair + backlog heading guard  `[impact: Med · effort: S · risk: Low (test-only)]` · task
 

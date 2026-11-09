@@ -441,8 +441,7 @@ describe("AC-1: exactly one record per turn end, one per exit", () => {
 
   it("⚠️ M16.5 WP9: a MID-PHASE edge over the threshold is a plain `fired` record carrying its tokens", async () => {
     // The deferred recycle stays visible in the log without a new reason: the edge chained, and
-    // the reading that WOULD have recycled at a boundary is on the line. F10 is one of the two
-    // edges every pre-WP9 field recycle happened on.
+    // the reading that WOULD have recycled at a boundary is on the line.
     await mount({
       tail: () => tailFor("F10", RECYCLE_TOKEN_THRESHOLD + 1),
       wip: WIP_AT_BOUNDARY,

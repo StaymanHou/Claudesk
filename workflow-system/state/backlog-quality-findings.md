@@ -4,46 +4,6 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
-# recycle-at-clean-boundaries — 2026-11-08
-
-*(feature-review-quality on ship commit `b999081`, window `b999081^..b999081`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 3 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-11-08-QUALITY-WP9-RECYCLE-HISTORY-NARRATED-IN-FOUR-SITES
-- **Severity:** MAJOR
-- **Location:** `src/state/supervisor/verdict.ts` (the `RECYCLE_BOUNDARY_EDGES` doc), `src/state/supervisor/wipPhases.ts` (`atNonFinalPhaseBoundary` doc), `src/state/supervisor/__tests__/verdict.test.ts` (the mid-phase `it.each` comment), `src/state/supervisor/__tests__/activityFunnel.test.tsx` (the MID-PHASE test comment); plus `arch/workflow-supervisor.md` §E.
-- **Finding:** the same history ("before WP9 every Phase 2+ fire recycled; all four field recycles were on F8/F10") is restated in four code/test sites as well as arch §E. `singleAuthority.test.ts` matches exact phrases only, so these paraphrases pass it.
-- **Why it matters:** the comment-budget rule (`docs/lessons/source-text-guards.md`) puts what a previous version did in the WIP/archive and states a rationale once. WP14 consolidated exactly this pattern two commits earlier; four copies drift as soon as the boundary set is tuned.
-- **Suggested action:** make arch §E the one home for the history and the measurement; cut the code comments to the invariant (F15 only; the WIP check is a second guard) with a pointer to §E. Optionally add a `once` rule to `singleAuthority.test.ts` for the field-recycle sentence.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-11-08-QUALITY-WP9-TEST-COMMENTS-USE-OLD-CONDITION-NUMBERS
-- **Severity:** MINOR
-- **Location:** `src/state/supervisor/__tests__/verdict.test.ts`, the recycle-branch describe ("Condition 1 falsified, other two held", "Condition 2 falsified", "satisfy the OTHER two conditions", "Condition 3 falsified").
-- **Finding:** the `recycleTokens` doc now numbers the conditions 1 = edge, 2 = threshold, 3 = feature, 4 = WIP boundary, so each of these comments is off by one.
-- **Why it matters:** stale cross-references that read as authoritative.
-- **Suggested action:** renumber, or name the condition instead of numbering it ("threshold falsified").
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-08-QUALITY-WP9-BOUNDARY-SET-IS-STRING-TYPED
-- **Severity:** MINOR
-- **Location:** `src/state/supervisor/verdict.ts`, `RECYCLE_BOUNDARY_EDGES: ReadonlySet<string>`.
-- **Finding:** edge-ID validity is checked only by a runtime test (AC-5), not by the type.
-- **Why it matters:** acceptable today because the guard exists; a typo fails in `vitest`, not `tsc`.
-- **Suggested action:** if edge IDs ever become a literal union type, type the set with it.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-08-QUALITY-WP9-DOCSTRING-CARRIES-A-DATE
-- **Severity:** MINOR
-- **Location:** `src/state/supervisor/verdict.ts`, the `RECYCLE_BOUNDARY_EDGES` doc ("M16.5 WP9, 2026-11-07").
-- **Finding:** provenance in a code comment (and a day off the commit date).
-- **Why it matters:** the comment-budget rule moves provenance out of code; folds into the MAJOR's fix.
-- **Suggested action:** drop the date when the MAJOR is addressed.
-- **Priority:** low
-- **Status:** pending
-
 # paydown-2026-11-04-wp14-comment-convention-pass — 2026-11-07
 
 *(feature-review-quality on ship commit `20930c3`, window `20930c3^..20930c3`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged; each claim re-checked against the source before filing.)*

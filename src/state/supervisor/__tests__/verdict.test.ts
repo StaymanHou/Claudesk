@@ -565,7 +565,7 @@ describe("⚠️ decideSupervised — the HYBRID's ordering", () => {
 // wired, so each test below turns exactly ONE condition off and asserts the verdict falls back
 // to `fire` — that is what proves each arm is load-bearing.
 //
-// ⚠️ **The condition tests emit F15** (M16.5 WP9), the one boundary edge. Emitted on any other
+// ⚠️ **The condition tests emit F15**, the one boundary edge. Emitted on any other
 // edge, a "FIRES when X is false" test would pass because of the EDGE and stop proving X.
 describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
   const tailDeps = (answer: string) => ({
@@ -622,7 +622,7 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
   });
 
   it("⚠️ FIRES (does not recycle) when context is UNDER the threshold", async () => {
-    // Condition 1 falsified, other two held.
+    // Threshold falsified; the edge, feature and WIP-boundary conditions held.
     const r = await decide({ contextTokens: UNDER, wip: featureAtBoundary });
     expect(r.kind).toBe("fire");
   });
@@ -634,7 +634,7 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
   });
 
   it("⚠️ FIRES when the workflow is NOT feature, even over threshold at a boundary", async () => {
-    // Condition 2 falsified. Task/incident/product have no phase structure; auto-chain
+    // Feature-workflow condition falsified. Task/incident/product have no phase structure; auto-chain
     // enforcement still applies, which is why this FIRES rather than withholding.
     const r = await decide({ contextTokens: OVER, wip: taskWip });
     expect(r.kind).toBe("fire");
@@ -655,7 +655,8 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
         "\n",
       ),
     );
-    // Sanity: this fixture really does satisfy the OTHER two conditions.
+    // Sanity: this fixture really does satisfy the WIP-boundary condition, so only the
+    // feature-workflow condition is off.
     expect(atNonFinalPhaseBoundary(taskWithPhases)).toBe(true);
     expect(isFeatureWorkflow(taskWithPhases)).toBe(false);
 
@@ -664,7 +665,7 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
   });
 
   it("⚠️ FIRES at the LAST phase — a completed feature is not recycled", async () => {
-    // Condition 3 falsified (no open phase). Recycling here would hand a fresh session a
+    // WIP-boundary condition falsified (no open phase). Recycling here would hand a fresh session a
     // feature with no work left; the next step is ship, not a new session.
     const r = await decide({ contextTokens: OVER, wip: featureAllDone });
     expect(r.kind).toBe("fire");
@@ -721,10 +722,9 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
   it.each(["F8", "F9", "F9b", "F10", "F10b"])(
     "⚠️ M16.5 WP9: a MID-PHASE edge (%s) over the threshold in Phase 2+ FIRES, it does not recycle",
     async (edge) => {
-      // ⚠️ The defect WP9 fixes: the boundary used to be read off the WIP's STATE alone, so every
-      // AUTO fire inside Phase 2+ recycled, handing off mid-phase. All four recycles in the
-      // installed build's log (2026-11) were on F8 or F10. The WIP and the reading here satisfy
-      // every other condition, so only the EDGE can be what withholds the recycle.
+      // ⚠️ The WIP's state alone is true at every step inside Phase 2+, so it cannot be the
+      // boundary (arch §E). The WIP and the reading here satisfy every other condition, so only
+      // the EDGE can be what withholds the recycle.
       const r = await decideSupervised(
         {
           lines: emitted(edge),
@@ -759,7 +759,7 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
         decideVerdict({ lines: emitted(e.id), storedMode: "autopilot" })
           .kind === "fire",
     ).map((e) => e.id);
-    // Non-vacuous: the mid-phase edges WP9 exists for, and the boundary itself, are in it.
+    // Non-vacuous: the mid-phase edges the edge rule excludes, and the boundary itself, are in it.
     expect(firing).toEqual(expect.arrayContaining(["F8", "F10", "F15"]));
 
     const recycled: string[] = [];
