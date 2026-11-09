@@ -565,7 +565,7 @@ steering work toward the guard style that failed the nine ways above.** Stated o
 ⚠️ **CORRECTED 2026-09-23 (paydown WP7): that does NOT mean "no interaction".** The note used to
 continue *"so there is no harness for interaction — no click dispatch, no state transition, no
 `act()`"*, and that half was false too. React's own `act` (from `react`) plus `createRoot` (from
-`react-dom/client`) under a per-file jsdom environment mounts a component LIVE: effects run, state
+`react-dom/client`) under a per-file jsdom environment (`// @vitest-environment jsdom` at the top of the test file) mounts a component LIVE: effects run, state
 transitions, a real `.click()` reaches React's handler, and with
 `@tauri-apps/api/mocks` → `mockIPC(…, { shouldMockEvents: true })` a real (mocked) Tauri event
 reaches a `listen` subscriber. No new dependency is needed. Precedents:
@@ -604,6 +604,12 @@ mis-attribute a correct render as a bug:
     is reachable in a server render. That is not a limitation to work around; for gated surfaces it
     is the single most valuable assertion available ("the surface is ABSENT when off"), and a parsed
     DOM is the honest form of it rather than a grep.
+
+⚠️ **The cost of reading the old note (F-a WP3, recorded 2026-11-09 from `CLAUDE.md`):** F-a WP3 asserted
+"this project configures no DOM environment" in three test files to justify `?raw`, having read the
+note. Replacing one of those guards with a real render **failed on its first run and exposed a shipped
+defect the grep could not see** (an indicator dark on first paint). Assume any "no DOM" justification
+you inherit is wrong until you have re-read this section.
 
 **The rule:** when the question is *"what does the DOM look like at rest"*, render it. When it is
 *"what does the source say"*, guard the source. Reaching for `?raw` on a DOM question is how this
