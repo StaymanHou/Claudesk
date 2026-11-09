@@ -10,21 +10,6 @@
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
 
-## SURFACE-2026-10-21-ADJUDICATOR-FAILS-THE-BREAK-AXIS-ON-ASK-SHAPED-TURNS
-
-- **Source:** feature:build (M16.5 WP2 Phase 4, the re-measurement verdict)
-- **Target level:** product:wbs → **M16.5 WP3 task 3.5** (operator, 2026-10-21)
-- **Type:** bug
-- **Summary:** The shipped adjudicator holds 95/103 real waits (0.92), but lets only **126/188 real breaks fire (0.67, CI 0.60–0.73; 0.665–0.676 over 3 runs)**, so it FAILS R-6's 0.80/0.80 bar on the break axis. The misses concentrate on break turns that end by asking or offering ("shall I proceed?", "say the word"): **8/29 fire**. Without an ask, 118/159 fire. (*Ask-shaped* is an agent heuristic, approximate: the last 400 chars end in `?` or contain "say the word / let me know / want me to / shall I / should I / or would you / approve / your call"; a strict `?`-only check gives 8/21; the direction is robust, the exact split is not.)
-- **Context:**
-  - The prompt asks *"is this turn waiting for the human to reply?"*, and an unnecessary ask IS literally waiting, so the cause is the QUESTION, not the threshold. The failure is the safe direction (it withholds), but it is a third of real breaks.
-  - Two further problems with the old baseline: the M15 numbers R-6 accepted came from a different prompt than the one that shipped, and on `claude-sonnet-5`, not today's `claude-sonnet-5-5`.
-  - Evidence is `workflow-system/product/wp2-adjudicator-set.json`, and `adjudicatorRemeasure.test.ts` pins the verdict.
-- **Suggested action:** Revise the adjudicator's one question to the supervisor's real need, e.g. *"does the turn need information or a decision that only the human can give, beyond permission to continue?"*. Re-score it on the frozen set with a held-out split, so the prompt is not fitted to the set. ⚠️ A prompt change is a behavior change: re-measure both axes, since wrong-fire recall is the axis that must not drop.
-- **WP3 measurement (2026-10-27, M16.5 WP3 task 3.5; the question was KEPT):** five candidate questions were tuned on a seeded dev split (seed 20261026, 146 rows). The chosen one, v5 (`tooling/adjudicator-probe/candidates.ts`, hash `7c3133ebe6f3384a`), scored **0.830 waits held / 0.801 breaks fired** on the untouched held-out split (145 rows, mean of 3 runs). The shipped question scores 0.869 / 0.695 on the same split. That misses AC-18's waits-held floor of ≥0.85, so `adjudicationPrompt` was not changed. Across the five, raising breaks fired cost waits held almost one-for-one. The labels turn on context the tail does not carry: a "ready for your review" stop before verify-human is a break, and the verify-human checklist turn is a wait. ⚠️ So another wording pass on tail-only input is unlikely to clear the bar. A next attempt would need more input (for example the emitted transition id, or whether the next step's skill presents its own checklist), or a change to the bar, which is the operator's call.
-- **Priority:** low (lowered from high 2026-10-27 per design prior `simple-version-first-when-the-source-fix-shrank-the-problem`: breaks are now rare at source, and the next lever, richer adjudicator input, is an advanced minor-gain enhancement)
-- **Status:** open — re-measured at M16.5 WP3 (3.5), question KEPT per AC-18 (see the WP3 measurement above). Stays open.
-
 ## Code-quality findings — recycle-at-clean-boundaries (2026-11-08)
 
 - **Pointer:** **1 MAJOR + 3 MINOR** from the review of `b999081` (M16.5 WP9). MAJOR: the "before WP9 every Phase 2+ fire recycled; the four field recycles were F8/F10" history is narrated in four code/test sites as well as arch §E, against the comment-budget rule. MINOR: the recycle-branch test comments use the old condition numbering; `RECYCLE_BOUNDARY_EDGES` is string-typed; the docstring carries a date.
@@ -77,42 +62,6 @@
   marker on it. Until then there is nothing to build here.
 - **Priority:** low
 - **Status:** blocked on upstream (anthropics/claude-code#105187)
-
-## SURFACE-2026-09-17-F10B-STOPPED-BEFORE-VERIFY-HUMAN-INSTEAD-OF-CHAINING-INTO-IT
-- **Source:** operator correction (M14 WP0, observed twice in one session)
-- **Target level:** product:wbs
-- **Type:** bug
-- **Summary:** On `TRANSITION: F10b` in autopilot the agent **returned control to the operator
-  before invoking `feature-verify-human`**, instead of chaining into it and letting the skill take
-  its own pause at the checklist. Cost one operator turn per phase, twice in one session
-  (Phase 1 and Phase 2).
-- **Context:** ⚠️ **The pause-policy table already says the right thing** — `feature-verify-self`'s
-  F10b row reads *"AUTO (chain into verify-human, which itself PAUSEs)"*, and
-  `feature-verify-human`'s own table marks **skill invocation (entry)** as the PAUSE point. So the
-  pause is supposed to live INSIDE verify-human, at the moment the checklist is presented.
-  ⚠️ **The failure is subtle because the OUTCOME looks identical** — either way the operator ends
-  up being asked to verify. What differs is that stopping early costs a turn AND skips everything
-  verify-human does *before* its checklist: the §2 integration-boundary assessment, the §2
-  auto-skip gate evaluation, and the §3 pre-filter that EXCLUDES outcomes verify-self already
-  confirmed. An operator who says "proceed" gets those; an operator who is asked first does not
-  get them until they answer.
-  ⚠️ **Plausible cause worth checking before designing a fix:** the AUTO-exit hard rule is stated
-  in terms of *"do not return control to the user"*, and a chain whose NEXT skill is itself a
-  pause gate reads like an exception to an agent applying that rule literally. It is not — the
-  rule's own parenthetical says so — but the phrasing invites the misread. The two other
-  PAUSE-at-entry skills (`feature-spec`, `feature-plan`) have the same shape and the same risk.
-- **Suggested action:** Operator's framing: fix in **mccc** (sharpen the rule so "the next skill
-  is itself a pause gate" is named as explicitly NOT an exception — a chain-into-a-pause is still
-  a chain) **or** in **Claudesk** (the M15 supervisor could enforce it mechanically: F10b in
-  autopilot is an AUTO cell, so a turn that ends on it without a `Skill` call is exactly the
-  "wrongful stop" class the supervisor was built to detect). ⚠️ **Claudesk's supervisor would
-  have caught this one** — it is a textbook AUTO-cell break, which makes it a useful real-world
-  test case for the dogfooding pass. Scheduled as QoL work immediately AFTER the WP0 hotfix ships
-  (operator, 2026-09-17).
-- **Priority:** low (was medium; lowered 2026-11-04 on the post-fix measurement below)
-- **Update 2026-09-23 — the upstream fix has LANDED; what remains is MEASUREMENT.** mccc shipped the prose fix (`07ff3ba`, *"disambiguate the F10b edge into verify-human"*) and the tooling to measure it (`f25a509`, `--since/--until` on `measure-f10b`). No work is owed here. The open question is whether the stop still recurs in dogfooding after the fix date.
-- **Measured 2026-11-04 (paydown WP1), `measure-f10b-handback-rate.py`, AUTOPILOT/FSD-gated F10b turns:** after the fix (`--since 2026-09-22`) **3 of 198 stopped (1.5%; opus-5-5 3/183, opus-5 0/15)**; before it (`--until 2026-09-21`) opus-5 21/279 (7.5%), opus-4-8 9/452 (2.0%), opus-4-7 30/198 (15.2%). The fix cut the rate about 5x, but it is NOT zero, so the entry stays open. Re-measure at the next cycle boundary; a rate that climbs back toward 7% reopens the upstream ask.
-- **Status:** open — residual 1.5% after the upstream fix (priority lowered medium → low, 2026-11-04)
 
 ## SURFACE-2026-09-17-OBSERVABLE-OUTCOME-WRITTEN-FOR-A-SURFACE-A-LATER-PHASE-BUILDS
 - **Source:** feature:verify-self (M14 WP0 Phase 1)
@@ -647,3 +596,23 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
   - a screenshot at about 30 s and about 2 min.
 - **Priority:** low (one dev-build sighting, and one clean deliberate probe; raise to medium on any installed-build sighting, since a blank pane hides an awaiting question)
 - **Status:** open — watch
+
+## SURFACE-2026-11-08-QUOTA-AUTO-RESUME-FIRED-IS-AN-UNCLASSIFIED-NOTIFICATION-TYPE
+- **Source:** `/release` step 1 advisory vocabulary check (v0.8.2 cut, 2026-11-08)
+- **Target level:** task
+- **Type:** bug (status dot, low frequency)
+- **Summary:** CC has sent `notification_type: "quota_auto_resume_fired"` **9 times** (prod `time-analytics.sqlite`; first 2026-09-21 12:11, recurring around 12:11 on later days, e.g. 2026-10-21). It is in neither `INPUT_NEEDED_NOTIFICATION_TYPES` nor `INFORMATIONAL_NOTIFICATION_TYPES` (`status_broadcaster/mod.rs`), so `event_to_state` falls back to **AwaitingInput** and the workspace dot goes blue when CC auto-resumes after a quota reset.
+- **Context:** The name says CC resumed work on its own, which is a completion/informational shape (like `agent_completed`, the M13.5 WP2 precedent), not a request for input. ⚠️ Classify it deliberately: capture one live payload first (`[[cc-hook-capture-beats-docs]]`) to confirm that nothing in it asks the user anything. The fallback itself must NOT be inverted.
+- **Suggested action:** add it to `INFORMATIONAL_NOTIFICATION_TYPES` with a classification test, after the payload check.
+- **Priority:** low (≈1 event per quota reset; a false blue, not a lost prompt)
+- **Status:** open
+
+## SURFACE-2026-11-09-F10B-MEASUREMENT-COUNTS-A-CORRECT-FSD-CHAIN-AS-A-STOP
+- **Source:** task:act (backlog-paydown-2026-11-08 WP1, the F10b re-measure)
+- **Target level:** upstream (mccc) — `tools/analysis/measure-f10b-handback-rate.py`
+- **Type:** bug (measurement instrument)
+- **Summary:** The script's classifier `vh()` counts an F10b turn as chained only if the next assistant turn invokes `feature-verify-human`. But in **FSD**, F10b correctly SKIPS verify-human and chains into `feature-verify-codify`, and the drive-mode gate (`AUTO` regex) admits FSD turns. So **every FSD F10b turn reads as a stop.** All 8 post-fix "stops" were this: 3 in the 2026-11-04 reading (`--since 2026-09-22`, read as a 1.5% residual) and 5 more in `--since 2026-11-04` (read as 8.1%). Each was checked by hand and each chained into `feature-verify-codify`. The corrected post-fix rate is **0 of 257**.
+- **Context:** A reading of 8.1% would have triggered the "rate climbing back toward 7% reopens the upstream ask" branch of the close rule on a pure instrument artifact. ⚠️ The pre-fix baselines in `tests/results/M-PROSE-SHIP-BASELINE.md` may carry the same inflation, wherever FSD sessions fall inside their windows.
+- **Suggested action:** In FSD context, count a `feature-verify-codify` invocation as the chain, or more generally accept the mode's next skill. Add a fixture with one FSD F10b → codify turn that must read as chained. Then re-derive the pre-fix baselines to see whether any moved.
+- **Priority:** low (the F10b entry it was measuring is resolved; this matters only for future readings)
+- **Status:** open — upstream (mccc); not yet sent

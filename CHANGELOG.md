@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-09
+
+- **Task closed:** Backlog-paydown 2026-11-08 WP1 buries the adjudicator ask-shaped-turn entry by operator ruling (wording cannot clear the bar on tail-only input; the next lever is richer input) and re-measures F10b, finding the post-fix hand-back rate is 0 of 257 once the measurement's FSD misclassification is corrected.
+- **Backlog resolved:** SURFACE-2026-09-17-F10B-STOPPED-BEFORE-VERIFY-HUMAN-INSTEAD-OF-CHAINING-INTO-IT — every post-fix "stop" (3 at the 2026-11-04 reading, 5 since) was an FSD turn that correctly chained into verify-codify, so the real rate after the upstream fix is 0 of 257 autopilot/FSD F10b turns.
+
 ## 2026-11-08
 
 - **Feature shipped:** M16.5 WP9 makes the context-pressure recycle key on the fired edge: above 400k tokens the supervisor recycles only at F15 (verify-codify → build, a new phase starting), where before every AUTO fire inside Phase 2+ recycled mid-phase, as all four recycles in the installed build's log did.
