@@ -4,64 +4,6 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
-# paydown-2026-11-04-wp14-comment-convention-pass — 2026-11-07
-
-*(feature-review-quality on ship commit `20930c3`, window `20930c3^..20930c3`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged; each claim re-checked against the source before filing.)*
-
-## SURFACE-2026-11-07-QUALITY-WP14-ABSENT-RULES-MATCH-RAW-CASE-SENSITIVE-TEXT
-- **Severity:** MAJOR
-- **Location:** `src/__tests__/singleAuthority.test.ts`, the `absent` branch of the rule loop (and the header's "WHAT THIS DOES NOT CHECK" paragraph).
-- **Finding:** `absent` rules match `readFileSync(...)` raw text with `new RegExp(rule.pattern.source, "g")`, so (a) a label wrapped across two comment lines evades every multi-word pattern (`paydown WP\d`, `WP\d+ Phase \d`, `verified live at P\d`, `this WP`); (b) matching is case-sensitive, so `(Paydown WP7,`, which `recycleSession.ts` actually carried at `20930c3^`, gives 0 matches; and (c) rebuilding from `.source` DISCARDS the pattern's own flags, so adding `i` to a pattern would be silently dropped too. The header says matching is "comment leaders stripped, whitespace collapsed", which is only true of the `once` rules.
-- **Why it matters:** a guard that reports green on exactly the label forms it was written to exclude (`source-text-guards.md`'s green-while-checking-nothing shape), with a header claiming more than it checks.
-- **Suggested action:** match `absent` patterns against the same normalized haystack the `once` rules use (`textOf(f)`), build the RegExp with `rule.pattern.flags` merged with `g` (and `i`), and add a wrapped + capitalized control. Or, at minimum, correct the header.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-11-07-QUALITY-WP14-ABSENT-RULES-HAVE-NO-PERMANENT-POSITIVE-CONTROL
-- **Severity:** MINOR
-- **Location:** `src/__tests__/singleAuthority.test.ts`, the `absent` rules table.
-- **Finding:** nothing asserts that each `pattern` matches a known example label (e.g. `"P3 verify-self"`, `"(Paydown WP7,"`). The mutation proof ran once at build time; a later edit that breaks a pattern (bad escape, narrowed alternation) keeps passing.
-- **Why it matters:** an `absent` rule with a broken pattern is indistinguishable from a clean file.
-- **Suggested action:** one example string per rule, asserted to match in the meta block. Pairs naturally with the MAJOR above.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-07-QUALITY-WP14-GUARD-HEADER-OVERCLAIMS-COPY-PASTE-ORIGIN
-- **Severity:** MINOR
-- **Location:** `src/__tests__/singleAuthority.test.ts` header ("It stops copy-paste regrowth, which is how every instance in the WP14 roster arose").
-- **Finding:** the WIP build record says two roster rules (chord map, do-not-merge) "pass at HEAD by construction": those duplicates were paraphrases, so their `once` halves never matched a real duplicate.
-- **Why it matters:** an overclaim in the very paragraph meant to prevent overclaiming.
-- **Suggested action:** "most instances" plus a note that the two paraphrase rules guard regrowth only.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-07-QUALITY-WP14-BARE-DIGIT-FINGERPRINTS
-- **Severity:** MINOR
-- **Location:** `src/__tests__/singleAuthority.test.ts`, the corpus-drift rule's `"2282"` / `"2284"` fingerprints.
-- **Finding:** bare digit runs matched with `includes` and no boundary; any unrelated number containing them (`122824`, a future count or timestamp) trips the rule.
-- **Why it matters:** fails loudly, not silently, but brittle.
-- **Suggested action:** anchor on a phrase such as `2282 → 2284`.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-07-QUALITY-WP14-WORKFLOW-GATE-POINTER-MISSES-THE-TERMS-GAP
-- **Severity:** MINOR
-- **Location:** `workflow-system/product/arch/workflow-gate.md` (the "guard's mechanics live in its own header" paragraph).
-- **Finding:** the pointer says `offInvariantGuard.test.ts`'s header holds the `WORKFLOW_TERMS` vocabulary gap (recycle/session), but the header mentions `WORKFLOW_TERMS` only for the drive-mode terms; the gap appears only as a SURFACE id in an arm comment.
-- **Why it matters:** nothing is lost (the arch paragraph restates the gap), but the pointer points at the wrong place.
-- **Suggested action:** point at the arm comment, or move the gap statement into the header.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-07-QUALITY-WP14-COMMENT-BUDGET-DOES-NOT-NAME-THE-GUARD
-- **Severity:** MINOR
-- **Location:** `docs/lessons/source-text-guards.md`, the comment-budget section.
-- **Finding:** it says "state it once … every other site a pointer" but never mentions `singleAuthority.test.ts`, so an author creating a new canonical home is not told to add a rule.
-- **Why it matters:** new duplication is only guarded if someone already knows the table exists.
-- **Suggested action:** a one-line pointer to the guard.
-- **Priority:** low
-- **Status:** pending
-
 # paydown-2026-11-04-wp13-settings-split-and-picker-row — 2026-11-06
 
 *(feature-review-quality on ship commit `0e7c138`, window `fea480e..0e7c138`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 4 MINOR, all auto-backlogged; finding 1 re-checked against the source before filing.)*

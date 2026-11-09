@@ -19,9 +19,11 @@ import { fileURLToPath } from "node:url";
 // labels (phase or mutant ids that stop resolving once the WIP is archived).
 //
 // ⚠️ WHAT THIS DOES NOT CHECK, so it is not assumed:
-//   - A PARAPHRASE. Matching is on exact phrases (comment leaders stripped, whitespace collapsed),
-//     so restating a rationale in new words passes. It stops copy-paste regrowth, which is how
-//     every instance in the WP14 roster arose; it is not a semantic check.
+//   - A PARAPHRASE. Both kinds match the same normalized text (comment leaders stripped, whitespace
+//     collapsed; `absent` patterns case-insensitively), so a wrapped phrase is still caught, but
+//     restating a rationale in new words passes. It stops copy-paste regrowth, which is how most
+//     instances in the WP14 roster arose; it is not a semantic check. Two rules (the chord map,
+//     the do-not-merge toggle) were paraphrases at HEAD, so they guard regrowth only.
 //   - Files outside SCOPE_ROOTS: `CLAUDE.md` (a harness-loaded rule index that restates with a
 //     pointer by design), `workflow-system/product/*.md` outside `arch/` (the historical record),
 //     the backlog files, `CHANGELOG.md` and every archive.
@@ -64,12 +66,17 @@ type Rule =
       /** Narrows the rule to these repo-relative prefixes (default: every scanned file). */
       scope?: string[];
     }
-  | {
-      kind: "absent";
-      id: string;
-      files: string[];
-      pattern: RegExp;
-    };
+  | AbsentRule;
+
+type AbsentRule = {
+  kind: "absent";
+  id: string;
+  files: string[];
+  /** Matched case-insensitively against the normalized text; its own flags are kept. */
+  pattern: RegExp;
+  /** Labels the pattern must catch, as raw source text: the rule's permanent positive control. */
+  examples: string[];
+};
 
 const RULES: Rule[] = [
   {
@@ -97,7 +104,7 @@ const RULES: Rule[] = [
     kind: "once",
     id: "the transcript's scanned total drifts within one session",
     authority: ["src-tauri/src/transcript/mod.rs"],
-    fingerprints: ["2282", "2284"],
+    fingerprints: ["2282 → 2284"],
   },
   {
     kind: "once",
@@ -179,6 +186,12 @@ const RULES: Rule[] = [
     authority: ["src/state/__tests__/offInvariantGuard.test.ts"],
     fingerprints: ["composite bypass that trips", "NO ungated half"],
   },
+  {
+    kind: "once",
+    id: "the four pre-boundary-rule field recycles were all mid-phase (F8/F10)",
+    authority: ["workflow-system/product/arch/workflow-supervisor.md"],
+    fingerprints: ["F10 at 508,028", "F8 at 488,911"],
+  },
   // ── WIP-local labels (phase, probe and mutant ids) stop resolving once the WIP is archived.
   // Each file below was cleaned of them in WP14 Phase 2; these stop them coming back there.
   {
@@ -190,12 +203,18 @@ const RULES: Rule[] = [
     ],
     pattern:
       /re-verify \d|verify-self|probe [AB]\b|probe P\d|mutant R\d|\(R\d\)/,
+    examples: [
+      "// Probe B: the child succeeded",
+      "// re-verify\n// 2 confirmed it",
+      "(R3)",
+    ],
   },
   {
     kind: "absent",
     id: "the M15 fixture test carries no attempt-count history",
     files: ["src/state/__tests__/m15SupervisorFixture.test.ts"],
     pattern: /223 breaks|-> 96|An earlier version/,
+    examples: ["// 223\n// breaks were scored", "// An earlier version did X"],
   },
   {
     kind: "absent",
@@ -205,6 +224,11 @@ const RULES: Rule[] = [
       "src/components/workspace/editor/mediaClock.ts",
     ],
     pattern: /verify-self|verify-human|WIP →|OQ-\d|decision A\b/,
+    examples: [
+      "// confirmed at verify-human",
+      "// Decision A picked this",
+      "// OQ-2",
+    ],
   },
   {
     kind: "absent",
@@ -221,6 +245,11 @@ const RULES: Rule[] = [
       "src/components/workspace/docs/fetchLatch.ts",
     ],
     pattern: /verify-self|verify-human|\bWP\d+ P\d|\bP\d+\.\d+\b/,
+    examples: [
+      "// found at WP3\n// P2",
+      "// see P2.4",
+      "// Verify-self caught it",
+    ],
   },
   {
     kind: "absent",
@@ -232,12 +261,23 @@ const RULES: Rule[] = [
     ],
     pattern:
       /verify-self|paydown WP\d|earlier revision|picker MAJOR|\bP\d+\.\d+\b|\(Phase \d\)|WP\d+ Phase \d/,
+    examples: [
+      "// (Paydown WP7, the fix)",
+      "// paydown\n// WP7 moved this",
+      "// an earlier revision",
+      "// WP4 Phase 2",
+    ],
   },
   {
     kind: "absent",
     id: "window_state carries no provenance narrative",
     files: ["src-tauri/src/window_state/mod.rs"],
     pattern: /verified live at P\d|screenshot|backlog entry|1920×1080/,
+    examples: [
+      "// verified live\n// at P3",
+      "// see the backlog entry",
+      "// at 1920×1080",
+    ],
   },
   {
     kind: "absent",
@@ -246,6 +286,7 @@ const RULES: Rule[] = [
       "src/components/settings/__tests__/settingsTimeTrackingCopy.test.ts",
     ],
     pattern: /Scope-audit|verify-human|this WP/,
+    examples: ["// scope-audit of the copy", "// added in\n// this WP"],
   },
 ];
 
@@ -267,15 +308,29 @@ function scannedFiles(): string[] {
 }
 
 /**
- * The text a fingerprint is matched against: comment leaders removed from each line, lines
- * joined, whitespace collapsed. So a phrase still matches when a comment wraps it across lines.
+ * The text every rule is matched against: comment leaders removed from each line, lines joined,
+ * whitespace collapsed. So a phrase still matches when a comment wraps it across lines.
  */
-function haystack(rel: string): string {
-  return readFileSync(join(repoRoot, rel), "utf8")
+function normalize(raw: string): string {
+  return raw
     .split("\n")
     .map((line) => line.replace(/^\s*(\/\/[/!]?|\/?\*+\/?|#+|\{\/\*)\s?/, ""))
     .join(" ")
     .replace(/\s+/g, " ");
+}
+
+function haystack(rel: string): string {
+  return normalize(readFileSync(join(repoRoot, rel), "utf8"));
+}
+
+/**
+ * The ONE matcher for `absent` rules, used by the rule loop and by the example controls alike:
+ * it normalizes the raw source itself, matches case-insensitively, and merges the pattern's own
+ * flags in rather than dropping them.
+ */
+function absentHits(rule: AbsentRule, source: string): string[] {
+  const flags = [...new Set([...rule.pattern.flags, "g", "i"])].join("");
+  return normalize(source).match(new RegExp(rule.pattern.source, flags)) ?? [];
 }
 
 const files = scannedFiles();
@@ -328,10 +383,10 @@ describe("⚠️ each documented rule has exactly ONE authority", () => {
       it(`absent: ${rule.id}`, () => {
         for (const f of rule.files) {
           expect(existsSync(join(repoRoot, f)), `${f} must exist`).toBe(true);
-          const hits = readFileSync(join(repoRoot, f), "utf8").match(
-            new RegExp(rule.pattern.source, "g"),
-          );
-          expect(hits ?? [], `${f} carries WIP-local labels`).toEqual([]);
+          expect(
+            absentHits(rule, readFileSync(join(repoRoot, f), "utf8")),
+            `${f} carries WIP-local labels`,
+          ).toEqual([]);
         }
       });
     }
@@ -362,6 +417,34 @@ describe("the guard is not vacuous", () => {
     expect(textOf("src/components/workspace/recycleButton.ts")).toContain(
       "multi-step OPERATION",
     );
+  });
+
+  it("every absent rule catches each of its examples through the rule loop's own matcher", () => {
+    // Without this, a pattern broken by a later edit (a bad escape, a narrowed alternation) is
+    // indistinguishable from a clean file. The examples include wrapped and differently cased
+    // forms, so the normalization and the case-folding are exercised too.
+    for (const r of RULES) {
+      if (r.kind !== "absent") continue;
+      expect(r.examples.length, r.id).toBeGreaterThan(0);
+      for (const ex of r.examples) {
+        expect(
+          absentHits(r, ex),
+          `${r.id} must catch ${JSON.stringify(ex)}`,
+        ).not.toEqual([]);
+      }
+    }
+  });
+
+  it("the absent matcher keeps a pattern's OWN flags", () => {
+    // Without the `u` flag `\p{Lu}` is a literal "p", so this matches only if the flag survives.
+    const rule: AbsentRule = {
+      kind: "absent",
+      id: "flag control",
+      files: [],
+      pattern: /\p{Lu}\d/u,
+      examples: [],
+    };
+    expect(absentHits(rule, "// X1")).toEqual(["X1"]);
   });
 
   it("every rule is well-formed and every authority is in scope", () => {

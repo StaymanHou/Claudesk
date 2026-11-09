@@ -545,7 +545,7 @@ mod tests {
 
     #[test]
     fn a_grandchild_holding_a_pipe_does_not_discard_a_successful_answer() {
-        // Probe B: the child succeeded; only its background grandchild still holds stderr.
+        // The child succeeded; only its background grandchild still holds stderr.
         let start = Instant::now();
         let out = run_command(sh("sleep 6 >/dev/null & echo answer"), "", 1_000)
             .expect("a successful exit must be Ok even with a pipe still held");

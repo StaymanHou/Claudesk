@@ -34,11 +34,12 @@ claim's nouns, not a known-wrong number.
 
    ⚠️ **`showRecycleButton` is a SEPARATE probe from `showSkillButtons`, not a formality.** The two are byte-identical one-liners, so a guard checking only the array would report the row clean while a live Recycle button sat beside it. **Mutation-proven independent** at M13 WP4: bypassing either left the other's assertions green. ⚠️ **At the render site, though, the row's gate strictly DOMINATES** — Recycle is nested inside the `showSkillButtons(…) &&` block, so a future divergence between the two predicates could only ever *remove* Recycle, never show it when the row is hidden. The documented independence is half-realized (WP3 review MINOR (a)).
 
-   ⚠️ **The guard's mechanics live in its own header** (`offInvariantGuard.test.ts`, which is
-   executable and so the authority): why arm 5 has no ungated half and pins its premise instead,
-   why each arm must be probed individually, and the `WORKFLOW_TERMS` vocabulary gap (it holds
-   neither "recycle" nor "session", so a `RECYCLE_SESSION` menu id would register unseen by arms
-   1–3: `SURFACE-2026-08-18-GUARD-VOCABULARY-MISSES-RECYCLE-AND-SESSION`, open and unexercised).
+   ⚠️ **The guard's mechanics live in the guard itself** (`offInvariantGuard.test.ts`, which is
+   executable and so the authority). Its header says why arm 5 has no ungated half and pins its
+   premise instead, and why each arm must be probed individually. The `WORKFLOW_TERMS` vocabulary
+   gap is recorded at its **ARM 6 banner**, not the header: the list holds neither "recycle" nor
+   "session", so a `RECYCLE_SESSION` menu id would register unseen by arms 1–3
+   (`SURFACE-2026-08-18-GUARD-VOCABULARY-MISSES-RECYCLE-AND-SESSION`, open and unexercised).
    The M13 WP4 per-subject probe went red via each subject's own arm. The supervisor authored no
    surface that would exercise the gap; its `recycle`-named exports are data, not surfaces:
    the numeric `RECYCLE_TOKEN_THRESHOLD` and the edge set `RECYCLE_BOUNDARY_EDGES` (M16.5 WP9) (→ [workflow-supervisor](workflow-supervisor.md) §G).

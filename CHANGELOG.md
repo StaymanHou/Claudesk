@@ -9,6 +9,14 @@
 - **Backlog resolved:** SURFACE-2026-11-08-QUALITY-WP9-TEST-COMMENTS-USE-OLD-CONDITION-NUMBERS — the recycle-branch test comments name the falsified condition (threshold, feature workflow, WIP boundary), so a renumber cannot stale them.
 - **Backlog resolved:** SURFACE-2026-11-08-QUALITY-WP9-DOCSTRING-CARRIES-A-DATE — the `RECYCLE_BOUNDARY_EDGES` docstring no longer carries "M16.5 WP9, 2026-11-07".
 - **Backlog resolved:** SURFACE-2026-11-08-QUALITY-WP9-BOUNDARY-SET-IS-STRING-TYPED — closed as won't-do: edge IDs are `string` project-wide, so typing this one set alone would be inconsistent, and the runtime guard that every member is a real feature edge stays.
+- **Task closed:** Backlog-paydown 2026-11-08 WP3 makes the `singleAuthority` guard's `absent` rules match the same normalized, case-insensitive text as its `once` rules with their own flags kept, gives each rule permanent example labels, and adds a `backlogHeadings` guard that rejects a duplicated or malformed `## ` heading in the two backlog files; the tightened matcher found one real leftover probe label.
+- **Backlog resolved:** SURFACE-2026-11-07-QUALITY-WP14-ABSENT-RULES-MATCH-RAW-CASE-SENSITIVE-TEXT — `absent` patterns now go through one matcher that normalizes the source, adds `i` and keeps the pattern's own flags; a wrapped `paydown`/`WP7` label and a capitalized `(Paydown WP7,` now fail it (HEAD's guard passed both), and the one real hit, a `Probe B:` label in `adjudicator/mod.rs`, was removed.
+- **Backlog resolved:** SURFACE-2026-11-07-QUALITY-WP14-ABSENT-RULES-HAVE-NO-PERMANENT-POSITIVE-CONTROL — each `absent` rule carries example labels, including wrapped and differently cased ones, that a meta test runs through the rule loop's own matcher, so a broken pattern now fails.
+- **Backlog resolved:** SURFACE-2026-11-07-QUALITY-WP14-GUARD-HEADER-OVERCLAIMS-COPY-PASTE-ORIGIN — the guard header now says "most instances" and names the two paraphrase rules that guard regrowth only.
+- **Backlog resolved:** SURFACE-2026-11-07-QUALITY-WP14-BARE-DIGIT-FINGERPRINTS — the transcript-drift rule fingerprints the phrase `2282 → 2284` instead of two bare digit runs, so an unrelated `122824` no longer trips it.
+- **Backlog resolved:** SURFACE-2026-11-07-QUALITY-WP14-WORKFLOW-GATE-POINTER-MISSES-THE-TERMS-GAP — `arch/workflow-gate.md` now points to the OFF-invariant guard's ARM 6 banner, which is where the recycle/session vocabulary gap is actually recorded.
+- **Backlog resolved:** SURFACE-2026-11-07-QUALITY-WP14-COMMENT-BUDGET-DOES-NOT-NAME-THE-GUARD — the comment-budget section of `source-text-guards.md` tells a new canonical home to add a `singleAuthority` `once` rule.
+- **Backlog resolved:** SURFACE-2026-08-26-DELETE-ON-RESOLVE-REWRITE-PATH-SKIPS-THE-DELETE (partial: the local guard) — `backlogHeadings.test.ts` fails on a duplicated or malformed `## ` heading in `backlog.md` and `backlog-quality-findings.md`; the upstream prose fix stays open.
 
 ## 2026-11-08
 

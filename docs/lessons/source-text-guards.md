@@ -528,6 +528,10 @@ the other five keep asserting the old thing with equal confidence. State it **on
 canonical home, and make every other site a pointer. Measured instances in this repo: a milestone
 rationale in six files, a validation-asymmetry warning in three, an incident narrative in three.
 
+When you make a canonical home, add a `once` rule for it to `src/__tests__/singleAuthority.test.ts`
+(its authority plus one or two exact fingerprint phrases). Without a rule, a new duplicate is caught
+only by whoever happens to remember the table exists.
+
 ⚠️ **At high density, prose that is 95% accurate reads as authoritative** — and the wrong 5% is
 what gets acted on. Three findings in one review were stale *comments* rather than code, including
 a headroom figure the same commit corrected in three other files. Density is not free even when

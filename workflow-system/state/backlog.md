@@ -10,14 +10,6 @@
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
 
-## Code-quality findings — paydown-2026-11-04-wp14-comment-convention-pass (2026-11-07)
-
-- **Pointer:** **1 MAJOR + 5 MINOR** from the review of `20930c3` (0 CRITICAL). MAJOR: `singleAuthority.test.ts`'s `absent` rules match raw, case-sensitive text and drop their patterns' flags, so wrapped or capitalized labels evade them while the header claims normalized matching. MINORs: no permanent positive control per `absent` rule; a header overclaim; bare-digit fingerprints; a misaimed `workflow-gate.md` pointer; the comment budget does not name the guard.
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp14-comment-convention-pass — 2026-11-07`.
-- **Priority:** medium (MAJOR) / low (MINORs)
-- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
-- **Pickup shape:** one small task on `singleAuthority.test.ts` (MAJOR + the control + the two header/fingerprint MINORs together); the two doc pointers fold into it.
-
 ## Code-quality findings — paydown-2026-11-04-wp13-settings-split-and-picker-row (2026-11-06)
 
 - **Pointer:** **1 MINOR** remains from the review of `0e7c138` (0 CRITICAL, 0 MAJOR): the picker's five live tests share no harness. (The guard-ordering and guard-rename MINORs were resolved at paydown WP13b, and the `PickerRow.tsx` comment indentation at WP14, both 2026-11-07.)
@@ -448,7 +440,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium (cheap prose fix + a cheap guard; the failure silently contradicts a shipped
   record and nothing re-reads a closed item).
 - **Evidence 2026-09-23 (paydown-2026-09-23 WP1) — the class at SCALE:** 22 of 100 code-quality finding bodies were resolved-but-undeleted, most by the 2026-08-18/19 paydown, whose CHANGELOG lines claimed them while the bodies stayed. So were 10 of 34 pointer stubs, whose counts no longer matched their bodies, and one claimed closure was only HALF true (`SURFACE-2026-08-18-QUALITY-WP3-LATE-SUBSCRIPTION-DISPOSAL-UNTESTED`: one arm of two). A sweep that resolves SUB-ITEMS of a grouped entry is where this happens, because no heading disappears, so nothing prompts the delete.
-- **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §F.11 (upstream half; a local duplicate-heading guard is optional); stays OPEN until mccc applies it
+- **Status:** pending — upstream (mccc) ONLY — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §F.11. ✅ The **local half is DONE** (backlog-paydown-2026-11-08 WP3): `src/__tests__/backlogHeadings.test.ts` fails on a duplicated or malformed `## ` heading in `backlog.md` and `backlog-quality-findings.md`. Stays OPEN until mccc applies the prose fix.
 
 ## SURFACE-2026-08-25-OBSERVABLE-OUTCOME-ASSERTED-A-GREEN-GATE-ITS-OWN-PHASE-BREAKS
 - **Source:** feature:verify-self (M13.5 WP3 Phase 1)

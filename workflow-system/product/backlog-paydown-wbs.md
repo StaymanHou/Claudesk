@@ -169,6 +169,13 @@ Runs right after WP2 because both touch the comment-budget/single-authority surf
 - **Resolves:** all 6 WP14 QF bodies + the `paydown-2026-11-04-wp14-…` pointer stub (BL). The local
   half of `08-26-DELETE-ON-RESOLVE-…` is done; **rewrite** that entry's Status to say so (it stays
   open upstream).
+- ✅ **DONE 2026-11-09.** The tightened matcher found **one REAL violation at HEAD**: `// Probe B:` in
+  `src-tauri/src/adjudicator/mod.rs`, which the old case-sensitive `probe [AB]` missed. It was removed.
+  No case-fold false positives. 11 mutants were each killed individually (wrapped label, capitalized
+  label, own flags dropped, no case-fold, no normalize, broken pattern, duplicate heading ×2 files,
+  mangled heading, field-recycle copy, transcript phrase copy); HEAD's guard passed the wrapped and
+  capitalized mutants. `once` rule added for the field-recycle figures. ⚠️ Not guarded: a rule loop
+  that stops calling `absentHits` (the examples would still pass); the shared matcher makes it unlikely.
 
 ## WP4: Picker live-test harness + the `findResultsReplaceLive` flake  `[impact: Med · effort: S–M · risk: Low (test-only)]` · task
 
