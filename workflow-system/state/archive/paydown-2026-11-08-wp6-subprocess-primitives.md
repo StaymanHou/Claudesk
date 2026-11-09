@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: Paydown 2026-11-08 WP6 — shared subprocess primitives
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-11-09
 **Created:** 2026-11-09
 
 ## Problem Statement
@@ -125,11 +125,47 @@ Problem statement unchanged (2026-11-09, F9 back-loop): the failure was `cargo f
 - ⚠️ **GUI-PATH smoke owed at the next `/release`:** the adjudicator's `claude -p` spawn is install-sensitive, and the suite cannot see a GUI-PATH regression. The installed build's `supervisor-activity.log` must show at least one `adjudicator (model): …` verdict. Carry this into the relevant backlog entry at fold-back.
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality against the ship commit
+- **Path:** Feature > finalize (complete)
+- **Active scope:** none — archived
 - **Blocked:** none
 - **Unvisited:** none (Phase 2 is the last)
 - **Open discoveries:** none
+
+## Code-Quality Review
+
+*(feature-review-quality on ship commit `1ccf9c4`, window `1ccf9c4^..1ccf9c4`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*
+
+### Strengths
+- One acquire site, one release site: `HeldRunLock::try_acquire` makes acquire-and-hold one step, so the four manual early-return releases are gone; `begin_install` / `begin_uninstall` let tests drive the commands' real synchronous half; the source guard is two-directional (exactly-one counts).
+- `subprocess/mod.rs` states the group-kill limits once; keeping the adjudicator's `Drain` separate was the right call, and the module doc says why.
+- Tests are built so right and wrong answers differ (the slow-sink test, the distinct `seq` lines in the flood test).
+- The per-stream tail has a measured reason, recorded on `OutputBudget`; stderr stays last on truncated and untruncated runs alike.
+- `on_blocking_worker` gives five commands one panic wording, with ok / err / panic / off-thread tests.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`workflow_install/runner.rs`, both kill exits of `run_streaming`] The `while let Ok(..) = rx.try_recv()` drain runs BEFORE the readers' `stop` flag is set (`StopOnDrop` drops only on return). A writer that escaped the group (`setsid`, which the module doc lists as surviving) and floods the pipe at least as fast as the consumer handles lines makes the drain unbounded, which breaks "always returns by `deadline`" and keeps the install lock held. The deadline exit's drain pre-dates WP6; the grace exit's copy is new. Fix: set the flag before draining, or drain a bounded snapshot (by count or time), at both exits.
+
+**MINOR**
+- [`subprocess/mod.rs` `MAX_OUTPUT`] It now carries three meanings: the adjudicator's per-pipe cap, the runner's combined budget, and the per-line read limit. The adjudicator's own reason ("a verdict is a few hundred bytes") was dropped in the move. Tuning the runner's budget silently changes the adjudicator's `OutputTooLarge` threshold.
+- [`runner.rs` `truncation_note`] "the last {shown} follow" implies arrival order; the tail is stdout's then stderr's. Suggest "the last lines of each stream follow".
+- [5 command docs + `sync_commands_do_not_block.rs` `ASYNC_COMMANDS` / `SPAWN_BOUNDARIES`] They still say the work runs on `spawn_blocking`; the call sites say `on_blocking_worker`, and `SPAWN_BOUNDARIES` does not list it (harmless today: async bodies are not scanned).
+- [`runner.rs` `read_bounded_line`] A line over `MAX_OUTPUT` is cut with no marker, unlike the budget's note.
+
+### Assessment
+Net debt paid down: five prior findings closed with real structure (RAII lock, one process-group module, one blocking hop) and discriminating tests. The one real gap is the drain loop: "lose nothing at the grace exit" spread an unbounded drain to a second exit without setting `stop` first, which weakens the deadline promise in the setsid-flood case. The fix is small. The rest is doc polish.
+
+### If you disagree
+Mark a finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** two things the tests found. (1) The two pipes' reader threads deliver lines in their OWN order, not the script's, so any "last N lines" window over a merged stream can evict the very error it exists to keep; the tail had to be per stream. (2) The old `lines()` reader didn't just risk unbounded memory: it stopped reading at the first invalid UTF-8 line, leaving the pipe unemptied for the rest of the run.
+- **Assumptions that held:** the primitives were truly identical and consolidated cleanly; extracting `begin_*` made the run-lock paths testable without a new dependency.
+- **Assumptions that were wrong:** (a) the first burst test passed with the fix removed, because a fast sink empties the channel inside the grace; it needed a slow sink to discriminate. (b) A test helper `gone_within(pid, ZERO)` checked nothing, which made two "control: alive" assertions vacuous until a sibling test failed. (c) The plan's Phase 1 outcomes named no consuming surface; verify-self back-looped once to add them.
+- **Approach delta:** the operator's two cap rulings (C, then A per stream) added a tail mechanism the plan did not have; 5 hops migrated instead of 3; the review then found the kill-exit drain runs before `stop` (MAJOR, backlogged).
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

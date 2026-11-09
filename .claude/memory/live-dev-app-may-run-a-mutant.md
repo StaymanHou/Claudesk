@@ -1,6 +1,6 @@
 ---
 name: live-dev-app-may-run-a-mutant
-description: Mutation-testing Rust while `pnpm tauri:dev` runs lets its watcher rebuild + restart the app from a MUTANT; check the process start time and binary mtime against the last restore and force a clean rebuild before any live check.
+description: Mutation-testing Rust while `pnpm tauri:dev` runs lets its watcher rebuild + restart the app from a MUTANT; check the process start time and binary mtime against the last restore and force a clean rebuild before any live check. Find the app with `pgrep -x claudesk` (`pgrep -f` matches the Bash wrapper shell).
 metadata:
   type: project
 ---
@@ -14,7 +14,7 @@ Hit 2026-11-02 (M16.5 WP6 Phase 2): after two Rust mutants, the dev process had 
 the final restore, too close to be sure it was built from the restored file.
 
 **How to apply:** before any live verify-self that follows a mutation run, compare
-`ps -o lstart= -p <pid>` (from `pgrep -f target/debug/claudesk`) and
+`ps -o lstart= -p <pid>` (from `pgrep -x claudesk`, NOT `pgrep -f`; see below) and
 `stat -f %Sm src-tauri/target/debug/claudesk` against the time of the last restore. If either is not
 clearly later, `touch` a source file and wait for a NEW PID before observing.
 
@@ -27,3 +27,12 @@ by `Running \`target/debug/claudesk\`` (strip ANSI before grepping; the cargo pr
 `Finished` on the same line as `Building`). Related:
 [[verify-the-mutation-landed]] (the mutant must land) and [[hmr-stale-across-file-rename]] (the
 frontend twin: a stale HMR module).
+
+⚠️ **Find the dev app with `pgrep -x claudesk`, never `pgrep -f target/debug/claudesk`** (added
+2026-11-09, backlog-paydown-2026-11-08 WP6). The Bash tool runs each command inside a wrapper shell whose
+OWN command line contains the whole command text, so `pgrep -f <pattern>` matches that wrapper whenever
+the pattern appears in the same command, and a `kill $(pgrep -f …)` can then kill the agent's own shell
+(observed: the wrapper `/bin/zsh -c … pgrep -fl "target/debug/claudesk" …` listed as a match while the app
+had not started yet). `pgrep -x claudesk` matches the process NAME exactly. Before any kill, confirm the
+PID is one this session launched (`ps -o pid,lstart,command -p <pid>`); never kill a dev build you did not
+start ([[lsof-ti-tcp-misses-ipv6-vite]]).

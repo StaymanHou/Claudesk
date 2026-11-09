@@ -41,17 +41,18 @@ This is not hypothetical:
 and follows calls transitively, so it fails on the pre-fix `cc_kill`. A flagged command has two
 fixes:
 - move the wait to a worker (`SessionRegistry::take` + `thread::spawn`), or
-- make the command `async` (`async fn` + `tauri::async_runtime::spawn_blocking` for long waits, or
+- make the command `async` (`async fn` + `crate::blocking::on_blocking_worker(what, work)` for long
+  waits, the one `spawn_blocking` hop, which also names a panicked worker in its error; or
   `#[tauri::command(async)]` for short ones). ⚠️ `(async)` on a sync body moves the wait onto an
   async-runtime WORKER, which an unbounded wait then holds for good: the dry run shipped that way
-  and was fixed at paydown 2026-11-04 WP4. Bound the wait, and use `spawn_blocking`.
+  and was fixed at paydown 2026-11-04 WP4. Bound the wait, and use `on_blocking_worker`.
 
 The guard's `LEDGER` holds the accepted exceptions, each with a reason, and its `ASYNC_COMMANDS`
 lists every async command with why it is async. ⚠️ **What it cannot see** (the guard's module doc,
 "What this does NOT cover", is the canonical list; these are the ones that bite here):
 - **a lock held across a main-thread marshal** (the incident's other fault, `tray::reconcile`);
 - **the body of an async command**: it is listed with a reason, not scanned, so a blocking call
-  added later outside its `spawn_blocking` is not seen;
+  added later outside its `on_blocking_worker` closure is not seen;
 - calls inside macros, and fns passed as values.
 
 Those still need review. ⚠️ `run_on_main_thread` from a sync command is NOT an escape hatch: the

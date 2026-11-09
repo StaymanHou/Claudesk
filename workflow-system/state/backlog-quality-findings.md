@@ -4,55 +4,6 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
-# paydown-2026-11-04-wp4-run-lock-and-sync-guard — 2026-11-04
-
-*(feature-review-quality on ship commit `190b3a2`, window `00ebf92..190b3a2`; drive_mode=autopilot. 1 MAJOR + 4 MINOR auto-backlogged.)*
-
-## SURFACE-2026-11-04-QUALITY-WP4-PROCESS-GROUP-PRIMITIVES-DUPLICATED
-- **Severity:** MAJOR
-- **Location:** `src-tauri/src/workflow_install/runner.rs` (`StopOnDrop`, `DRAIN_GRACE`, `kill_group`, `kill_and_reap`) vs `src-tauri/src/adjudicator/mod.rs` (`StopOnDrop`, `DRAIN_GRACE`, `kill_tree`).
-- **Finding:** The process-group primitives are copied rather than shared: an identical `StopOnDrop` struct and Drop body, the same 250 ms grace, and the same group-SIGKILL → kill → reap sequence. Not reusing `Drain` itself is justified, because `Drain` is a capped byte buffer and `run_streaming` needs live per-line delivery to a sink. The primitives beneath it are not.
-- **Why it matters:** There are two kill-and-reap implementations, and only the adjudicator documents its limits. Its "does NOT do" list (a grandchild that `setsid`s or uses job control escapes the group kill) applies to the runner too, unstated. A future fix, such as descendant tracking, will land in one copy only.
-- **Suggested action:** A small shared module (process-group spawn, `kill_group`, `kill_and_reap`, `StopOnDrop`, the grace constant, and the limits doc). Do it before a third subprocess runner appears.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-11-04-QUALITY-WP4-GRACE-PATH-DROPS-QUEUED-OUTPUT
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/workflow_install/runner.rs`, `run_streaming`, the grace-expiry arm.
-- **Finding:** The grace-expiry arm calls `kill_group` and breaks without draining lines still queued in `rx`, while the deadline arm drains with `try_recv`. Each loop pass consumes one line, so a burst still in the channel when the grace ends is lost.
-- **Why it matters:** The two kill exits handle in-flight output differently.
-- **Suggested action:** The same three-line `try_recv` drain before the break, with a test that emits a burst then backgrounds a pipe holder.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-04-QUALITY-WP4-RUN-STREAMING-OUTPUT-UNCAPPED
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/workflow_install/runner.rs`, `run_streaming` (`combined`, `stderr`, the unbounded channel, `BufReader::lines()`).
-- **Finding:** No output cap. The adjudicator added `MAX_OUTPUT` after a pipe flood produced a measured 1.9 GB allocation (paydown 2026-09-23 WP9 probe P4). The gap pre-dates WP4, but the 600 s deadline now bounds how much can pile up.
-- **Why it matters:** A lesson already learned next door was not carried over. The risk is low, because the script is the managed clone's own `install.sh`.
-- **Suggested action:** Cap the accumulated output (discard past N bytes and append a truncation note), never by backpressure on the pipe. Fold this into the shared module above.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-04-QUALITY-WP4-THREE-WAYS-TO-RELEASE-THE-RUN-LOCK
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/workflow_install/commands.rs`: `RunGuard` (the workers), `HeldRunLock` (the dry run), and manual `running.store(false)` on the early-error returns of `workflow_install_start` / `workflow_uninstall_start`.
-- **Finding:** The single-run lock is released three different ways, and `HeldRunLock` can be built without acquiring the lock, so taking and releasing it are still separate statements.
-- **Why it matters:** The manual releases on early returns are the shape a panic or an early `?` has wedged before.
-- **Suggested action:** `HeldRunLock::try_acquire(&control) -> Option<Self>`, used by all three commands and held by `RunGuard`, removes the four manual releases. ⚠️ `every_substrate_touching_command_takes_the_single_run_lock` greps `running.swap(true` within 400 chars of each command, so it must move with this change.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-04-QUALITY-WP4-SPAWN-BLOCKING-HOP-REPEATED
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/editor_fs/commands.rs` (`trash_path`), `src-tauri/src/adjudicator/commands.rs` (`on_worker`), `src-tauri/src/workflow_install/commands.rs` (`finish_on_worker`).
-- **Finding:** `spawn_blocking(...).await.map_err(|e| format!("… stopped unexpectedly: {e}"))?` appears three times, each worded differently.
-- **Why it matters:** It is the remedy `ASYNC_COMMANDS` reasons point to, so it will spread as more commands move off the main thread.
-- **Suggested action:** A shared helper. Low cost either way.
-- **Priority:** low
-- **Status:** pending
-
 # m12-wp1-probe-flag-store-and-announce — 2026-08-03
 
 ## SURFACE-2026-08-03-QUALITY-WP1-PHASE2-OBSERVABLE-LEFT-UNAMENDED
@@ -63,4 +14,53 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** No code change. Consider whether `feature-verify-codify` should prompt to reconcile observables that a verdict reversed. Low value alone; worth folding into a future workflow-system pass.
 - **Priority:** low
 - **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §B.6
+
+# paydown-2026-11-08-wp6-subprocess-primitives — 2026-11-09
+
+*(feature-review-quality on ship commit `1ccf9c4`, window `1ccf9c4^..1ccf9c4`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-09-QUALITY-WP6-KILL-EXIT-DRAIN-UNBOUNDED-BEFORE-STOP
+- **Severity:** MAJOR
+- **Location:** `src-tauri/src/workflow_install/runner.rs`, `run_streaming`, both kill exits (the drain-grace arm and the deadline arm).
+- **Finding:** each exit drains with `while let Ok(..) = rx.try_recv()` before the readers' `stop` flag is set (`StopOnDrop` drops only when the function returns). A writer outside the group (a `setsid` grandchild, which `subprocess`'s doc lists as surviving the kill) that keeps the pipe fed at least as fast as the consumer handles lines makes that loop unbounded. Before the budget is spent, each line costs a `sink.line` emit, so the producer easily outruns it.
+- **Why it matters:** it breaks `run_streaming`'s headline promise ("It always returns by `deadline`") on the path that keeps the install lock held, which is the bug the deadline exists to prevent. The deadline arm's drain pre-dates WP6; WP6 copied it to the grace arm.
+- **Suggested action:** set the stop flag before draining (each reader then sends at most one more line), or drain a bounded snapshot (by count, or by time), at BOTH exits. Test: a `setsid` flooder that outlives the child; the run must return within deadline + a small margin.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-09-QUALITY-WP6-MAX-OUTPUT-CARRIES-THREE-MEANINGS
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/subprocess/mod.rs`, `MAX_OUTPUT`; used by `adjudicator` (per-pipe cap), `run_streaming` (combined budget) and `read_bounded_line` (per-line limit).
+- **Finding:** one constant, three meanings; its doc ("the most output a runner keeps") fits none exactly, and the adjudicator's own reason ("a verdict is a few hundred bytes") was dropped in the move.
+- **Why it matters:** tuning the runner's budget silently changes the adjudicator's `OutputTooLarge` threshold.
+- **Suggested action:** separate named constants (or one doc that names all three uses), and restore the adjudicator's reason at its use.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-09-QUALITY-WP6-TRUNCATION-NOTE-IMPLIES-ARRIVAL-ORDER
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/workflow_install/runner.rs`, `truncation_note`.
+- **Finding:** "the last {shown} follow" reads as the last N dropped lines in arrival order; the tail is stdout's tail, then stderr's.
+- **Why it matters:** a reader of the wizard output could take the stdout-then-stderr block for the real order.
+- **Suggested action:** reword to e.g. "the last lines of each stream follow" (update the two tests that pin the note).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-09-QUALITY-WP6-DOCS-STILL-NAME-SPAWN-BLOCKING
+- **Severity:** MINOR
+- **Location:** the doc headers of `supervisor_adjudicate`, `time_analytics_query`, `trash_path`, `profile_delete`, `workflow_uninstall_dry_run`; `src-tauri/tests/sync_commands_do_not_block.rs` `ASYNC_COMMANDS` reasons and `SPAWN_BOUNDARIES`.
+- **Finding:** they say "the work runs on `spawn_blocking`"; the call sites now call `on_blocking_worker`, which `SPAWN_BOUNDARIES` does not list.
+- **Why it matters:** a grep by the documented name misses the call sites. Harmless today (async bodies are not scanned); a sync path reaching `on_blocking_worker` would be a loud false positive.
+- **Suggested action:** name `on_blocking_worker` in those docs/reasons, and add it to `SPAWN_BOUNDARIES`.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-09-QUALITY-WP6-LONG-LINE-CUT-WITHOUT-MARKER
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/workflow_install/runner.rs`, `read_bounded_line` / `start_line_reader`.
+- **Finding:** a line longer than `MAX_OUTPUT` is cut silently; the kept part has no marker, unlike the budget's note.
+- **Why it matters:** rare, but a cut line reads as a complete one.
+- **Suggested action:** append a short marker (e.g. ` […line cut]`) when the remainder was discarded.
+- **Priority:** low
+- **Status:** pending
 

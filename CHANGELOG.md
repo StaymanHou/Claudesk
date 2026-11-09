@@ -20,6 +20,12 @@
 - **Task closed:** Backlog-paydown 2026-11-08 WP4 gives the picker's live tests one shared harness (`livePicker.tsx`) and every live test one tag-checked, realm-safe `setNativeValue` plus a bounded `waitForElement`, migrating seven test files with each one's original mutant still failing.
 - **Backlog resolved:** SURFACE-2026-11-06-QUALITY-WP13-PICKER-LIVE-TESTS-HAVE-NO-SHARED-HARNESS — the five picker live tests mount through `livePicker.tsx` (one IPC lifecycle, the gate moved only by its broadcast); same test counts, and each still fails on the mutant it was written for.
 - **Backlog resolved:** SURFACE-2026-11-07-FIND-RESULTS-REPLACE-LIVE-FLAKES-UNDER-FULL-SUITE-LOAD — fixed by construction: the flake never reproduced in 10 full-suite runs (5 under CPU load), but its exact message is what the old setter throws on a `null` query result, so `typeInto` now waits for its field and every setter is tag-checked; 10 runs after the change were also clean.
+- **Feature shipped:** Backlog-paydown 2026-11-08 WP6 gives the install runner and the adjudicator one shared `subprocess` module, has the install output cap keep the start, a note and each stream's last lines (so a flooding script that fails still shows its error), takes and releases the install run lock in exactly one place each, and routes every async command's blocking work through one `on_blocking_worker` hop.
+- **Backlog resolved:** SURFACE-2026-11-04-QUALITY-WP4-PROCESS-GROUP-PRIMITIVES-DUPLICATED — `src-tauri/src/subprocess/` now holds the process-group spawn, group kill + reap, `StopOnDrop`, the drain grace and the limits doc, and both runners use it.
+- **Backlog resolved:** SURFACE-2026-11-04-QUALITY-WP4-GRACE-PATH-DROPS-QUEUED-OUTPUT — the drain-grace exit keeps every line still queued in the channel, as the deadline exit did; a slow-sink test fails without it.
+- **Backlog resolved:** SURFACE-2026-11-04-QUALITY-WP4-RUN-STREAMING-OUTPUT-UNCAPPED — `run_streaming` caps output at 4 MiB (clean start, one note, then each stream's last 200 lines / 64 KB), bounds a single line, and decodes invalid UTF-8 instead of stopping the read.
+- **Backlog resolved:** SURFACE-2026-11-04-QUALITY-WP4-THREE-WAYS-TO-RELEASE-THE-RUN-LOCK — `HeldRunLock::try_acquire` is the one acquire and its `Drop` the one release; `RunGuard` holds it, and the four manual early-return releases are gone.
+- **Backlog resolved:** SURFACE-2026-11-04-QUALITY-WP4-SPAWN-BLOCKING-HOP-REPEATED — `on_blocking_worker` replaces all five `spawn_blocking` hops, with one error wording for a panicked worker.
 
 ## 2026-11-08
 

@@ -1,13 +1,5 @@
 # Backlog
 
-## Code-quality findings — paydown-2026-11-04-wp4-run-lock-and-sync-guard (2026-11-04)
-
-- **Pointer:** **1 MAJOR + 4 MINOR** from the review of `190b3a2`. MAJOR: the process-group primitives (`StopOnDrop`, the grace constant, group kill + reap) are copied between `workflow_install::runner` and `adjudicator`, not shared, and only one copy documents its limits. MINOR: the grace path drops queued output; `run_streaming` has no output cap; there are three ways to release the run lock; the `spawn_blocking` hop is repeated.
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp4-run-lock-and-sync-guard — 2026-11-04`.
-- **Priority:** medium (MAJOR) / low (the rest)
-- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
-- **Pickup shape:** one small task: a shared `subprocess` module (group spawn, kill + reap, stop-on-drop, grace, output cap, limits doc) that both runners use, plus the grace-path drain. The lock-release unification and the hop helper are independent one-liners.
-
 ## SURFACE-2026-09-28-IS-TURN-START-FIRES-ON-MID-TURN-DEQUEUES
 - **Source:** feature:build (`supervisor-activity-record`, P3.1 probe)
 - **Target level:** product:arch
@@ -582,3 +574,12 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** In FSD context, count a `feature-verify-codify` invocation as the chain, or more generally accept the mode's next skill. Add a fixture with one FSD F10b → codify turn that must read as chained. Then re-derive the pre-fix baselines to see whether any moved.
 - **Priority:** low (the F10b entry it was measuring is resolved; this matters only for future readings)
 - **Status:** open — upstream (mccc); not yet sent
+
+## Code-quality findings — paydown-2026-11-08-wp6-subprocess-primitives (2026-11-09)
+
+- **Pointer:** **1 MAJOR + 4 MINOR** from the review of `1ccf9c4`. MAJOR: both kill exits of `run_streaming` drain the channel before setting the readers' stop flag, so a `setsid` writer flooding the pipe can keep the run (and the install lock) past its deadline. MINOR: `MAX_OUTPUT` carries three meanings; the truncation note implies arrival order; docs still name `spawn_blocking`; a long line is cut without a marker.
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-08-wp6-subprocess-primitives — 2026-11-09`.
+- **Priority:** medium (MAJOR) / low (the rest)
+- **Status:** pending
+- **Pickup shape:** one small task: set `stop` (or bound the drain) at both exits with a `setsid`-flood test, plus the doc/naming MINORs in the same pass.
+
