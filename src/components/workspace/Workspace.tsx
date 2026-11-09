@@ -61,7 +61,11 @@ import {
   getSessionDriveMode,
   type DriveMode,
 } from "../../cc/driveModeIpc";
-import { actionFromAnnounced } from "../../state/predictAction";
+import {
+  actionFromAnnounced,
+  isManualAnnounced,
+  type AnnouncedAction,
+} from "../../state/predictAction";
 import { nextOpenIndicator } from "./sessionStartButton";
 // M13 WP2 — the skill-button row. ⚠️ It ABSORBED the standalone `/session-start` button that
 // used to live here: `/session-start` is a member of the row's fixed set, so keeping both would
@@ -374,7 +378,7 @@ export function Workspace({
     // so this adds no per-workspace IPC shape. ⚠️ `.catch` is mandatory: an unhandled Tauri
     // rejection vanishes silently (the WP6 picker MAJOR), and this surface failing quietly is
     // exactly the write-only problem it exists to fix.
-    invoke<Record<string, "continue" | "restore">>("picker_announce_actions")
+    invoke<Record<string, AnnouncedAction>>("picker_announce_actions")
       .then((map) => {
         if (cancelled) return;
         const announced = map[workspace.project_path];
@@ -393,6 +397,8 @@ export function Workspace({
           nextOpenIndicator({
             workflowEnabled: true,
             action: actionFromAnnounced(announced),
+            // paydown-2026-11-08 WP5 — an untrusted folder's restore will not be typed for you.
+            manual: isManualAnnounced(announced),
           }),
         );
       })

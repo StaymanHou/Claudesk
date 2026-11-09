@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { actionFromAnnounced, type AnnouncedAction } from "../predictAction";
+import {
+  actionFromAnnounced,
+  isManualAnnounced,
+  type AnnouncedAction,
+} from "../predictAction";
 
 // M12 WP3 Phase 2 verify-codify — the FE↔BE wire vocabulary must agree.
 //
@@ -91,12 +95,27 @@ describe("the announce wire vocabulary agrees across the FE↔BE boundary", () =
     expect(rust).toBe(ts);
   });
 
+  it("ACTION_RESTORE_MANUAL matches the TS vocabulary (paydown-2026-11-08 WP5)", () => {
+    const rust = rustConst("ACTION_RESTORE_MANUAL", src);
+    const ts: AnnouncedAction = "restore-manual";
+    expect(rust).toBe(ts);
+    // It must read as the manual variant on the TS side, or the row promises a fire.
+    expect(isManualAnnounced(rust as AnnouncedAction)).toBe(true);
+    expect(
+      isManualAnnounced(rustConst("ACTION_RESTORE", src) as AnnouncedAction),
+    ).toBe(false);
+  });
+
   it("every Rust action value maps to a real action, not the default arm", () => {
     // The consequence test, and the one that states the actual failure mode rather than a
     // string comparison: whatever the backend can send must resolve to a typed action. If
     // a value drifts, `actionFromAnnounced` falls through to `default → null` and every
     // row silently reads as "no prediction".
-    for (const name of ["ACTION_CONTINUE", "ACTION_RESTORE"]) {
+    for (const name of [
+      "ACTION_CONTINUE",
+      "ACTION_RESTORE",
+      "ACTION_RESTORE_MANUAL",
+    ]) {
       const value = rustConst(name, src);
       const action = actionFromAnnounced(value as AnnouncedAction);
       expect(
@@ -106,12 +125,15 @@ describe("the announce wire vocabulary agrees across the FE↔BE boundary", () =
     }
   });
 
-  it("the two Rust values are distinct", () => {
-    // A copy-paste making both constants the same string would collapse the two arms into
-    // one and pass every equality check above that happened to match.
-    expect(rustConst("ACTION_CONTINUE", src)).not.toBe(
-      rustConst("ACTION_RESTORE", src),
-    );
+  it("the Rust values are distinct", () => {
+    // A copy-paste making two constants the same string would collapse arms into one and pass
+    // every equality check above that happened to match.
+    const values = [
+      "ACTION_CONTINUE",
+      "ACTION_RESTORE",
+      "ACTION_RESTORE_MANUAL",
+    ].map((n) => rustConst(n, src));
+    expect(new Set(values).size).toBe(values.length);
   });
 
   it("neither value is a slash command or a raw CLI flag", () => {
@@ -119,7 +141,11 @@ describe("the announce wire vocabulary agrees across the FE↔BE boundary", () =
     // vocabulary is deliberately neither: `"continue"` rather than `--continue` (the flag
     // is an implementation detail of the argv arm) and never `/resume` (which names the
     // picker-opening command this design exists to avoid).
-    for (const name of ["ACTION_CONTINUE", "ACTION_RESTORE"]) {
+    for (const name of [
+      "ACTION_CONTINUE",
+      "ACTION_RESTORE",
+      "ACTION_RESTORE_MANUAL",
+    ]) {
       const value = rustConst(name, src);
       expect(value.startsWith("/"), `${name} must not be a slash command`).toBe(
         false,

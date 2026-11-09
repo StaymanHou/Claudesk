@@ -37,5 +37,15 @@ pub fn picker_announce_actions(app: AppHandle) -> AnnounceMap {
     };
     // Gate read is server-side and FIRST — an OFF gate returns before any project-dir IO.
     let gate_enabled = read_workflow_features_enabled(&dir).unwrap_or(false);
-    super::announce_actions(&dir, gate_enabled)
+    // paydown-2026-11-08 WP5 — an untrusted folder's restore row is announced as manual. The
+    // default profile's record is read only if some row reached the restore arm.
+    let home = app.path().home_dir().ok();
+    super::apply_trust(super::announce_actions(&dir, gate_enabled), || {
+        let home = home?;
+        let path = crate::folder_trust::claude_json_path(
+            &home,
+            &crate::config_store::profiles::ConfigTarget::Default,
+        );
+        std::fs::read_to_string(path).ok()
+    })
 }

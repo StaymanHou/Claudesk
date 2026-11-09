@@ -17,6 +17,31 @@ use super::{
     PROJECTS_FILE,
 };
 
+/// The config a project's CC session reads, by that session's LIVE profile when
+/// `pty_session_id` names a registered session, else by the row's stored profile.
+///
+/// The one AppHandle-level resolver for callers that open CC's own files (the transcript tail,
+/// the folder-trust read). No app-data dir means no profile can be named, so the default is the
+/// only answer. `None` means an unlisted profile or an unreadable list: nothing to read.
+pub(crate) fn live_config_target(
+    app: &AppHandle,
+    registry: &std::sync::Mutex<crate::cc_session::SessionRegistry>,
+    project_path: &Path,
+    pty_session_id: Option<&str>,
+) -> Option<super::profiles::ConfigTarget> {
+    use super::profiles::{config_target, live_or_stored_reference, read_profiles, ConfigTarget};
+    let live = pty_session_id.and_then(|id| registry.lock().ok()?.profile(id).ok());
+    let Ok(data_dir) = app.path().app_data_dir() else {
+        return Some(ConfigTarget::Default);
+    };
+    config_target(
+        live_or_stored_reference(live, || {
+            super::read_project_profile(&data_dir, project_path)
+        }),
+        || read_profiles(&data_dir),
+    )
+}
+
 /// Resolve `~/Library/Application Support/<identifier>/` and ensure it exists.
 /// `pub(crate)` so the `cc_session` / `pip` command modules share this one
 /// definition rather than each keeping a verbatim module-local copy (Theme A dedup).

@@ -92,6 +92,7 @@ export function PickerRow({
               workflowApplicable,
             );
             const announcement = isOpen ? null : affordances.announcement;
+            const manual = affordances.manual;
             const showNoFireDoor = isOpen ? false : affordances.showNoFireDoor;
             return (
               <button
@@ -123,11 +124,25 @@ export function PickerRow({
                     )}
                     {announcement !== null && (
                       <span
-                        className="picker-recent-announce"
+                        className={
+                          manual
+                            ? "picker-recent-announce picker-recent-announce--manual"
+                            : "picker-recent-announce"
+                        }
                         data-testid="picker-recent-announce"
-                        title={`Opening this project will run ${announcement}`}
+                        data-manual={manual ? "true" : undefined}
+                        title={
+                          manual
+                            ? `Claude Code will first ask whether to trust this folder, so Claudesk will not type ${announcement}. Trust the folder, then run it yourself.`
+                            : `Opening this project will run ${announcement}`
+                        }
                       >
-                        ↻ {announcement}
+                        {/* paydown-2026-11-08 WP5: an untrusted folder's badge carries NO glyph
+                           — `↻` would promise a re-run that will not happen. The amber tone and
+                           the tooltip carry the meaning. A `⌨︎` stood here at verify-human and
+                           was rejected (operator, 2026-11-09): at 0.72rem it reads as a tiny
+                           box, i.e. as something broken. */}
+                        {manual ? announcement : `↻ ${announcement}`}
                       </span>
                     )}
                   </span>

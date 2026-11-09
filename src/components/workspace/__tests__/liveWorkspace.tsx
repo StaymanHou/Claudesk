@@ -246,12 +246,14 @@ export async function mountWorkspace(opts: MountOptions) {
   rightPanel.props = null;
   gate.enabled = opts.gate;
   bootIpc((cmd) => {
+    // A per-test answer wins over the defaults below (paydown-2026-11-08 WP5: a test needs to
+    // set what `picker_announce_actions` returns).
+    if (opts.ipcAnswers && cmd in opts.ipcAnswers) return opts.ipcAnswers[cmd];
     if (cmd === "project_get_default_drive_mode")
       return opts.storedDriveMode ?? null;
     if (cmd === "picker_announce_actions") return {};
     if (cmd === "project_get_profile" || cmd === "cc_session_profile")
       return opts.profile ?? null;
-    if (opts.ipcAnswers && cmd in opts.ipcAnswers) return opts.ipcAnswers[cmd];
     return null;
   });
   pane.steps = [];

@@ -310,8 +310,28 @@ mod tests {
 
         let tr = flat_production(include_str!("../transcript/commands.rs"));
         assert!(
-            tr.contains("Some(d)=>config_root_for_project("),
-            "transcript_tail no longer resolves the config root"
+            tr.contains("crate::config_store::commands::live_config_target(&app,&registry,")
+                && tr.contains(".map(|target|transcript_root(&home,target))"),
+            "transcript_tail no longer resolves the config root through the shared live target"
+        );
+        // paydown-2026-11-08 WP5: the folder-trust read is the other AppHandle caller of the
+        // shared resolver, and it must map the target through `claude_json_path` (the default
+        // profile's record is `~/.claude.json`, not under the transcript root).
+        let ft = flat_production(include_str!("../folder_trust/commands.rs"));
+        assert!(
+            ft.contains("crate::config_store::commands::live_config_target(&app,&registry,")
+                && ft.contains("claude_json_path(&home,&target)"),
+            "folder_trusted no longer resolves the live profile's trust record"
+        );
+        // The picker's announce marks untrusted restore rows from the DEFAULT profile's record
+        // (only default rows reach the restore arm, F-b ruling 4).
+        let an = flat_production(include_str!("../announce/commands.rs"));
+        assert!(
+            an.contains("super::apply_trust(super::announce_actions(&dir,gate_enabled),")
+                && an.contains(
+                    "claude_json_path(&home,&crate::config_store::profiles::ConfigTarget::Default)"
+                ),
+            "picker_announce_actions no longer applies the default profile's trust record"
         );
         assert!(
             !tr.contains("transcript_dir_for(&super::default_config_root(&home)"),

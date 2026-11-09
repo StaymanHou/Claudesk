@@ -12,6 +12,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
 use crate::cc_session::SessionRegistry;
+use crate::config_store::profiles::ConfigTarget;
 
 /// One transcript read: the lines, plus which file they came from.
 ///
@@ -34,48 +35,15 @@ fn home_dir(app: &AppHandle) -> Option<PathBuf> {
     app.path().home_dir().ok()
 }
 
-/// F-b F.29 — the config root a project's transcripts live under: `<home>/.claude` for the
-/// default profile, the profile's own dir for a listed one. `None` for a row naming a profile
-/// that is not listed (or an unreadable list): there is no root to read, and guessing
-/// `~/.claude` would read ANOTHER profile's transcripts for the same directory — the 4 dual-use
-/// dirs make that a real collision, not a theoretical one.
-///
-/// `reference` is whatever [`live_or_stored_reference`] chose — this fn does not care which.
-pub(crate) fn config_root_for_project(
-    home: &Path,
-    reference: Result<Option<String>, crate::config_store::ConfigError>,
-    list: impl FnOnce() -> Result<
-        Vec<crate::config_store::profiles::Profile>,
-        crate::config_store::ConfigError,
-    >,
-) -> Option<PathBuf> {
-    use crate::config_store::profiles::{is_default_reference, resolve, ResolvedProfile};
-    let reference = reference.ok()?;
-    if is_default_reference(reference.as_deref()) {
-        return Some(super::default_config_root(home));
-    }
-    match resolve(&list().ok()?, reference.as_deref()) {
-        ResolvedProfile::Default => Some(super::default_config_root(home)),
-        ResolvedProfile::Listed(p) => Some(p.config_dir),
-        ResolvedProfile::Missing(_) => None,
-    }
-}
-
-/// The profile reference the transcript root follows: the LIVE session's (`Some`, from the
-/// session registry) when the caller names a registered session, else the row's STORED one.
-///
-/// ⚠️ **Live wins because the two can disagree.** Switching a picker row's profile does not
-/// touch the running process, and the workflow gate follows the LIVE profile
-/// (`useWorkspaceProfile`). Reading the stored one would leave the supervisor ON for a default
-/// session while this reads `<neo>/projects/<slug>/`, and falls back to ANOTHER profile's newest
-/// transcript for the same directory, with nothing to show that it had.
-fn live_or_stored_reference(
-    live: Option<Option<String>>,
-    stored: impl FnOnce() -> Result<Option<String>, crate::config_store::ConfigError>,
-) -> Result<Option<String>, crate::config_store::ConfigError> {
-    match live {
-        Some(reference) => Ok(reference),
-        None => stored(),
+/// F-b F.29 — where transcripts live for a resolved [`ConfigTarget`]: `<home>/.claude` for the
+/// default profile, the profile's own dir for a listed one. The target comes from the shared
+/// `config_store::commands::live_config_target` (live profile first); an unlisted profile has no
+/// target, so there is no root to read, rather than a guessed `~/.claude` that would read
+/// ANOTHER profile's transcripts for the same directory.
+fn transcript_root(home: &Path, target: ConfigTarget) -> PathBuf {
+    match target {
+        ConfigTarget::Default => super::default_config_root(home),
+        ConfigTarget::Dir(dir) => dir,
     }
 }
 
@@ -113,7 +81,7 @@ fn select_transcript(dir: &std::path::Path, session_id: Option<&str>) -> Option<
 /// all — an empty result the caller must handle, never a silently-wrong file.
 ///
 /// `pty_session_id` is the Claudesk session the transcript belongs to; it selects the config
-/// root by that session's LIVE profile ([`live_or_stored_reference`]).
+/// root by that session's LIVE profile (`config_store::commands::live_config_target`).
 #[tauri::command]
 pub fn transcript_tail(
     app: AppHandle,
@@ -129,21 +97,13 @@ pub fn transcript_tail(
     let Some(home) = home_dir(&app) else {
         return empty;
     };
-    let live = pty_session_id
-        .as_deref()
-        .and_then(|id| registry.lock().ok()?.profile(id).ok());
-    let data_dir = app.path().app_data_dir().ok();
-    let root = match data_dir.as_deref() {
-        Some(d) => config_root_for_project(
-            &home,
-            live_or_stored_reference(live, || {
-                crate::config_store::read_project_profile(d, Path::new(&project_path))
-            }),
-            || crate::config_store::profiles::read_profiles(d),
-        ),
-        // No app-data dir → no profile can be named; the default root is the only answer.
-        None => Some(super::default_config_root(&home)),
-    };
+    let root = crate::config_store::commands::live_config_target(
+        &app,
+        &registry,
+        Path::new(&project_path),
+        pty_session_id.as_deref(),
+    )
+    .map(|target| transcript_root(&home, target));
     let Some(root) = root else {
         return empty;
     };
@@ -165,6 +125,22 @@ pub fn transcript_tail(
 #[cfg(test)]
 mod tests {
     use super::*;
+    // ⚠️ Imported HERE, not at the top under `#[cfg(test)]`: `hook_install`'s caller guard reads
+    // this file's production text as everything before the FIRST `#[cfg(test)]`, so a test-only
+    // import above the code would cut that text down to the imports and blind the guard.
+    use crate::config_store::profiles::{config_target, live_or_stored_reference};
+
+    /// The pre-WP5 `config_root_for_project`, composed from the two pieces that replaced it.
+    fn config_root_for_project(
+        home: &Path,
+        reference: Result<Option<String>, crate::config_store::ConfigError>,
+        list: impl FnOnce() -> Result<
+            Vec<crate::config_store::profiles::Profile>,
+            crate::config_store::ConfigError,
+        >,
+    ) -> Option<PathBuf> {
+        config_target(reference, list).map(|t| transcript_root(home, t))
+    }
 
     fn profile(name: &str, dir: &str) -> crate::config_store::profiles::Profile {
         crate::config_store::profiles::Profile {

@@ -116,6 +116,14 @@ pub const SESSION_MD_REL: &str = "workflow-system/state/.session.md";
 pub const ACTION_CONTINUE: &str = "continue";
 /// Arm 2 — inject `/session-restore` after the settle delay.
 pub const ACTION_RESTORE: &str = "restore";
+/// Arm 2 on a folder Claude Code has NOT trusted yet (paydown-2026-11-08 WP5, ruling R1).
+///
+/// The click still yields the same inject action, but the fire withholds it at fire time
+/// (`autoResumeFire.ts` → `shouldInject`'s trust term), because the injected `\r` would answer
+/// CC's trust dialog with its default "No, exit". This value only lets the row SAY so before
+/// the click: the operator trusts the folder, then types the command. A prediction, like every
+/// value here; the fire-time read stays the authority.
+pub const ACTION_RESTORE_MANUAL: &str = "restore-manual";
 
 /// project path → predicted action. An **absent key means no prediction** (the "neither"
 /// arm), mirroring `session-state.json`'s absent-means-clean convention rather than
@@ -255,6 +263,37 @@ pub fn announce_actions(data_dir: &Path, gate_enabled: bool) -> AnnounceMap {
         }
     }
     out
+}
+
+/// Mark each [`ACTION_RESTORE`] row whose folder CC has not trusted as
+/// [`ACTION_RESTORE_MANUAL`] (paydown-2026-11-08 WP5).
+///
+/// `read_trust_record` returns the text of the DEFAULT profile's `.claude.json`. Only the default
+/// profile can reach the restore arm (F-b ruling 4, [`config_store::profiles::workflow_applicable`]),
+/// so one file answers every row. It is called **at most once, and only when some row reached the
+/// restore arm**: a gate-OFF build or a list of profile rows never produces [`ACTION_RESTORE`],
+/// so it does no trust IO, the same no-IO-when-unavailable property the `.session.md` stat has.
+///
+/// ⚠️ Any doubt reads as untrusted (D4): an unreadable file (`None`), malformed JSON, or no
+/// trusted entry on the path or an ancestor ([`crate::folder_trust::is_trusted`]). The cost of a
+/// wrong "manual" label is a hint to type the command; the fire-time read still decides.
+pub fn apply_trust(
+    mut map: AnnounceMap,
+    read_trust_record: impl FnOnce() -> Option<String>,
+) -> AnnounceMap {
+    if !map.values().any(|a| a == ACTION_RESTORE) {
+        return map;
+    }
+    let record = read_trust_record();
+    for (path, action) in map.iter_mut() {
+        let trusted = record
+            .as_deref()
+            .is_some_and(|text| crate::folder_trust::is_trusted(text, Path::new(path)));
+        if action == ACTION_RESTORE && !trusted {
+            *action = ACTION_RESTORE_MANUAL.to_string();
+        }
+    }
+    map
 }
 
 #[cfg(test)]
@@ -896,5 +935,93 @@ mod tests {
         let d = TempDir::new().unwrap();
         fs::create_dir_all(d.path().join(SESSION_MD_REL)).unwrap();
         assert!(!has_session_md(d.path()));
+    }
+
+    // ── paydown-2026-11-08 WP5: the trust post-pass ─────────────────────────────────
+
+    fn map_of(entries: &[(&str, &str)]) -> AnnounceMap {
+        entries
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    fn record(trusted: &[&str]) -> String {
+        let body = trusted
+            .iter()
+            .map(|k| format!("{k:?}: {{\"hasTrustDialogAccepted\": true}}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("{{\"projects\": {{{body}}}}}")
+    }
+
+    #[test]
+    fn an_untrusted_restore_row_becomes_manual_and_a_trusted_one_stays() {
+        let out = apply_trust(
+            map_of(&[
+                ("/u/trusted/p", ACTION_RESTORE),
+                ("/u/other", ACTION_RESTORE),
+            ]),
+            || Some(record(&["/u/trusted"])),
+        );
+        // Trusted through its ANCESTOR (CC's own rule), not an exact key.
+        assert_eq!(out["/u/trusted/p"], ACTION_RESTORE);
+        assert_eq!(out["/u/other"], ACTION_RESTORE_MANUAL);
+    }
+
+    #[test]
+    fn the_continue_arm_is_untouched_whatever_the_trust() {
+        let out = apply_trust(map_of(&[("/u/other", ACTION_CONTINUE)]), || {
+            panic!("a map with no restore row must not read the trust record")
+        });
+        assert_eq!(out["/u/other"], ACTION_CONTINUE);
+    }
+
+    #[test]
+    fn an_unreadable_record_makes_every_restore_row_manual() {
+        let out = apply_trust(
+            map_of(&[("/u/p", ACTION_RESTORE), ("/u/q", ACTION_CONTINUE)]),
+            || None,
+        );
+        assert_eq!(out["/u/p"], ACTION_RESTORE_MANUAL);
+        assert_eq!(out["/u/q"], ACTION_CONTINUE);
+    }
+
+    #[test]
+    fn the_record_is_read_once_for_many_rows() {
+        let mut reads = 0;
+        let out = apply_trust(
+            map_of(&[("/u/a", ACTION_RESTORE), ("/u/b", ACTION_RESTORE)]),
+            || {
+                reads += 1;
+                Some(record(&[]))
+            },
+        );
+        assert_eq!(reads, 1);
+        assert_eq!(out.len(), 2);
+    }
+
+    #[test]
+    fn gate_off_and_profile_rows_do_no_trust_io() {
+        // End to end over the real `announce_actions`: neither shape reaches the restore arm, so
+        // the trust reader must never run. Positive control first: the default row DOES read it.
+        let proj = project_with_session_md();
+        let data = data_dir_with(&[proj.path()]);
+        let mut reads = 0;
+        apply_trust(announce_actions(data.path(), true), || {
+            reads += 1;
+            None
+        });
+        assert_eq!(
+            reads, 1,
+            "positive control: a default restore row reads trust"
+        );
+        apply_trust(announce_actions(data.path(), false), || {
+            panic!("gate OFF must do no trust IO")
+        });
+        config_store::set_project_profile(data.path(), proj.path(), Some("neo".into())).unwrap();
+        apply_trust(announce_actions(data.path(), true), || {
+            panic!("a profile row must do no trust IO")
+        });
     }
 }

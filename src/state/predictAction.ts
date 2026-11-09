@@ -194,7 +194,21 @@ export function requiresInjection(action: AutoResumeAction): boolean {
  * `"resume"` because arm 1 is a spawn argv flag, and a payload naming `/resume` would
  * invite a caller to type it — which opens an interactive picker instead of resuming.
  */
-export type AnnouncedAction = "continue" | "restore";
+export type AnnouncedAction = "continue" | "restore" | "restore-manual";
+
+/**
+ * Whether the backend announced the restore arm for a folder Claude Code has NOT trusted yet
+ * (`ACTION_RESTORE_MANUAL`, paydown-2026-11-08 WP5).
+ *
+ * The action is unchanged (still the inject arm: the fire-time trust read in `autoResumeFire.ts`
+ * is what withholds it), so this is a DISPLAY fact only: the surfaces that predict the command
+ * say the operator will type it after trusting the folder, instead of promising it will run.
+ */
+export function isManualAnnounced(
+  announced: AnnouncedAction | undefined,
+): boolean {
+  return announced === "restore-manual";
+}
 
 /** project path → announced action. An **absent key means no prediction**. */
 export type AnnounceMap = Readonly<Record<string, AnnouncedAction>>;
@@ -216,7 +230,11 @@ export function actionFromAnnounced(
   switch (announced) {
     case "continue":
       return { kind: "argv", flag: "--continue" };
+    // ⚠️ "restore-manual" yields the SAME action, deliberately: an untrusted folder is announced
+    // differently, but the decision to withhold is taken at fire time from a fresh trust read,
+    // never from this label.
     case "restore":
+    case "restore-manual":
       return { kind: "inject", command: "/session-restore" };
     default:
       return null;

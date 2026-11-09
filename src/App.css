@@ -4401,6 +4401,14 @@ body,
   text-overflow: ellipsis;
 }
 
+/* paydown-2026-11-08 WP5 — an untrusted folder: the command is announced but will NOT be typed
+   (CC asks about trust first; the operator types it after). The pause control's amber, COPIED,
+   not approximated: it already means "set down; you come back to it". */
+.picker-recent-announce--manual {
+  background: rgba(255, 190, 80, 0.16);
+  color: #ffcf8a;
+}
+
 .picker-recent-nofire {
   /* Reads as a real control: bordered, hover-lit, keyboard-focusable. The first
      version rendered as a bare glyph in dead space and read as decoration. */

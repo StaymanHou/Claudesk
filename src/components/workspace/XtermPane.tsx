@@ -28,9 +28,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { invoke } from "@tauri-apps/api/core";
 import {
   FIRE_DELAY_MS,
-  injectCommand,
-  injectionCommand,
-  shouldInject,
+  fireAutoResume,
   shouldScheduleFire,
 } from "./autoResumeFire";
 import type { AutoResumeAction, OpenIntent } from "../../state/predictAction";
@@ -892,17 +890,24 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           ) {
             hasFiredRef.current = true;
             fireTimer = setTimeout(() => {
-              if (!shouldInject({ action: pendingAction, cancelled })) return;
-              const command = injectionCommand(pendingAction);
-              if (command === null) return;
+              // paydown-2026-11-08 WP5 — `fireAutoResume` reads CC's folder trust FIRST and
+              // withholds on an untrusted folder, where the injected `\r` would answer CC's
+              // trust dialog with its default "No, exit". `isCancelled` is a closure over THIS
+              // run's `cancelled`, read after that await, never a captured value.
+              //
               // ⚠️ NO error dispatch on failure. An injection miss must NOT be surfaced as
               // `spawn-failed`: that would replace a perfectly working terminal with an
               // error overlay over a command the user can simply type themselves. The
               // operator-settled surfacing is `console.warn` always (inside
-              // `injectCommand`), and the terminal itself is the evidence — the user is at
-              // a live prompt. A toast belongs only on a genuine backend fault, and this
-              // pane has no toast setter, so it passes no handler.
-              void injectCommand(sessionId, command);
+              // `injectCommand` / `fireAutoResume`), and the terminal itself is the evidence —
+              // the user is at a live prompt. A toast belongs only on a genuine backend
+              // fault, and this pane has no toast setter, so it passes no handler.
+              void fireAutoResume({
+                action: pendingAction,
+                sessionId,
+                projectPath,
+                isCancelled: () => cancelled,
+              });
             }, FIRE_DELAY_MS);
           }
         } catch (err) {

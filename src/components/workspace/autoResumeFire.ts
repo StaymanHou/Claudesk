@@ -38,6 +38,16 @@
 // handshake, fired right after the spawn `invoke` resolves. Two independent readers of this
 // codebase took it the wrong way (`SURFACE-2026-08-04-CC-READY-NAME-INVITES-MISREADING-AS-CC-
 // READINESS`). Firing on it was measured NOT-EXECUTED 5/5.
+//
+// ═══════════════════════════════════════════════════════════════════════════════
+// ⚠️ THE DELAY DOES NOT MAKE CC READY ON A NEVER-TRUSTED FOLDER (paydown-2026-11-08 WP5)
+//
+// There, CC opens on "Quick safety check … trust this folder?", whose default is "No, exit",
+// and the injected `\r` answers it: CC quits and the session is lost. So the fire
+// (`fireAutoResume`) reads CC's own trust record first and withholds unless the folder is
+// trusted (ruling R1; any doubt withholds, D4). The record's location and the ANCESTOR-WALK
+// rule CC applies were probed live and are documented in `src-tauri/src/folder_trust/mod.rs`.
+// The `--continue` arm is spawn argv and is not gated here.
 
 import { invoke } from "@tauri-apps/api/core";
 import { encodeBase64 } from "../../cc/bridge";
@@ -53,6 +63,12 @@ export interface FireInputs {
   action: AutoResumeAction;
   /** Whether this pane's spawn was torn down before the delay elapsed. */
   cancelled: boolean;
+  /**
+   * Whether CC's folder-trust dialog has already been accepted for this project, read at fire
+   * time ({@link readFolderTrust}). `false` whenever that is in doubt (paydown-2026-11-08 WP5,
+   * default D4).
+   */
+  trusted: boolean;
 }
 
 /**
@@ -70,7 +86,89 @@ export interface FireInputs {
  */
 export function shouldInject(inputs: FireInputs): boolean {
   if (inputs.cancelled) return false;
+  // ⚠️ paydown-2026-11-08 WP5 — THE TRUST TERM. On a folder CC has never trusted, CC opens on
+  // "Quick safety check … trust this folder?", whose DEFAULT is "No, exit": the `\r` that ends
+  // an injected command picks it and CC quits, losing the session
+  // (`SURFACE-2026-11-03-AUTO-RESUME-FIRES-INTO-THE-FOLDER-TRUST-PROMPT`). Ruling R1: do not
+  // fire; the picker still names the command and the operator types it after trusting.
+  if (!inputs.trusted) return false;
   return requiresInjection(inputs.action);
+}
+
+/**
+ * Whether CC's folder-trust dialog has been accepted for `projectPath`, under the live profile
+ * of `ptySessionId` (the Rust `folder_trusted` command; the file location and the ancestor-walk
+ * rule are documented in `src-tauri/src/folder_trust/mod.rs`).
+ *
+ * ⚠️ **Every failure resolves `false`, never rejects** (default D4: a withheld fire costs one
+ * typed command, a wrong fire costs the session). A rejection with no handler would vanish
+ * silently, so it is caught here and warned.
+ */
+export async function readFolderTrust(
+  projectPath: string,
+  ptySessionId: string,
+): Promise<boolean> {
+  try {
+    return (
+      (await invoke<boolean>("folder_trusted", {
+        projectPath,
+        ptySessionId,
+      })) === true
+    );
+  } catch (e) {
+    console.warn(
+      `auto-resume: reading folder trust for ${projectPath} failed`,
+      e,
+    );
+    return false;
+  }
+}
+
+/** What one fire needs. The two IO seams default to the real ones and are injected by tests. */
+export interface FireRun {
+  action: AutoResumeAction;
+  /** The Claudesk PTY session to type into. */
+  sessionId: string;
+  projectPath: string;
+  /**
+   * ⚠️ A FUNCTION, not a boolean: the trust read is awaited, and the pane can be torn down
+   * while it is in flight. `cancelled` must be read AFTER the await, from the caller's live
+   * per-run closure flag.
+   */
+  isCancelled: () => boolean;
+  readTrust?: (projectPath: string, ptySessionId: string) => Promise<boolean>;
+  inject?: (sessionId: string, command: string) => Promise<void>;
+}
+
+/**
+ * The fire itself, run when the {@link FIRE_DELAY_MS} timer wakes: read trust, decide through
+ * {@link shouldInject}, inject. Returns whether it typed anything.
+ *
+ * ⚠️ **This is the ONLY fire path, and the order is the fix.** The trust read happens at FIRE
+ * time, so a trust the operator accepts inside the delay still fires. `shouldInject` is asked
+ * AFTER the read with a fresh `isCancelled()`, so a pane closed during the read types nothing.
+ * Extracted from `XtermPane`'s timer so a test drives the real sequence rather than a replica.
+ */
+export async function fireAutoResume(run: FireRun): Promise<boolean> {
+  const trusted = await (run.readTrust ?? readFolderTrust)(
+    run.projectPath,
+    run.sessionId,
+  );
+  const cancelled = run.isCancelled();
+  if (!shouldInject({ action: run.action, cancelled, trusted })) {
+    if (!cancelled && !trusted && requiresInjection(run.action)) {
+      // The one diagnostic this path has (no overlay, by operator decision): name the
+      // withheld command so a "nothing happened" report is answerable.
+      console.warn(
+        `auto-resume: ${injectionCommand(run.action) ?? "command"} withheld for ${run.projectPath} — Claude Code has not trusted this folder yet`,
+      );
+    }
+    return false;
+  }
+  const command = injectionCommand(run.action);
+  if (command === null) return false;
+  await (run.inject ?? injectCommand)(run.sessionId, command);
+  return true;
 }
 
 /**

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   FIRE_DELAY_MS,
+  fireAutoResume,
   injectionCommand,
   shouldInject,
   slashCommandPayload,
@@ -19,26 +20,36 @@ const ARGV: AutoResumeAction = { kind: "argv", flag: "--continue" };
 
 describe("shouldInject — the decision is re-checked AT FIRE TIME", () => {
   it("injects for the inject arm when the run is live", () => {
-    expect(shouldInject({ action: INJECT, cancelled: false })).toBe(true);
+    expect(
+      shouldInject({ action: INJECT, cancelled: false, trusted: true }),
+    ).toBe(true);
   });
 
   it("does NOT inject for the argv arm — that arm is spawn flags, never typed", () => {
     // The load-bearing asymmetry from Phase 1's Verdict 2: `--continue` is present at
     // execvp time and needs no injection. Typing `/resume` instead would open an
     // interactive session picker, which is worse than firing nothing.
-    expect(shouldInject({ action: ARGV, cancelled: false })).toBe(false);
+    expect(
+      shouldInject({ action: ARGV, cancelled: false, trusted: true }),
+    ).toBe(false);
   });
 
   it("does NOT inject when there is no action", () => {
-    expect(shouldInject({ action: null, cancelled: false })).toBe(false);
+    expect(
+      shouldInject({ action: null, cancelled: false, trusted: true }),
+    ).toBe(false);
   });
 
   it("does NOT inject when the run was cancelled — for EITHER arm", () => {
     // ⚠️ THE REASON THIS IS A FUNCTION AND NOT AN `if` AROUND setTimeout. 1500 ms is long
     // enough to close the workspace, switch away, or relaunch. A write into a torn-down or
     // replaced session would type a slash command into someone else's live conversation.
-    expect(shouldInject({ action: INJECT, cancelled: true })).toBe(false);
-    expect(shouldInject({ action: ARGV, cancelled: true })).toBe(false);
+    expect(
+      shouldInject({ action: INJECT, cancelled: true, trusted: true }),
+    ).toBe(false);
+    expect(shouldInject({ action: ARGV, cancelled: true, trusted: true })).toBe(
+      false,
+    );
   });
 
   it("cancellation dominates — no input combination injects while cancelled", () => {
@@ -46,10 +57,95 @@ describe("shouldInject — the decision is re-checked AT FIRE TIME", () => {
     // "someone adds an arm and forgets the cancel check".
     for (const action of [INJECT, ARGV, null] as AutoResumeAction[]) {
       expect(
-        shouldInject({ action, cancelled: true }),
+        shouldInject({ action, cancelled: true, trusted: true }),
         `cancelled run injected for ${JSON.stringify(action)}`,
       ).toBe(false);
     }
+  });
+});
+
+describe("shouldInject — the folder-trust term (paydown-2026-11-08 WP5)", () => {
+  // On a never-trusted folder CC opens on its trust dialog, whose default is "No, exit": the
+  // injected `\r` picks it and CC quits. Untrusted (or unknown, D4) must never inject.
+  it("does NOT inject the inject arm on an untrusted folder", () => {
+    expect(
+      shouldInject({ action: INJECT, cancelled: false, trusted: false }),
+    ).toBe(false);
+  });
+
+  it("the ONLY injecting input is inject + live + trusted", () => {
+    const actions = [INJECT, ARGV, null] as AutoResumeAction[];
+    const hits: string[] = [];
+    for (const action of actions)
+      for (const cancelled of [false, true])
+        for (const trusted of [false, true])
+          if (shouldInject({ action, cancelled, trusted }))
+            hits.push(`${action?.kind ?? "null"}/${cancelled}/${trusted}`);
+    expect(hits).toEqual(["inject/false/true"]);
+  });
+});
+
+describe("fireAutoResume — read trust, THEN decide, THEN type", () => {
+  function run(over: {
+    trusted?: boolean;
+    action?: AutoResumeAction;
+    cancelledAfterRead?: boolean;
+  }) {
+    const events: string[] = [];
+    let cancelled = false;
+    const injected: Array<[string, string]> = [];
+    const readArgs: Array<[string, string]> = [];
+    const promise = fireAutoResume({
+      action: over.action === undefined ? INJECT : over.action,
+      sessionId: "pty-7",
+      projectPath: "/u/proj",
+      isCancelled: () => cancelled,
+      readTrust: async (projectPath, ptySessionId) => {
+        readArgs.push([projectPath, ptySessionId]);
+        events.push("read");
+        if (over.cancelledAfterRead) cancelled = true;
+        return over.trusted ?? true;
+      },
+      inject: async (sessionId, command) => {
+        events.push("inject");
+        injected.push([sessionId, command]);
+      },
+    });
+    return { promise, events, injected, readArgs };
+  }
+
+  it("types /session-restore into the pane's session on a trusted folder", async () => {
+    const r = run({ trusted: true });
+    expect(await r.promise).toBe(true);
+    expect(r.injected).toEqual([["pty-7", "/session-restore"]]);
+    // Exact args: the trust read follows THIS project under THIS session's live profile.
+    expect(r.readArgs).toEqual([["/u/proj", "pty-7"]]);
+  });
+
+  it("types NOTHING on an untrusted folder — the reported defect", async () => {
+    const r = run({ trusted: false });
+    expect(await r.promise).toBe(false);
+    expect(r.injected).toEqual([]);
+  });
+
+  it("reads trust BEFORE it types", async () => {
+    const r = run({ trusted: true });
+    await r.promise;
+    expect(r.events).toEqual(["read", "inject"]);
+  });
+
+  it("re-reads cancellation AFTER the trust read — a pane closed meanwhile types nothing", async () => {
+    // The read is awaited; reading `cancelled` before it (or capturing it) would type into a
+    // torn-down or replaced session.
+    const r = run({ trusted: true, cancelledAfterRead: true });
+    expect(await r.promise).toBe(false);
+    expect(r.injected).toEqual([]);
+  });
+
+  it("never types the argv arm, trusted or not", async () => {
+    const r = run({ trusted: true, action: ARGV });
+    expect(await r.promise).toBe(false);
+    expect(r.injected).toEqual([]);
   });
 });
 
@@ -156,9 +252,18 @@ describe("the wiring in XtermPane (source guard — STRUCTURE, not runtime)", ()
     expect(code).not.toContain("/*");
   });
 
-  it("the fire goes through shouldInject — the decision is not re-implemented inline", () => {
-    expect(squeezed).toContain("shouldInject({");
-    expect(squeezed).toContain("injectCommand(");
+  it("the fire goes through fireAutoResume — the decision is not re-implemented inline", () => {
+    // paydown-2026-11-08 WP5 moved the timer body into `fireAutoResume` (trust read →
+    // `shouldInject` → inject), so the pane must call THAT and must not type on its own.
+    expect(squeezed).toContain("fireAutoResume({");
+    expect(squeezed).not.toContain("shouldInject(");
+    expect(squeezed).not.toContain("injectCommand(");
+  });
+
+  it("passes a LIVE cancellation read, not a captured value", () => {
+    // The trust read is awaited; a pane torn down during it must type nothing, so the flag is
+    // read through a closure after the await.
+    expect(squeezed).toContain("isCancelled:()=>cancelled");
   });
 
   it("the timer is CLEARED in the effect cleanup", () => {
@@ -179,19 +284,19 @@ describe("the wiring in XtermPane (source guard — STRUCTURE, not runtime)", ()
     // the user can simply type. `injectCommand` warns; the pane passes no toast handler.
     //
     // ⚠️ THE WINDOW IS BOUNDED STRUCTURALLY, and the first version of this test was wrong
-    // in a way worth recording: it read a fixed 400 characters after `shouldInject({`,
+    // in a way worth recording: it read a fixed 400 characters after the fire call,
     // which over-reached past the fire block into the surrounding `catch (err)` — a block
     // that LEGITIMATELY dispatches `spawn-failed` for a real spawn failure. The test failed
     // while the code was correct. A fixed-length window is a guess about formatting; the
     // honest boundary is the end of the timer callback, which is the `FIRE_DELAY_MS`
     // argument that closes it.
-    const start = squeezed.indexOf("shouldInject({");
+    const start = squeezed.indexOf("fireTimer=setTimeout(");
     const end = squeezed.indexOf("FIRE_DELAY_MS)", start);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     const fireBlock = squeezed.slice(start, end);
     expect(fireBlock).not.toContain('type:"spawn-failed"');
     // Non-vacuity: the window must actually contain the fire, or "no dispatch" is trivial.
-    expect(fireBlock).toContain("injectCommand(");
+    expect(fireBlock).toContain("fireAutoResume(");
   });
 });

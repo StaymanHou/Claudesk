@@ -565,6 +565,16 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (≈1 event per quota reset; a false blue, not a lost prompt)
 - **Status:** open
 
+## SURFACE-2026-11-09-NEXT-OPEN-INDICATOR-PREDICTS-CONTINUE-WITH-NO-TRANSCRIPT
+- **Source:** feature:verify-self (paydown-2026-11-08 WP5 Phase 1, reproducing the side observation in `SURFACE-2026-11-03-AUTO-RESUME-FIRES-INTO-THE-FOLDER-TRUST-PROMPT`)
+- **Target level:** task
+- **Type:** bug (prediction surface)
+- **Summary:** The workspace header's next-open indicator (`nextOpenIndicator` in `sessionStartButton.ts`, fed by `picker_announce_actions`) shows `↻ will continue` whenever the unclean flag is set, and the flag is set at spawn by design. But the spawn drops `--continue` when the project has no transcript under its config root (`cc_session` → `guard_continue_against_transcripts`, F-b P1.1), so for such a project the label predicts a continue that will not happen. Because the flag outranks `.session.md` in `predictAction`, the prediction also displaces the `/session-restore` arm. Seen live 2026-11-09 on `claudesk-scratch/restore-test` (never trusted, no `~/.claude/projects/…` dir): the header read `↻ will continue` right after open.
+- **Context:** Display-only today: the action is re-derived at open time, so nothing is typed wrongly. The cost is a false promise, plus a reopen after an unclean exit that runs neither arm. The picker's batch announce has the same blind spot: it reads the flag but not the transcript guard.
+- **Suggested action:** Have `announce_actions` apply the same transcript check the spawn uses (one predicate shared by both, never a copy), so a no-transcript project predicts the `.session.md` arm or nothing. Decide whether the flag should then still outrank `.session.md` when `--continue` cannot run (likely: fall through to `/session-restore`, which needs a matching change in `resolve_resume_arm`).
+- **Priority:** low (display-only mis-prediction; most real projects have transcripts)
+- **Status:** open
+
 ## SURFACE-2026-11-09-F10B-MEASUREMENT-COUNTS-A-CORRECT-FSD-CHAIN-AS-A-STOP
 - **Source:** task:act (backlog-paydown-2026-11-08 WP1, the F10b re-measure)
 - **Target level:** upstream (mccc) — `tools/analysis/measure-f10b-handback-rate.py`

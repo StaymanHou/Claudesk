@@ -65,6 +65,60 @@ pub enum ResolvedProfile {
     Missing(String),
 }
 
+/// Which Claude Code config a session reads, for callers that open CC's own files.
+///
+/// ⚠️ **Kept as a two-way choice, NOT a path**, because CC's files do not all sit under one root
+/// for the default profile. Transcripts are at `~/.claude/projects/`, but the trust record is
+/// at `~/.claude.json`, a sibling of `~/.claude/` (probed at CC 2.1.319, paydown-2026-11-08
+/// WP5). Under a listed profile both sit under `CLAUDE_CONFIG_DIR`. So a single "config root"
+/// path cannot name both, and joining `.claude.json` onto `~/.claude` reads a file that does
+/// not exist. Each consumer maps the target to its own file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigTarget {
+    /// The built-in profile: no `CLAUDE_CONFIG_DIR`.
+    Default,
+    /// A listed profile's `CLAUDE_CONFIG_DIR`.
+    Dir(PathBuf),
+}
+
+/// Resolve a profile reference to the config a session under it reads.
+///
+/// `None` for a row naming a profile that is not listed, or for an unreadable list or row:
+/// there is no config to read, and guessing the default would read ANOTHER profile's files for
+/// the same directory (the 4 dual-use dirs make that a real collision, not a theoretical one).
+/// The default reference never reads the list.
+pub fn config_target(
+    reference: Result<Option<String>, ConfigError>,
+    list: impl FnOnce() -> Result<Vec<Profile>, ConfigError>,
+) -> Option<ConfigTarget> {
+    let reference = reference.ok()?;
+    if is_default_reference(reference.as_deref()) {
+        return Some(ConfigTarget::Default);
+    }
+    match resolve(&list().ok()?, reference.as_deref()) {
+        ResolvedProfile::Default => Some(ConfigTarget::Default),
+        ResolvedProfile::Listed(p) => Some(ConfigTarget::Dir(p.config_dir)),
+        ResolvedProfile::Missing(_) => None,
+    }
+}
+
+/// The profile reference a live-file read follows: the LIVE session's (`Some`, from the session
+/// registry) when the caller names a registered session, else the row's STORED one.
+///
+/// ⚠️ **Live wins because the two can disagree.** Switching a picker row's profile does not
+/// touch the running process, and the workflow gate follows the LIVE profile
+/// (`useWorkspaceProfile`). Reading the stored one would read the wrong profile's files for the
+/// same directory, with nothing to show that it had.
+pub fn live_or_stored_reference(
+    live: Option<Option<String>>,
+    stored: impl FnOnce() -> Result<Option<String>, ConfigError>,
+) -> Result<Option<String>, ConfigError> {
+    match live {
+        Some(reference) => Ok(reference),
+        None => stored(),
+    }
+}
+
 /// Whether a stored reference means the built-in default profile: absent, blank, or
 /// `"default"`. ⚠️ The ONE definition — [`resolve`] and [`workflow_applicable`] both read it, and
 /// `src/state/workflowApplicable.ts` mirrors it for the frontend.

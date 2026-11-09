@@ -66,6 +66,11 @@ import type { AutoResumeAction } from "../../state/predictAction";
 export function nextOpenIndicator(inputs: {
   workflowEnabled: boolean;
   action: AutoResumeAction;
+  /**
+   * paydown-2026-11-08 WP5 — the announce said `"restore-manual"`: Claude Code has not trusted
+   * this folder, so the fire will withhold the command and the operator types it after trusting.
+   */
+  manual?: boolean;
 }): string | null {
   if (!inputs.workflowEnabled) return null;
   const { action } = inputs;
@@ -81,6 +86,9 @@ export function nextOpenIndicator(inputs: {
       // surface must not reintroduce the wrong name in front of the operator.
       return "will continue";
     case "inject":
-      return `will run ${action.command}`;
+      // An untrusted folder: promising "will run" would be false, since the fire withholds it.
+      return inputs.manual
+        ? `type ${action.command} after trusting`
+        : `will run ${action.command}`;
   }
 }

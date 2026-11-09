@@ -57,7 +57,9 @@ describe("shouldScheduleFire vs shouldInject — two DIFFERENT questions", () =>
   // var), so `shouldInject` says "yes, inject" — correctly, for its own question. Only the latch
   // can express "this pane already fired".
   it("shouldInject STILL approves on a relaunch run — proving it cannot carry consume-once", () => {
-    expect(shouldInject({ action: injectAction, cancelled: false })).toBe(true);
+    expect(
+      shouldInject({ action: injectAction, cancelled: false, trusted: true }),
+    ).toBe(true);
   });
 
   it("…while shouldScheduleFire is the one that stops it", () => {
@@ -105,7 +107,13 @@ describe("XtermPane honors the consume-once contract (caller-side wiring)", () =
   });
 
   it("still routes the write through injectCommand (arch.md: all injection via slash_command_bytes)", () => {
-    expect(code).toMatch(/void injectCommand\(sessionId,\s*command\)/);
+    // paydown-2026-11-08 WP5: the write now happens inside `fireAutoResume`, whose DEFAULT
+    // `inject` is `injectCommand` (driven for real in `readFolderTrust.test.ts`). The pane must
+    // take that default: an `inject:` override here would be a second path to `cc_input`.
+    const fire = code.slice(code.indexOf("fireAutoResume({"));
+    const call = fire.slice(0, fire.indexOf("})") + 2);
+    expect(call).toContain("pendingAction");
+    expect(call).not.toMatch(/\binject\s*:/);
   });
 
   // Meta-guard: a broken ?raw loader yields "" and every `not.toMatch` above passes vacuously.

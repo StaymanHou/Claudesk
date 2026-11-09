@@ -10,9 +10,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️ ONE CONDITIONAL GOVERNS BOTH THE LABEL AND THE BUTTON
 //
-// The announcement and the `⊘` no-fire door appear **exactly together**, because with no
-// predicted action both doors are identical and `⊘` would be a control that provably does
-// nothing. [`rowAffordances`] returns both from a single decision so the component cannot
+// The `⊘` no-fire door appears ONLY WITH an announcement, because with no predicted action
+// both doors are identical and `⊘` would be a control that provably does nothing. The same
+// reason drops it from a MANUAL row (paydown-2026-11-08 WP5): on a folder Claude Code has not
+// trusted, the fire withholds the command, so the row click types nothing either. Such a row
+// keeps its announcement (the command you will type) and loses only the door. [`rowAffordances`] returns both from a single decision so the component cannot
 // render one without the other — the alternative (two independent `action !== null` checks
 // in JSX) is two places to forget.
 //
@@ -31,6 +33,7 @@
 import {
   actionFromAnnounced,
   announcementFor,
+  isManualAnnounced,
   type AnnounceMap,
   type AnnouncedAction,
   type AutoResumeAction,
@@ -57,6 +60,11 @@ export interface RowAffordances {
   showNoFireDoor: boolean;
   /** The action a normal row click should fire, or `null` to open plainly. */
   action: AutoResumeAction;
+  /**
+   * paydown-2026-11-08 WP5 — Claude Code has not trusted this folder yet, so the announced
+   * command will NOT be typed for you: CC asks about trust first, and you type the command after.
+   */
+  manual: boolean;
 }
 
 /** Nothing announced, no second door, no action. The gate-OFF and no-signal answer. */
@@ -64,6 +72,7 @@ const SILENT: RowAffordances = {
   announcement: null,
   showNoFireDoor: false,
   action: null,
+  manual: false,
 };
 
 /**
@@ -122,17 +131,22 @@ export function rowAffordances(
   announce: AnnounceMap,
   enabled: WorkflowGateValue,
 ): RowAffordances {
-  const action = actionFromAnnounced(
-    announce[projectPath] as AnnouncedAction | undefined,
-  );
+  const announced = announce[projectPath] as AnnouncedAction | undefined;
+  const action = actionFromAnnounced(announced);
   if (action === null) return SILENT;
   if (!armAvailable(action, enabled)) return SILENT;
+  const manual = isManualAnnounced(announced);
   return {
     announcement: announcementFor(action),
     // ⚠️ Deliberately derived from the SAME decision as the label above, not from a second
     // independent check. See the module header.
-    showNoFireDoor: true,
+    //
+    // paydown-2026-11-08 WP5 — no `⊘` on a MANUAL row: nothing is typed through either door
+    // (the fire withholds on an untrusted folder), so the second door would be a control that
+    // provably does nothing — the same reason a row with no prediction has none.
+    showNoFireDoor: !manual,
     action,
+    manual,
   };
 }
 

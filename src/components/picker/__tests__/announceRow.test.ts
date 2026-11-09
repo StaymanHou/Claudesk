@@ -71,6 +71,34 @@ describe("rowAffordances — one conditional governs the label AND the button", 
   });
 });
 
+describe("rowAffordances — an untrusted folder (paydown-2026-11-08 WP5)", () => {
+  const MANUAL: AnnounceMap = { [P]: "restore-manual" };
+
+  it("keeps the command and the SAME inject action, marks it manual, and drops the ⊘ door", () => {
+    expect(rowAffordances(P, MANUAL, true)).toEqual({
+      announcement: "/session-restore",
+      showNoFireDoor: false,
+      action: { kind: "inject", command: "/session-restore" },
+      manual: true,
+    });
+  });
+
+  it("a trusted restore row is NOT manual and keeps its door", () => {
+    const r = rowAffordances(P, RESTORE, true);
+    expect(r.manual).toBe(false);
+    expect(r.showNoFireDoor).toBe(true);
+  });
+
+  it("the gate still hides a manual restore row entirely", () => {
+    expect(rowAffordances(P, MANUAL, false)).toEqual({
+      announcement: null,
+      showNoFireDoor: false,
+      action: null,
+      manual: false,
+    });
+  });
+});
+
 describe("the gate — PER ARM, not per feature (operator decision 2026-08-05)", () => {
   it("gate OFF keeps the continue arm and drops the restore arm", () => {
     // ⚠️ THE PHASE 3.5 CONTRACT, and both halves live in ONE test on purpose.

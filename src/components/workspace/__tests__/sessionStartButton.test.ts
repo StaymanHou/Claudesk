@@ -69,6 +69,40 @@ describe("showSkillButtons — when the skill-button row exists", () => {
   });
 });
 
+describe("nextOpenIndicator — an untrusted folder (paydown-2026-11-08 WP5)", () => {
+  const restore = { kind: "inject", command: "/session-restore" } as const;
+
+  it("does not promise 'will run' when the fire will withhold the command", () => {
+    expect(
+      nextOpenIndicator({
+        workflowEnabled: true,
+        action: restore,
+        manual: true,
+      }),
+    ).toBe("type /session-restore after trusting");
+  });
+
+  it("a trusted (non-manual) restore still reads 'will run'", () => {
+    expect(
+      nextOpenIndicator({
+        workflowEnabled: true,
+        action: restore,
+        manual: false,
+      }),
+    ).toBe("will run /session-restore");
+  });
+
+  it("manual never changes the continue arm", () => {
+    expect(
+      nextOpenIndicator({
+        workflowEnabled: true,
+        action: { kind: "argv", flag: "--continue" },
+        manual: true,
+      }),
+    ).toBe("will continue");
+  });
+});
+
 describe("nextOpenIndicator — the unclean flag stops being write-only", () => {
   // Signals are fed through the REAL predictor rather than hand-built actions, so a change to
   // precedence or to an arm's shape reaches these assertions.
@@ -336,7 +370,9 @@ describe("wiring — the properties no value can observe (source guards)", () =>
     // Pins that this surface adds no NEW per-workspace IPC shape — it reuses
     // `picker_announce_actions`, the same one call the picker makes. A per-workspace command
     // would be the N+1 M11.5 WP1's review found in the model cell.
-    expect(ws).toContain('invoke<Record<string, "continue" | "restore">>(');
+    // paydown-2026-11-08 WP5: the payload type is the shared wire union (which gained
+    // `"restore-manual"`), not a hand-written literal that would drift from it.
+    expect(ws).toContain("invoke<Record<string, AnnouncedAction>>(");
     expect(ws).toContain('"picker_announce_actions"');
 
     // ⚠️ This assertion used to demand `predictAction({`, on the stated rule that the action
