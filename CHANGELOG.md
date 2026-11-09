@@ -26,6 +26,8 @@
 - **Backlog resolved:** SURFACE-2026-11-04-QUALITY-WP4-RUN-STREAMING-OUTPUT-UNCAPPED — `run_streaming` caps output at 4 MiB (clean start, one note, then each stream's last 200 lines / 64 KB), bounds a single line, and decodes invalid UTF-8 instead of stopping the read.
 - **Backlog resolved:** SURFACE-2026-11-04-QUALITY-WP4-THREE-WAYS-TO-RELEASE-THE-RUN-LOCK — `HeldRunLock::try_acquire` is the one acquire and its `Drop` the one release; `RunGuard` holds it, and the four manual early-return releases are gone.
 - **Backlog resolved:** SURFACE-2026-11-04-QUALITY-WP4-SPAWN-BLOCKING-HOP-REPEATED — `on_blocking_worker` replaces all five `spawn_blocking` hops, with one error wording for a panicked worker.
+- **Feature shipped:** Backlog-paydown 2026-11-08 WP5 stops auto-resume from typing `/session-restore` into Claude Code's folder-trust prompt: the fire now reads CC's own trust record (the live profile's `.claude.json`, ancestor walk, any doubt withholds) and withholds on an untrusted folder, and the picker row shows that command in amber with no `⊘` so the operator trusts the folder and types it.
+- **Backlog resolved:** SURFACE-2026-11-03-AUTO-RESUME-FIRES-INTO-THE-FOLDER-TRUST-PROMPT — the inject arm withholds unless CC's trust record says the folder (or an ancestor) is trusted, so its `\r` can no longer answer "No, exit"; the side observation it noted is filed separately as SURFACE-2026-11-09-NEXT-OPEN-INDICATOR-PREDICTS-CONTINUE-WITH-NO-TRANSCRIPT.
 
 ## 2026-11-08
 

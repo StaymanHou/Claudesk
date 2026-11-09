@@ -9,4 +9,6 @@ The repo's source-text-guard convention (assert against a file's literal source,
 
 Fix: read the CSS file directly with Node fs — `readFileSync(fileURLToPath(new URL("../../App.css", import.meta.url)), "utf8")`. Add `import { readFileSync } from "node:fs"` + `import { fileURLToPath } from "node:url"`.
 
+⚠️ **Not in a jsdom test file.** Under `// @vitest-environment jsdom`, `import.meta.url` is not a `file:` URL, so that recipe throws `TypeError: The URL must be of scheme file` and the WHOLE file fails to collect (Vitest prints `Tests  no tests`, which a `grep "Tests "` filter can misread as a pass). There, resolve from Vitest's cwd (the project root): `readFileSync(resolve("src/App.css"), "utf8")` with `import { resolve } from "node:path"`. Hit 2026-11-09 (paydown-2026-11-08 WP5, `pickerRowTrustLive.test.tsx`).
+
 Discovered M10 WP4 (the `.update-banner` not-`position:absolute` layout-invariant guard in `src/updater/__tests__/updaterWiring.test.ts`). Any future vitest source-guard that must assert over CSS (`App.css` or a component `.css`) uses the fs read, not `?raw`. Relates to the `?raw` FE-wiring guard convention (see `menuBridge.test.ts`, the `pickerTimeTrackingWiring.test.ts` family). [[macos-case-collision-module-naming]] is the other FE test-authoring gotcha.

@@ -230,7 +230,7 @@ Runs right after WP2 because both touch the comment-budget/single-authority surf
 - **Resolves:** all 5 WP4 QF bodies + the `paydown-2026-11-04-wp4-…` pointer stub (BL).
 - ✅ **SHIPPED 2026-11-09 (`1ccf9c4`).** Feature path, 2 phases. Operator rulings at P1 verify-human: the runner cap keeps the start + a note + the tail (C), with **per-stream** tails (A; a shared tail let the stderr error be evicted). Beyond the letter, same root: the line reader bounds a line and decodes invalid UTF-8 lossily; all **5** `spawn_blocking` hops moved (the finding named 3). Live-verified in the dev app (`supervisor_adjudicate`, `time_analytics_query`). Review: 1 MAJOR (both kill exits drain before `stop`, so a `setsid` flooder can overrun the deadline) + 4 MINOR, auto-backlogged. ⚠️ GUI-PATH smoke still owed at the next `/release` (carry at fold-back).
 
-## WP5: Auto-resume vs CC's folder-trust prompt (R1)  `[impact: Med · effort: S · risk: Med]` · feature
+## WP5: Auto-resume vs CC's folder-trust prompt (R1)  `[impact: Med · effort: S · risk: Med]` · feature ✅ SHIPPED 2026-11-09 (commit 80128a4)
 
 - `11-03-AUTO-RESUME-FIRES-INTO-THE-FOLDER-TRUST-PROMPT` (BL), per R1 + D4:
   - A backend read (Rust, file IO only, in the spirit of M15's R-4) answers one boolean:

@@ -131,6 +131,29 @@ dev/prod isolation comes free.
   consequence is the only honest observable:** a cleared project announces **nothing** on reopen.
   Reading the raw flag right after a recycle and concluding the clear failed is the available trap.
 
+### ⚠️ The inject arm withholds on a folder Claude Code has not trusted (paydown-2026-11-08 WP5)
+
+On a never-trusted folder CC opens on "Quick safety check … trust this folder?", whose **default is
+"No, exit"**: the `\r` ending an injected `/session-restore` picked it and CC quit, losing the session.
+**As built (ruling R1, default D4):** the fire (`autoResumeFire.ts` → `fireAutoResume`) reads CC's own
+trust record at FIRE time, then decides through `shouldInject` (its `trusted` term) with a fresh
+cancellation read. Untrusted or any doubt → nothing typed; the operator trusts, then types it.
+
+- **The record:** `projects[<physical path>].hasTrustDialogAccepted`, in `$HOME/.claude.json` for the
+  default profile (⚠️ a SIBLING of `~/.claude/`, not inside it) or `$CLAUDE_CONFIG_DIR/.claude.json` for
+  a profile — `folder_trust::claude_json_path` over `config_store::profiles::ConfigTarget`, resolved by
+  the session's LIVE profile (`config_store::commands::live_config_target`, shared with `transcript_tail`).
+- **⚠️ CC trusts by ANCESTOR WALK** (probed at CC 2.1.319): trusted ⇔ the canonical path OR ANY ancestor
+  is `true`; a nearer `false` does NOT override a farther `true`. An exact-key lookup would wrongly
+  withhold everything nested under a trusted folder. Probe table: the archived WIP
+  `paydown-2026-11-08-wp5-auto-resume-folder-trust.md` → "Probe outcomes".
+- **The announcement says so before the click:** `announce::apply_trust` rewrites an untrusted restore
+  row to the wire value `"restore-manual"` (SAME inject action — the fire-time read stays the authority).
+  The row shows a plain amber `/session-restore` (no `↻`, no `⊘`: both doors type nothing), and the
+  header indicator reads "type /session-restore after trusting".
+- **The `--continue` arm is unaffected** (spawn argv, never typed); and a never-trusted folder has no
+  transcript, so `guard_continue_against_transcripts` drops `--continue` there anyway.
+
 ### The announcement: a prediction, never the input to the action
 
 `picker_announce_actions` is a **new sibling command**, one call per picker open, **zero per-row IPC**,
@@ -143,7 +166,7 @@ number (pinned by `listProjectsConsumers.test.ts`).
   — observed live). Worst case is a label that promised an action and nothing firing, **never a wrong
   action.** `actionForIntent` is the enforcement point.
 - **One conditional governs both the label and the door** (`rowAffordances`), so the component cannot
-  render one without the other.
+  render a door without a label. ⚠️ Since WP5 a MANUAL (untrusted) row has the label and NO door.
 - **⚠️ The `⊘` no-fire door shipped NESTED-and-defended, not as a sibling `⏵`** — a
   `<span role="button" tabindex="0">` inside the open `<button>`'s gutter, guarded by
   `stopPropagation` on **both** pointerdown and click plus an Enter/Space mirror, verified live to

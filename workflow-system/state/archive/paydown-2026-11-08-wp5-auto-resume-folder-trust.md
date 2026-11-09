@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: Auto-resume vs CC's folder-trust prompt (paydown 2026-11-08 WP5)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed (2026-11-09)
 **Created:** 2026-11-09
 **Source:** `workflow-system/product/backlog-paydown-wbs.md` → WP5 (ruling R1 + default D4)
 **Resolves:** `SURFACE-2026-11-03-AUTO-RESUME-FIRES-INTO-THE-FOLDER-TRUST-PROMPT`
@@ -365,10 +365,10 @@ Claude/Claudesk env markers stripped, `CLAUDE_CONFIG_DIR` set, reads 6–8 s of 
 - Committed on `main`, NOT pushed (operator rule). The operator's uncommitted `backlog.md` block,
   outbox edits and memory files stay unstaged (blob-staged around the block).
 
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality
+- **Path:** Feature > (complete)
+- **Active scope:** none
 - **Blocked:** none
-- **Unvisited:** finalize
+- **Unvisited:** none (finalize is the last step)
 - **Open discoveries:** SURFACE-2026-11-09-NEXT-OPEN-INDICATOR-PREDICTS-CONTINUE-WITH-NO-TRANSCRIPT (logged, separate from WP5)
 
 ## Discoveries

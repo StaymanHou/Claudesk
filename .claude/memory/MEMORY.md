@@ -16,6 +16,7 @@
 - [mutant-survives-because-its-line-never-executes.md](mutant-survives-because-its-line-never-executes.md) — A mutant can survive because its line is NEVER EVALUATED (a gate short-circuits above it), so no input distinguishes the versions. Check the arm is reachable before blaming the test.
 - [extracted-machine-needs-a-live-caller-guard.md](extracted-machine-needs-a-live-caller-guard.md) — A pure `plan*` module's own tests cannot see it has zero callers. Guard "every exported `plan*` has a live caller", with the list derived from the exports.
 - [whole-app-jsdom-boot-via-tauri-mockipc.md](whole-app-jsdom-boot-via-tauri-mockipc.md) — The REAL `main.tsx`/`pip/main.tsx` boot under jsdom via `mockIPC` + `shouldMockEvents` + `mockWindows` (precedent `appBoot.test.tsx`). Assert IPC-seeded identity; deleted exports need `check:link`.
+- [real-xtermpane-mounts-under-jsdom.md](real-xtermpane-mounts-under-jsdom.md) — The REAL XtermPane spawn path mounts under jsdom (fake only `@xterm/*`, ResizeObserver, rAF); `useRealTimers()` before `teardownIpc` or afterEach hangs.
 - [jsdom-listener-throw-is-silent-in-vitest.md](jsdom-listener-throw-is-silent-in-vitest.md) — Under Vitest jsdom a throw inside a DOM LISTENER is swallowed (window `error` event, no Vitest report, test green); a `setTimeout` throw instead fails the run. Tap `window` `error` to see listener throws.
 - [vitest-console-log-silent-on-passing-tests.md](vitest-console-log-silent-on-passing-tests.md) — Vitest here prints NOTHING from console.log/warn on a passing test; stderr.write prints. A silent console probe is not a negative.
 - [ts-arity-flexible-assignability-hides-a-widened-param.md](ts-arity-flexible-assignability-hides-a-widened-param.md) — Widening a function-TYPE param list breaks no implementation, so `tsc` + green tests don't prove a new required arg is passed. Capture the VALUE in the double, mutate the call site.
@@ -43,7 +44,7 @@
 - [supervisor-activity-observable-from-cc-transcripts.md](supervisor-activity-observable-from-cc-transcripts.md) — Supervisor fires/misses are readable from CC transcripts (fire ≈4s after turn end; AUTO-edge TRANSITION answered by human text = miss); its withheld reasons are console-only.
 - [never-emit-provocation-token-in-supervised-reply.md](never-emit-provocation-token-in-supervised-reply.md) — In a supervised workspace never write a literal TRANSITION token you don't mean (a code block counts); the supervisor can fire it into your own session.
 - [pnpm-exec-shadows-local-binaries.md](pnpm-exec-shadows-local-binaries.md) — `pnpm exec tsc` runs the PNPM binary and exits 0 regardless of type errors (silent FALSE GREEN); use `./node_modules/.bin/tsc`. `pnpm run <script>` is trustworthy.
-- [vitest-raw-import-css-returns-processed-not-text.md](vitest-raw-import-css-returns-processed-not-text.md) — A Vitest `?raw` import of a `.css` file does NOT yield raw text (Vite's CSS plugin intercepts); read CSS source-guards via `node:fs`.
+- [vitest-raw-import-css-returns-processed-not-text.md](vitest-raw-import-css-returns-processed-not-text.md) — A Vitest `?raw` import of a `.css` file does NOT yield raw text (Vite's CSS plugin intercepts); read CSS source-guards via `node:fs` (in a jsdom file, `resolve()` from cwd, not `import.meta.url`).
 
 ## verify-self: what the agent can and cannot observe
 

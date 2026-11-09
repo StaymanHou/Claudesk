@@ -64,3 +64,42 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
+# paydown-2026-11-08-wp5-auto-resume-folder-trust — 2026-11-09
+
+*(feature-review-quality on ship commit `80128a4`, window `80128a4^..80128a4`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 4 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-09-QUALITY-WP5-APPLY-TRUST-REPARSES-PER-ROW
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/announce/mod.rs`, `apply_trust` (calls `folder_trust::is_trusted` per row).
+- **Finding:** `trusted` is computed for every row before the `action == ACTION_RESTORE` check, and `is_trusted` takes the raw text, so each row re-parses the whole `.claude.json` (~247 KB here) plus a `canonicalize`, continue rows included, inside a sync (main-thread) command.
+- **Why it matters:** the "read once" doc covers the file read, not the parse; the cost grows with the record and the project list.
+- **Suggested action:** check the action first, and parse once (e.g. an `is_trusted_in(projects: &Map, path)` that both `is_trusted` and `apply_trust` call).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-09-QUALITY-WP5-SHARED-RESOLVER-TESTS-LIVE-IN-TRANSCRIPT
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/transcript/commands.rs` tests (the `config_root_for_project` shim); `src-tauri/src/config_store/profiles.rs` (`config_target`, `live_or_stored_reference`).
+- **Finding:** the moved functions' tests stayed in one of their two consumers, behind a test-only shim named after the deleted function; `profiles.rs` has no tests of its own for them.
+- **Why it matters:** the next maintainer of `profiles.rs` will not find the tests.
+- **Suggested action:** move the `config_target` / `live_or_stored_reference` cases into `profiles.rs`'s tests; keep one `transcript_root` case in transcript.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-09-QUALITY-WP5-ANNOUNCEROW-HEADER-CONTRADICTS-MANUAL-ROWS
+- **Severity:** MINOR (verified: the defect is real)
+- **Location:** `src/components/picker/announceRow.ts` module header (the "ONE CONDITIONAL GOVERNS BOTH THE LABEL AND THE BUTTON" section and the "label and the door still appear together or not at all" line under the gate section).
+- **Finding:** the WP5 edit merged two sentences onto one ~157-char line, and the heading plus the "together or not at all" claim are now false for a manual row (label shown, no door).
+- **Why it matters:** a header stating a rule the code no longer follows misleads the next edit to `rowAffordances`.
+- **Suggested action:** re-wrap the merged line; restate the rule as "the door appears only with an announcement, and only when the two doors differ" in both places.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-09-QUALITY-WP5-PICKERROW-COMMENT-CARRIES-REVIEW-HISTORY
+- **Severity:** MINOR
+- **Location:** `src/components/picker/PickerRow.tsx`, the JSX comment above the badge text.
+- **Finding:** the comment records verify-human history (the rejected `⌨︎`); the WHY ("`↻` would promise a re-run") is enough on its own.
+- **Why it matters:** comment budget.
+- **Suggested action:** trim to the WHY.
+- **Priority:** low
+- **Status:** pending

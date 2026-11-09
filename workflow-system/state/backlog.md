@@ -522,17 +522,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M16 close, 2026-10-20)*
 
-## SURFACE-2026-11-03-AUTO-RESUME-FIRES-INTO-THE-FOLDER-TRUST-PROMPT
-- **Source:** inbox live check (drive-mode picker, 2026-11-03), dev build
-- **Target level:** task
-- **Type:** bug
-- **Summary:** The first time a never-trusted folder opens as a workspace, Claudesk's auto-fired resume command lands on CC's "Quick safety check: … trust this folder?" prompt. That prompt's default is "No, exit", so the `\r` that ends the injected `/session-restore` picks it and CC quits ("Session ended"). The resume is lost, and so is the session.
-- **Context:** `autoResumeFire.ts` injects on a fixed delay after spawn (1500 ms, `shouldInject`); nothing checks that CC is at its input prompt. The trust dialog only appears for a folder CC has never trusted, so dogfooding on known projects never hits it. A newly added project that already holds a `.session.md` (a cloned repo, a copied fixture, a new machine) does. Reproduced 2026-11-03 with `tmp/scratch/restore-test`: open → trust dialog → auto-fire → exit. After Re-launch the dialog showed again and no auto-fire repeated (consume-once), so accepting trust by hand recovered. Side observation, not investigated: the header showed `↻ will continue` on that workspace afterwards, including after a close and reopen.
-- **Ready-made repro (2026-11-06):** paydown WP11 moved the scratch workspaces to `../claudesk-scratch/`, so CC sees `scratch-a`, `scratch-b` and `restore-test` as never-trusted folders. (`scratch-c` was trusted during the WP11 probe.) Put a `.session.md` in one, open it, and the auto-fired `/session-restore` should land on the trust prompt.
-- **Suggested action:** Pick one: (a) skip or defer the auto-fire until a first hook event proves CC reached its prompt (a `SessionStart` hook, if the channel sees one before input), or (b) detect a never-trusted folder (`~/.claude.json` → `projects[<path>].hasTrustDialogAccepted`) and announce instead of firing. Note that (a) must not parse PTY output (the CLAUDE.md rule).
-- **Priority:** low (first open of a new folder only; recovery is one Re-launch plus accepting trust)
-- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
-
 ## SURFACE-2026-11-04-REOPENED-WORKSPACE-CC-PANE-NEVER-PAINTS
 - **Source:** inbox live check (drive-mode picker, `/session-start` half, 2026-11-04), dev build
 - **Target level:** task
@@ -593,3 +582,10 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** pending
 - **Pickup shape:** one small task: set `stop` (or bound the drain) at both exits with a `setsid`-flood test, plus the doc/naming MINORs in the same pass.
 
+## Code-quality findings — paydown-2026-11-08-wp5-auto-resume-folder-trust (2026-11-09)
+
+- **Pointer:** **4 MINOR** from the review of `80128a4`: `apply_trust` re-parses `.claude.json` per row; the shared resolver's tests live in `transcript`; the `announceRow.ts` header contradicts manual rows (and has a merged line); a `PickerRow` comment carries review history.
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-08-wp5-auto-resume-folder-trust — 2026-11-09`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** one small cleanup task; the parse fix wants a "parsed once" test.
