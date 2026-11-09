@@ -17,16 +17,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # paydown-2026-11-08-wp6-subprocess-primitives — 2026-11-09
 
-*(feature-review-quality on ship commit `1ccf9c4`, window `1ccf9c4^..1ccf9c4`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-11-09-QUALITY-WP6-KILL-EXIT-DRAIN-UNBOUNDED-BEFORE-STOP
-- **Severity:** MAJOR
-- **Location:** `src-tauri/src/workflow_install/runner.rs`, `run_streaming`, both kill exits (the drain-grace arm and the deadline arm).
-- **Finding:** each exit drains with `while let Ok(..) = rx.try_recv()` before the readers' `stop` flag is set (`StopOnDrop` drops only when the function returns). A writer outside the group (a `setsid` grandchild, which `subprocess`'s doc lists as surviving the kill) that keeps the pipe fed at least as fast as the consumer handles lines makes that loop unbounded. Before the budget is spent, each line costs a `sink.line` emit, so the producer easily outruns it.
-- **Why it matters:** it breaks `run_streaming`'s headline promise ("It always returns by `deadline`") on the path that keeps the install lock held, which is the bug the deadline exists to prevent. The deadline arm's drain pre-dates WP6; WP6 copied it to the grace arm.
-- **Suggested action:** set the stop flag before draining (each reader then sends at most one more line), or drain a bounded snapshot (by count, or by time), at BOTH exits. Test: a `setsid` flooder that outlives the child; the run must return within deadline + a small margin.
-- **Priority:** medium
-- **Status:** pending
+*(feature-review-quality on ship commit `1ccf9c4`, window `1ccf9c4^..1ccf9c4`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged. The MAJOR was resolved 2026-11-09 by task `wp6-kill-exit-drain-bound`; the 4 MINORs below remain.)*
 
 ## SURFACE-2026-11-09-QUALITY-WP6-MAX-OUTPUT-CARRIES-THREE-MEANINGS
 - **Severity:** MINOR

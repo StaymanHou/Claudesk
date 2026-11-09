@@ -386,6 +386,31 @@ fn truncation_note(dropped: usize, shown: usize) -> String {
     )
 }
 
+/// When a kill exit's drain must stop: the run's deadline, or now if that has passed, plus
+/// [`DRAIN_GRACE`].
+fn drain_until(started: Instant, deadline: Duration) -> Instant {
+    (started + deadline).max(Instant::now()) + DRAIN_GRACE
+}
+
+/// Stop the readers, then hand every queued line to `take` until the queue is empty or `until`
+/// passes. Returns how many lines were still queued at `until` (discarded without reaching
+/// `take`). Finite: once `stop` is set each reader sends at most one more line.
+fn drain_queued(
+    rx: &mpsc::Receiver<(Stream, String)>,
+    stop: &StopOnDrop,
+    until: Instant,
+    mut take: impl FnMut(Stream, String),
+) -> usize {
+    stop.stop_now();
+    while Instant::now() < until {
+        match rx.try_recv() {
+            Ok((stream, line)) => take(stream, line),
+            Err(_) => return 0,
+        }
+    }
+    rx.try_iter().count()
+}
+
 /// Run one command, streaming its output into `sink`, and return `(exit_code, combined)`.
 ///
 /// ## It always returns by `deadline`
@@ -395,7 +420,14 @@ fn truncation_note(dropped: usize, shown: usize) -> String {
 ///
 /// If the child exits but something it started still holds a pipe open, EOF never comes. The
 /// output is read for [`DRAIN_GRACE`] more, then the group is killed and the run returns with
-/// the child's own exit code. Both kill exits keep every line the readers had already sent.
+/// the child's own exit code. Both kill exits keep every line the readers had already sent,
+/// up to `deadline` + [`DRAIN_GRACE`].
+///
+/// ⚠️ That bound needs two things at each kill exit, see [`drain_queued`]: the readers are
+/// stopped BEFORE the drain, and the drain itself has a time cap. Without the first, a writer
+/// outside the group (a `setsid` grandchild survives the kill) keeps the queue fed forever.
+/// Without the second, a slow sink still spends seconds on what such a writer queued before the
+/// kill. Lines past the cap are counted in one note.
 ///
 /// ## Output is capped
 /// At most [`MAX_OUTPUT`] bytes of output (both streams together) reach the sink and the result,
@@ -462,6 +494,8 @@ fn run_streaming(
         };
     let mut readers_done = false;
     let mut exited: Option<(std::process::ExitStatus, Instant)> = None;
+    // Lines still queued when a kill exit's drain ran out of time (see `drain_queued`).
+    let mut dropped = 0usize;
 
     // `None` means the deadline passed and the group was killed.
     let status: Option<std::process::ExitStatus> = loop {
@@ -492,17 +526,17 @@ fn run_streaming(
                 // The child is gone but a pipe is still held: kill what it left behind, and keep
                 // the lines already queued (each pass above consumes only one).
                 kill_group(child.id());
-                while let Ok((stream, line)) = rx.try_recv() {
-                    take(stream, line, &mut combined, &mut stderr);
-                }
+                dropped = drain_queued(&rx, &stop, drain_until(started, deadline), |s, l| {
+                    take(s, l, &mut combined, &mut stderr);
+                });
                 break Some(status);
             }
             None if started.elapsed() >= deadline => {
                 kill_and_reap(&mut child);
                 // The readers end once the group is dead; keep the lines they already sent.
-                while let Ok((stream, line)) = rx.try_recv() {
-                    take(stream, line, &mut combined, &mut stderr);
-                }
+                dropped = drain_queued(&rx, &stop, drain_until(started, deadline), |s, l| {
+                    take(s, l, &mut combined, &mut stderr);
+                });
                 break None;
             }
             _ => {}
@@ -512,6 +546,11 @@ fn run_streaming(
     for line in stderr {
         sink.line(&line);
         combined.push(line);
+    }
+    if dropped > 0 {
+        let note = format!("[{dropped} queued lines dropped: the run had to end by its deadline]");
+        sink.line(&note);
+        combined.push(note);
     }
     if let Some((note, tail)) = budget.finish() {
         sink.line(&note);
@@ -1628,6 +1667,105 @@ mod tests {
         );
         assert_eq!(lines.last().map(String::as_str), Some("2000"));
         assert!(is_dead(pids.pids()[0]), "the pipe holder was left running");
+    }
+
+    /// Start a writer that LEAVES the run's process group (`setsid`, so `kill_group` cannot
+    /// reach it), records its PID in `pidfile`, and writes ~10,000 short lines a second to the
+    /// inherited stdout forever: ten times what a 1 ms sink can consume.
+    fn setsid_flooder(pidfile: &Path) -> String {
+        format!(
+            r#"perl -MPOSIX -e 'defined(POSIX::setsid()) or die "setsid"; open(my $f, ">>", $ARGV[0]) or die; print $f "$$\n"; close $f; while (1) {{ print "flood\n" x 100; select(undef, undef, undef, 0.01) }}' '{}' & "#,
+            pidfile.display()
+        )
+    }
+
+    /// Run `script` with a 1 ms-per-line sink behind an outer watchdog. Returns the result, the
+    /// sink's lines and how long the run took.
+    fn run_flooded(script: String, deadline: Duration) -> ((i32, String), Vec<String>, Duration) {
+        struct SlowSink(Mutex<Vec<String>>);
+        impl OutputSink for SlowSink {
+            fn line(&self, line: &str) {
+                std::thread::sleep(Duration::from_millis(1));
+                self.0.lock().unwrap().push(line.to_string());
+            }
+        }
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let sink = SlowSink(Mutex::new(Vec::new()));
+            let start = Instant::now();
+            let result = run_streaming("/bin/sh", &["-c".into(), script], None, &sink, deadline);
+            let _ = tx.send((result, sink.0.into_inner().unwrap(), start.elapsed()));
+        });
+        let (result, lines, elapsed) = rx
+            .recv_timeout(deadline + Duration::from_secs(10))
+            .expect("run_streaming did not return: the kill exit's drain is unbounded");
+        (result.expect("the script spawns"), lines, elapsed)
+    }
+
+    /// The run must really have been flooded past the kill, or the timing assertion proves
+    /// nothing. The flooder writes its PID only after `setsid` succeeded, so a recorded PID means
+    /// it left the group; the drop note means lines were still queued when the drain's cap
+    /// came. (Its liveness after the run is NOT an observable: once the run returns, the readers
+    /// close the pipe and the flooder dies of SIGPIPE on its next write.)
+    fn assert_flooded_past_the_kill(pids: &KillPidsOnDrop, lines: &[String]) {
+        let recorded = pids.pids();
+        assert_eq!(
+            recorded.len(),
+            1,
+            "the flooder records its PID after setsid: {recorded:?}"
+        );
+        assert!(
+            lines.iter().any(|l| l == "flood"),
+            "no flood line reached the sink"
+        );
+        assert!(
+            lines.iter().any(|l| l.contains("queued lines dropped")),
+            "nothing was still queued at the cap: the flood did not outlast the kill"
+        );
+    }
+
+    #[test]
+    fn a_setsid_flooder_cannot_hold_the_drain_grace_exit_past_the_deadline() {
+        // The child exits at once, but the flooder holds stdout, so the run leaves through the
+        // drain-grace exit with a queue the flooder keeps feeding. Before the fix that drain ran
+        // until the 4 MiB budget was spent at 1 ms a line: minutes, with the install lock held.
+        let dir = tempfile::TempDir::new().unwrap();
+        let pids = KillPidsOnDrop(dir.path().join("pids"));
+        let deadline = Duration::from_secs(2);
+        let script = format!("{}sleep 0.3; exit 0", setsid_flooder(&pids.0));
+
+        let ((code, _), lines, elapsed) = run_flooded(script, deadline);
+
+        assert!(
+            elapsed < deadline + DRAIN_GRACE + Duration::from_secs(1),
+            "returned only after {elapsed:?}"
+        );
+        assert_eq!(code, 0, "the child's own exit code is kept");
+        assert_flooded_past_the_kill(&pids, &lines);
+    }
+
+    #[test]
+    fn a_setsid_flooder_cannot_hold_the_deadline_exit_past_the_deadline() {
+        // The child never exits, so the run leaves through the deadline exit. The kill reaps the
+        // group but not the flooder, which keeps feeding the queue being drained.
+        let dir = tempfile::TempDir::new().unwrap();
+        let pids = KillPidsOnDrop(dir.path().join("pids"));
+        let deadline = Duration::from_secs(1);
+        let script = format!("{}exec sleep 600", setsid_flooder(&pids.0));
+
+        let ((code, output), lines, elapsed) = run_flooded(script, deadline);
+
+        assert!(
+            elapsed < deadline + DRAIN_GRACE + Duration::from_secs(1),
+            "returned only after {elapsed:?}"
+        );
+        assert_eq!(code, -1, "a timeout reports as exit -1");
+        assert!(
+            output.contains("timed out"),
+            "got the tail {:?}",
+            lines.last()
+        );
+        assert_flooded_past_the_kill(&pids, &lines);
     }
 
     #[test]

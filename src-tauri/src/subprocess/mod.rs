@@ -74,11 +74,17 @@ impl StopOnDrop {
     pub fn flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.0)
     }
+
+    /// Tell the readers to stop now, before the drop. Each then sends at most the line it is
+    /// reading, so a caller that drains after this drains a finite queue.
+    pub fn stop_now(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
 }
 
 impl Drop for StopOnDrop {
     fn drop(&mut self) {
-        self.0.store(true, Ordering::SeqCst);
+        self.stop_now();
     }
 }
 

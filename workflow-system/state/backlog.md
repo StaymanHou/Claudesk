@@ -576,11 +576,11 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — paydown-2026-11-08-wp6-subprocess-primitives (2026-11-09)
 
-- **Pointer:** **1 MAJOR + 4 MINOR** from the review of `1ccf9c4`. MAJOR: both kill exits of `run_streaming` drain the channel before setting the readers' stop flag, so a `setsid` writer flooding the pipe can keep the run (and the install lock) past its deadline. MINOR: `MAX_OUTPUT` carries three meanings; the truncation note implies arrival order; docs still name `spawn_blocking`; a long line is cut without a marker.
+- **Pointer:** **4 MINOR** from the review of `1ccf9c4` (its MAJOR, the unbounded kill-exit drain, was resolved 2026-11-09). `MAX_OUTPUT` carries three meanings; the truncation note implies arrival order; docs still name `spawn_blocking`; a long line is cut without a marker.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-08-wp6-subprocess-primitives — 2026-11-09`.
-- **Priority:** medium (MAJOR) / low (the rest)
+- **Priority:** low (all)
 - **Status:** pending
-- **Pickup shape:** one small task: set `stop` (or bound the drain) at both exits with a `setsid`-flood test, plus the doc/naming MINORs in the same pass.
+- **Pickup shape:** one small doc/naming cleanup task.
 
 ## Code-quality findings — paydown-2026-11-08-wp5-auto-resume-folder-trust (2026-11-09)
 

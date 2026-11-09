@@ -29,6 +29,8 @@
 - **Feature shipped:** Backlog-paydown 2026-11-08 WP5 stops auto-resume from typing `/session-restore` into Claude Code's folder-trust prompt: the fire now reads CC's own trust record (the live profile's `.claude.json`, ancestor walk, any doubt withholds) and withholds on an untrusted folder, and the picker row shows that command in amber with no `⊘` so the operator trusts the folder and types it.
 - **Backlog resolved:** SURFACE-2026-11-03-AUTO-RESUME-FIRES-INTO-THE-FOLDER-TRUST-PROMPT — the inject arm withholds unless CC's trust record says the folder (or an ancestor) is trusted, so its `\r` can no longer answer "No, exit"; the side observation it noted is filed separately as SURFACE-2026-11-09-NEXT-OPEN-INDICATOR-PREDICTS-CONTINUE-WITH-NO-TRANSCRIPT.
 - **Task closed:** The 2026-11-08 backlog-paydown sweep is folded back and its temporary WBS deleted: all six WPs shipped, every resolved finding has its CHANGELOG line, and the one surviving obligation (re-running the installed-build GUI-PATH smoke for the adjudicator spawn that WP6 moved) is now check 6 of the supervisor release-gate backlog entry.
+- **Task closed:** `run_streaming`'s two kill exits now stop the output readers before draining and cap the drain at the run's deadline plus the 250 ms grace, so a `setsid` writer that survives the group kill can no longer hold the run (and the install lock) past its deadline.
+- **Backlog resolved:** SURFACE-2026-11-09-QUALITY-WP6-KILL-EXIT-DRAIN-UNBOUNDED-BEFORE-STOP — `drain_queued` stops the readers, drains until the queue is empty or `deadline + DRAIN_GRACE`, and counts what is left in one note; a `setsid` flooder test at each exit fails on the old drain.
 
 ## 2026-11-08
 
