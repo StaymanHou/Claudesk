@@ -1,23 +1,5 @@
 # Backlog
 
-## SURFACE-2026-11-07-FIND-RESULTS-REPLACE-LIVE-FLAKES-UNDER-FULL-SUITE-LOAD
-- **Source:** feature:verify-codify (paydown WP14 Phase 2)
-- **Target level:** task
-- **Type:** bug (test flake)
-- **Summary:** `src/components/workspace/__tests__/findResultsReplaceLive.test.tsx` › "a row button replaces THAT match with the current text, then re-searches" failed once during a full `pnpm verify:auto` with `TypeError: 'set value' called on an object that is not a valid instance of HTMLInputElement` at its `typeInto` helper (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, value)`). It passed 2/2 alone and on the next full run (3792/3792). WP14 did not touch the file.
-- **Context:** the error means `el` was not an `HTMLInputElement` of the realm whose prototype the setter came from: either the query found a different element under load, or the setter came from another jsdom window (a cross-test realm leak). Either way the test can report a false failure, which costs a gate re-run and invites "fixing" an unrelated change.
-- **Suggested action:** take the setter from the element's own realm (`Object.getPrototypeOf(el)` or `el.ownerDocument.defaultView.HTMLInputElement.prototype`) and assert the element's tag before setting; check whether `liveWorkspace`/`livePicker`-style helpers share the same idiom (the picker's `setNativeValue` copies, see `SURFACE-2026-11-06-QUALITY-WP13-PICKER-LIVE-TESTS-HAVE-NO-SHARED-HARNESS`). Reproduce first: loop the full vitest run a few times.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
-
-## Code-quality findings — paydown-2026-11-04-wp13-settings-split-and-picker-row (2026-11-06)
-
-- **Pointer:** **1 MINOR** remains from the review of `0e7c138` (0 CRITICAL, 0 MAJOR): the picker's five live tests share no harness. (The guard-ordering and guard-rename MINORs were resolved at paydown WP13b, and the `PickerRow.tsx` comment indentation at WP14, both 2026-11-07.)
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-04-wp13-settings-split-and-picker-row — 2026-11-06`.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M16.5 close, 2026-11-08)*
-- **Pickup shape:** its own small task (left out of WP13b, decision D4: migrating five files is not small).
-
 ## Code-quality findings — paydown-2026-11-04-wp4-run-lock-and-sync-guard (2026-11-04)
 
 - **Pointer:** **1 MAJOR + 4 MINOR** from the review of `190b3a2`. MAJOR: the process-group primitives (`StopOnDrop`, the grace constant, group kill + reap) are copied between `workflow_install::runner` and `adjudicator`, not shared, and only one copy documents its limits. MINOR: the grace path drops queued output; `run_streaming` has no output cap; there are three ways to release the run lock; the `spawn_blocking` hop is repeated.

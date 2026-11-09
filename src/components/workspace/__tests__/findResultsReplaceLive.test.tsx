@@ -13,6 +13,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { RightPanelHost } from "../RightPanelHost";
 import "../../../test-support/cm6JsdomShims";
+import { setNativeValue } from "../../../test-support/setNativeValue";
+import { waitForElement } from "../../../test-support/waitForElement";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -95,14 +97,10 @@ afterEach(async () => {
 const q = (sel: string) => document.querySelector(sel);
 
 async function typeInto(testid: string, value: string) {
-  const el = q(`[data-testid="${testid}"]`) as HTMLInputElement;
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )!.set!.call(el, value);
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  // Waits for the field: the overlay renders after the chord, and a fixed settle can fall short
+  // under full-suite load.
+  const el = await waitForElement(`[data-testid="${testid}"]`);
+  await act(async () => setNativeValue(el, value));
 }
 
 async function chordSearch() {

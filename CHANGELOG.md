@@ -17,6 +17,9 @@
 - **Backlog resolved:** SURFACE-2026-11-07-QUALITY-WP14-WORKFLOW-GATE-POINTER-MISSES-THE-TERMS-GAP — `arch/workflow-gate.md` now points to the OFF-invariant guard's ARM 6 banner, which is where the recycle/session vocabulary gap is actually recorded.
 - **Backlog resolved:** SURFACE-2026-11-07-QUALITY-WP14-COMMENT-BUDGET-DOES-NOT-NAME-THE-GUARD — the comment-budget section of `source-text-guards.md` tells a new canonical home to add a `singleAuthority` `once` rule.
 - **Backlog resolved:** SURFACE-2026-08-26-DELETE-ON-RESOLVE-REWRITE-PATH-SKIPS-THE-DELETE (partial: the local guard) — `backlogHeadings.test.ts` fails on a duplicated or malformed `## ` heading in `backlog.md` and `backlog-quality-findings.md`; the upstream prose fix stays open.
+- **Task closed:** Backlog-paydown 2026-11-08 WP4 gives the picker's live tests one shared harness (`livePicker.tsx`) and every live test one tag-checked, realm-safe `setNativeValue` plus a bounded `waitForElement`, migrating seven test files with each one's original mutant still failing.
+- **Backlog resolved:** SURFACE-2026-11-06-QUALITY-WP13-PICKER-LIVE-TESTS-HAVE-NO-SHARED-HARNESS — the five picker live tests mount through `livePicker.tsx` (one IPC lifecycle, the gate moved only by its broadcast); same test counts, and each still fails on the mutant it was written for.
+- **Backlog resolved:** SURFACE-2026-11-07-FIND-RESULTS-REPLACE-LIVE-FLAKES-UNDER-FULL-SUITE-LOAD — fixed by construction: the flake never reproduced in 10 full-suite runs (5 under CPU load), but its exact message is what the old setter throws on a `null` query result, so `typeInto` now waits for its field and every setter is tag-checked; 10 runs after the change were also clean.
 
 ## 2026-11-08
 

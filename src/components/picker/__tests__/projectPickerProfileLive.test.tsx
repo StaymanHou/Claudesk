@@ -1,21 +1,21 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
-import { ProjectPicker } from "../ProjectPicker";
 import { PROFILES_CHANGED_EVENT } from "../../../state/profiles";
 import { NEW_PROFILE_OPTION } from "../profileLine";
+import {
+  calls,
+  mountPicker,
+  setNativeValue,
+  settle as settleFor,
+  teardownLive,
+} from "./livePicker";
 
 // F-b Phase 4 — the PICKER PAGE on a live mount (the consuming surface): the real component,
 // real clicks, real (mocked) Tauri events. Pins what no unit test of the cell can see — the
 // page reads the profile list, re-reads it on `profiles-changed`, refuses a missing row BEFORE
 // opening, and sends a profile change as `set_project_profile`.
-
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 const ROW = "/tmp/scratch/proj";
 const neo = {
@@ -25,40 +25,22 @@ const neo = {
 };
 
 let listed: (typeof neo)[] = [];
-const calls: { cmd: string; args: Record<string, unknown> }[] = [];
-let root: Root | null = null;
-let host: HTMLDivElement | null = null;
 
-async function settle() {
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 25));
-  });
-}
+const settle = () => settleFor(25);
 
-async function mount(rowProfile: string | null, onOpen = vi.fn()) {
-  calls.length = 0;
-  mockWindows("main");
-  mockIPC(
-    (cmd, args) => {
-      calls.push({ cmd, args: (args ?? {}) as Record<string, unknown> });
+function mount(rowProfile: string | null, onOpen = vi.fn()) {
+  return mountPicker({
+    projects: [
+      {
+        project_path: ROW,
+        display_name: "proj",
+        ...(rowProfile === null ? {} : { profile: rowProfile }),
+      },
+    ],
+    profiles: () => listed,
+    onOpen,
+    ipc: (cmd, args) => {
       switch (cmd) {
-        case "prune_missing_projects":
-          return [];
-        case "list_projects":
-          return [
-            {
-              project_path: ROW,
-              display_name: "proj",
-              ...(rowProfile === null ? {} : { profile: rowProfile }),
-            },
-          ];
-        case "picker_announce_actions":
-          return {};
-        case "profiles_list":
-          return listed;
-        case "set_project_profile":
-        case "record_open":
-          return null;
         case "profile_wizard_defaults":
           return {
             config_root: "/u/.config",
@@ -86,25 +68,14 @@ async function mount(rowProfile: string | null, onOpen = vi.fn()) {
           return null;
       }
     },
-    { shouldMockEvents: true },
-  );
-  host = document.createElement("div");
-  document.body.appendChild(host);
-  root = createRoot(host);
-  await act(async () => root!.render(<ProjectPicker onOpen={onOpen} />));
-  await settle();
-  return { el: host, onOpen };
+  });
 }
 
 const profileLine = (el: ParentNode) =>
   el.querySelector('[data-testid="project-profile-line"]');
 
 afterEach(async () => {
-  await act(async () => root?.unmount());
-  host?.remove();
-  root = null;
-  host = null;
-  clearMocks();
+  await teardownLive();
   listed = [];
 });
 
@@ -159,10 +130,7 @@ describe("ProjectPicker × profiles — live (F-b Phase 4)", () => {
       "neo",
       NEW_PROFILE_OPTION,
     ]);
-    await act(async () => {
-      select.value = "neo";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await act(async () => setNativeValue(select, "neo"));
     await settle();
     expect(calls.filter((c) => c.cmd === "set_project_profile")).toEqual([
       { cmd: "set_project_profile", args: { path: ROW, profile: "neo" } },
@@ -179,22 +147,12 @@ describe("ProjectPicker × profiles — live (F-b Phase 4)", () => {
     const select = el.querySelector(
       '[data-testid="project-profile-select"]',
     ) as HTMLSelectElement;
-    await act(async () => {
-      select.value = NEW_PROFILE_OPTION;
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await act(async () => setNativeValue(select, NEW_PROFILE_OPTION));
     await settle();
     const name = document.body.querySelector(
       '[data-testid="profile-wizard-name"]',
-    ) as HTMLInputElement;
-    const setter = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )?.set;
-    await act(async () => {
-      setter?.call(name, "work");
-      name.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    );
+    await act(async () => setNativeValue(name, "work"));
     for (let i = 0; i < 8; i++) {
       await act(async () => {
         (

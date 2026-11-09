@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import { emit } from "@tauri-apps/api/event";
-import { WORKFLOW_FEATURES_ENABLED_EVENT } from "../../../state/workflowGate";
-import { ProjectPicker } from "../ProjectPicker";
+import {
+  calls,
+  mountPicker,
+  pickerRow,
+  setGate,
+  setNativeValue,
+  settle,
+  teardownLive,
+} from "./livePicker";
 
 // Paydown 2026-11-04 WP13 — every callback the picker hands `PickerRow`, driven on a live mount
 // of the real picker (the consuming surface).
@@ -19,113 +23,51 @@ import { ProjectPicker } from "../ProjectPicker";
 // ⚠️ The gate is moved through the seam's broadcast (the drive-mode line only renders with it
 // ON), never by answering its seed command by name (offInvariantGuard).
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
 const ONE = "/p/one";
 const TWO = "/p/two";
-const calls: { cmd: string; args: unknown }[] = [];
-let root: Root | null = null;
-let host: HTMLDivElement | null = null;
+let host: HTMLDivElement;
 
-afterEach(async () => {
-  await act(async () => root?.unmount());
-  host?.remove();
-  root = null;
-  host = null;
-  clearMocks();
-});
-
-async function settle(ms = 15) {
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, ms));
-  });
-}
+afterEach(teardownLive);
 
 async function mount(onOpen = vi.fn()) {
-  calls.length = 0;
-  mockWindows("main");
-  mockIPC(
-    (cmd, args) => {
-      calls.push({ cmd, args });
-      switch (cmd) {
-        case "prune_missing_projects":
-          return [];
-        case "list_projects":
-          return [
-            { project_path: ONE, display_name: "one", last_opened_at: 2 },
-            { project_path: TWO, display_name: "two", last_opened_at: 1 },
-          ];
-        case "picker_announce_actions":
-          return { [ONE]: "continue" };
-        case "profiles_list":
-          return [
-            {
-              name: "neo",
-              config_dir: "/u/.config/claude-neo",
-              provenance: "adopted",
-            },
-          ];
-        default:
-          return null;
-      }
-    },
-    { shouldMockEvents: true },
-  );
-  host = document.createElement("div");
-  document.body.appendChild(host);
-  root = createRoot(host);
-  await act(async () => {
-    root!.render(<ProjectPicker onOpen={onOpen} />);
-  });
-  await settle(25);
-  await act(async () => {
-    await emit(WORKFLOW_FEATURES_ENABLED_EVENT, true);
-  });
-  await settle();
+  ({ el: host } = await mountPicker({
+    projects: [
+      { project_path: ONE, display_name: "one", last_opened_at: 2 },
+      { project_path: TWO, display_name: "two", last_opened_at: 1 },
+    ],
+    announce: { [ONE]: "continue" },
+    profiles: [
+      {
+        name: "neo",
+        config_dir: "/u/.config/claude-neo",
+        provenance: "adopted",
+      },
+    ],
+    onOpen,
+    gateOn: true,
+  }));
   return onOpen;
 }
 
-function row(name: string): HTMLElement {
-  const li = [
-    ...host!.querySelectorAll<HTMLElement>("li.picker-recent-row"),
-  ].find((l) => l.querySelector(".picker-recent-name")?.textContent === name);
-  if (!li) throw new Error(`no row ${name}`);
-  return li;
-}
+const row = (name: string) => pickerRow(host, name);
 
 async function typeFilter(value: string) {
-  const input = host!.querySelector<HTMLInputElement>(
+  const input = host.querySelector<HTMLInputElement>(
     '[data-testid="picker-filter"]',
-  )!;
-  const setValue = Object.getOwnPropertyDescriptor(
-    HTMLInputElement.prototype,
-    "value",
-  )!.set!;
-  await act(async () => {
-    setValue.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  );
+  await act(async () => setNativeValue(input, value));
   await settle();
 }
 
 /** Filter row `one` out (unmounting it) and back in, so it re-seeds from `recents`. */
 async function roundTripRowOne() {
   await typeFilter("two");
-  expect(host!.textContent).not.toContain("/p/one"); // it really unmounted
+  expect(host.textContent).not.toContain("/p/one"); // it really unmounted
   await typeFilter("");
 }
 
 async function pickInSelect(select: HTMLSelectElement, value: string) {
-  const setValue = Object.getOwnPropertyDescriptor(
-    HTMLSelectElement.prototype,
-    "value",
-  )!.set!;
-  await act(async () => {
-    setValue.call(select, value);
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  });
+  await act(async () => setNativeValue(select, value));
   await settle();
 }
 
@@ -170,8 +112,8 @@ describe("PickerRow — remove reaches the picker", () => {
     expect(calls.filter((c) => c.cmd === "remove_project")).toEqual([
       { cmd: "remove_project", args: { path: TWO } },
     ]);
-    expect(host!.textContent).not.toContain("/p/two");
-    expect(host!.textContent).toContain("/p/one"); // control: the other row stays
+    expect(host.textContent).not.toContain("/p/two");
+    expect(host.textContent).toContain("/p/one"); // control: the other row stays
   });
 });
 
@@ -187,14 +129,7 @@ describe("PickerRow — a committed value survives the row unmounting (the picke
     const input = row("one").querySelector<HTMLInputElement>(
       '[data-testid="picker-recent-model-input"]',
     )!;
-    const setValue = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )!.set!;
-    await act(async () => {
-      setValue.call(input, "sonnet");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    await act(async () => setNativeValue(input, "sonnet"));
     await act(async () => {
       input.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
@@ -231,10 +166,7 @@ describe("PickerRow — a committed value survives the row unmounting (the picke
     await roundTripRowOne();
     // The remounted cell seeds the gate from its command, which this harness answers as OFF
     // (it may not name it); re-broadcast it, as the real app's seed would read it ON.
-    await act(async () => {
-      await emit(WORKFLOW_FEATURES_ENABLED_EVENT, true);
-    });
-    await settle();
+    await setGate(true);
     expect(
       row("one").querySelector('[data-testid="picker-recent-mode-line"]')!
         .textContent,

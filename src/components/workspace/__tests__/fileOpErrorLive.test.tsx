@@ -5,6 +5,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { RightPanelHost } from "../RightPanelHost";
 import "../../../test-support/cm6JsdomShims";
+import { setNativeValue } from "../../../test-support/setNativeValue";
+import { waitForElement } from "../../../test-support/waitForElement";
 
 // M16.5 WP5 (5.2) — a failed delete / trash is SHOWN, not only logged
 // (SURFACE-2026-06-30-FILE-OP-ERROR-SURFACE), and a create that collides with a gitignored
@@ -137,17 +139,10 @@ describe("RightPanelHost — a failed file op is visible (live)", () => {
   it("refuses a new file named like an existing gitignored .env, without writing", async () => {
     await mount();
     await click(q('[data-testid="file-tree-newfile-btn"]'));
-    const input = q(
+    const input = await waitForElement(
       '[data-testid="file-tree-newfile-input"]',
-    ) as HTMLInputElement;
-    await act(async () => {
-      const setValue = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        "value",
-      )!.set!;
-      setValue.call(input, ".env");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    );
+    await act(async () => setNativeValue(input, ".env"));
     await act(async () => {
       input.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),

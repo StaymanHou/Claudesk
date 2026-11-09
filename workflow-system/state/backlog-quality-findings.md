@@ -4,19 +4,6 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
-# paydown-2026-11-04-wp13-settings-split-and-picker-row — 2026-11-06
-
-*(feature-review-quality on ship commit `0e7c138`, window `fea480e..0e7c138`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 4 MINOR, all auto-backlogged; finding 1 re-checked against the source before filing.)*
-
-## SURFACE-2026-11-06-QUALITY-WP13-PICKER-LIVE-TESTS-HAVE-NO-SHARED-HARNESS
-- **Severity:** MINOR
-- **Location:** `src/components/picker/__tests__/*Live.test.tsx` (five files, two of them new in WP13); `pickerRowCallbacksLive.test.tsx` writes out the native value-setter idiom three times.
-- **Finding:** each live picker test rebuilds the createRoot + mockIPC + act + afterEach scaffolding. The workspace has a shared harness (`liveWorkspace.tsx`); the picker has none.
-- **Why it matters:** a new mount-time IPC command means five edits, and the next live test copies again.
-- **Suggested action:** a small `livePicker.tsx` (mount with a projects/announce/profiles fixture, gate-via-broadcast, `setNativeValue`), then migrate the five files.
-- **Priority:** low
-- **Status:** pending
-
 # paydown-2026-11-04-wp4-run-lock-and-sync-guard — 2026-11-04
 
 *(feature-review-quality on ship commit `190b3a2`, window `00ebf92..190b3a2`; drive_mode=autopilot. 1 MAJOR + 4 MINOR auto-backlogged.)*

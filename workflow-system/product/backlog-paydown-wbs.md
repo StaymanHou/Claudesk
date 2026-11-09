@@ -194,6 +194,7 @@ Runs right after WP2 because both touch the comment-budget/single-authority surf
 - **Resolves:** the WP13 QF body + its pointer stub (BL); the flake (BL), but only if the post-fix loop
   runs clean. If it never reproduces, apply the realm fix anyway, record the loop's n, and resolve
   it as fixed-by-construction.
+- ✅ **DONE 2026-11-09.** The flake did **not** reproduce: 0 in 10 full-suite runs, 5 of them under 4× `yes` CPU load. ⚠️ **The cross-realm theory was refuted by measurement:** jsdom's global input setter does NOT throw on an element from another `JSDOM` window here. It throws the flake's exact message on `null`, a `<textarea>` or a `<div>`. The likely cause is `typeInto` querying before the overlay rendered. So: `src/test-support/setNativeValue.ts` (tag-checked, setter by tag from the element's own window) + `waitForElement.ts` (bounded poll inside `act`); `typeInto` waits for its field. The 5 picker files are on `livePicker.tsx`; the counts are unchanged (3/6/2/2/5). 7 production mutants each still fail their own file. `newProfileWizardLive` was also pointed at the shared setter (a 7th copy, realm-safe already but it silently no-op'd on a missing setter). Post-fix: 10/10 clean runs.
 
 ## WP6 runs before WP5: see the ordering note
 

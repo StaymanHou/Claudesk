@@ -571,10 +571,16 @@ transitions, a real `.click()` reaches React's handler, and with
 reaches a `listen` subscriber. No new dependency is needed. Precedents:
 `src/components/workspace/__tests__/liveWorkspace.tsx` (the shared harness for a live `Workspace`
 mount, which stubs exactly `XtermPane`, `RightPanelHost` and the gate seam),
+`src/components/picker/__tests__/livePicker.tsx` (its picker counterpart: `mountPicker` from a
+projects/announce/profiles fixture, `setGate` via the broadcast),
 `turnNavControls.test.tsx`, `workspaceDriveModeLive.test.tsx`, `promptSendWiring.test.tsx` (real
 CM6 host), `src/__tests__/closeWiring.test.tsx` (the real `App`, workspaces opened through the DEV
 `window.__seedWorkspace` seam), and the older `dictationProbeArms.test.tsx`.
   - ⚠️ Set `globalThis.IS_REACT_ACT_ENVIRONMENT = true` explicitly in the test file.
+  - ⚠️ Set a control's value with `src/test-support/setNativeValue.ts` and wait for an
+    asynchronously rendered one with `waitForElement.ts`. Never write the global
+    `HTMLInputElement.prototype` setter by hand: on a `null` query it throws "'set value' called on
+    an object that is not a valid instance", which reads as a realm bug and is really a timing one.
   - ⚠️ Tap `window` `error`: a throw inside a DOM listener is swallowed under Vitest jsdom
     (`[[jsdom-listener-throw-is-silent-in-vitest]]`).
   - ⚠️ Teardown order: settle a tick after `unmount` BEFORE `clearMocks()`. The unlisten runs on

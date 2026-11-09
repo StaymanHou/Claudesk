@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NewProfileWizard } from "../NewProfileWizard";
 import type { Profile } from "../../../state/profiles";
+import { setNativeValue } from "../../../test-support/setNativeValue";
 
 // F-b Phase 5 — the New-profile wizard on a LIVE mount: the real component, real input events,
 // IPC answered by `mockIPC`. Asserts the WIRING by value — which command is sent with which
@@ -95,16 +96,7 @@ const q = <T extends Element = HTMLElement>(id: string) =>
 async function setValue(id: string, value: string) {
   const el = q<HTMLInputElement | HTMLSelectElement>(id);
   if (!el) throw new Error(`no ${id}`);
-  const proto = Object.getPrototypeOf(el) as object;
-  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
-  await act(async () => {
-    setter?.call(el, value);
-    el.dispatchEvent(
-      new Event(el instanceof HTMLSelectElement ? "change" : "input", {
-        bubbles: true,
-      }),
-    );
-  });
+  await act(async () => setNativeValue(el, value));
 }
 
 async function click(id: string) {

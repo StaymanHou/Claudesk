@@ -1,11 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import { emit } from "@tauri-apps/api/event";
-import { WORKFLOW_FEATURES_ENABLED_EVENT } from "../../../state/workflowGate";
-import { ProjectPicker } from "../ProjectPicker";
+import { mountPicker, teardownLive } from "./livePicker";
 
 // Paydown 2026-11-04 WP13 — each row's gate decision, on a live mount of the real picker.
 //
@@ -20,88 +15,45 @@ import { ProjectPicker } from "../ProjectPicker";
 // ⚠️ The gate is moved through the seam's broadcast, never by answering its seed command by
 // name (offInvariantGuard; the `gateOffClearWiring.test.tsx` precedent).
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
-let root: Root | null = null;
-let host: HTMLDivElement | null = null;
-
-afterEach(async () => {
-  await act(async () => root?.unmount());
-  host?.remove();
-  root = null;
-  host = null;
-  clearMocks();
-});
+afterEach(teardownLive);
 
 async function mount(gateOn: boolean) {
-  mockWindows("main");
-  mockIPC(
-    (cmd) => {
-      switch (cmd) {
-        case "prune_missing_projects":
-          return [];
-        case "list_projects":
-          return [
-            {
-              project_path: "/p/plain",
-              display_name: "plain",
-              last_opened_at: 3,
-            },
-            {
-              project_path: "/p/on-neo",
-              display_name: "on-neo",
-              last_opened_at: 2,
-              profile: "neo",
-            },
-            {
-              project_path: "/p/crashed",
-              display_name: "crashed",
-              last_opened_at: 1,
-            },
-          ];
-        case "picker_announce_actions":
-          return {
-            "/p/plain": "restore",
-            "/p/on-neo": "restore",
-            "/p/crashed": "continue",
-          };
-        case "profiles_list":
-          return [
-            {
-              name: "neo",
-              config_dir: "/u/.config/claude-neo",
-              provenance: "adopted",
-            },
-          ];
-        default:
-          return null;
-      }
+  const { el } = await mountPicker({
+    projects: [
+      { project_path: "/p/plain", display_name: "plain", last_opened_at: 3 },
+      {
+        project_path: "/p/on-neo",
+        display_name: "on-neo",
+        last_opened_at: 2,
+        profile: "neo",
+      },
+      {
+        project_path: "/p/crashed",
+        display_name: "crashed",
+        last_opened_at: 1,
+      },
+    ],
+    announce: {
+      "/p/plain": "restore",
+      "/p/on-neo": "restore",
+      "/p/crashed": "continue",
     },
-    { shouldMockEvents: true },
-  );
-  host = document.createElement("div");
-  document.body.appendChild(host);
-  root = createRoot(host);
-  await act(async () => {
-    root!.render(<ProjectPicker onOpen={() => {}} />);
-    await new Promise((r) => setTimeout(r, 25));
+    profiles: [
+      {
+        name: "neo",
+        config_dir: "/u/.config/claude-neo",
+        provenance: "adopted",
+      },
+    ],
+    gateOn,
   });
-  if (gateOn) {
-    await act(async () => {
-      await emit(WORKFLOW_FEATURES_ENABLED_EVENT, true);
-      await new Promise((r) => setTimeout(r, 10));
-    });
-  }
+  return el;
 }
 
 /** Each row's name → its announcement text (`null` when it announces nothing). */
-function announcements(): Record<string, string | null> {
+function announcements(el: ParentNode): Record<string, string | null> {
   const out: Record<string, string | null> = {};
-  for (const button of host!.querySelectorAll(
-    '[data-testid="picker-recent"]',
-  )) {
+  for (const button of el.querySelectorAll('[data-testid="picker-recent"]')) {
     const name = button.querySelector(".picker-recent-name")!.textContent!;
     out[name] =
       button.querySelector('[data-testid="picker-recent-announce"]')
@@ -112,8 +64,8 @@ function announcements(): Record<string, string | null> {
 
 describe("the picker hands each row ITS OWN gate decision", () => {
   it("gate OFF: no row offers /session-restore; the ungated continue still shows", async () => {
-    await mount(false);
-    expect(announcements()).toEqual({
+    const el = await mount(false);
+    expect(announcements(el)).toEqual({
       plain: null,
       "on-neo": null,
       crashed: "↻ continue",
@@ -121,8 +73,8 @@ describe("the picker hands each row ITS OWN gate decision", () => {
   });
 
   it("gate ON: only the DEFAULT-profile row offers /session-restore", async () => {
-    await mount(true);
-    expect(announcements()).toEqual({
+    const el = await mount(true);
+    expect(announcements(el)).toEqual({
       plain: "↻ /session-restore",
       "on-neo": null,
       crashed: "↻ continue",
