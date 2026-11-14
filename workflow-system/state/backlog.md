@@ -595,8 +595,8 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Target level:** product:wbs (WP3 / WP5)
 - **Type:** gap
 - **Summary:** Under tmux, the bracketed-paste envelope reaches the pane app only once that app has enabled `?2004h`; before then tmux strips it and each interior `\r` becomes an Enter. A multi-line injection (the Prompt panel's staged payload, or any future multi-line auto-inject) sent to a remote workspace before CC is up would split into several submits.
-- **Context:** Measured 2026-11-14 with `cat -v` in a `tmux -L claudesk` pane on the mini (`arch/remote-workspaces.md` §C.1). Locally the raw envelope always reaches CC, so this is remote-only.
-- **Suggested action:** In WP3, confirm the existing `cc_ready` gate holds remote multi-line injections until CC has drawn its prompt; add a test if it does not already cover the remote spawn path.
+- **Context:** Measured 2026-11-14 with `cat -v` in a `tmux -L claudesk` pane on the mini (`arch/remote-workspaces.md` §C.1). Locally the raw envelope always reaches CC, so this is remote-only. The same timing question affects auto-resume's fixed `INJECT_SETTLE_MS` on remote (WBS 5.6).
+- **Suggested action:** In WP3 (task 3.7), pick a **real** CC-readiness signal for remote multi-line injections and test that a multi-line send during startup arrives as one turn. ⚠️ **Not `cc_ready`:** that is Claudesk's frontend-listener handshake, not CC readiness (firing at it measured NOT-EXECUTED 5/5; `autoResumeFire.ts` header; SURFACE-2026-08-04-CC-READY-NAME-INVITES-MISREADING-AS-CC-READINESS). Nothing holds a Prompt-panel send today. Candidates to probe: the session's first hook event over the link, or an observed `?2004h` mode toggle in the output stream. *(Corrected 2026-11-14 at review-quality; the first version of this entry wrongly named `cc_ready`.)*
 - **Priority:** medium
 - **Status:** pending
 

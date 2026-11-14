@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-14
+
+- **Feature shipped:** M17 WP1's remote-terminal probe settled how a remote workspace's Claude Code runs under tmux on the SSH host: tmux conf C with CC inline, token auth because the macOS Keychain is unreadable over ssh, `unset TMUX` for truecolor, and a copy-mode cancel before every injection and before `/exit` on close. Every finding is folded into WP2–WP7's tasks.
+- **Milestone:** WP1: Probe — the remaining terminal unknowns under tmux on the mini
+
 ## 2026-11-09
 
 - **Task closed:** Backlog-paydown 2026-11-08 WP1 buries the adjudicator ask-shaped-turn entry by operator ruling (wording cannot clear the bar on tail-only input; the next lever is richer input) and re-measures F10b, finding the post-fix hand-back rate is 0 of 257 once the measurement's FSD misclassification is corrected.

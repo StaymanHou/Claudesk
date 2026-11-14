@@ -79,13 +79,23 @@ workspace.
   **inner** argv.
   - **Local** behaves exactly as today. The existing env-composition tests pin that it stays byte-identical.
   - **Remote** spawns `/usr/bin/ssh -S <ctl> -tt <host> -- <remote command>`, with a local cwd of
-    `$HOME`. The remote command is:
+    `$HOME`. The remote command is (schematic; WP1 probed **each element** on the mini: the token in
+    auth-2, the inline TUI in P2.2 (B), `unset TMUX` in P2.4, together inside a launcher script, but
+    never as this one composed string; the exact quoting is WP2.4/WP3's, see the ⚠️ OPEN point below):
 
     ```
-    zsh -lc 'exec tmux -L <srv> new -A -s <name> -c <path> \
-      "env CLAUDESK_DRIVE_MODE=<mode> ~/.local/bin/claude <argv…>" \; set status off'
+    zsh -lc 'exec tmux -L <srv> -f ~/.claudesk/<identifier>/tmux.conf \
+      new -A -s <name> -c <path> "<inner command>"'
+
+    <inner command> =
+      export CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.claudesk/cc-oauth-token)";   # auth (§C.1)
+      export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1;                       # inline TUI (§I decision)
+      unset TMUX;                                                          # truecolor (§C.1)
+      exec env CLAUDESK_DRIVE_MODE=<mode> claude <argv…>                   # build_cc_argv's argv
     ```
 
+    The conf (`status off`, `mouse on`, RGB; §C.1) replaces the old `\; set status off` suffix. `claude`
+    is the binary the §H preflight resolved under `zsh -lc` (`~/.local/bin/claude` on the mini).
     `zsh -lc` is required because tmux isn't on the mini's non-login PATH (probed). `CLAUDESK_DRIVE_MODE`
     is omitted when the gate is off or no mode is set, exactly as locally. The value travels in the
     command line because **an arbitrary env var doesn't cross ssh**. Only `LANG`/`LC_*` do, through
@@ -94,16 +104,37 @@ workspace.
   covering spawn, execs and reads. It is unit-tested against hostile inputs (spaces, quotes, `$`,
   backticks, newlines). It is the only defense against a path or mode string becoming remote code
   execution on a shared host. **Never build a remote command with `format!` outside it.**
+- ⚠️ **OPEN for WP2.4 / WP3 spec: the quoting layers, and the one expansion that must survive.** The
+  command crosses four interpreters: Claudesk's argv to `ssh` (no shell) → the remote login shell
+  running `zsh -lc '…'` → tmux, which hands `<inner command>` to its default shell → that shell. Every
+  **variable** value (path, session name, drive mode, argv) is quoted by `remote_cmd::quote` for each
+  layer it crosses. But the token export's `$(cat …)` must **expand**, in the innermost shell, so it
+  cannot pass through a `$`-neutralising `quote` unchanged. That contradicts the rule above as
+  written. WP3 resolves it at spec with one of:
+  - **(a)** the auth/inline/`TMUX` lines are a **compile-time constant** fragment inside `remote_cmd`
+    (no variable data in it), escaped for the **outer** layers only (`zsh -lc '…'`, tmux's `"…"`) so
+    that its `$(…)` survives to the innermost shell, while every variable value still goes through
+    `quote`. The rule is then restated as "no *variable* value enters a remote command outside
+    `quote`"; or
+  - **(b)** a **deployed launcher script**, `~/.claudesk/<identifier>/cc-launch` (WP4 already deploys
+    the hook script to that directory), does the exports and `unset TMUX` and then
+    `exec claude "$@"`. The tmux command then contains no expansion at all, and every part of it is
+    quoted. The probe's runs used such a launcher (`~/.claudesk-probe/cc.sh`; its contents are in the
+    WIP's Phase 2 raw readings). That is evidence the mechanism works, not a ruling between (a) and (b).
+
+  Either way a test pins it: a hostile path or mode string never executes, and the token is never
+  present in the command string.
 - **`new -A` means attach-if-exists.** When the tmux session is live, the inner command and its env are
   ignored, which is the reconnect (R-2). When CC exits, its tmux session ends, so a later `new -A`
   starts fresh with the argv the resume rule chose.
 - **The `CcSession` trait gains one method, `detach()`.** Its default impl returns `Unsupported`, so the local
-  impl is unchanged. On remote it SIGHUPs the local ssh **without** typing `/exit`. `kill()` is
-  unchanged (§E, R-1).
+  impl is unchanged. On remote it SIGHUPs the local ssh **without** typing `/exit`. `kill()` keeps its
+  local behaviour, but **the remote close path first runs `send-keys -X cancel` over the master**, so
+  the `/exit\r` it types is never swallowed by tmux copy-mode (§C.1, §E, R-1).
 - **Profiles stay local-only** (`CLAUDE_CONFIG_DIR` names a local directory). A remote workspace runs
   under the remote's default `~/.claude`.
 
-### C.1 Terminal facts from the WP1 probe (PROBED 2026-11-14, Phase 1; mini tmux 3.8)
+### C.1 Terminal facts from the WP1 probe (PROBED 2026-11-14, Phases 1–2; mini tmux 3.8, CC 2.1.325)
 
 Measured in a real Claudesk xterm.js pane (the second terminal, same `XtermPane` and
 `color_tty_env` as the CC spawn) running the planned remote command. Raw readings:
@@ -126,12 +157,21 @@ Measured in a real Claudesk xterm.js pane (the second terminal, same `XtermPane`
 - **Bracketed paste survives tmux only when the pane app has enabled `?2004h`.** With it, the
   `stagedPayload.ts` envelope reaches the app intact. Without it, tmux **strips the envelope** and
   each interior `\r` becomes an Enter. CC enables it at startup, so this bites only an injection sent
-  **before CC is up** (a multi-line send would split into several submits). WP3/WP5: a multi-line
-  injection must wait for CC to be ready (the existing `cc_ready` gate covers the local pane;
-  confirm it covers the remote one).
+  **before CC is up** (a multi-line send would split into several submits).
+  ⚠️ **`cc_ready` does NOT solve this; do not lean on it.** `cc_ready` is Claudesk's own
+  frontend-listener handshake, not a CC-readiness signal: firing an injection at `cc_ready` was
+  measured NOT-EXECUTED 5/5 (`autoResumeFire.ts` header; SURFACE-2026-08-04-CC-READY-NAME-INVITES-
+  MISREADING-AS-CC-READINESS). **Nothing in Claudesk today holds a Prompt-panel send until CC has
+  enabled `?2004h`.** Locally that is harmless (the raw envelope reaches CC either way); on a remote
+  pane it splits the send. **WP3 must pick a real readiness signal** for remote multi-line
+  injections (candidates to probe: the session's first hook event over the link, or an observed
+  `?2004h` in the output stream, which is a mode toggle, not text parsing for state) and test it: a
+  multi-line send during startup arrives as one turn.
 - **Latency:** to tmux-ready, cold **1.0 s** / warm master **0.26 s**; **to CC's prompt, cold 1.30 s /
   warm master 0.55 s** (3 runs each, host-side PTY, trusted folder). That is vision Metric 7's
-  open-time input, well inside Metric 1's <10 s.
+  open-time input (operator-accepted), well inside Metric 1's <10 s. ⚠️ Scope: measured in **default**
+  permission mode and **before** the token export, `CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN` and
+  `unset TMUX` joined the inner command. Re-measure with the real inner command in WP3/WP8.
 - ✅ **R-1 mechanism PROBED (Phase 2): `/exit\r` ends it all.** Typed into the pane, `/exit\r` ended CC
   (no remote `claude` left), the tmux session (`has-session` → 1) and server, and the outer `ssh`
   returned the local prompt. That is exactly what `PtyCcSession::kill()` types. `/exit\n` alone does
@@ -184,10 +224,9 @@ Measured in a real Claudesk xterm.js pane (the second terminal, same `XtermPane`
   Missing or expired → §H preflight and the open path say so in plain words.
 - **WP3's conf (ratified 2026-11-14):** `set -g status off`, `set -g mouse on`,
   `set -as terminal-features ',xterm*:RGB'` (the probe's `d.conf`), loaded with `-f`.
-- **WP3's remote inner command, as probed end to end (2026-11-14):** before `exec claude <argv>`, it
-  runs `export CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.claudesk/cc-oauth-token)"` (auth),
-  `export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1` (inline, operator decision, §I) and `unset TMUX`
-  (truecolor). All three are built through `remote_cmd::quote` like the rest of the command (§C).
+- **WP3's remote inner command** is the one in §C's code block (token export, inline TUI,
+  `unset TMUX`, then `exec claude`), each element probed (auth-2, P2.2 B, P2.4). How the token's `$(cat …)` coexists with
+  `remote_cmd::quote` is §C's ⚠️ OPEN point.
 
 ## D. Hook channel and drive mode (vision Q3)
 
@@ -196,7 +235,11 @@ Measured in a real Claudesk xterm.js pane (the second terminal, same `XtermPane`
   bad stdin), so a down link or a dev/prod twin never blocks CC there either.
 - **Registration in the remote `~/.claude/settings.json`** reuses `hook_install`'s merge logic. The file
   is read with `cat`, the merge runs **locally**, and the result is written back atomically (`cat > tmp && mv`).
-  On the mini the file doesn't exist yet (probed), so this creates it. The registered command is
+  ⚠️ **The mini's file EXISTS** (it was absent at research; CC created it at the operator's login, and
+  it now holds `theme` and `skipDangerousModePermissionPrompt: true`, §C.1). The merge **must preserve
+  every key it didn't write**; never a create-or-overwrite path, which would silently undo the
+  operator's yolo acceptance on a shared host. Test: a fixture holding both keys survives the merge
+  unchanged except for Claudesk's hook entries. The registered command is
   `CLAUDESK_HOOK_SOCK=<remote>/hook.sock CLAUDESK_ORIGIN=<8-hex host key> /usr/bin/perl <script>`.
   ⚠️ **Provenance holds remotely too:** only remove a hook Claudesk recorded installing, matched by exact
   basename. Never delete one it didn't install.
@@ -223,10 +266,10 @@ remote. Code, UI copy and tests use these two words for these two cases only.
 
 | Event | Kind | What happens | Rule |
 |---|---|---|---|
-| Close workspace (link up) | explicit | the existing `kill()` types `/exit` → CC ends → tmux session ends → the clean-exit route clears the unclean flag | R-1 |
-| Quit / self-update relaunch (link up) | explicit | the same `kill()` for every remote workspace, then the quit continues | R-1 |
-| ⏸ "Close, resume later" (`onPauseClose`, link up) | explicit | the same `kill()` (`/exit` → CC and tmux end), but the unclean flag is **left set**, as it is locally, so the next open **resumes** with `--continue` on the remote | R-1 |
-| Recycle | explicit | the existing flow: handoff → composite marker (remote poll + `Stop` hook) → `kill()` → respawn → `/session-restore` | R-1 |
+| Close workspace (link up) | explicit | **`send-keys -X cancel` over the master first** (a scrolled-up pane would swallow `/exit`; §C.1), then the existing `kill()` types `/exit` → CC ends → tmux session ends → the clean-exit route clears the unclean flag | R-1 |
+| Quit / self-update relaunch (link up) | explicit | the same cancel-then-`kill()` for every remote workspace, then the quit continues | R-1 |
+| ⏸ "Close, resume later" (`onPauseClose`, link up) | explicit | the same cancel-then-`kill()` (`/exit` → CC and tmux end), but the unclean flag is **left set**, as it is locally, so the next open **resumes** with `--continue` on the remote | R-1 |
+| Recycle | explicit | the existing flow: handoff → composite marker (remote poll + `Stop` hook) → cancel-then-`kill()` → respawn → `/session-restore`; every injection in it (the handoff command, `/session-restore`) also goes through the cancel-before-inject funnel | R-1 |
 | Claudesk crash, link lost, host unreachable | passive | the local ssh dies; tmux and CC keep running; the link retries with backoff and reconnects every workspace on that host | R-2 |
 | Detach button | deliberate | `detach()`; the tile stays open in a **Detached** state with a Reconnect button; the unclean flag is left untouched | R-3 |
 | Reconnect button / reopen from the picker | — | `tmux has-session` over the master: **live → attach (beats both resume signals)**; dead → the two-signal rule, with its file checks done remotely (§F) | R-2 |
@@ -235,6 +278,20 @@ remote. Code, UI copy and tests use these two words for these two cases only.
 | Host unreachable at open | unclear | dialog: Retry / Cancel. Never silently fall back to anything | R-4 |
 | A live `cd-*` session with no Claudesk record (e.g. after its row was removed) | unclear | dialog at open: Reconnect / End it and start fresh | R-4 |
 
+- ⚠️ **Every Claudesk-originated injection on a remote workspace goes through ONE funnel that runs
+  `send-keys -X cancel` first**: skill buttons, the Prompt panel, auto-resume's `/session-restore`,
+  Recycle's commands, and the close path's `/exit`. It is a single function, like `remote_cmd::quote`,
+  so a new injection site can't forget it (WP3 owns it; a guard asserts every remote `cc_input` path
+  goes through it). ⚠️ **Only the scrolled-up case was probed.** In the normal case (not in copy-mode)
+  tmux likely rejects `send-keys -X cancel` with "not in a mode" and a non-zero exit (unprobed). The
+  funnel must not treat that as failure: cancel only when `#{pane_in_mode}` is 1 (e.g.
+  `if -F '#{pane_in_mode}' 'send -X cancel'`), or tolerate that exit. WP3 probes both cases.
+- ⚠️ **Auto-resume's fixed settle delay needs re-measuring for remote.** `/session-restore` fires
+  `INJECT_SETTLE_MS` (1500 ms) after `cc_ready` (`autoResumeFire.ts`), about 4× the local flake point.
+  Remote cold CC-ready measured 1.30 s, about 1.15× margin, and that was in default mode before the
+  final inner command. A cold remote open could land `/session-restore` before CC listens. WP5
+  re-measures with the real inner command and either raises the delay for remote or fires on a real
+  readiness signal (the same one §C.1 asks WP3 to choose for multi-line sends).
 - **The unclean flag is unchanged.** It is set on open and cleared only by an explicit clean route. A passive
   drop leaves it set, which is correct: if the remote session later dies too (the remote reboots),
   reopening falls to `--continue`.
@@ -250,8 +307,10 @@ remote. Code, UI copy and tests use these two words for these two cases only.
 - **New module `remote_fs`**: async, read-only, over the host's master. `remote_stat`, `remote_read`,
   `remote_exists`, and `remote_list_dir`. Every path is resolved under `RemoteTarget.path` and rejects
   `..` and absolute escapes **before** quoting. This is the remote equivalent of `validate_root`.
-  Claudesk still never writes into `workflow-system/`; the only remote writes are the hook script and
-  the hook registration under `~/.claudesk` and `~/.claude/settings.json`.
+  Claudesk still never writes into `workflow-system/`. The complete list of remote writes: under
+  `~/.claudesk/<identifier>/`, the hook script, the tmux conf (WBS 3.7) and, if §C's option (b) is
+  chosen, the `cc-launch` script; plus the hook registration merged into `~/.claude/settings.json`.
+  The token file `~/.claudesk/cc-oauth-token` is the operator's, and Claudesk never writes it.
 - **A poller replaces `notify` for remote workspaces.** It polls `stat` on a fixed set every 1.5 s: the docs set,
   `workflow-system/state/.session.md`, and the WIP dir listing. Changes go out as the **same
   `fs-change` event shape**, so the docs reload and Recycle's `.session.md` wait work unchanged.
@@ -271,7 +330,13 @@ remote. Code, UI copy and tests use these two words for these two cases only.
 - **New single funnel `workspaceSurfaces(project)`**, in TS with a Rust twin for anything the backend
   must refuse. It returns which surfaces a workspace may show. For remote:
   - **absent:** editor, diff, second terminal, file tree, ⌘P finder, project search, Sublime Text and
-    Merge, Finder reveal, media viewer, supervisor.
+    Merge, Finder reveal, media viewer, supervisor, and the **turn-marker jump** (prev/next turn). It
+    reads xterm.js's own scrollback, which stays empty under tmux (WP1, §I), so on a remote pane it
+    would jump nowhere. ⚠️ **Agent's lean, for the WP6 spec / operator to confirm**: the operator
+    accepted at WP1 verify-human that the jump won't work on remote panes, but whether to **hide**
+    it or **rebuild** it (e.g. jump via tmux's history, which config C keeps complete) was not
+    decided. The prior `a-session-behaves-the-same-wherever-it-runs` says "reproducible at bounded
+    cost → match local", so the rebuild cost has to be assessed before choosing absent.
   - **present:** prompt, docs (still through the gate), skill row, Recycle, Session-Start, drive mode,
     resume announce.
   - **remote-only:** Detach / Reconnect.
@@ -352,8 +417,9 @@ remote. Code, UI copy and tests use these two words for these two cases only.
     own typing while scrolled up goes to copy-mode (leave with `q`/`Esc`). The `Any` binding (exits
     copy-mode on typing but eats one key) is **NOT added** (operator, 2026-11-14): copy-mode keeps tmux's
     standard `q`/`Esc`.
-  - **E is retired** (operator, 2026-11-14). Phase 2 measures C on real CC, not E. E returns only if
-    Phase 2 shows C failing on real CC output.
+  - **E is retired** (operator, 2026-11-14). Phase 2 then measured C on real CC: it held (with CC
+    inline, the history is complete in tmux, and cancel-before-inject makes a scrolled-up injection
+    land), so E stays retired.
   - ⚠️ **On real CC (WP1 Phase 2), CC's own TUI mode decides where history lives, not tmux.** A fresh
     host boots CC 2.1.325's **fullscreen** TUI (alternate screen, even outside tmux); the operator's
     local CC is **inline** (`"tui": "default"`). Measured under C (`d.conf`) with a 200-line CC turn:

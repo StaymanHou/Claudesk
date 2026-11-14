@@ -83,6 +83,7 @@
 - [cc-hook-event-facts](cc-hook-event-facts.md) — Live-captured CC v2.1.x hook-event facts for the status channel.
 - [raw-mode-cr-is-enter](raw-mode-cr-is-enter.md) — Raw mode disables CR→NL, so PTY input lines end in `\r`, for every subprocess.
 - [cc-tui-cr-not-lf](cc-tui-cr-not-lf.md) — Slash-command injection must end in `\r`; `\n` only triggers autocomplete.
+- [cc-tui-wraps-each-word-in-sgr](cc-tui-wraps-each-word-in-sgr.md) — CC SGR-wraps each word; a multi-word raw-stream sentinel never matches. Use one word or strip SGR.
 - [pty-output-buffer-until-frontend-ready](pty-output-buffer-until-frontend-ready.md) — A new PTY session kind must buffer output until the frontend listens and calls `cc_ready`.
 - [pty-probe-observable-default](pty-probe-observable-default.md) — A PTY probe's reader thread should mirror output to an observable surface by default.
 - [tauri-xterm-pty-gotchas](tauri-xterm-pty-gotchas.md) — xterm.js + PTY in WKWebView needs explicit TERM, `term.focus()` and an rAF-deferred `fit()`.

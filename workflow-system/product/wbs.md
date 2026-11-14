@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-14  # first decomposition of M17
+updated: 2026-11-14  # WP1 probe shipped; its outputs folded into WP2–WP7 tasks
 cycle: milestone-17-remote-workspaces
 ---
 
@@ -41,7 +41,7 @@ only if the build disproves one.
 
 ## Work Packages
 
-### WP1: Probe — the remaining terminal unknowns under tmux on the mini
+### WP1: Probe — the remaining terminal unknowns under tmux on the mini ✅ SHIPPED 2026-11-14 (commit fd4423b)
 **Type:** probe
 **Milestone:** M17
 **Dependencies:** none (research already proved attach, resize, keystrokes and the forwards)
@@ -50,12 +50,14 @@ only if the build disproves one.
 **Timebox:** 1 day
 **Success criterion:** each item below is PASS, or FAIL with a chosen mitigation written into `arch/remote-workspaces.md`. Nothing is left "probably fine".
 **Tasks:**
-- [ ] 1.1 **Scrollback** (arch §I, UNPROBED): wheel-scroll a long CC output. Try plain tmux, `terminal-overrides ',xterm*:smcup@:rmcup@'`, and copy-mode-on-wheel. Pick one.
-- [ ] 1.2 **Bracketed paste through tmux**: the Prompt panel's `⌘↵` sends bracketed paste. Newlines must survive as one prompt (the F-a ruling).
-- [ ] 1.3 **TERM, colours and CC's TUI** inside tmux: `TERM`/`COLORTERM` pass-through, truecolor, the status line hidden (`status off`).
-- [ ] 1.4 **`/exit` ends the tmux session** when the session's command is `claude` (the R-1 mechanism). `\r` vs `\n` injection still behaves as `cc-tui-cr-not-lf` says.
-- [ ] 1.5 **Spawn-to-ready latency** with a warm master: open → CC prompt visible. This sets vision Metric 7's open-time budget.
-- [ ] 1.6 Clean up: no `cd-*` session or socket left on the mini, verified with `tmux -L claudesk ls`.
+- [x] 1.1 **Scrollback** (arch §I, PROBED 2026-11-14): wheel-scroll a long CC output. Try plain tmux, `terminal-overrides ',xterm*:smcup@:rmcup@'`, and copy-mode-on-wheel. Pick one.
+- [x] 1.2 **Bracketed paste through tmux**: the Prompt panel's `⌘↵` sends bracketed paste. Newlines must survive as one prompt (the F-a ruling).
+- [x] 1.3 **TERM, colours and CC's TUI** inside tmux: `TERM`/`COLORTERM` pass-through, truecolor, the status line hidden (`status off`).
+- [x] 1.4 **`/exit` ends the tmux session** when the session's command is `claude` (the R-1 mechanism). `\r` vs `\n` injection still behaves as `cc-tui-cr-not-lf` says.
+- [x] 1.5 **Spawn-to-ready latency** with a warm master: open → CC prompt visible. This sets vision Metric 7's open-time budget.
+- [x] 1.6 Clean up: no `cd-*` session or socket left on the mini, verified with `tmux -L claudesk ls`.
+
+✅ **WP1 done 2026-11-14** (outcomes below and in arch §C.1/§I; the outputs are folded into WP2–WP7's tasks).
 
 **WP1 → WP2/WP3 rationale:** a scrollback or bracketed-paste failure would change the terminal design (a different session host or a paste path). Learn that before WP3 builds the spawn path around tmux.
 
@@ -68,8 +70,8 @@ only if the build disproves one.
 - [ ] 2.1 `config_store::Project.remote: Option<RemoteTarget { host, path }>`, serde-compatible with every existing `projects.json`. Store-level rejection of `remote` + a non-default `profile`.
 - [ ] 2.2 ⚠️ **`prune_missing_projects` exempts remote rows.** The exemption goes in the pruner, with a test that fails when the exemption is deleted (mutation-proven).
 - [ ] 2.3 `remote_key` (`ssh://host/path`) as the one identity function. `key_for` passes remote keys through unchanged. Tests show a remote key never collides with a local project at the same path string.
-- [ ] 2.4 `remote_cmd::quote`, the single remote-command builder, unit-tested against hostile inputs (spaces, quotes, `$`, backticks, newlines, a leading `-`).
-- [ ] 2.5 Picker "Add remote project…" (host + path) with an async preflight: key works, `tmux`/`claude`/`perl` resolve under `zsh -lc`, the path exists. Plain-words errors, including "could not resolve hostname: is Tailscale running?".
+- [ ] 2.4 `remote_cmd::quote`, the single remote-command builder, unit-tested against hostile inputs (spaces, quotes, `$`, backticks, newlines, a leading `-`). ⚠️ Design it knowing the four quoting layers and the one expansion that must survive (the token's `$(cat …)`): arch §C's **OPEN** point, (a) constant fragment vs (b) deployed launcher.
+- [ ] 2.5 Picker "Add remote project…" (host + path) with an async preflight: key works, `tmux`/`claude`/`perl` resolve under `zsh -lc`, the path exists. Plain-words errors, including "could not resolve hostname: is Tailscale running?". **Plus the auth check** (arch §H): `~/.claudesk/cc-oauth-token` exists and, exported, `claude auth status` → `loggedIn: true`; on failure, name the `claude setup-token` fix.
 - [ ] 2.6 A remote row renders in the picker (host shown) and can be removed. Opening it is a no-op stub until WP3.
 
 **WP2 → WP3 rationale:** WP3 keys sessions and links by `remote_key` and builds commands with `quote`, so both must exist and be tested first. The prune exemption must land before *any* build can create a remote row on the operator's real `projects.json`.
@@ -77,15 +79,16 @@ only if the build disproves one.
 ### WP3: The host link and the remote terminal
 **Milestone:** M17
 **Dependencies:** WP1, WP2
-**Size:** L, **~3 days**
+**Size:** L, **~3.5 days** (was 3; +0.5 for task 3.7 after WP1)
 **Description:** a remote row opens a working CC pane on the mini, and the link survives drops. arch §B, §C.
 **Tasks:**
 - [ ] 3.1 `remote_link`: one ControlMaster per host on a worker thread, with a short ControlPath (≤104 bytes, with a test), `ServerAliveInterval 15` × 3, reconnect backoff, and **`rm -f` of the remote socket before every connect**. It broadcasts a `remote-link` state event.
-- [ ] 3.2 `SpawnTarget::{Local, Remote}` in `SessionRegistry::spawn`. The local path is byte-identical (the existing env tests stay green). The remote path runs `ssh -S <ctl> -tt … zsh -lc 'exec tmux -L <srv> new -A -s <name> -c <path> "…claude <argv>"'` with WP1's tmux options.
-- [ ] 3.3 Resize and input go through the unchanged `PtyCcSession`. R-1 close and quit go through the unchanged `kill()`, which types `/exit` and so ends the tmux session.
+- [ ] 3.2 `SpawnTarget::{Local, Remote}` in `SessionRegistry::spawn`. The local path is byte-identical (the existing env tests stay green). The remote path runs `ssh -S <ctl> -tt … zsh -lc 'exec tmux -L <srv> -f <conf> new -A -s <name> -c <path> "<inner command>"'`: **the exact shape in arch §C's code block** (token export, `CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1`, `unset TMUX`, `exec claude`).
+- [ ] 3.3 Resize and input go through the unchanged `PtyCcSession`. R-1 close and quit run **`send-keys -X cancel` over the master, then** the existing `kill()`, which types `/exit` and so ends the tmux session. ⚠️ Without the cancel, a scrolled-up pane swallows `/exit` and the remote session leaks (WP1). Test: close while scrolled up → the remote session is gone.
 - [ ] 3.4 On a link drop, the workspace's terminal reconnects automatically once the master is back, as the same session (marker test as in the research).
 - [ ] 3.5 The `MaxSessions` cap: a ninth workspace on one host is refused with a message.
 - [ ] 3.6 ⚠️ All new ssh I/O is `async` or on a worker. New async commands go into `sync_commands_do_not_block.rs`'s `ASYNC_COMMANDS` with reasons.
+- [ ] 3.7 **The WP1 terminal outputs:** deploy the tmux conf (`status off`, `mouse on`, RGB) to `~/.claudesk/<identifier>/` and load it with `-f`; the **one cancel-before-inject funnel** every remote Claudesk injection goes through (skill buttons, Prompt, auto-resume, Recycle, close), with a guard; and a **real CC-readiness signal** for multi-line sends (⚠️ not `cc_ready`, which is the frontend handshake; arch §C.1). Re-measure CC-ready latency with the real inner command.
 
 **WP3 → WP4 rationale:** status needs a link to ride (the `-R` forward lives on the master from 3.1).
 
@@ -95,7 +98,7 @@ only if the build disproves one.
 **Size:** M, **~2.5 days**
 **Description:** the remote workspace's dot is live on the filmstrip, PiP and tray, and honest while the link is down. arch §D, §E (overlay).
 **Tasks:**
-- [ ] 4.1 Deploy the hook script to `~/.claudesk/<identifier>/` and register it in the remote `~/.claude/settings.json`. The merge runs locally on the fetched JSON and is written back atomically. ⚠️ Provenance: never remove a hook Claudesk didn't install. Dev and prod stay distinct by basename and socket path.
+- [ ] 4.1 Deploy the hook script to `~/.claudesk/<identifier>/` and register it in the remote `~/.claude/settings.json`. The merge runs locally on the fetched JSON and is written back atomically. ⚠️ Provenance: never remove a hook Claudesk didn't install. Dev and prod stay distinct by basename and socket path. ⚠️ **The mini's file already holds `theme` and `skipDangerousModePermissionPrompt`** (the operator's yolo acceptance): the merge preserves every key it didn't write, with a fixture test (arch §D).
 - [ ] 4.2 An optional `origin` field from `CLAUDESK_ORIGIN`. `tests/hook_pl_output.rs` keeps the **local** output byte-identical and gains a remote case.
 - [ ] 4.3 `WorkspaceRegistry` resolves on **(origin, cwd)**. Tests show a remote event never lights a local tile, the reverse, or an unmatched session from another CC on the host.
 - [ ] 4.4 ⚠️ `time_store` refuses origin-tagged events at ingestion, with a test.
@@ -115,6 +118,7 @@ only if the build disproves one.
 - [ ] 5.3 `CcSession::detach()` (local default: `Unsupported`), the Detach / Reconnect control in the remote workspace's header, and the Detached tile state. The unclean flag is untouched.
 - [ ] 5.4 The R-4 dialogs: closing a detached workspace; a quit or close while the link is down (recorded end-intent, then a dialog at the next open); host unreachable at open; an unrecorded live `cd-*` session.
 - [ ] 5.5 The unclean-flag interplay is tested: a passive drop leaves it set; if the remote session then dies, reopening resolves to `--continue`.
+- [ ] 5.6 Auto-resume's `/session-restore` fires `INJECT_SETTLE_MS` (1500 ms) after `cc_ready`; remote cold CC-ready is ~1.3 s, about 1.15× margin. Re-measure with the real inner command, then raise the remote delay or fire on WP3's readiness signal (arch §E).
 
 ### WP6: OUT rows absent: the `workspaceSurfaces` funnel
 **Milestone:** M17
@@ -122,7 +126,7 @@ only if the build disproves one.
 **Size:** M, **~1.5 days**
 **Description:** arch §G. Every OUT surface is absent on a remote workspace, and the backend refuses local-fs commands for it.
 **Tasks:**
-- [ ] 6.1 `workspaceSurfaces(project)` in TS and its Rust twin. `availablePanels` and every OUT mount site consult it: editor, diff, second terminal, file tree, ⌘P, project search, Sublime ×2, Finder reveal, media, supervisor.
+- [ ] 6.1 `workspaceSurfaces(project)` in TS and its Rust twin. `availablePanels` and every OUT mount site consult it: editor, diff, second terminal, file tree, ⌘P, project search, Sublime ×2, Finder reveal, media, supervisor, **turn-marker jump**: hide or rebuild is ⚠️ open (agent leans hide; the WP6 spec or the operator confirms after costing a tmux-history rebuild; arch §G).
 - [ ] 6.2 Backend typed refusals for `editor_fs` / `git_*` / `fs_index` / `sublime_*` / `finder` / `project_search` on a remote workspace.
 - [ ] 6.3 `workspaceSurfacesGuard`, **mutation-proven per site**. The subject list is a floor: grep repo-wide before trusting it.
 - [ ] 6.4 ⚠️ `offInvariantGuard` (6 arms / 10 subjects) and `workflowApplicableGuard` stay green **unchanged**. That is the evidence the kind funnel didn't leak into the gate.
@@ -139,7 +143,7 @@ only if the build disproves one.
 - [ ] 7.2 A 1.5 s poller over the docs set, `.session.md` and the WIP dir, emitting the **same `fs-change` shape**. Polling stops when the workspace closes or detaches, and nothing long-running is started on the host.
 - [ ] 7.3 Docs panel on a remote workspace: `docs::discover` / `docs_read` routed by target, with live reload through the poller (gated as locally).
 - [ ] 7.4 Recycle on a remote workspace: the mtime baseline plus the `fs-change` wait over the poller, then the composite marker. An end-to-end Recycle on the mini.
-- [ ] 7.5 Skill buttons, Session-Start and the Prompt panel confirmed on a remote workspace (expected to work unchanged through the PTY; confirm, don't assume).
+- [ ] 7.5 Skill buttons, Session-Start and the Prompt panel confirmed on a remote workspace, **through WP3's cancel-before-inject funnel** (a scrolled-up pane swallows a raw PTY injection; WP1). Confirm each, including while scrolled up.
 
 ### WP8: Installed-build acceptance against the mini
 **Milestone:** M17
@@ -169,25 +173,25 @@ WP2 (rows) ───┤
 
 | WP | Size | Rough days |
 |---|---|---|
-| WP1 probe | S | 1 |
+| WP1 probe | S | 1 (✅ done 2026-11-14, in 1 day) |
 | WP2 rows | M | 2 |
-| WP3 link + terminal | L | 3 |
+| WP3 link + terminal | L | 3.5 (was 3; +0.5 for 3.7: conf deploy, cancel funnel, readiness signal) |
 | WP4 status | M | 2.5 |
 | WP5 lifecycle | M | 2 |
 | WP6 OUT absent | M | 1.5 |
 | WP7 reads | M | 2.5 |
 | WP8 acceptance | S | 1 + a release |
-| **Total** | | **~15.5 working days nominal; range 12–21** |
+| **Total** | | **~16 working days nominal; range 12.5–21** (agent's re-estimate after WP1, 2026-11-14) |
 
 - **Velocity reference:** M16.5 shipped 9 WPs in 19 calendar days.
-- **The checkpoint:** started 2026-11-16, the partial-release point (WP1–WP6, about 12 days) lands around
+- **The checkpoint:** started 2026-11-16, the partial-release point (WP1–WP6, about 12.5 days) lands around
   **2026-11-30 to 12-02**, and full parity around **2026-12-05 to 12-09**. That's inside the 2026-12-11
   checkpoint with little slack.
 - **The two places a surprise would push it past the checkpoint:**
-  - **WP1:** a scrollback or bracketed-paste failure that forces a different session host. About +2–3 days.
+  - ~~**WP1:** a scrollback or bracketed-paste failure that forces a different session host. About +2–3 days.~~ **Retired 2026-11-14:** WP1 kept tmux (no host swap). It added ~0.5 day to WP3 instead.
   - **WP3:** link reconnect edge cases. About +1–2 days.
 
-  Both are front-loaded on purpose, so the operator knows by about 2026-11-20 whether the checkpoint is at risk.
+  The WP3 risk remains front-loaded; the operator will know by about 2026-11-20 whether the checkpoint is at risk.
 
 ## Exit criteria (M17)
 

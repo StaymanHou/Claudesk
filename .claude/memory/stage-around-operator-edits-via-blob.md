@@ -1,13 +1,13 @@
 ---
 name: stage-around-operator-edits-via-blob
-description: When the operator's unstaged edit shares a diff hunk with yours, hunk-filtered `git apply --cached` can't split them; stage the exact index content as a blob via `git update-index --cacheinfo`.
+description: Stage only your changes around an operator's unstaged edits by writing the exact index content as a blob (`git update-index --cacheinfo`); a hunk-filtered `git apply --cached --unidiff-zero` can misplace lines.
 metadata:
   type: project
 ---
 
 The operator routinely leaves their own edits UNSTAGED in files a WP also touches (a `CLAUDE.md` hunk, a `wbs.md` insert, a `backlog.md` entry), and a ship/close commit must carry only the WP's changes.
 
-- **Separate hunks:** filter the `git diff -U0 <file>` output down to your hunks and `git apply --cached --unidiff-zero` it.
+- ⚠️ **Default to the blob method below, even for separate hunks.** The hunk-filter route (`git diff -U0 <file>` filtered to your hunks, then `git apply --cached --unidiff-zero`) **misplaced a pure one-line insertion by one line** in `MEMORY.md` (2026-11-14, M17 WP1 ship) when an excluded operator hunk shared the file: the zero-context patch has no anchor, so its line number lands wrong. If you do use it, check the placement with `git show :<path>` around the hunk, not just `git diff --cached`.
 - **Same or adjacent hunk** (e.g. two new backlog entries inserted next to each other at the top of `backlog.md`): no patch filter can split them. Build the exact content the index should hold, then stage that blob directly:
   - from the working copy minus the operator's block, or from `git show HEAD:<path>` plus your edits;
   - `git update-index --cacheinfo 100644,$(git hash-object -w <tmpfile>),<path>`.

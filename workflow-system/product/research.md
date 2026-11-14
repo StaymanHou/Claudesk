@@ -25,7 +25,7 @@ Confidence labels: **PROBED** = observed live on the mini; **CODE** = read from 
 | sshd `StreamLocalBindUnlink` | **no** | a stale socket blocks re-binding (see Finding 3) |
 | sshd `ClientAliveInterval` | **0** | the server never reaps a dead client; a hung connection holds its forwards indefinitely |
 | sshd `MaxSessions` | 10 | channels per multiplexed connection: terminal + forward + transient execs fit comfortably |
-| `~/.claude/settings.json` | **does not exist** | no hooks are registered on the mini yet; Claudesk's install creates the file |
+| `~/.claude/settings.json` | **did not exist** at research ⚠️ *Superseded (WP1, 2026-11-14): CC created it at the operator's login; it now holds `theme` and `skipDangerousModePermissionPrompt: true`* | the hook install must **merge, preserving every key** (arch §D), never create/overwrite |
 | Sleep (`pmset`) | `sleep 0` (prevented) | the "mini sleeps" case is effectively a **network-drop** case |
 | Repo at `~/tank-sim-lite-demo` | absent (moves there when M17 lands) | probes ran without the real repo |
 
@@ -80,7 +80,7 @@ Confidence labels: **PROBED** = observed live on the mini; **CODE** = read from 
 - **Resize**: `PtyCcSession::resize` → SIGWINCH → ssh → tmux (also PROBED).
 
 ### 7. Lifecycle mapping onto R-1–R-4 (CODE + PROBED)
-- **R-1, explicit close/quit = end.** `PtyCcSession::kill` already **types `/exit\r` first**, then SIGHUP/SIGKILL the local group. If the tmux session's command is `claude` itself, `/exit` ends CC, and the tmux session ends with it. **The existing kill path implements R-1 as-is.**
+- **R-1, explicit close/quit = end.** `PtyCcSession::kill` already **types `/exit\r` first**, then SIGHUP/SIGKILL the local group. If the tmux session's command is `claude` itself, `/exit` ends CC, and the tmux session ends with it. **The existing kill path implements R-1 as-is.** ⚠️ *Superseded in part (WP1, 2026-11-14): true only when the pane is not scrolled up. In tmux copy-mode `/exit\r` is swallowed and the session leaks, so the remote close path must `send-keys -X cancel` first (arch §C.1, §E).*
 - **R-2, a passive event leaves it running.** A Claudesk crash or network drop kills only the local `ssh`; tmux keeps CC alive (PROBED). **R-2's "reconnect beats both signals"** is one check on open: `tmux has-session -t <ws>` over the ControlMaster (0.14 s). If live, attach; if not, run the existing two-signal rule, with its file checks done remotely (Finding 5).
 - **R-3, Detach** is a new route: kill the local `ssh` **without** typing `/exit`, and don't mark the unclean flag as a crash. Reconnect is the same `new -A`.
 - **R-4, unclear → dialog.** Candidate cases for arch to enumerate: the host is unreachable at open; a live tmux session exists that Claudesk has no record of opening; reconnect retries are exhausted.
@@ -95,7 +95,7 @@ Confidence labels: **PROBED** = observed live on the mini; **CODE** = read from 
 
 ## Trade-offs
 
-- **tmux vs. a minimal detach tool** (`dtach` / `abduco`). tmux is installed and battle-tested, but it **re-renders the screen**, so CC's scrollback lives in tmux's history rather than xterm.js's buffer: wheel-scrolling the pane may not show earlier CC output. A detach-only tool keeps native scrollback but is a new install on a shared machine. **Lean: tmux, with scrollback mitigated** (`terminal-overrides` `smcup@:rmcup@`, or tmux mouse/copy mode). ⚠️ **UNPROBED**: the first build spike must check scrollback on a real CC session.
+- **tmux vs. a minimal detach tool** (`dtach` / `abduco`). tmux is installed and battle-tested, but it **re-renders the screen**, so CC's scrollback lives in tmux's history rather than xterm.js's buffer: wheel-scrolling the pane may not show earlier CC output. A detach-only tool keeps native scrollback but is a new install on a shared machine. **Lean: tmux, with scrollback mitigated** (`terminal-overrides` `smcup@:rmcup@`, or tmux mouse/copy mode). ⚠️ **UNPROBED**: the first build spike must check scrollback on a real CC session. ⚠️ *Resolved (WP1, 2026-11-14): tmux kept; scrollback via tmux copy-mode with CC inline (arch §I).*
 - **Unix-socket vs. TCP reverse forward.** Unix plus pre-connect `rm` survives a hung connection (PROBED); TCP can't free a port held by a hung sshd child without server-side `ClientAliveInterval`. **Unix.**
 - **Perl command hook vs. HTTP hook.** HTTP (DOC) would let Claudesk answer with `additionalContext` directly, but needs a listener and TCP forward. **Reuse Perl.**
 - **Separate terminal connection vs. everything on one master.** One ssh process per workspace as the PTY child is the simplest model to reason about. Side-channel execs ride a ControlMaster. If the terminal connection is itself the master, a drop kills both together, which is acceptable because both reconnect. **Leave the choice to arch.**
@@ -108,7 +108,7 @@ Confidence labels: **PROBED** = observed live on the mini; **CODE** = read from 
 3. **`sync_commands_do_not_block`**: every ssh exec (has-session, `rm`, `stat`, `cat`) is blocking I/O. These must live in `async` commands or on worker threads, never in a sync `#[command]`. (A main-thread block hung the app once, P1 2026-08-25.)
 4. **A silent `--continue` drop.** If the transcript guard keeps reading locally, a dead remote session respawns fresh instead of continuing, with no visible error.
 5. **The status of a disconnected workspace is undefined.** While the link is down, no hooks arrive and the dot freezes on its last state. Arch must define how "connection lost / reconnecting" reads on the filmstrip, menu bar and PiP. The CLAUDE.md precedent says a **display overlay, not a fifth state**.
-6. **Scrollback under tmux** (see Trade-offs). UNPROBED, and possibly a visible regression from local.
+6. **Scrollback under tmux** (see Trade-offs). ~~UNPROBED, and possibly a visible regression from local.~~ ⚠️ *PROBED (WP1, 2026-11-14): no full parity; config C + CC inline + cancel-before-inject chosen (arch §I).*
 7. **The remote hook is machine-global** on a shared machine. Events from other CC sessions on the mini reach `hook.sock`. They're harmless for status (unmatched cwd), but must be excluded from `time_store`.
 8. **Dev and prod Claudesk against the same mini** each register a hook. The script must fail fast and silently when its socket is absent. It does locally today; the build must confirm that on the remote.
 

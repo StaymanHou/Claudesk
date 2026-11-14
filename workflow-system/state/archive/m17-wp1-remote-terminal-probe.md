@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M17 WP1 — Remote terminal probe (tmux on the mini)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** Completed 2026-11-14 — shipped `fd4423b` (pushed); refactor pass + archive in the close commit
 **Created:** 2026-11-14
 **WBS:** `workflow-system/product/wbs.md` → WP1 (type: probe, timebox 1 day)
 
@@ -39,7 +39,7 @@ login zsh that then runs `ssh`, not `ssh` directly; Phase 1 checks the shell did
 **Third-party / external dependency:** the target host itself (`<user>@<mini-host>`
 over Tailscale). WP1 *is* the probe for it; research already probed the host facts.
 
-**⚠️ Blocker found at plan time (2026-11-14):** `claude auth status` on the mini reports
+**✅ RESOLVED 2026-11-14 (token auth, operator decision; see Discoveries). ⚠️ Blocker found at plan time (2026-11-14):** `claude auth status` on the mini reports
 `loggedIn: false`. Every CC-dependent check (Phase 2) needs CC logged in on the mini, and which
 account logs in on a shared host is the operator's (and possibly the tank side's) decision, not the
 agent's. Phase 1 holds every check that does not need CC; Phase 2 is `BLOCKED` on that login.
@@ -111,7 +111,7 @@ that file on a shared host is riskier than the stale entry).
   - Requirements unchanged: yes — one refinement: the scrollback check now targets the ratified config C, not E (verify-human 2026-11-14)
   - Solution still feasible: yes — once CC is logged in on the mini
   - No superior alternative discovered: yes
-  **Verdict:** proceed when unblocked. 2026-11-14: `claude auth status` over ssh still reports `loggedIn: false`; the operator is logging in via screen sharing.
+  **Verdict:** proceed when unblocked. 2026-11-14: `claude auth status` over ssh still reports `loggedIn: false`; the operator is logging in via screen sharing. ✅ *Unblocked the same day: the Keychain is unreadable over ssh, so the operator chose a `setup-token` token, exported remote-side.*
   **Observable outcomes:**
   - CLI (state-changing, mini: `~/.claudesk-probe/scratch`, `-L claudesk`): CC started in the tmux pane with the chosen Phase-1 options and the argv shape `build_cc_argv` produces (`--dangerously-skip-permissions`, `--model haiku` to keep turns cheap) reaches its input prompt; any first-run screen (folder trust, onboarding) is recorded verbatim as a WP5 input (remote `folder_trusted`).
   - CLI (1.1 on CC): CC is asked to print 1–200 one per line; under the ratified config C (`d.conf`) the turn's first lines are reachable via copy-mode (`#{pane_in_mode}`=1 after a wheel-up, `capture-pane -p -S -` contains line 1), and a skill-style injection sent while scrolled up lands after `send-keys -X cancel` (the WP3 mitigation, on real CC).
@@ -178,10 +178,10 @@ that file on a shared host is riskier than the stale entry).
   the spawn path exists.
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship (all phases complete)
+- **Path:** Feature > complete (archived)
+- **Active scope:** none
 - **Blocked:** none (Phase 2 unblocked 2026-11-14 by the operator's `setup-token` token)
-- **Unvisited:** ship, finalize
+- **Unvisited:** none
 - **Open discoveries:** SURFACE-2026-11-14-REMOTE-MULTILINE-INJECT-BEFORE-CC-READY (backlog; consumed by WP3/WP5 via arch §C.1)
 
 ## Discoveries
@@ -240,5 +240,74 @@ P2.2 (B) inline via CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1: alternate_on=0; 200-
 P2.3 paste: stagedPayload submit:true bytes "ESC[200~Reply with only the word PASTED.\rsecond line of the paste\rthird line of the pasteESC[201~\r" via cc_input -> transcript c6d6d1a0…jsonl: user messages 1: 'Reply with only the word PASTED.\nsecond line of the paste\nthird line of the paste'; assistant 'PASTED'
 P2.5 /exit: "/exit\n" -> not submitted (session alive, input shows /exit, "ctrl+g to edit in Vim"); cleared with ^U^U; "/exit\r" -> has-session exit 1, "no server running", no remote claude process, pane: "[exited]" / "Connection ... closed." / local prompt
 P2.6 latency to CC-ready (sentinel "shortcuts" in status line; host-side pty; d.conf; trusted scratch): cold median 1.297s (1.225,1.297,1.341); warm median 0.547s (0.471,0.601,0.547). First attempt with sentinel "manual mode on" timed out: words are SGR-separated in the raw stream (instrument error, not CC)
+launcher ~/.claudesk-probe/cc.sh (mode 700; final form used for P2.2 (B)/P2.3/P2.5/P2.6): `export CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.claudesk/cc-oauth-token)"` / `export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1` / `unset TMUX` / `exec claude --permission-mode default --model haiku "$@"` (earlier runs: without the DISABLE line = P2.2 (A); without `unset TMUX` = P2.4 baseline); tmux ran it as `tmux -L claudesk -f ~/.claudesk-probe/d.conf new -A -s cd-probe-cc -c ~/.claudesk-probe/scratch ~/.claudesk-probe/cc.sh`
 cleanup: ~/.claudesk-probe removed; ~/.claude/projects probe dirs removed; tmux -L claudesk no server; no remote claude; /tmp/cdp-wp1.sock absent. LEFT by design: ~/.claudesk/cc-oauth-token (operator's, production), ~/.claude.json trust entry for the scratch path + fullscreenBootPending, ~/.claude/settings.json {"theme":"dark"} (CC's own), ~/.zsh_history lines from Phase 1
 ```
+
+## Code-Quality Review
+
+## Code-Quality Review — m17-wp1-remote-terminal-probe (ship `fd4423b`, reviewed 2026-11-14)
+
+### Strengths
+- Every probe claim is backed by a raw reading with its instrument named, and positive controls guard the easy false greens (`-f /dev/null` vs the conf, local vs remote CC, `TMUX` kept vs unset).
+- Self-corrections are logged rather than silently rewritten (COLORTERM, LANG-over-ssh, "R-1 needs no new close path"); operator decisions are recorded beside the agent's differing recommendation.
+- Security posture stated as concrete rules (token read remote-side only; one remote-command funnel; containment before quoting; hook provenance; `time_store` refusal), indexed in `arch.md`.
+- Builds on existing seams and guards, cited by symbol; redaction consistent across all 16 files.
+
+### Issues
+**CRITICAL**
+- [arch/remote-workspaces.md §C.1 (bracketed-paste bullet); backlog SURFACE-2026-11-14-REMOTE-MULTILINE-INJECT-BEFORE-CC-READY] Tells WP3/WP5 to "confirm the existing `cc_ready` gate covers the remote one". `cc_ready` is NOT a CC-readiness signal — it is Claudesk's frontend-listener handshake (`autoResumeFire.ts` header: firing at `cc_ready` measured NOT-EXECUTED 5/5; SURFACE-2026-08-04-CC-READY-NAME-INVITES-MISREADING-AS-CC-READINESS). Nothing holds a Prompt-panel send until CC enables `?2004h`. — Points the next WP at the wrong mechanism; a "confirmed" check would ship the split-submit bug. (Orchestrator spot-check: confirmed against `autoResumeFire.ts`.)
+
+**MAJOR**
+- [arch §E table; wbs WP3 3.3, WP7 7.5; research.md Finding 7 + Risk 6] The cancel-before-inject / cancel-before-`/exit` correction stopped at §C.1, §I and Probe outcomes; the documents implementers build from still say "the same/unchanged `kill()`", "work unchanged through the PTY", "kill path implements R-1 as-is", "UNPROBED".
+- [wbs 2.5, 3.2, sizing] WBS tasks don't absorb the probe's outputs: 2.5 lacks the auth check; no WP3 task owns the conf deploy (`-f`), token export, `CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1`, `unset TMUX`, or the cancel funnel; sizing not revisited.
+- [arch §C command block vs §C.1 "WP3's remote inner command"; wbs 3.2] Two shapes for the same command; §C's block lacks `-f`, token, inline env, `unset TMUX`, keeps a redundant `\; set status off`; wbs copies the stale shape.
+- [arch §C/§C.1; wbs 2.4] The token's literal `$(cat …)` must expand on the remote, which contradicts "every export built through `remote_cmd::quote`" (a `$`-hardened quote neutralises it); the quoting layers (ssh argv → `zsh -lc` → tmux command → its shell) are unspecified.
+- [arch §D; research.md host table] Still say the mini's `~/.claude/settings.json` doesn't exist / "this creates it", contradicting §C.1 (it holds `theme` + `skipDangerousModePermissionPrompt`, which WP4 must preserve).
+- [arch §E/§F; wbs WP5] Auto-resume fires `/session-restore` at a fixed `INJECT_SETTLE_MS = 1500` after `cc_ready` (~4× local margin); remote cold CC-ready is 1.30 s (~1.15× margin, and measured in default mode, not the real inner command). Not mentioned anywhere.
+
+**MINOR**
+- [arch §C.1 latency bullet] Latency labelled Metric 7 input without the "default mode, pre-final-inner-command" caveat that wbs states.
+- [arch §C.1 heading, §I future tense; wbs WP1 tasks `[ ]` + "UNPROBED", sizing risk text; commit message "two new design priors" (three added)] Stale text after the probe.
+- [WIP plan-time blocker paragraph; Phase 2 verdict; `Unvisited:` lists the active node] Work Tree hygiene.
+- [arch §I / §G] The remote turn-marker gap is accepted but not in `workspaceSurfaces` lists and not surfaced to the operator — conflicts with the new prior `a-session-behaves-the-same-wherever-it-runs` ("stated where the operator meets it").
+
+### Assessment
+Strong probe write-up — raw, re-checked evidence, controls, logged corrections; §C.1 and §I are a trustworthy record. Weakness is propagation: corrections landed where recorded but not in the sections WP3–WP5 implementers read (§C command block, §E table, WBS tasks, research.md), so the set contradicts itself on the close path, the spawn command and `settings.json`. The `cc_ready` misidentification is the most serious; the token-vs-`quote` conflict the most subtle. One propagation pass makes the set build-ready.
+
+### If you disagree
+Operator: mark a finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
+
+### Re-run 2026-11-14 (after the F40 refactor)
+**Prior findings:** CRITICAL ✅ resolved; all 6 MAJOR ✅ resolved (the token-vs-`quote` one as a clearly-stated ⚠️ OPEN point, deliberately undecided); all 4 MINOR ✅ resolved. Repo-wide greps found none of the stale phrases left.
+**New MINORs (5)**, all **fixed in place** before finalize (not backlogged: four were overclaims in the arch doc WP3 builds from):
+- [arch §C, §C.1] "probed end to end" / an uncited `cc.sh` overclaimed. **Fixed:** "each element probed (auth-2, P2.2 B, P2.4) … never as this one composed string"; the launcher's contents are now in the Phase 2 raw readings, and it's cited as evidence, not as a ruling between (a) and (b).
+- [arch §E funnel; wbs 3.7] Cancel-before-inject was only probed while scrolled up; the not-in-mode exit is unprobed. **Fixed:** cancel only if `#{pane_in_mode}`, or tolerate the exit; WP3 probes both cases.
+- [arch §C option (a)] "composed verbatim" was misleading. **Fixed:** "escaped for the outer layers only, so its `$(…)` survives to the innermost shell".
+- [arch §F; wbs WP3 heading; checkpoint line] Stale text the refactor created. **Fixed:** the complete remote-write list (adds the tmux conf and, under option (b), `cc-launch`; the token file is the operator's); WP3 `~3.5 days`; partial-release point "about 12.5 days".
+- [arch §G; wbs 6.1] The refactor decided turn-marker "absent". **Fixed:** relabelled as the agent's lean; hide vs rebuild-via-tmux-history is open for the WP6 spec or the operator, per the prior's "reproducible at bounded cost → match local".
+**Outcome:** 0 CRITICAL, 0 MAJOR, 0 open MINOR → F39.
+
+## Ship
+- Full suite: reused the last-phase codify run (`Test scope: full — last phase`, `pnpm verify:auto` EXIT=0, 3856 vitest + all cargo suites).
+- Cleanup: the agent-launched dev app (pnpm tauri:dev, vite, target/debug/claudesk; launcher PID 40388) stopped by PID; no scratch files in the repo.
+- Commit `fd4423b` (planning set + WP1 probe; operator-approved scope), pushed. Pre-existing operator edits left unstaged (notarytool memory + its MEMORY line, the CODIFY-RUNS backlog entry, four mccc outbox files). Host and account names redacted before commit (public repo); pre-redaction copies are in the session scratchpad only.
+
+## Refactor (F40, 2026-11-14) — docs-only propagation pass over the review findings
+Done directly rather than via F20 plan: docs only, no ordering risk, no tests affected; verified by re-running review-quality.
+- **CRITICAL fixed:** arch §C.1's bracketed-paste bullet and the backlog entry no longer point at `cc_ready`; they say it is the frontend handshake (NOT-EXECUTED 5/5), that nothing holds a send today, and that WP3 (task 3.7) must pick a real readiness signal.
+- **MAJOR fixed:** §E table (close/quit/⏸/Recycle are now cancel-then-`kill()`, plus a one-funnel note); §C's code block is now the probed shape (`-f` conf, token export, inline env, `unset TMUX`, `exec claude`), and §C.1's duplicate points to it; the token-vs-`quote` conflict is written as an ⚠️ OPEN point for WP2.4/WP3 spec, with options (a) constant fragment and (b) deployed launcher (flagged, not decided: a design choice); §D and research.md `settings.json` corrected (merge must preserve keys); the auto-resume settle margin is in §E and WBS 5.6; WBS 2.4, 2.5, 3.2, 3.3, 3.7 (new), 4.1, 5.6 (new), 6.1 and 7.5 updated; sizing 15.5 → ~16 days (WP3 +0.5; agent's estimate) and the WP1 risk retired.
+- **MINOR fixed:** latency caveat in §C.1; §C.1 heading "Phases 1–2"; §I past tense; WBS WP1 tasks `[x]`; research.md superseded notes; WIP blocker/verdict annotated; the turn-marker jump added to §G's absent list and WBS 6.1.
+- **Not fixable in place:** the pushed commit `fd4423b`'s message says "two new design priors"; it added three (`a-workspace-is-its-cc-session` from the planning session plus the two from WP1 verify-human). Recorded here rather than rewriting pushed history.
+
+## Retrospect
+- **What changed in our understanding:** The remote terminal's real constraints weren't in tmux's scrollback at all. They were in Claude Code: (1) CC's OAuth login lives in the macOS Keychain, which ssh sessions can't read, so remote CC needs a token; (2) CC emits only 256 colours while `TMUX` is set; (3) a fresh host boots CC's fullscreen TUI, which decides where history lives. And tmux copy-mode swallowing input turned out to be a correctness trap for injections AND for R-1's close path, not just a UX cost.
+- **Assumptions that held:** tmux as the session host (no `dtach` swap needed); `/exit\r` ends CC + tmux + ssh (when not scrolled up); the bracketed-paste envelope survives tmux once CC is up; latency well inside budget (~0.5 s warm / ~1.3 s cold to CC's prompt).
+- **Assumptions that were wrong:** "CC just works on the remote once installed" (Keychain); "R-1 needs no new close path" (copy-mode swallows `/exit`); "`cc_ready` gates readiness" (it's the frontend handshake, a misreading this codebase had already documented); E (native xterm scrollback) as the lean (bursts lose lines); the mini's `settings.json` being absent.
+- **Approach delta:** Planned as 1 day / 2 phases with Phase 2 blocked on login; it took that, plus an operator auth decision, two extra operator decisions (inline TUI, yolo acceptance), a verify-self in-place fix, an F40 refactor to propagate corrections into the sections implementers read, and recovery of an arch file the agent wiped with a truncate-then-read script (rebuilt from transcripts, validated against every in-session capture).
+
+## Closure
+> **Feature complete:** M17 WP1, the remote-terminal probe, has shipped. It settled how a remote workspace's CC runs under tmux on the mini (config C, inline TUI, token auth, `unset TMUX`, cancel copy-mode before every injection and before close) and turned every finding into WP2–WP7 task text. See `arch/remote-workspaces.md` §C/§C.1/§I and `wbs.md` "Probe outcomes".
+
+Requester = operator — closure notice for self-record. (The tank side is owed an update at WP1's close: due now.)
