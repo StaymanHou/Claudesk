@@ -1,7 +1,7 @@
 ---
 stage: design-priors
 state: active
-updated: 2026-11-02
+updated: 2026-11-14
 ---
 
 # Design Priors — Claudesk
@@ -279,3 +279,48 @@ There is a second, sharper reason for the destructive half specifically: a user 
 **Why (⚠️ INFERRED; approved as proposed by the operator 2026-11-02, why not yet sharpened; directional + overridable):** Attention is the scarce resource (`claudesk-philosophy`). Rows the operator can already see elsewhere (the filmstrip shows every open workspace) are noise in a chooser, and putting them first is the worst place for noise, because the top of a list is where the eye lands for the next action.
 
 **Origin:** M16.5 WP5 task 5.7, Phase 1 verify-human (2026-11-02). The picker sorted by last opened, so the workspaces opened that morning sat at the top of ⌘⇧N. The operator: *"I don't want to see them at the top. That's useless information,"* and ruled the order to be **last closed**, with open workspaces given their own treatment. Related: [[group-surfaces-by-the-question-they-answer]] (ordering of sibling SURFACES; this prior orders ROWS inside one surface), [[needs-you-outranks-busy]] (the same "lead with what needs the operator" instinct, on the status-dot axis).
+
+## a-workspace-is-its-cc-session
+
+**Axis:** product identity (what a workspace must carry vs. what attaches per kind)
+
+**Lean:** A workspace's irreducible core is its **CC session and its status**. Everything else (the IDE right half, time analytics, the supervisor) **attaches per workspace kind** where it can function and is **hidden** where it can't. A new kind of context (a profile, a non-coding directory, a remote host) is accepted once its *session* can be made first-class; it does **not** have to reach IDE parity first.
+
+**Decision rule:** for a proposed workspace kind, ask **"is the CC session, and its status on every surface, first-class here?"**
+- **Yes** → the kind is in. Each other surface is in only where it works for that kind, and absent (never greyed out, never erroring) where it doesn't. That is vision Core Principle 7.
+- **No** → fix the session path first. IDE surfaces never make up for a second-class session.
+- Don't hold a kind back waiting for the IDE half to work there.
+
+**Why (⚠️ INFERRED; approved as proposed by the operator 2026-11-14, why not yet sharpened; directional + overridable):** Attention across parallel CC sessions is the scarce resource (`claudesk-philosophy`). Requiring IDE parity before admitting a new context would push useful contexts (profiles, media, remote hosts) back outside Claudesk, where every setup and status tax returns.
+
+**Origin:** the `/product-vision` revisit, 2026-11-14 (roadmap Next item 3). The operator ruled "non-coding workspaces" a product direction ("CC cockpit") and remote workspaces a general capability built against one host first. That was prompted by the `tank-sim-lite-demo` request, whose parity table keeps the session surfaces IN and the IDE surfaces OUT. Related: [[gate-substrate-dependent-feature-class-behind-default-off-opt-in]] (the same no-dead-affordances rule, applied to the workflow gate; this prior applies it to workspace kinds), [[new-surface-must-earn-its-place-against-existing-ones]].
+
+## a-session-behaves-the-same-wherever-it-runs
+
+**Axis:** cross-kind consistency vs. implementation simplicity (how a surface a workspace kind *does* get behaves)
+
+**Lean:** When a non-local workspace kind **can** reproduce a local pane's behaviour (scrollback, TUI mode, keys, injection, close), **match the local behaviour**, even when a simpler non-local behaviour exists, and pay the extra implementation cost.
+
+**Decision rule:** for a surface that is present on a non-local kind, ask **"does it behave the way the same surface does on a local workspace?"**
+- **Yes, or reproducible at bounded cost** → match local. Put the cost into the implementation (a guarded invariant, an extra exec), not into a behaviour the operator has to remember.
+- **Not reproducible at all** → the surface differs, and that difference is stated where the operator meets it, never discovered.
+- This prior does **not** decide *whether* a kind gets a surface. That is [[a-workspace-is-its-cc-session]].
+
+**Why (⚠️ INFERRED; approved as proposed by the operator 2026-11-14, why not yet sharpened; directional + overridable):** The operator moves between parallel sessions all day. If a pane behaves differently depending on where its CC runs, they must recall which kind of workspace they are in before they can act. That is a context-switching cost in exactly the place Claudesk exists to remove it (`claudesk-philosophy`: attention is the scarce resource).
+
+**Origin:** M17 WP1 probe, Phase 2 verify-human, 2026-11-14. On a remote host, CC's fullscreen TUI would have removed the tmux copy-mode swallow trap (the agent's recommendation). The operator chose inline, "match what my local panes do", accepting the cancel-before-inject invariant on every injection and on close (`arch/remote-workspaces.md` §I). Related: [[a-workspace-is-its-cc-session]], [[primary-surface-is-zero-ceremony-not-a-mode]].
+
+## explicit-action-keeps-its-meaning-passive-event-preserves-work
+
+**Axis:** lifecycle semantics (what an action or event does to a running session)
+
+**Lean:** An **explicit action keeps the meaning it already has**, with no new dialog. A **passive event never destroys work**. Only a **genuinely unclear state** gets a dialog.
+
+**Decision rule:** for a new lifecycle event on any workspace kind, classify it first:
+- **Explicit** (a click, a chosen command: close ×, ⏸ "Close, resume later", Recycle, quit) → do what the same action does locally, at face value. Don't add a confirmation just because the context is new.
+- **Passive** (a network drop, a crash, sleep, a lost link) → preserve the session and the work; reconnect or resume, never end.
+- **Unclear** (intent recorded but not executable, such as closing while the link is down; state Claudesk has no record of, such as an unrecorded live session) → ask, once, in plain words.
+
+**Why (⚠️ INFERRED; approved as proposed by the operator 2026-11-14, why not yet sharpened; directional + overridable):** A click carries intent; a passive event doesn't. So the app acts on clicks at face value, never treats an accident as a decision, and asks only when it truly can't tell.
+
+**Origin:** the M17 roadmap grill, 2026-11-14 (lifecycle rulings R-1–R-4, `roadmap.md` → "### Milestone 17"; mapped in `arch/remote-workspaces.md` §E). Proposed at that session's close, approved 2026-11-14. Related: [[a-session-behaves-the-same-wherever-it-runs]] (R-1's "local parity" is that prior applied to close), [[paired-actions-need-paired-affordances]].

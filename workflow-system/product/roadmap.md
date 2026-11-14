@@ -1,15 +1,15 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-11-08  # M16.5 closed
+updated: 2026-11-14  # vision revisit done; M17 remote workspaces added
 ---
 
 # Roadmap
 
 Claudesk grows in increments you can dogfood, and each one is usable on its own. **Every milestone
-planned so far has shipped** (M1–M16, both Group F asks, and the features inserted after them). This
-file now holds three things: a one-line index of what shipped, the rulings that still bind future
-work, and what comes next.
+through M16.5 has shipped** (M1–M16.5, both Group F asks, and the features inserted after them); M17 is
+next. This file holds three things: a one-line index of what shipped, the rulings that still bind
+future work, and what comes next.
 
 ⚠️ **The full milestone and revision text (1,202 lines) is archived VERBATIM at
 [`archive/revision-log/roadmap-2026-06-to-09.md`](archive/revision-log/roadmap-2026-06-to-09.md)**
@@ -100,23 +100,76 @@ Each ruling is one line here. Its full text is in the archive, under the heading
 
 ## Next
 
-**Order set by the operator on 2026-09-29.** ✅ **M16.5 closed 2026-11-08**, so the `/product-vision` revisit (item 3) is next. ✅ **M16 closed 2026-10-20**; its roadmap entry is archived verbatim at `archive/milestone-16-right-panel-media-viewer/roadmap-entry.md`, with its WBS beside it.
+✅ **The `/product-vision` revisit is done (2026-11-14)**, so milestones past M16 can be numbered. **Next: Milestone 17, remote workspaces.** Earlier items in this list are archived with their cycles: the mccc asks went out 2026-09-29, and M16.5 closed 2026-11-08 (`archive/milestone-16-5-supervisor-hardening-qol-and-paydown/`).
 
-### Then, in order
+### Milestone 17: Remote workspaces (one SSH host first)
 
-1. ✅ **mccc upstream asks were delivered 2026-09-29** to mccc's `workflow-system/inbox/` as three
-   messages: M15 WP2 (delete Phase 9), M15 WP4 (Work Tree schema pin), and the 2026-09-23 paydown's
-   13 asks. No Claudesk milestone is needed. The Claudesk backlog entries close as each ask lands
-   upstream.
-2. ✅ **Milestone 16.5 CLOSED 2026-11-08** (9 WPs: supervisor hardening, status-dot semantics, the QoL
-   batch, per-result replace, installed-build acceptance, the code-quality paydown, recycle only at
-   clean boundaries). Its entry is archived verbatim at
-   `archive/milestone-16-5-supervisor-hardening-qol-and-paydown/roadmap-entry.md`, with its WBS.
-3. **A short `/product-vision` revisit BEFORE numbering anything past M16.** All six vision success
-   metrics are met, and every milestone since M14 has been an operator ask. The open question is
-   whether **non-coding workspaces** (the direction F-b opened, which M16 serves) is a product
-   direction or a one-off. The two remaining vision Future Possibilities (PiP click-to-focus and a
-   visual view of workflow state) are weighed there too.
+**Why:** the vision revisit (2026-11-14) made Claudesk a **cockpit for parallel CC sessions**, and ruled
+remote workspaces a general capability built against one host first. The first host and consumer is
+the `tank-sim-lite-demo` Mac mini (accepted inbox request
+`archive/2026-11-13-tank-sim-lite-demo-remote-workspace.md`). That project won't start agent-driven
+game development until this milestone ships, and its **checkpoint is 2026-12-11**.
+
+**Goal:** a workspace whose CC session runs on another Mac over SSH is as one-click and as glanceable
+as a local one, and it survives the network or the remote going away (vision Metric 7).
+
+**Scope:** the operator's parity table (2026-11-13), as codified in `vision.md` → "The direction from here".
+- **IN:** the CC terminal; the status dots on the filmstrip, menu bar and PiP (four states plus
+  attention); the Docs and Prompt panels; the drive mode and its `UserPromptSubmit` line; smart
+  auto-resume; the skill, Session-Start and Recycle buttons; live filmstrip thumbnails.
+- **OUT:** the editor, diff viewer and second terminal; ⌘P, the file tree, project search and the
+  Sublime launchers. These are **hidden** on a remote workspace (Core Principle 7), never greyed
+  out or erroring. Time analytics and the supervisor are deferred.
+- **Constraints:** the per-workspace config lives in `projects.json`, with no multi-host screen; no
+  system extension on the main box; no long-running remote process beyond CC, its session host and
+  the hook path. Windows isn't needed but shouldn't be foreclosed.
+
+**Lifecycle rulings (`/util-grill-me`, 2026-11-14; settled):**
+- **R-1: explicit actions keep local parity.** Close (×), **⏸ "Close, resume later"** (`onPauseClose`), Recycle and quit **end**
+  the remote session (CC gets `/exit`), as they do locally, with no extra dialog beyond the existing
+  active-close confirm. ⏸ leaves the unclean flag set, as it does locally, so the next open **resumes**
+  (`--continue` on the remote).
+- **R-2: passive events leave the session running on the remote.** A lost connection, a Claudesk
+  crash, or the remote sleeping. Reopening **reconnects** to the live session, and that beats both
+  resume signals. Only a dead remote session falls back to the two-signal rule (unclean flag →
+  `--continue`, else `.session.md` → `/session-restore`, else nothing).
+- **R-3: a deliberate Detach / Reconnect control** on remote workspaces leaves the session running
+  on purpose and reconnects later.
+- **R-4: when the state is genuinely unclear, show a dialog** so the operator chooses deliberately.
+  Don't guess.
+
+- ⚠️ **Vocabulary (operator, 2026-11-14): reconnect ≠ resume.** **Reconnect** = the CC session is
+  still alive on the remote; Claudesk only connects back to it (tmux attach). No resume command fires.
+  **Resume** = the session already ended (`/exit`) on the remote; Claudesk connects and starts CC
+  through the existing two-signal rule (unclean flag → `--continue`, else `.session.md` →
+  `/session-restore`). Never call the live case "resume" or the dead case "reconnect".
+
+**Defaults taken at the grill (correct at arch/WBS if wrong):**
+- A self-update relaunch counts as an explicit quit (R-1).
+- Adding a remote project goes through a minimal entry in the picker (host + path), because Open
+  Folder can't pick a remote path.
+- The remote hook installs automatically, keeping the dev/prod identifier split; remote events stay
+  out of the local time analytics.
+- F-b profiles stay local-only.
+- The Detach / Reconnect control lives in the remote workspace's header.
+- WPs are ordered core-first (terminal, status, reconnect, OUT rows hidden), so a partial release
+  *could* be cut; full parity remains the exit criterion.
+
+**Probe:** Claudesk's `/product-research` probes the mechanisms Claudesk needs (the terminal over
+ssh + a session host, the hook path back to `hook_socket`, remote reads and watches, the reconnect
+rule). ⚠️ Whether the tank side runs its own spikes is **tank's call**, and Claudesk's messages
+don't steer it (operator, 2026-11-14).
+
+**Exit criteria:** tank's "done" list, verified on an **installed release** on the main box against
+the mini:
+- A remote workspace opens on the mini's CC.
+- Every IN row works, verified row by row by the operator.
+- Every OUT row is hidden, with nothing broken.
+- After a network drop or the mini sleeping, the workspace reconnects to the same session.
+- Close and quit end the session (R-1), and Detach / Reconnect works (R-3).
+- No system extension is installed on the main box.
+
+**Follow-up owed:** a sized estimate (WPs + rough days) goes to tank's inbox after `/product-wbs`.
 
 **Held open, not scheduled:**
 - The stale minimap (feature-sized; revive as its own feature when the `drawLine` rewrite is worth
@@ -124,6 +177,7 @@ Each ruling is one line here. Its full text is in the archive, under the heading
 
 ## Revisions
 
+- **2026-11-14** — `/product-vision` revisit done: vision condensed, the CC-cockpit direction set, and remote workspaces ruled a general capability built one host first. **M17 (remote workspaces) added and scoped** at a `/util-grill-me` pass (lifecycle rulings R-1 to R-4). Its first consumer is `tank-sim-lite-demo`, with a checkpoint on 2026-12-11.
 - **2026-11-08** — M16.5 closed (9 WPs; WP9, an operator insert, made the recycle key on the F15 edge). The M15 on-screen checks and WP9's installed check stay deferred to dogfooding. Next: the `/product-vision` revisit.
 - **2026-10-20 (b)** — M16.5 scoped at a `/util-grill-me` pass: one bucket of supervisor hardening + the status-dot items + the QoL seeds (minimap excluded) + a closing code-quality paydown; the supervisor gate recorded as met by the 2026-10-12 fires.
 - **2026-10-20** — M16 (right-panel media viewer) closed at `/product-finalize`: moved to Shipped, its two deferred checks added to "Carried forward", and its Next entry archived verbatim with the cycle docs. Next in order: the supervisor-hardening bucket (still gated on a live fire), then the `/product-vision` revisit.

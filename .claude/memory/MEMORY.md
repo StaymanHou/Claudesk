@@ -111,6 +111,7 @@
 ## Toolchain & environment traps
 
 - [node-strip-types-fails-on-extensionless-runtime-imports](node-strip-types-fails-on-extensionless-runtime-imports.md) — `node --experimental-strip-types` breaks on extensionless runtime imports; use a throwaway vitest spec.
+- [open-w-truncates-before-read-wipes-untracked-file](open-w-truncates-before-read-wipes-untracked-file.md) — `open(p,'w').write(open(p).read())` truncates first; copy an untracked file aside before scripted edits.
 - [bsd-sed-lacks-word-boundary](bsd-sed-lacks-word-boundary.md) — BSD `sed` has no `\b`, so a mutation silently no-ops; use `perl -pi -e` and check it landed.
 - [check-payload-before-outward-send](check-payload-before-outward-send.md) — Before any outward send from a file, `test -s` + `head` the payload (an empty public issue, #105187).
 - [zsh-unquoted-var-does-not-word-split](zsh-unquoted-var-does-not-word-split.md) — zsh doesn't word-split `$files` in a `for`; `$rev:src/x` is a modifier, so write `"${rev}:path"`.

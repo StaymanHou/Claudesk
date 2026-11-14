@@ -183,7 +183,12 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 
 ## Current Milestone
 
-✅ **M16.5 CLOSED 2026-11-08**; the post-M16.5 backlog-paydown sweep was folded back 2026-11-09. ⭐ **Next: the `/product-vision` revisit** (`roadmap.md` → "Next", item 3). The latest release is `git tag --sort=-v:refname | head -1`.
+⭐ **ACTIVE: M17 — Remote workspaces (one SSH host first)** (planned 2026-11-14). A workspace whose CC runs on another Mac (first: the `tank-sim-lite-demo` Mac mini) over SSH + tmux, with session-level parity. The IDE half is **absent** on it (vision Core Principle 7). The `tank-sim-lite-demo` project's checkpoint is **2026-12-11**.
+- **Scope + lifecycle rulings R-1–R-4** (explicit close/quit = end; a passive drop = keep running and reconnect; Detach / Reconnect; unclear → dialog): `roadmap.md` → "### Milestone 17".
+- **Design (⚠️ PLANNED, not as-built):** `workflow-system/product/arch/remote-workspaces.md`. **Evidence (live-probed):** `research.md`. **WPs + sizing:** `wbs.md` (WP1 probe ∥ WP2 rows first; ⭐ a partial-release point after WP6).
+- ⚠️ **Data-loss trap:** `prune_missing_projects` deletes any row whose path doesn't exist locally. A remote row needs the exemption (WP2.2) **before** any build writes one to the real `projects.json`.
+
+**Direction (vision revisit, 2026-11-14):** Claudesk is a **cockpit for parallel CC sessions**. A workspace = one CC session in a context (local dir, profile, remote host), and the IDE half attaches where a local tree exists. Prior: `a-workspace-is-its-cc-session`. ✅ M16.5 closed 2026-11-08. The latest release is `git tag --sort=-v:refname | head -1`.
 
 ⚠️ **Closed cycles' "do NOT re-derive" rulings are EXTRACTED, not dropped. Read the matching file before touching that subsystem:**
 - **Workflow supervisor (M15 + M16.5):** as-built `workflow-system/product/arch/workflow-supervisor.md`. The M15 rulings R-1–R-4, the two refuted premises (`message.model` does not give the context window; there is no skill registry), the mccc ownership boundary ("absorb the machine, not the skills") and every M16.5 WP verdict → `docs/lessons/closed-cycles-m14-m16-5.md`. ⚠️ The supervisor is headless and owns NO guard arm: the OFF-invariant pin stays at 6 arms / 10 subjects.

@@ -589,3 +589,33 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** one small cleanup task; the parse fix wants a "parsed once" test.
+
+## SURFACE-2026-11-14-REMOTE-MULTILINE-INJECT-BEFORE-CC-READY
+- **Source:** feature:build (M17 WP1 probe, Phase 1)
+- **Target level:** product:wbs (WP3 / WP5)
+- **Type:** gap
+- **Summary:** Under tmux, the bracketed-paste envelope reaches the pane app only once that app has enabled `?2004h`; before then tmux strips it and each interior `\r` becomes an Enter. A multi-line injection (the Prompt panel's staged payload, or any future multi-line auto-inject) sent to a remote workspace before CC is up would split into several submits.
+- **Context:** Measured 2026-11-14 with `cat -v` in a `tmux -L claudesk` pane on the mini (`arch/remote-workspaces.md` §C.1). Locally the raw envelope always reaches CC, so this is remote-only.
+- **Suggested action:** In WP3, confirm the existing `cc_ready` gate holds remote multi-line injections until CC has drawn its prompt; add a test if it does not already cover the remote spawn path.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-14-REMOTE-CC-AUTH-KEYCHAIN-LOCKED-OVER-SSH
+- **Source:** feature:build (M17 WP1 probe, Phase 2 preflight)
+- **Target level:** product:arch (M17 WP2.5 preflight, WP3 spawn)
+- **Type:** gap
+- **Summary:** CC on macOS stores its OAuth login in the user's login Keychain, and that Keychain is locked/unreadable from ssh sessions. On the mini, after `claude auth login` over `ssh -t`, the `Claude Code-credentials` item exists but `claude auth status` reports `loggedIn: false` from a plain ssh exec, `ssh -tt`, and inside `tmux -L claudesk` (`security show-keychain-info` → "User interaction is not allowed").
+- **Context:** Every remote workspace Claudesk spawns would start CC logged out. research.md and arch/remote-workspaces.md assumed CC on the remote "just works" once installed. Measured 2026-11-14.
+- **Suggested action:** Choose a headless auth mechanism for remote CC (candidates: a long-lived `claude setup-token` OAuth token exported as `CLAUDE_CODE_OAUTH_TOKEN` by the remote spawn from a 0600 file on the host; an API key; unlocking the Keychain per connection, which needs a stored password and is rejected). Record it in arch §C/§H, and make WP2.5's preflight check `claude auth status` → `loggedIn: true`.
+- **Priority:** high
+- **Status:** decided 2026-11-14 (operator: option 1, a `setup-token` token at `~/.claudesk/cc-oauth-token`, exported remote-side; probed working under `ssh -tt` and tmux; arch §C.1 + §H). Open work: build it — WP2.5 preflight check + WP3 spawn export.
+
+## SURFACE-2026-11-14-REMOTE-CLOSE-SWALLOWED-IN-COPY-MODE
+- **Source:** feature:verify-self (M17 WP1 probe, Phase 2)
+- **Target level:** product:wbs (WP3 spawn/kill, WP5 lifecycle)
+- **Type:** gap
+- **Summary:** On a remote workspace whose CC runs inline under tmux config C, `/exit\r` typed while the pane is scrolled up (tmux copy-mode) is swallowed: CC and the tmux session stay up. `PtyCcSession::kill()` types `/exit\r` and then SIGHUPs the local group, which drops only the ssh. So an explicit close while scrolled up would leave the remote session running, violating R-1.
+- **Context:** Measured on real CC on the mini, 2026-11-14 (`arch/remote-workspaces.md` §C.1). It does not arise if remote CC runs fullscreen (tmux passes the wheel to CC and never enters copy-mode).
+- **Suggested action:** In WP3, the remote kill path runs `send-keys -X cancel` over the master before typing `/exit\r` (the same step every Claudesk injection gets). Add a test: close a remote workspace while scrolled up → the remote session is gone.
+- **Priority:** high
+- **Status:** pending
