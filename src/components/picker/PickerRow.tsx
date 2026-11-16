@@ -19,6 +19,7 @@ import { ProjectModelCell } from "./ProjectModelCell";
 import { PICKER_ROW_CELLS } from "./pickerRowOrder";
 import { rowAffordances, type OpenIntent } from "./announceRow";
 import type { RecentProject } from "./ProjectPicker";
+import { isRemoteRow, pathLineFor, shortHost } from "./remoteRow";
 
 // Label shown for a project row: prefer the display name, fall back to the path.
 function labelFor(project: RecentProject): string {
@@ -53,6 +54,10 @@ export function PickerRow({
   onProfileCommitted,
   onDriveModeCommitted,
 }: PickerRowProps) {
+  // M17 WP2 — a row whose CC session runs on another Mac. Its path line is the REMOTE path (never
+  // its `ssh://` key), its marker names the short host, and it has no profile line (profiles are
+  // LOCAL config dirs). Operator ruling at P3.verify-human.2: see `remoteRow.ts`'s header.
+  const remote = isRemoteRow(r);
   return (
     <li
       className={
@@ -61,6 +66,7 @@ export function PickerRow({
           : "picker-recent-row"
       }
       data-open={isOpen ? "true" : undefined}
+      data-remote={remote ? "true" : undefined}
     >
       {/* The row's cells are emitted by mapping PICKER_ROW_CELLS, so their ORDER
          and — critically — their FLATNESS live in one asserted value rather than in
@@ -113,6 +119,15 @@ export function PickerRow({
                      is now reserved unconditionally: see `.picker-recent-gutter`. */}
                   <span className="picker-recent-headline">
                     <span className="picker-recent-name">{labelFor(r)}</span>
+                    {remote && (
+                      <span
+                        className="picker-recent-remote"
+                        data-testid="picker-recent-remote"
+                        title={`Runs on ${r.remote?.host ?? "another host"} over SSH`}
+                      >
+                        ⇄ {shortHost(r.remote?.host ?? "")}
+                      </span>
+                    )}
                     {isOpen && (
                       <span
                         className="picker-recent-open"
@@ -146,7 +161,7 @@ export function PickerRow({
                       </span>
                     )}
                   </span>
-                  <span className="picker-recent-path">{r.project_path}</span>
+                  <span className="picker-recent-path">{pathLineFor(r)}</span>
                 </span>
                 {/* ⚠️ THE GUTTER IS ALWAYS RENDERED — this is the P3.9 fix
                    (operator decision, 2026-08-05), and it is load-bearing.
@@ -228,6 +243,7 @@ export function PickerRow({
                 seedDriveMode={r.default_drive_mode ?? null}
                 profile={r.profile ?? null}
                 profiles={profiles}
+                remote={remote}
                 onProfileCommitted={onProfileCommitted}
                 onCommitted={onModelCommitted}
                 onDriveModeCommitted={onDriveModeCommitted}

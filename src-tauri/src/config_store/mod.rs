@@ -38,6 +38,11 @@
 //! `#![allow(dead_code)]` (per `session_state/mod.rs:47`, where a blanket allow with an
 //! expiry note masked a test-only helper sitting in production until code review caught it).
 //! A future placeholder field in this module should re-open the ledger in this shape.
+//!
+//! ⚠️ **Re-opened and re-closed by M17 WP2 (2026-11-16):** [`add_remote`] carried one per-item
+//! attribute through Phase 1, naming `remote_cmd::commands::add_remote_project` as its consumer.
+//! That command landed in Phase 2 and the attribute was deleted with clippy green — the ledger
+//! working as designed.
 
 pub mod commands;
 pub mod profile_create;
@@ -162,6 +167,67 @@ pub struct Project {
     /// whole project list down (the drive-mode blast radius).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
+    /// M17 WP2 — set when this row's CC session runs on **another Mac** over SSH
+    /// (`arch/remote-workspaces.md` §A). `None` = an ordinary local project, and the key is
+    /// omitted from disk, so every existing `projects.json` is byte-for-byte unaffected.
+    ///
+    /// ⚠️ **`remote.is_some()` IS the row kind** — there is deliberately no `kind` field, so
+    /// there is one source of truth.
+    ///
+    /// ⚠️ **For a remote row, [`Self::path`] holds its [`remote_key`] (`ssh://host/abs/path`),
+    /// NOT the remote path.** Every per-row IPC (`remove_project`, `record_open`, the model and
+    /// drive-mode setters, `touch_closed`, the unclean flag) keys on `path`, so they all work for a
+    /// remote row unchanged, and a remote row can never collide with a local directory of the same
+    /// path string. [`add_remote`] enforces `path == remote_key(remote)` at insert.
+    ///
+    /// ⚠️ **Mutually exclusive with a non-default [`Self::profile`]** — a profile names a LOCAL
+    /// `CLAUDE_CONFIG_DIR`. Rejected on write by [`add_remote`] and [`set_project_profile`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<RemoteTarget>,
+}
+
+impl Project {
+    /// Whether this row's CC session runs on another host (M17). The one predicate every
+    /// local-only consumer (the pruner, the announce stat, the editor root list) asks.
+    pub fn is_remote(&self) -> bool {
+        self.remote.is_some()
+    }
+}
+
+/// M17 WP2 — where a remote row's CC session runs (`arch/remote-workspaces.md` §A).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteTarget {
+    /// An ssh destination as the operator typed it: `user@host` or a `~/.ssh/config` alias.
+    pub host: String,
+    /// An **absolute** path on the remote host.
+    pub path: String,
+}
+
+impl RemoteTarget {
+    /// This target's identity key — see [`remote_key`].
+    pub fn key(&self) -> String {
+        remote_key(&self.host, &self.path)
+    }
+}
+
+/// The scheme prefix every remote identity key starts with. A local project path is always
+/// absolute (`/…`), so no local key can start with it.
+pub const REMOTE_KEY_PREFIX: &str = "ssh://";
+
+/// **THE identity function for a remote workspace** (`arch/remote-workspaces.md` §A):
+/// `ssh://<host><path>`. Every keyed store uses it — the project list, `WorkspaceRegistry`,
+/// the unclean-exit flag, the announce map.
+///
+/// ⚠️ Never key a remote workspace by its bare path: `canonical_key` falls back to the raw
+/// string, so a bare `/Users/x/proj` would collide with a local project at the same path.
+pub fn remote_key(host: &str, path: &str) -> String {
+    format!("{REMOTE_KEY_PREFIX}{host}{path}")
+}
+
+/// Whether `key` is a [`remote_key`]. Used by `canonical_key` to pass remote keys through
+/// untouched rather than resolving them against the local disk.
+pub fn is_remote_key(key: &str) -> bool {
+    key.starts_with(REMOTE_KEY_PREFIX)
 }
 
 /// The `supervisor_enabled` default: **ON**.
@@ -332,11 +398,20 @@ pub(crate) fn update_settings<T>(
 /// Add a project if its path is new, or refresh `last_opened_at` if it already
 /// exists. Paths are compared verbatim (the frontend supplies canonicalized
 /// dialog/dir paths). Returns the resulting record. Persists the full list.
+///
+/// ⚠️ M17: a remote key (`ssh://…`) may only TOUCH an existing remote row. Creating one here would
+/// mint a row with `path = ssh://…` but no `remote` target — a local row pointing nowhere. Remote
+/// rows are created only by [`add_remote`], after the preflight.
 pub fn add_or_touch(data_dir: &Path, path: PathBuf, now_ms: i64) -> Result<Project, ConfigError> {
     update_projects(data_dir, |projects| {
         let record = if let Some(existing) = projects.iter_mut().find(|p| p.path == path) {
             existing.last_opened_at = now_ms;
             existing.clone()
+        } else if is_remote_key(&path.to_string_lossy()) {
+            return Err(ConfigError::Invalid(format!(
+                "no remote project {} — add it with \"Add remote project…\"",
+                path.display()
+            )));
         } else {
             let project = Project {
                 display_name: derive_display_name(&path),
@@ -350,12 +425,86 @@ pub fn add_or_touch(data_dir: &Path, path: PathBuf, now_ms: i64) -> Result<Proje
                 // this is the one place a literal would silently diverge from serde's default.
                 supervisor_enabled: supervisor_enabled_default(),
                 profile: None,
+                remote: None,
             };
             projects.push(project.clone());
             project
         };
         Ok(record)
     })
+}
+
+/// M17 WP2 — add a remote row, or refresh `last_opened_at` if one with the same
+/// [`remote_key`] exists. Returns the resulting record. The ONLY creator of remote rows; the
+/// command wrapper runs the §H preflight before calling it (WP2 Phase 2).
+///
+/// Store-level invariants (`arch/remote-workspaces.md` §A), enforced here so no caller can skip
+/// them:
+/// - `project.path == remote_key(remote)` — the row's key is its remote identity;
+/// - no non-default `profile` (profiles are local `CLAUDE_CONFIG_DIR`s);
+/// - `target.path` is absolute and `target.host` is non-empty.
+pub fn add_remote(
+    data_dir: &Path,
+    target: RemoteTarget,
+    now_ms: i64,
+) -> Result<Project, ConfigError> {
+    if target.host.is_empty() {
+        return Err(ConfigError::Invalid("a remote project needs a host".into()));
+    }
+    if !target.path.starts_with('/') {
+        return Err(ConfigError::Invalid(format!(
+            "the remote path must be absolute, got {:?}",
+            target.path
+        )));
+    }
+    let candidate = Project {
+        display_name: derive_display_name(Path::new(&target.path)),
+        path: PathBuf::from(target.key()),
+        last_opened_at: now_ms,
+        last_closed_at: None,
+        default_model: None,
+        default_drive_mode: None,
+        supervisor_enabled: supervisor_enabled_default(),
+        profile: None,
+        remote: Some(target),
+    };
+    check_remote_invariants(&candidate)?;
+    update_projects(data_dir, |projects| {
+        if let Some(existing) = projects.iter_mut().find(|p| p.path == candidate.path) {
+            // The key matches but the stored row may be malformed (hand-edited, or a local row
+            // that somehow carries the key) — re-check before touching, never "repair" silently.
+            check_remote_invariants(existing)?;
+            existing.last_opened_at = now_ms;
+            return Ok(existing.clone());
+        }
+        projects.push(candidate.clone());
+        Ok(candidate)
+    })
+}
+
+/// The §A invariants of a remote row: its `path` is its [`remote_key`], and it carries no
+/// non-default profile. A local row (`remote: None`) always passes.
+fn check_remote_invariants(project: &Project) -> Result<(), ConfigError> {
+    let Some(target) = &project.remote else {
+        return Ok(());
+    };
+    if project.path != Path::new(&target.key()) {
+        return Err(ConfigError::Invalid(format!(
+            "remote row key mismatch: path {} is not {}",
+            project.path.display(),
+            target.key()
+        )));
+    }
+    if project
+        .profile
+        .as_deref()
+        .is_some_and(|p| p != profiles::DEFAULT_PROFILE)
+    {
+        return Err(ConfigError::Invalid(
+            "a remote project cannot use a profile: profiles are local config dirs".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// M16.5 WP5 (5.7) — stamp `last_closed_at = now_ms` on every listed project, in ONE
@@ -594,6 +743,13 @@ pub fn set_project_profile(
                     format!("no project record for {}", project_path.display()),
                 ))
             })?;
+        // M17 §A — a remote row runs under the remote's own `~/.claude`; a profile names a LOCAL
+        // config dir. Clearing (normalized `None`) stays allowed: it is already the state.
+        if target.is_remote() && normalized.is_some() {
+            return Err(ConfigError::Invalid(
+                "a remote project cannot use a profile: profiles are local config dirs".into(),
+            ));
+        }
         target.profile = normalized;
         Ok(())
     })
@@ -640,9 +796,14 @@ pub fn prune_missing(data_dir: &Path) -> Result<Vec<Project>, ConfigError> {
     // write when nothing was dropped. The file content is identical in that case, so this is a
     // redundant atomic rename rather than a behavior change — and it buys a single write path.
     update_projects(data_dir, |projects| {
+        // ⚠️ M17 — A REMOTE ROW IS NEVER PRUNED. Its `path` is an `ssh://` key that never exists
+        // on the local disk, so without this exemption every remote row would be SILENTLY DELETED
+        // on the next picker mount (research Risk 1, the highest-severity M17 item). The
+        // exemption lives HERE, in the pruner, not in a caller, so no call path can skip it.
+        // Pinned (mutation-proven) by `prune_missing_never_drops_a_remote_row`.
         let (kept, dropped): (Vec<Project>, Vec<Project>) = std::mem::take(projects)
             .into_iter()
-            .partition(|p| p.path.exists());
+            .partition(|p| p.is_remote() || p.path.exists());
         *projects = kept;
         Ok(dropped)
     })
@@ -682,6 +843,7 @@ mod tests {
             // The ruled default, so every pre-existing test keeps its original semantics.
             supervisor_enabled: supervisor_enabled_default(),
             profile: None,
+            remote: None,
         }
     }
 
@@ -869,6 +1031,7 @@ mod tests {
             default_drive_mode: Some(DriveMode::Autopilot),
             supervisor_enabled: supervisor_enabled_default(),
             profile: None,
+            remote: None,
         }];
         write_projects(dir.path(), &with_mode).unwrap();
         let read = read_projects(dir.path()).unwrap();
@@ -2153,5 +2316,196 @@ mod tests {
         touch_closed(dir.path(), &[PathBuf::from("/a")], 7).unwrap();
         let raw = std::fs::read_to_string(dir.path().join(PROJECTS_FILE)).unwrap();
         assert!(raw.contains("\"last_closed_at\": 7"), "{raw}");
+    }
+
+    // ── M17 WP2: remote rows ────────────────────────────────────────────────────────
+
+    fn mini(path: &str) -> RemoteTarget {
+        RemoteTarget {
+            host: "user@mini-host".into(),
+            path: path.into(),
+        }
+    }
+
+    #[test]
+    fn remote_key_is_the_ssh_url_form() {
+        assert_eq!(remote_key("u@h", "/a/b"), "ssh://u@h/a/b");
+        assert_eq!(mini("/x").key(), "ssh://user@mini-host/x");
+        assert!(is_remote_key("ssh://u@h/a"));
+        assert!(!is_remote_key("/Users/x/ssh://"));
+    }
+
+    #[test]
+    fn a_remote_key_never_equals_an_absolute_local_path() {
+        // Same path string on both sides: the remote key must differ from the local one, and
+        // must not be readable as a local path at all.
+        for path in ["/a", "/Users/me/proj", "/ssh:/h/p"] {
+            let key = remote_key("h", path);
+            assert_ne!(key, path);
+            assert!(
+                !key.starts_with('/'),
+                "{key} would parse as an absolute local path"
+            );
+            assert!(!is_remote_key(path), "{path} must not read as a remote key");
+        }
+    }
+
+    #[test]
+    fn a_list_with_no_remote_key_round_trips_byte_identical() {
+        // Existing projects.json files must be unaffected: `remote: None` is omitted on write.
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a/one", 100)]).unwrap();
+        let before = std::fs::read(dir.path().join(PROJECTS_FILE)).unwrap();
+        assert!(!String::from_utf8_lossy(&before).contains("remote"));
+        let read = read_projects(dir.path()).unwrap();
+        write_projects(dir.path(), &read).unwrap();
+        let after = std::fs::read(dir.path().join(PROJECTS_FILE)).unwrap();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn a_remote_row_round_trips_and_is_keyed_by_its_remote_key() {
+        let dir = TempDir::new().unwrap();
+        let added = add_remote(dir.path(), mini("/Users/u/tank"), 5).unwrap();
+        assert_eq!(
+            added.path,
+            PathBuf::from("ssh://user@mini-host/Users/u/tank")
+        );
+        assert_eq!(added.display_name.as_deref(), Some("tank"));
+        assert!(added.is_remote());
+        let read = read_projects(dir.path()).unwrap();
+        assert_eq!(read, vec![added]);
+    }
+
+    #[test]
+    fn adding_the_same_remote_twice_touches_rather_than_duplicates() {
+        let dir = TempDir::new().unwrap();
+        add_remote(dir.path(), mini("/r"), 5).unwrap();
+        let again = add_remote(dir.path(), mini("/r"), 9).unwrap();
+        assert_eq!(again.last_opened_at, 9);
+        assert_eq!(read_projects(dir.path()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_remote_row_and_a_local_row_at_the_same_path_string_coexist() {
+        let dir = TempDir::new().unwrap();
+        add_or_touch(dir.path(), PathBuf::from("/same"), 1).unwrap();
+        add_remote(dir.path(), mini("/same"), 2).unwrap();
+        let read = read_projects(dir.path()).unwrap();
+        assert_eq!(read.len(), 2, "{read:?}");
+        assert_eq!(read.iter().filter(|p| p.is_remote()).count(), 1);
+    }
+
+    #[test]
+    fn add_remote_rejects_a_relative_path_and_an_empty_host() {
+        let dir = TempDir::new().unwrap();
+        assert!(matches!(
+            add_remote(dir.path(), mini("rel/path"), 1),
+            Err(ConfigError::Invalid(_))
+        ));
+        let no_host = RemoteTarget {
+            host: String::new(),
+            path: "/a".into(),
+        };
+        assert!(matches!(
+            add_remote(dir.path(), no_host, 1),
+            Err(ConfigError::Invalid(_))
+        ));
+        assert!(
+            read_projects(dir.path()).unwrap().is_empty(),
+            "nothing written"
+        );
+    }
+
+    #[test]
+    fn the_remote_invariants_reject_a_key_mismatch_and_a_profile() {
+        let mut row = p("/whatever", 1);
+        row.remote = Some(mini("/r"));
+        assert!(
+            matches!(check_remote_invariants(&row), Err(ConfigError::Invalid(_))),
+            "path != remote_key(remote) must be rejected"
+        );
+        row.path = PathBuf::from(mini("/r").key());
+        assert!(check_remote_invariants(&row).is_ok(), "positive control");
+        row.profile = Some("work".into());
+        assert!(
+            matches!(check_remote_invariants(&row), Err(ConfigError::Invalid(_))),
+            "remote + a non-default profile must be rejected"
+        );
+        row.profile = Some(profiles::DEFAULT_PROFILE.into());
+        assert!(
+            check_remote_invariants(&row).is_ok(),
+            "the default profile is no profile"
+        );
+    }
+
+    #[test]
+    fn add_remote_refuses_to_touch_a_malformed_stored_row() {
+        // A hand-edited row carrying the key AND a profile: touching it would bless it.
+        let dir = TempDir::new().unwrap();
+        let mut bad = p("/r", 1);
+        bad.path = PathBuf::from(mini("/r").key());
+        bad.remote = Some(mini("/r"));
+        bad.profile = Some("work".into());
+        write_projects(dir.path(), &[bad]).unwrap();
+        assert!(matches!(
+            add_remote(dir.path(), mini("/r"), 2),
+            Err(ConfigError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn set_project_profile_refuses_a_remote_row_but_allows_clearing() {
+        let dir = TempDir::new().unwrap();
+        let row = add_remote(dir.path(), mini("/r"), 1).unwrap();
+        assert!(matches!(
+            set_project_profile(dir.path(), &row.path, Some("work".into())),
+            Err(ConfigError::Invalid(_))
+        ));
+        set_project_profile(dir.path(), &row.path, None).unwrap();
+        set_project_profile(dir.path(), &row.path, Some("default".into())).unwrap();
+        assert_eq!(read_projects(dir.path()).unwrap()[0].profile, None);
+    }
+
+    #[test]
+    fn add_or_touch_never_mints_a_remote_row_from_a_bare_key() {
+        let dir = TempDir::new().unwrap();
+        let key = PathBuf::from(mini("/r").key());
+        assert!(matches!(
+            add_or_touch(dir.path(), key.clone(), 1),
+            Err(ConfigError::Invalid(_))
+        ));
+        assert!(read_projects(dir.path()).unwrap().is_empty());
+        // ...but it DOES touch an existing remote row (this is `record_open`'s path).
+        add_remote(dir.path(), mini("/r"), 1).unwrap();
+        let touched = add_or_touch(dir.path(), key, 50).unwrap();
+        assert_eq!(touched.last_opened_at, 50);
+        assert!(touched.is_remote(), "the touch must keep the remote target");
+    }
+
+    /// ⚠️ THE data-loss guard (research Risk 1). Mutation-proven at WP2 Phase 1: deleting
+    /// `p.is_remote() ||` from `prune_missing`'s partition makes this test fail.
+    #[test]
+    fn prune_missing_never_drops_a_remote_row() {
+        let dir = TempDir::new().unwrap();
+        let present = TempDir::new().unwrap();
+        add_or_touch(dir.path(), present.path().to_path_buf(), 1).unwrap();
+        add_or_touch(dir.path(), PathBuf::from("/definitely/not/here/xyz"), 2).unwrap();
+        let remote = add_remote(dir.path(), mini("/definitely/not/here/xyz"), 3).unwrap();
+        assert!(
+            !remote.path.exists(),
+            "premise: the remote key is not a local path"
+        );
+
+        let dropped = prune_missing(dir.path()).unwrap();
+        // Positive control: the pruner still prunes a missing LOCAL row.
+        assert_eq!(dropped.len(), 1, "{dropped:?}");
+        assert_eq!(dropped[0].path, PathBuf::from("/definitely/not/here/xyz"));
+        let kept = read_projects(dir.path()).unwrap();
+        assert!(
+            kept.contains(&remote),
+            "the remote row was pruned: {kept:?}"
+        );
+        assert_eq!(kept.len(), 2);
     }
 }

@@ -777,4 +777,17 @@ mod tests {
         assert!(!after.contains_key(A), "the cleared flag is gone");
         assert!(is_unclean(&after, B), "the sibling flag survives the clear");
     }
+
+    // --- M17 WP2: the unclean flag keys a remote workspace by its remote key, unchanged ---
+
+    #[test]
+    fn key_for_passes_a_remote_key_through_unchanged() {
+        let key = crate::config_store::remote_key("u@h", "/a/b");
+        assert_eq!(key_for(&key), key);
+        let dir = TempDir::new().unwrap();
+        set_and_persist(dir.path(), &key);
+        assert!(is_unclean(&read(dir.path()), &key));
+        // A local project at the same path string is a different flag.
+        assert!(!is_unclean(&read(dir.path()), &key_for("/a/b")));
+    }
 }

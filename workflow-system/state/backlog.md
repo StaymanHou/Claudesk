@@ -619,3 +619,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** In WP3, the remote kill path runs `send-keys -X cancel` over the master before typing `/exit\r` (the same step every Claudesk injection gets). Add a test: close a remote workspace while scrolled up → the remote session is gone.
 - **Priority:** high
 - **Status:** pending
+
+## SURFACE-2026-11-16-REMOTE-OPEN-MUST-CHECK-THE-FOLDER-STILL-EXISTS
+- **Source:** feature:verify-human (M17 WP2 Phase 3; operator's question "what about a sad path? … the folder is gone?")
+- **Target level:** product:wbs (M17 WP3 / WP5)
+- **Type:** gap
+- **Summary:** A remote row whose folder was deleted or renamed ON THE HOST after it was added has no check anywhere. The add-time preflight (WP2) refuses a missing path, but `prune_missing` deliberately exempts remote rows, because a remote stat at every picker mount would cost an ssh round-trip per row. WP3's open path (`tmux new -A -s … -c <path>`) has no folder check listed in the WBS.
+- **Context:** Today opening a remote row is a stub (WP2), so this is harmless. Once WP3 lands, a missing folder would start CC in tmux's fallback cwd (or fail with an opaque tmux error), not in the project.
+- **Suggested action:** In WP3 (3.2) or WP5, the remote open path runs `test -d <path>` over the master first (through `remote_cmd::quote`, or a constant fragment plus the quoted path, as the WP2 preflight does). On failure it says in plain words "<path> no longer exists on <host>", keeps the row and offers Remove. Do not prune it automatically: an unreachable host and a deleted folder must not look alike.
+- **Priority:** medium
+- **Status:** open

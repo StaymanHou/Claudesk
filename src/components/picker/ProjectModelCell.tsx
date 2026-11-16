@@ -116,6 +116,12 @@ interface ProjectModelCellProps {
   /** F-b — a successfully-persisted profile change, so the parent can fold it into `recents`. */
   onProfileCommitted?: (projectPath: string, profile: string | null) => void;
   /**
+   * M17 WP2 — a REMOTE row has NO profile line: a profile names a LOCAL `CLAUDE_CONFIG_DIR`, and
+   * the store refuses one on a remote row (`config_store::set_project_profile`). The picker never
+   * offers what the store would refuse (arch §A).
+   */
+  remote?: boolean;
+  /**
    * Report a successfully-persisted model so the parent can fold it into `recents`,
    * keeping the seed truthful across an unmount (filter in/out). Success path only — a
    * failed write reverts locally and must NOT be written back.
@@ -137,6 +143,7 @@ export function ProjectModelCell({
   seedDriveMode = null,
   profile = null,
   profiles = NO_PROFILES,
+  remote = false,
   onCommitted,
   onDriveModeCommitted,
   onProfileCommitted,
@@ -292,7 +299,7 @@ export function ProjectModelCell({
     >
       {/* F-b — the PROFILE line, first in the stack and always present (lite-IDE core, NOT
           gated). A closed-set native <select> while editing, per the drive-mode precedent. */}
-      {editingProfile ? (
+      {remote ? null : editingProfile ? (
         <select
           ref={profileSelectRef}
           className="picker-recent-profile-select"

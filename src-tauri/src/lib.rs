@@ -48,6 +48,7 @@ mod project_search;
 // EventRow). Phase 2 = AI kinds (ai-doing/subagent/ai-reasoning) + reused interval
 // mechanics; Phase 3 = the human-state gap machine (focus-fusion + capped-working).
 mod reclassify;
+mod remote_cmd;
 // M12 WP2: the unclean-exit flag store (`session-state.json`) — one boolean per project
 // path, DEFAULT-SET on workspace open and cleared only by a clean exit, so a power loss
 // (which runs no code) leaves it set for free. ABSENT MEANS CLEAN: clearing removes the
@@ -490,6 +491,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             config_store::commands::list_projects,
             config_store::commands::add_project,
+            remote_cmd::commands::remote_preflight,
+            remote_cmd::commands::add_remote_project,
             config_store::commands::record_open,
             config_store::commands::remove_project,
             // WP9: prune projects whose folder was deleted between sessions.

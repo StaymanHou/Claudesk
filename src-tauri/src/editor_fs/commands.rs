@@ -28,6 +28,20 @@ use super::{
 };
 use crate::config_store::{self, commands::resolve_data_dir};
 
+/// The project roots that may authorize a local editor-fs root: every LOCAL project's path.
+///
+/// ⚠️ M17 — a REMOTE row has no local tree, so it can never authorize a local root. Its `path` is
+/// an `ssh://` key, which `canonicalize` would resolve RELATIVE TO THE PROCESS CWD; excluding it
+/// here keeps this security boundary from depending on that resolution failing. Pinned by
+/// `known_local_roots_excludes_remote_rows`.
+fn known_local_roots(projects: Vec<config_store::Project>) -> Vec<PathBuf> {
+    projects
+        .into_iter()
+        .filter(|p| !p.is_remote())
+        .map(|p| p.path)
+        .collect()
+}
+
 /// Authenticate a frontend-supplied `root` against the known project list, returning the
 /// canonicalized root to confine against. Resolves the project list server-side from the
 /// real app-data dir, so the renderer can't widen the guard by passing an arbitrary
@@ -38,11 +52,8 @@ use crate::config_store::{self, commands::resolve_data_dir};
 /// that drifts — the same principle the `docs` module already applies to `read_file_core`.
 pub(crate) fn validate_frontend_root(app: &AppHandle, root: &str) -> Result<PathBuf, String> {
     let data_dir = resolve_data_dir(app)?;
-    let known_roots: Vec<PathBuf> = config_store::read_projects(&data_dir)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|p| p.path)
-        .collect();
+    let known_roots =
+        known_local_roots(config_store::read_projects(&data_dir).map_err(|e| e.to_string())?);
     validate_root(&known_roots, Path::new(root)).map_err(|e| e.to_string())
 }
 
@@ -165,4 +176,30 @@ pub fn open_in_default_app(app: AppHandle, root: String, path: String) -> Result
             )
         })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config_store::{add_or_touch, add_remote, read_projects, RemoteTarget};
+    use tempfile::TempDir;
+
+    #[test]
+    fn known_local_roots_excludes_remote_rows() {
+        let dir = TempDir::new().unwrap();
+        add_or_touch(dir.path(), PathBuf::from("/local/one"), 1).unwrap();
+        let remote = add_remote(
+            dir.path(),
+            RemoteTarget {
+                host: "u@h".into(),
+                path: "/local/one".into(),
+            },
+            2,
+        )
+        .unwrap();
+        let roots = known_local_roots(read_projects(dir.path()).unwrap());
+        // Positive control: the local row IS a known root.
+        assert_eq!(roots, vec![PathBuf::from("/local/one")]);
+        assert!(!roots.contains(&remote.path), "{roots:?}");
+    }
 }

@@ -141,6 +141,16 @@ const ASYNC_COMMANDS: &[(&str, &str)] = &[
         "reads up to two 5 MiB log generations, bounded, on the worker directly",
     ),
     (
+        "remote_preflight",
+        "two one-shot `ssh` execs, each up to `EXEC_TIMEOUT_MS` (30 s) (M17 WP2); the work runs \
+         on `spawn_blocking`",
+    ),
+    (
+        "add_remote_project",
+        "the same `ssh` preflight, then one `projects.json` write (M17 WP2); the work runs on \
+         `spawn_blocking`",
+    ),
+    (
         "updater_check",
         "awaits the updater plugin's async HTTP check; nothing blocks the worker",
     ),

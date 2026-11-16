@@ -4385,6 +4385,63 @@ body,
   white-space: nowrap;
 }
 
+/* M17 WP2 — the remote-row marker: a readout on the name's line, like "● open". The existing
+   neutral grey, deliberately NOT a blue: blue is the awaiting-input status hue. */
+.picker-recent-remote {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: #9b9b9b;
+  white-space: nowrap;
+}
+
+/* M17 WP2 — "Open Folder…" and "Add Remote Project…" side by side. */
+.picker-add-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* M17 WP2 — the inline "Add remote project" form below the two add buttons. */
+.picker-remote-form {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(160, 160, 160, 0.3);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.picker-remote-fields {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.picker-remote-input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.picker-remote-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.picker-remote-status {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.picker-remote-error {
+  font-size: 0.85rem;
+  color: #ff8a7a;
+  white-space: pre-wrap;
+}
+
 .picker-recent-announce {
   /* A READOUT, not a control: no border, no hover, not focusable. */
   flex: 0 0 auto;

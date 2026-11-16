@@ -49,6 +49,8 @@ import { isWorkflowApplicable } from "../../state/workflowApplicable";
 import type { AnnounceMap, AutoResumeAction } from "../../state/predictAction";
 import { NO_TEXT_ASSIST } from "../noTextAssist";
 import { PickerRow } from "./PickerRow";
+import { AddRemoteForm } from "./AddRemoteForm";
+import { pathLineFor, remoteOpenRefusal, remoteSearchText } from "./remoteRow";
 import { orderPickerRows } from "./pickerOrder";
 
 // A picker toast is either an INFO note (e.g. "removed N stale projects" on mount) or
@@ -89,6 +91,18 @@ export interface RecentProject {
   last_opened_at?: number | null;
   /** M16.5 WP5 (5.7) — unix epoch ms of the last workspace close; the row order's key. */
   last_closed_at?: number | null;
+  /**
+   * M17 WP2 — set when this row's CC session runs on another Mac over SSH. Absent / `null` = a
+   * local project. ⚠️ For a remote row `project_path` is its `ssh://host/abs/path` identity key,
+   * NOT a local path (`config_store::remote_key`), so every path-keyed IPC works unchanged.
+   */
+  remote?: RemoteTarget | null;
+}
+
+/** M17 WP2 — mirrors `config_store::RemoteTarget`: an ssh destination + an absolute remote path. */
+export interface RemoteTarget {
+  host: string;
+  path: string;
 }
 
 // Pure, testable filter predicate. Case-insensitive substring match on the
@@ -98,7 +112,10 @@ export function matchesFilter(project: RecentProject, query: string): boolean {
   if (q === "") return true;
   const name = (project.display_name ?? "").toLowerCase();
   const path = project.project_path.toLowerCase();
-  return name.includes(q) || path.includes(q);
+  // M17 — a remote row also matches on `user@host:path`, which its `ssh://` key does not contain
+  // verbatim (`host:/abs` vs `ssh://host/abs`); the row SHOWS the path and the short host apart.
+  const remote = remoteSearchText(project).toLowerCase();
+  return name.includes(q) || path.includes(q) || remote.includes(q);
 }
 
 interface ProjectPickerProps {
@@ -166,6 +183,8 @@ export function ProjectPicker({
   // The picker toast: an info note (prune-on-mount) or a surfaced IPC error. `null` =
   // no toast (the common case). Both kinds are dismissible.
   const [toast, setToast] = useState<PickerToast | null>(null);
+  // M17 WP2 — whether the "Add remote project…" form is showing.
+  const [addingRemote, setAddingRemote] = useState(false);
   // M12 WP3 — the batched auto-resume announcement. ONE call per picker open (never a
   // per-row probe: M11.5 WP1's review found the model cell issuing an IPC read per row for
   // a value already on the wire, and this is the same surface). `{}` until it resolves.
@@ -286,6 +305,14 @@ export function ProjectPicker({
     // Re-derive, do not read the label. `rowAffordances` is the same function the row
     // rendered with, called fresh — so a signal that changed since render is reflected.
     const row = recents.find((r) => r.project_path === projectPath);
+    // M17 WP2 — a REMOTE row opens nothing yet (WP3 builds the terminal). Refused HERE, in the
+    // funnel both doors share, and BEFORE `record_open`, so neither door mints an empty
+    // workspace or stamps a recency for a session that never started.
+    const remoteRefusal = remoteOpenRefusal(row);
+    if (remoteRefusal !== null) {
+      setToast({ kind: "info", message: remoteRefusal });
+      return;
+    }
     // F-b A.6 — a row naming an unlisted profile opens NOTHING. The backend would refuse the
     // spawn anyway; refusing here means no empty workspace is minted for it.
     const refusal = missingProfileRefusal(row?.profile, profiles);
@@ -578,13 +605,42 @@ export function ProjectPicker({
           );
         })}
       </ul>
-      <button
-        type="button"
-        data-testid="picker-open-folder"
-        onClick={() => void handleOpenFolder()}
-      >
-        Open Folder…
-      </button>
+      <div className="picker-add-actions">
+        <button
+          type="button"
+          data-testid="picker-open-folder"
+          onClick={() => void handleOpenFolder()}
+        >
+          Open Folder…
+        </button>
+        {/* M17 WP2 — a project whose CC session runs on another Mac over SSH. A picker ACTION,
+            not a settings screen (arch §H). */}
+        <button
+          type="button"
+          data-testid="picker-add-remote"
+          aria-expanded={addingRemote}
+          onClick={() => setAddingRemote((v) => !v)}
+        >
+          Add Remote Project…
+        </button>
+      </div>
+      {addingRemote && (
+        <AddRemoteForm
+          onCancel={() => setAddingRemote(false)}
+          onAdded={(added) => {
+            // Prepend-and-dedup, exactly like "Open Folder…": a re-added remote moves to the top.
+            setRecents((rs) => [
+              added,
+              ...rs.filter((r) => r.project_path !== added.project_path),
+            ]);
+            setAddingRemote(false);
+            setToast({
+              kind: "info",
+              message: `Added ${added.display_name ?? pathLineFor(added)} on ${added.remote?.host ?? "the remote host"}.`,
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

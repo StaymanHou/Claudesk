@@ -219,6 +219,14 @@ pub fn announce_actions(data_dir: &Path, gate_enabled: bool) -> AnnounceMap {
 
     let mut out = AnnounceMap::new();
     for project in projects {
+        // ⚠️ M17 WP2 — a REMOTE row announces nothing yet. Its `path` is an `ssh://` key, so
+        // `has_session_md` would stat `ssh:/host/…/.session.md` RELATIVE TO THE PROCESS CWD (a
+        // local read that means nothing), and the resume rule's remote checks (a live tmux
+        // session first, then the remote `.session.md`) are WP5/WP7's, read over the host link.
+        // No prediction is the safe direction here: a missed announcement costs a click.
+        if project.is_remote() {
+            continue;
+        }
         let path_str = project.path.to_string_lossy().to_string();
         // ⚠️ The flag lookup MUST go through the canonical key form. `session_state`'s
         // `is_unclean_on_disk` re-reads the file per call, so this uses the map-level
@@ -1023,5 +1031,36 @@ mod tests {
         apply_trust(announce_actions(data.path(), true), || {
             panic!("a profile row must do no trust IO")
         });
+    }
+
+    // ── M17 WP2: remote rows announce nothing (yet) ─────────────────────────────────
+
+    #[test]
+    fn a_remote_row_announces_nothing_even_with_its_unclean_flag_set() {
+        let data = TempDir::new().unwrap();
+        // Positive control: a LOCAL row with its unclean flag set announces `continue`.
+        let local = TempDir::new().unwrap();
+        config_store::add_or_touch(data.path(), local.path().to_path_buf(), 1).unwrap();
+        let local_key = local.path().to_string_lossy().to_string();
+        crate::session_state::set_and_persist(data.path(), &local_key);
+
+        let remote = config_store::add_remote(
+            data.path(),
+            config_store::RemoteTarget {
+                host: "u@h".into(),
+                path: "/r".into(),
+            },
+            2,
+        )
+        .unwrap();
+        let remote_key = remote.path.to_string_lossy().to_string();
+        crate::session_state::set_and_persist(data.path(), &remote_key);
+
+        let map = announce_actions(data.path(), true);
+        assert_eq!(
+            map.get(&local_key).map(String::as_str),
+            Some(ACTION_CONTINUE)
+        );
+        assert!(!map.contains_key(&remote_key), "{map:?}");
     }
 }

@@ -122,7 +122,16 @@ fn adjudicator_command(model: &str) -> Command {
 /// - **A grandchild writing to the same pipe** during the grace is mixed into the output. If it
 ///   floods past [`MAX_OUTPUT`], the result is [`AdjudicateError::OutputTooLarge`], not the
 ///   answer.
-fn run_command(mut cmd: Command, prompt: &str, timeout_ms: u64) -> Result<String, AdjudicateError> {
+///
+/// ⚠️ `pub(crate)` since M17 WP2: `remote_cmd::preflight` runs its one-shot `ssh` execs through
+/// this same hardened loop (group kill on the deadline, drained pipes, capped output) rather
+/// than a second copy of it. The error type keeps its adjudicator name; the preflight maps each
+/// variant to its own words and never shows this `Display`.
+pub(crate) fn run_command(
+    mut cmd: Command,
+    prompt: &str,
+    timeout_ms: u64,
+) -> Result<String, AdjudicateError> {
     let deadline = Instant::now() + Duration::from_millis(timeout_ms);
     // Its own process group, so a timeout can kill everything it started.
     let mut child = match in_own_group(&mut cmd)

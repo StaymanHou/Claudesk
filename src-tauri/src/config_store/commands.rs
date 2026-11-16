@@ -132,7 +132,7 @@ fn seed_dev_projects(
 /// project to the BOTTOM of recents — the exact opposite of what the user just did.
 /// Instead we log the anomaly and stamp `i64::MAX` so the actively-opened record
 /// sorts FIRST, matching intent, and surface the clock fault rather than swallowing it.
-fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(d) => d.as_millis() as i64,
         Err(e) => {

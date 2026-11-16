@@ -620,7 +620,19 @@ pub(crate) fn is_path_ancestor(ancestor: &Path, descendant: &Path) -> bool {
 /// `canonicalize` fails (e.g. the path no longer exists on disk) — a non-existent
 /// `cwd` then simply won't match any canonicalized registered path and is dropped,
 /// which is the intended "no open workspace" behavior. Never panics.
+///
+/// ⚠️ **M17: a remote key (`ssh://host/path`) is returned UNCHANGED, before any disk access.**
+/// `Path::new("ssh://h/p")` is a *relative* path, so `canonicalize` would resolve it against the
+/// process cwd and, if a `./ssh:/h/p` directory happened to exist there, return a LOCAL absolute
+/// path, silently re-keying a remote workspace onto a local one. Doing the pass-through here,
+/// at the root, covers every keyed store at once: `WorkspaceRegistry`, `touch_closed`, and the
+/// unclean flag's `session_state::key_for`. Pinned by
+/// `canonical_key_passes_a_remote_key_through_even_when_a_cwd_relative_match_exists`.
 pub(crate) fn canonical_key(path: &Path) -> String {
+    let raw = path.to_string_lossy();
+    if crate::config_store::is_remote_key(&raw) {
+        return raw.into_owned();
+    }
     match path.canonicalize() {
         Ok(p) => p.to_string_lossy().into_owned(),
         Err(_) => path.to_string_lossy().into_owned(),
@@ -2359,5 +2371,58 @@ mod tests {
                 "an overlaid {truth:?} must light the tray"
             );
         }
+    }
+
+    // ── M17 WP2: remote keys pass through canonical_key ─────────────────────────────
+
+    /// Removes what the test created under the process cwd, even on panic.
+    struct CwdDirGuard {
+        created_root: Option<std::path::PathBuf>,
+        created_leaf: std::path::PathBuf,
+    }
+    impl Drop for CwdDirGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.created_leaf);
+            if let Some(root) = &self.created_root {
+                // Only if WE created `ssh:` and it is now empty.
+                let _ = std::fs::remove_dir(root);
+            }
+        }
+    }
+
+    /// ⚠️ The trap D2 closes: `Path::new("ssh://h/p")` is RELATIVE, so without the pass-through
+    /// `canonicalize` resolves it against the cwd and, when `./ssh:/h/p` exists, re-keys the
+    /// remote workspace onto a LOCAL absolute path. This test creates exactly that directory.
+    #[test]
+    fn canonical_key_passes_a_remote_key_through_even_when_a_cwd_relative_match_exists() {
+        let cwd = std::env::current_dir().unwrap();
+        let root = cwd.join("ssh:");
+        let created_root = (!root.exists()).then(|| root.clone());
+        let host = format!("claudesk-ck-{}", std::process::id());
+        let leaf = root.join(&host);
+        std::fs::create_dir_all(leaf.join("a")).unwrap();
+        let _guard = CwdDirGuard {
+            created_root,
+            created_leaf: leaf,
+        };
+
+        let key = format!("ssh://{host}/a");
+        // Premise: the cwd-relative resolution really would succeed (the trap is armed).
+        assert!(
+            Path::new(&key).canonicalize().is_ok(),
+            "premise: ./{key} must resolve for this test to discriminate"
+        );
+        assert_eq!(canonical_key(Path::new(&key)), key);
+    }
+
+    #[test]
+    fn canonical_key_still_canonicalizes_a_local_path() {
+        // Positive control for the pass-through: a real local dir is still resolved.
+        let dir = tempfile::TempDir::new().unwrap();
+        let canon = dir.path().canonicalize().unwrap();
+        assert_eq!(
+            canonical_key(dir.path()),
+            canon.to_string_lossy().into_owned()
+        );
     }
 }
