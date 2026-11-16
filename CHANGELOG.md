@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-16
+
+- **Feature shipped:** M17 WP2 lets a picker row be a project whose Claude Code session runs on another Mac over SSH. The row is keyed `ssh://user@host/path`, exempt from the launch-time prune, and added only after an async ssh preflight checks the key, tmux/claude/perl, the folder and CC's token login. Every remote command string is built by the new `remote_cmd` quoting module.
+- **Backlog resolved:** SURFACE-2026-11-14-REMOTE-CC-AUTH-KEYCHAIN-LOCKED-OVER-SSH (partial) — the add-time preflight now checks the token file and `claude auth status` → `loggedIn: true`; the WP3 spawn export remains open.
+- **Milestone:** WP2: Remote rows: data model, identity, and adding one
+
 ## 2026-11-14
 
 - **Feature shipped:** M17 WP1's remote-terminal probe settled how a remote workspace's Claude Code runs under tmux on the SSH host: tmux conf C with CC inline, token auth because the macOS Keychain is unreadable over ssh, `unset TMUX` for truecolor, and a copy-mode cancel before every injection and before `/exit` on close. Every finding is folded into WP2–WP7's tasks.

@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-14  # WP1 probe shipped; its outputs folded into WP2–WP7 tasks
+updated: 2026-11-16  # WP2 remote rows shipped (d871473); WP1 probe shipped 2026-11-14
 cycle: milestone-17-remote-workspaces
 ---
 
@@ -61,18 +61,25 @@ only if the build disproves one.
 
 **WP1 → WP2/WP3 rationale:** a scrollback or bracketed-paste failure would change the terminal design (a different session host or a paste path). Learn that before WP3 builds the spawn path around tmux.
 
-### WP2: Remote rows: data model, identity, and adding one
+### WP2: Remote rows: data model, identity, and adding one ✅ SHIPPED 2026-11-16 (commit d871473)
 **Milestone:** M17
 **Dependencies:** none (can run in parallel with WP1)
 **Size:** M, **~2 days**
 **Description:** the data-loss risk is fixed first. Remote rows exist, survive launch, and are keyed safely. arch §A, §H.
 **Tasks:**
-- [ ] 2.1 `config_store::Project.remote: Option<RemoteTarget { host, path }>`, serde-compatible with every existing `projects.json`. Store-level rejection of `remote` + a non-default `profile`.
-- [ ] 2.2 ⚠️ **`prune_missing_projects` exempts remote rows.** The exemption goes in the pruner, with a test that fails when the exemption is deleted (mutation-proven).
-- [ ] 2.3 `remote_key` (`ssh://host/path`) as the one identity function. `key_for` passes remote keys through unchanged. Tests show a remote key never collides with a local project at the same path string.
-- [ ] 2.4 `remote_cmd::quote`, the single remote-command builder, unit-tested against hostile inputs (spaces, quotes, `$`, backticks, newlines, a leading `-`). ⚠️ Design it knowing the four quoting layers and the one expansion that must survive (the token's `$(cat …)`): arch §C's **OPEN** point, (a) constant fragment vs (b) deployed launcher.
-- [ ] 2.5 Picker "Add remote project…" (host + path) with an async preflight: key works, `tmux`/`claude`/`perl` resolve under `zsh -lc`, the path exists. Plain-words errors, including "could not resolve hostname: is Tailscale running?". **Plus the auth check** (arch §H): `~/.claudesk/cc-oauth-token` exists and, exported, `claude auth status` → `loggedIn: true`; on failure, name the `claude setup-token` fix.
-- [ ] 2.6 A remote row renders in the picker (host shown) and can be removed. Opening it is a no-op stub until WP3.
+- [x] 2.1 `config_store::Project.remote: Option<RemoteTarget { host, path }>`, serde-compatible with every existing `projects.json`. Store-level rejection of `remote` + a non-default `profile`.
+- [x] 2.2 ⚠️ **`prune_missing_projects` exempts remote rows.** The exemption goes in the pruner, with a test that fails when the exemption is deleted (mutation-proven).
+- [x] 2.3 `remote_key` (`ssh://host/path`) as the one identity function. `key_for` passes remote keys through unchanged. Tests show a remote key never collides with a local project at the same path string.
+- [x] 2.4 `remote_cmd::quote`, the single remote-command builder, unit-tested against hostile inputs (spaces, quotes, `$`, backticks, newlines, a leading `-`). ⚠️ Design it knowing the four quoting layers and the one expansion that must survive (the token's `$(cat …)`): arch §C's **OPEN** point, (a) constant fragment vs (b) deployed launcher.
+- [x] 2.5 Picker "Add remote project…" (host + path) with an async preflight: key works, `tmux`/`claude`/`perl` resolve under `zsh -lc`, the path exists. Plain-words errors, including "could not resolve hostname: is Tailscale running?". **Plus the auth check** (arch §H): `~/.claudesk/cc-oauth-token` exists and, exported, `claude auth status` → `loggedIn: true`; on failure, name the `claude setup-token` fix.
+- [x] 2.6 A remote row renders in the picker (host shown) and can be removed. Opening it is a no-op stub until WP3.
+
+✅ **WP2 done 2026-11-16** (archived WIP `workflow-system/state/archive/m17-wp2-remote-rows.md`). What WP3 inherits:
+- **A remote row's `project_path` IS its `remote_key`** (`ssh://user@host/abs/path`). `RemoteTarget { host, path }` sits beside it, and every path-keyed IPC works unchanged. `canonical_key` passes remote keys through before any disk access.
+- **`remote_cmd`** has `quote` (POSIX single-quote, applied once per layer), `validate_host` (allow-list, no leading `-`), `normalize_remote_path` (remote-`$HOME` `~` expansion; operator ruling) and constant fragments. The rule is restated as "no *variable* value outside `quote`". **Recommendation recorded for 3.2: arch §C option (b), a deployed launcher.**
+- **The preflight** is two one-shot `BatchMode` execs (key + `$HOME`, then one constant check script), run inside the async `add_remote_project`. It reuses `adjudicator::run_command`.
+- **The picker row** (operator ruling): the path line is the remote path, the marker is `⇄ <short host>`, the full host is in the tooltip, and there is no profile line. Opening is a stub that refuses both doors before `record_open`.
+- ⚠️ **Before 3.2 reads rows from disk:** fold in the review's MAJOR (the store doesn't enforce `validate_host` / path normalization for remote rows), plus `SURFACE-2026-11-16-REMOTE-OPEN-MUST-CHECK-THE-FOLDER-STILL-EXISTS` (the open path must `test -d` the folder).
 
 **WP2 → WP3 rationale:** WP3 keys sessions and links by `remote_key` and builds commands with `quote`, so both must exist and be tested first. The prune exemption must land before *any* build can create a remote row on the operator's real `projects.json`.
 

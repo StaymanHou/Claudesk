@@ -94,3 +94,80 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** trim to the WHY.
 - **Priority:** low
 - **Status:** pending
+
+# m17-wp2-remote-rows — 2026-11-16
+
+*(feature-review-quality on ship commit `d871473`, window `5ac8819..d871473`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 7 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-16-QUALITY-M17WP2-STORE-DOES-NOT-ENFORCE-HOST-AND-PATH-VALIDATION
+- **Severity:** MAJOR
+- **Location:** `src-tauri/src/config_store/mod.rs`: `add_remote` / `check_remote_invariants`.
+- **Finding:** The doc says the store enforces the §A invariants "so no caller can skip them", but the security-relevant checks are not among them. The store requires only a non-empty host and a path starting with `/`. `remote_cmd::validate_host` (no leading `-`, allow-listed characters) and `normalize_remote_path` (no control characters, no trailing slash) run only inside `run_preflight`, and nothing re-checks a remote row read back from a hand-edited `projects.json`.
+- **Why it matters:** WP3 puts `remote.host` / `remote.path` from the STORE into the ControlMaster ssh argv and tmux `-c`. Today that depends on the WP3 author re-validating, or on the `--` that only `SshExec` passes. The store also accepts `/r/` and `/r` as two identity keys for one project.
+- **Suggested action:** Call `validate_host` and the path normalization from `check_remote_invariants`, and apply them to remote rows on read (refuse or degrade the row, never fail the whole list, which is the drive-mode blast-radius rule). ⚠️ **Do this before WP3's spawn reads rows from disk (WP3 task 3.2).**
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP2-AUTH-CHECK-HARDCODES-TOKEN-PATH
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/remote_cmd/mod.rs`: `AUTH_CHECK` vs `TOKEN_FILE`.
+- **Finding:** `AUTH_CHECK` repeats `~/.claudesk/cc-oauth-token` literally instead of deriving it from `TOKEN_FILE`, and the only test asserts the literal, so the two can drift silently.
+- **Suggested action:** `assert!(AUTH_CHECK.contains(TOKEN_FILE))`, or build the fragment with `concat!`.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP2-PRINT-HOME-INTOLERANT-OF-RC-NOISE
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/remote_cmd/preflight.rs`: the connect step.
+- **Finding:** The connect step requires the whole stdout of `PRINT_HOME` to be one `/…` line, while the check-script parser deliberately ignores rc-file noise. A remote `.zshenv` that prints anything fails connect with "$HOME looked wrong".
+- **Suggested action:** Take the last line, or wrap `$HOME` in a sentinel.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP2-PREFLIGHT-CHECK-NAMES-MISLABEL
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/remote_cmd/preflight.rs`: `run_preflight` / `parse_check_lines`.
+- **Finding:** A transport failure on the check-script exec is labelled `"tools"`, and "stopped early" is labelled `"auth"`, whatever step was actually reached.
+- **Suggested action:** Use a `"connect"` / `"script"` name for transport failures, and name the next unreported check when the script stops early.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP2-REMOTE-PREFLIGHT-HAS-NO-FRONTEND-CALLER
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/remote_cmd/commands.rs`: `remote_preflight`.
+- **Finding:** The command is registered and listed in `ASYNC_COMMANDS`, but no frontend code calls it. `AddRemoteForm` shows a static "Checking…" line, although P2.4 justified the command as "the UI's progress line". Its only use so far is MCP-bridge verification.
+- **Suggested action:** Wire it up for per-check progress, or document it as a deliberate diagnostic surface (or delete it).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP2-SSH-RUNNER-BORROWS-ADJUDICATOR-TYPES
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/remote_cmd/preflight.rs` → `crate::adjudicator::{run_command, AdjudicateError}`.
+- **Finding:** The ssh exec maps errors through a type named after an unrelated subsystem.
+- **Suggested action:** Before WP3 adds more remote execs, move the hardened runner and its error type into `subprocess` under a neutral name.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP2-REMOTE-PATH-NOT-FULLY-NORMALIZED
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/remote_cmd/mod.rs`: `normalize_remote_path`.
+- **Finding:** Only trailing slashes are stripped. `/a//b`, `/a/./b` and `/a/x/../b` each give a different identity key for the same folder.
+- **Suggested action:** Collapse `//` and `.` lexically. For `..`, resolve remotely or refuse it. Do it before rows accumulate (changing the key format later means a migration).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP2-CWD-TRAP-TEST-WRITES-UNDER-SRC-TAURI
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/status_broadcaster/mod.rs`: `canonical_key_passes_a_remote_key_through_even_when_a_cwd_relative_match_exists`.
+- **Finding:** The test creates `ssh:/claudesk-ck-<pid>/a` under the process cwd (`src-tauri/`). The Drop guard cleans it up, but a killed run leaves debris, and a running `tauri:dev` watcher may rebuild on it.
+- **Suggested action:** Add a `.gitignore` entry for `src-tauri/ssh:` plus a comment about the watcher interaction (or a cwd-scoped harness).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP2-HISTORY-NOTES-IN-CODE-COMMENTS
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/config_store/mod.rs` module doc ("Re-opened and re-closed by M17 WP2"); `src-tauri/src/remote_cmd/commands.rs` test comment citing `P2.verify-human.1`.
+- **Finding:** Per-WP history in code comments, citing WIP-local ruling IDs that get archived.
+- **Suggested action:** Trim the history note and state the rule.
+- **Priority:** low
+- **Status:** pending

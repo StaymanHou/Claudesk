@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-14  # M17 /product-arch: PLANNED design, not yet as-built. Resync at M17's /product-finalize.
+updated: 2026-11-16  # M17 /product-arch: PLANNED design; §A/§C/§H carry WP2 as-built notes. Resync at M17's /product-finalize.
 ---
 
 # Remote workspaces (M17)
@@ -30,6 +30,7 @@ probe's vehicle before WP3, not this layout.
   exist locally, so a remote row would be **silently deleted on the next launch** (research Risk 1, the
   highest-severity item). The exemption goes in the pruner itself, not its caller, with a test that
   fails if the exemption is deleted.
+- ✅ **AS-BUILT (WP2, 2026-11-16): a remote row's `project_path` IS its `remote_key`.** `remote` sits beside it, and `add_remote` (the only creator) enforces `path == remote_key(remote)`. Every path-keyed IPC (`remove_project`, `record_open`, the model / drive-mode setters, `touch_closed`, the unclean flag) therefore works for remote rows unchanged. The `remote_key` pass-through lives in `status_broadcaster::canonical_key` (the root `key_for` and `WorkspaceRegistry` delegate to), before any disk access: `Path::new("ssh://h/p")` is cwd-RELATIVE, so `canonicalize` could otherwise resolve it to a local `./ssh:/h/p`.
 - **Identity key = `ssh://<host><path>`**, built by one function (`remote_key`). Every keyed store uses
   it: `WorkspaceRegistry` registration, the unclean-exit flag (it goes through `key_for()`, which must
   pass a remote key through unchanged rather than trying to canonicalize it locally), and the
@@ -124,6 +125,8 @@ workspace.
 
   Either way a test pins it: a hostile path or mode string never executes, and the token is never
   present in the command string.
+
+  ✅ **WP2 as-built (2026-11-16):** `remote_cmd` exists. Its module doc restates the rule as **"no *variable* value enters a remote command outside `quote`"**, which makes option (a)'s constant fragments legal. The preflight already uses one (`AUTH_CHECK`, whose `$(cat …)` expands only remotely). **WP2's recommendation for WP3 is (b), a deployed launcher**, because 3.7 already deploys `tmux.conf` to the same directory. That leaves no expansion in the spawn string, and the "token never in the command string" test becomes trivial. The (a)/(b) choice stays WP3's.
 - **`new -A` means attach-if-exists.** When the tmux session is live, the inner command and its env are
   ignored, which is the reconnect (R-2). When CC exits, its tmux session ends, so a later `new -A`
   starts fresh with the argv the resume rule chose.
@@ -383,6 +386,13 @@ remote. Code, UI copy and tests use these two words for these two cases only.
   - deploy and register the hook (§D).
 
   The row is written only after all of them pass.
+
+  ✅ **WP2 as-built (2026-11-16):**
+  - The checks run as **two** one-shot `ssh -o BatchMode=yes -o ConnectTimeout=10 -- <host>` execs, with no ControlMaster (WP3 owns the master). The first is `printf '%s' "$HOME"`, which proves the key and supplies `$HOME`. The second is one constant check script under `zsh -lc` that prints `ok:<check>` / `fail:<check>` lines and always exits 0, so a non-zero exit means ssh or zsh failed, never a check.
+  - A path typed as `~/…` is expanded with the **remote** `$HOME` and stored absolute (operator ruling).
+  - The host is validated against an allow-list before any spawn.
+  - The checks run inside the async `add_remote_project`, so the UI cannot skip them.
+  - The hook deploy/register step is WP4's and is not in this preflight.
 - Hosts are ordinary `ssh` destinations, so the operator's `~/.ssh/config`, agent and Tailscale
   MagicDNS all apply. ⚠️ **A stopped Tailscale on the main box presents as "could not resolve hostname"**
   (hit during research). The preflight and the link's `Lost` state say so in plain words.

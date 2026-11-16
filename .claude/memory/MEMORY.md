@@ -11,6 +11,7 @@
 - [git-checkout-no-ops-on-untracked-file](git-checkout-no-ops-on-untracked-file.md) — Never restore a mutation with `git checkout` (no-op on untracked, destroys dirty work); `cp` aside + `shasum`.
 - [verify-redaction-by-what-remains](verify-redaction-by-what-remains.md) — Verify a redaction by asking what is STILL unredacted across the whole artifact, not field by field.
 - [verify-the-mutation-landed](verify-the-mutation-landed.md) — Confirm a mutant changed EXECUTABLE code (`sed -n '<line>p'`) and require a `Tests N` line per run.
+- [projects-json-resorted-on-every-launch](projects-json-resorted-on-every-launch.md) — Every launch re-sorts projects.json (prune always writes); a shasum check spanning a launch is invalid, compare row sets.
 - [live-dev-app-may-run-a-mutant](live-dev-app-may-run-a-mutant.md) — Rust mutation runs under `tauri:dev` can rebuild the live app from a mutant; check PID start + binary mtime.
 - [behavioral-test-can-still-be-an-equivalent-mutant](behavioral-test-can-still-be-an-equivalent-mutant.md) — A landed mutant survives when both paths give identical observables; find the discriminating input.
 - [mutant-survives-because-its-line-never-executes](mutant-survives-because-its-line-never-executes.md) — A mutant can survive because a gate short-circuits above its line; check the arm is reachable first.

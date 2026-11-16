@@ -5,7 +5,8 @@ drive_mode: autopilot
 # Feature: M17 WP2 — Remote rows (data model, identity, adding one)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete)
+**Completed:** 2026-11-16
 **Created:** 2026-11-16
 **WBS:** `workflow-system/product/wbs.md` → WP2 (tasks 2.1–2.6). **Design:** `arch/remote-workspaces.md` §A, §C (quote), §H (adding).
 **Probe:** WP1 shipped 2026-11-14 (`fd4423b`). The ssh / tmux / `claude auth status` shapes used by the preflight were live-probed there and in `research.md`. There's no unprobed third-party dependency.
@@ -203,10 +204,10 @@ Problem statement unchanged (P3 F12 re-entry, 2026-11-16): the back-loop is a di
     - Evidence: `pnpm verify:auto` → EXIT=0; vitest 301 files / 3866 tests; cargo 1187 passed / 0 failed (lib 1142 + integration and doc test binaries).
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality. Shipped 2026-11-16: the full suite was re-run at ship (`pnpm verify:auto` EXIT=0, vitest 3866, cargo 1187), not reused, because the public-repo leak scan redacted the real host's short name from 2 `remoteRow.ts` comments after the codify run. Committed locally; push waits for the operator.
+- **Path:** Feature > (complete)
+- **Active scope:** finalize. Review-quality done (1 MAJOR + 7 MINOR auto-backlogged). Shipped 2026-11-16: the full suite was re-run at ship (`pnpm verify:auto` EXIT=0, vitest 3866, cargo 1187), not reused, because the public-repo leak scan redacted the real host's short name from 2 `remoteRow.ts` comments after the codify run. Committed locally; push waits for the operator.
 - **Blocked:** none
-- **Unvisited:** review-quality, then finalize
+- **Unvisited:** none
 - **Open discoveries:** none
 
 ## Build notes (Phase 1)
@@ -250,6 +251,64 @@ Problem statement unchanged (P3 F12 re-entry, 2026-11-16): the back-loop is a di
   Stage around them (memory `stage-around-operator-edits-via-blob`).
 - ⚠️ No ssh I/O in a sync `#[command]` (`sync_commands_do_not_block.rs`).
 - `canonical_key` callers: `WorkspaceRegistry`, `touch_closed`, `key_for`. Re-run their tests after D2.
+
+## Retrospect
+- **What changed in our understanding:**
+  - `Path::new("ssh://h/p")` is a *relative* path, so any `canonicalize` on a remote key resolves against the process cwd. The pass-through had to live at the root (`canonical_key`), not just in `key_for` as arch §A said.
+  - Making `project_path` the remote key removed the need for any new per-row IPC.
+  - The token's `$(cat …)` didn't force (a) vs (b) at WP2: restating the rule as "no *variable* value outside `quote`" made constant fragments legal without deciding WP3's spawn.
+- **Assumptions that held:**
+  - The WP1-probed ssh/tmux/`claude auth status` shapes. The live preflight passed 5/5 against the mini in ~0.6–0.75 s.
+  - The prune exemption being the single highest-risk change. It was mutation-proven and survived a real relaunch.
+  - Reusing the adjudicator's hardened runner for ssh execs instead of writing a second loop.
+- **Assumptions that were wrong:**
+  - That `user@host:path` reads well on the row. A Tailscale MagicDNS host truncated the path, and the operator ruled path-only with the short host on the marker (one F12 round-trip).
+  - That the store's invariants covered everything security-relevant. Review-quality found host validation and path normalization live only in the preflight (MAJOR, scheduled before WP3 3.2).
+  - The operator's sad-path question also exposed a gap no WBS task covered: a folder deleted on the host after adding (SURFACED for WP3/WP5).
+- **Approach delta:**
+  - Three phases as planned.
+  - `quote_n` was dropped (nested `quote` covers every layer).
+  - The preflight became two execs with an `ok:`/`fail:` line protocol instead of one exec per check.
+  - The tauri bridge isn't available to subagents, so dev-app checks were driven by the orchestrator and the runner did CLI checks and mutations, with the dev app stopped so Vite HMR couldn't load mutants.
+  - The ship-time public-repo scan caught the mini's real short name in two comments and three WIP lines; redacted before the commit.
+
+## Closure
+Requester = operator — closure notice for self-record.
+> **Feature complete:** M17 WP2 (remote rows) has shipped. A picker row can now be a project on another Mac: "Add Remote Project…" checks the host over ssh (key, tmux/claude/perl, the folder, CC's token login) and only then saves a row that survives launch and is keyed `ssh://user@host/path`. See it in the picker (`pnpm tauri:dev`); opening one is a stub until WP3.
+
+## Code-Quality Review
+
+*(feature-review-quality, 2026-11-16, ship commit `d871473`, window `5ac8819..d871473`; drive_mode=autopilot → 0 CRITICAL, 1 MAJOR, 7 MINOR, all auto-backlogged to `backlog-quality-findings.md` under `# m17-wp2-remote-rows — 2026-11-16`, with a pointer in `backlog.md`.)*
+
+### Strengths
+- `quote` is the only door for variable values, proven through real nested `sh`/`zsh`/`bash` with a canary and an unquoted positive control.
+- The data-loss trap is closed at the root (the exemption inside the `prune_missing` partition; the `canonical_key` pass-through before disk access), each with a positive control.
+- The write invariants can't be bypassed: `add_remote_project` is the only writer and runs the preflight itself, `add_or_touch` refuses a bare `ssh://` key, the profile exclusion is enforced at three layers, and every write goes through the `update_projects` funnel.
+- The preflight is testable and honest about blocking: the injectable `RemoteExec`, validation before spawn proven by zero fake calls, reuse of the hardened runner, `--` before the host, async plus `ASYNC_COMMANDS`.
+- The frontend refusal lives in the shared `handleOpenRecent` funnel. The live tests have positive controls and use only placeholder hosts.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`config_store/mod.rs` `add_remote` / `check_remote_invariants`] The store doesn't enforce `validate_host` or path normalization; only the preflight does. A hand-edited row reaches WP3's ssh argv / tmux `-c` unvalidated, and `/r/` vs `/r` gives two keys. → SURFACE-2026-11-16-QUALITY-M17WP2-STORE-DOES-NOT-ENFORCE-HOST-AND-PATH-VALIDATION (do before WP3 3.2).
+
+**MINOR**
+- `AUTH_CHECK` hard-codes the token path instead of deriving it from `TOKEN_FILE`.
+- The connect step's `$HOME` read is intolerant of rc-file noise, unlike the check-script parser.
+- Check names are mislabelled ("tools" for a transport failure, "auth" for stopped-early).
+- `remote_preflight` has no frontend caller.
+- The ssh runner borrows `adjudicator::{run_command, AdjudicateError}`.
+- `normalize_remote_path` strips only trailing slashes (`//`, `.`, `..` give distinct keys).
+- The cwd-trap test writes `ssh:/…` under `src-tauri/` (debris on a killed run; watcher rebuilds).
+- History notes sit in code comments (the ledger re-open note; a `P2.verify-human.1` citation).
+
+### Assessment
+Solid, and it improves the codebase. Every local-path assumption was either exempted explicitly or fixed at the root, each with a test whose guard is shown to fail when it should. Security is handled with care. The main debt is layering, not correctness: host validation and path normalization live in the preflight, not in the store's invariant set, so WP3, which reads rows from disk into ssh and tmux, inherits a store that doesn't guarantee what its doc says.
+
+### If you disagree
+Dismiss a finding by marking its line `[DISMISSED]` here before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

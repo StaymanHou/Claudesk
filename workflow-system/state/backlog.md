@@ -608,7 +608,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** Every remote workspace Claudesk spawns would start CC logged out. research.md and arch/remote-workspaces.md assumed CC on the remote "just works" once installed. Measured 2026-11-14.
 - **Suggested action:** Choose a headless auth mechanism for remote CC (candidates: a long-lived `claude setup-token` OAuth token exported as `CLAUDE_CODE_OAUTH_TOKEN` by the remote spawn from a 0600 file on the host; an API key; unlocking the Keychain per connection, which needs a stored password and is rejected). Record it in arch §C/§H, and make WP2.5's preflight check `claude auth status` → `loggedIn: true`.
 - **Priority:** high
-- **Status:** decided 2026-11-14 (operator: option 1, a `setup-token` token at `~/.claudesk/cc-oauth-token`, exported remote-side; probed working under `ssh -tt` and tmux; arch §C.1 + §H). Open work: build it — WP2.5 preflight check + WP3 spawn export.
+- **Status:** decided 2026-11-14 (operator: option 1, a `setup-token` token at `~/.claudesk/cc-oauth-token`, exported remote-side; probed working under `ssh -tt` and tmux; arch §C.1 + §H). ✅ The WP2.5 preflight check shipped 2026-11-16 (`d871473`: `remote_cmd::AUTH_CHECK`, token file present + `claude auth status` → `loggedIn: true`, plain-words `setup-token` fix). **Remaining open work: the WP3 spawn export** (arch §C; WP2 recommends option (b), a deployed launcher).
 
 ## SURFACE-2026-11-14-REMOTE-CLOSE-SWALLOWED-IN-COPY-MODE
 - **Source:** feature:verify-self (M17 WP1 probe, Phase 2)
@@ -629,3 +629,31 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** In WP3 (3.2) or WP5, the remote open path runs `test -d <path>` over the master first (through `remote_cmd::quote`, or a constant fragment plus the quoted path, as the WP2 preflight does). On failure it says in plain words "<path> no longer exists on <host>", keeps the row and offers Remove. Do not prune it automatically: an unreachable host and a deleted folder must not look alike.
 - **Priority:** medium
 - **Status:** open
+
+## Code-quality findings — m17-wp2-remote-rows (2026-11-16)
+
+- **Pointer:** **1 MAJOR + 7 MINOR** from the review of `d871473`.
+  - ⚠️ **MAJOR:** the store doesn't enforce `validate_host` / path normalization for remote rows (only the preflight does), so a hand-edited `projects.json` row reaches WP3's ssh argv unvalidated.
+  - MINORs:
+    - the token path is duplicated;
+    - the `$HOME` read is intolerant of rc-file output;
+    - the check names are mislabelled;
+    - `remote_preflight` has no frontend caller;
+    - the ssh runner borrows the adjudicator's types;
+    - remote paths are only partly normalized;
+    - the cwd-trap test writes under `src-tauri/`;
+    - history notes sit in code comments.
+
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp2-remote-rows — 2026-11-16`.
+- **Priority:** medium (the MAJOR); low (the MINORs)
+- **Status:** pending
+- **Pickup shape:** fold the MAJOR, path normalization and the runner move into WP3's first task (before 3.2 reads rows from disk); the rest is one small cleanup task.
+
+## SURFACE-2026-11-16-PRUNE-COMMENT-CLAIMS-UNCHANGED-FILE-BUT-IT-RE-SORTS
+- **Source:** session-reflect (M17 WP2 verify-self evidence)
+- **Target level:** product:arch (doc accuracy, `config_store`)
+- **Type:** tech-debt (stale comment)
+- **Summary:** `prune_missing`'s comment says the always-write funnel leaves "the file content … identical" when nothing is dropped. It is not: `read_projects` sorts by recency, so the rewrite reorders any file not already in recency order. Measured 2026-11-16: the dev `projects.json` shasum changed across a launch with the same row set. `remove` has the same funnel and the same effect.
+- **Suggested action:** Correct the comment (the rows are identical, the order is recency). Optionally note it at `read_projects`.
+- **Priority:** low
+- **Status:** pending
