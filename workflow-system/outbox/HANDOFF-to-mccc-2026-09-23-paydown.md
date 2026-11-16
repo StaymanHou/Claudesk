@@ -3,6 +3,7 @@
 **From:** Claudesk, backlog-paydown 2026-09-23 (WP2)
 **Date:** 2026-09-23
 **Status:** ⚠️ **Not applied.** This note is written *in the Claudesk repo*; every edit it asks for belongs to a session running *in the mccc repo*. Same posture as `HANDOFF-to-mccc-m15-wp2.md` and `-m15-wp4.md`. Editing mccc from here would silently dirty a different git repository, because `_ref/claude-customization/` and every `~/.claude/skills/` entry are symlinks into it.
+**Delivered:** 2026-09-29, verbatim, to mccc's inbox as `workflow-system/inbox/2026-09-29-claudesk-paydown-upstream-asks.md`. Still not applied; the Claudesk backlog entries stay open until each ask lands.
 
 **Why one note:** twelve Claudesk backlog entries plus one code-quality finding (13 asks) are workflow-system prose or policy that Claudesk cannot fix. Each surfaced during real Claudesk work and each is small, but they were scattered across the backlog, so no mccc-rooted session ever saw them together. **Each entry stays OPEN in Claudesk's `backlog.md`**, re-anchored to this file; this note resolves none of them. When an ask lands in mccc, the Claudesk entry is deleted with a `**Backlog resolved:**` line.
 

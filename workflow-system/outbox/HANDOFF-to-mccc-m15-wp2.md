@@ -3,6 +3,7 @@
 **From:** Claudesk, M15 WP2 (the state machine as executable code)
 **Date:** 2026-09-12
 **Status:** ⚠️ **Not applied.** This note is written *in the Claudesk repo* and the edit is left to a session running *in the mccc repo*. See "Why this is a note, not a commit" below.
+**Delivered:** 2026-09-29, verbatim, to mccc's inbox as `workflow-system/inbox/2026-09-29-claudesk-m15-wp2-delete-phase-9.md`. Still not applied; the Claudesk backlog entries stay open until each ask lands.
 
 ---
 

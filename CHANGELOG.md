@@ -5,6 +5,7 @@
 - **Feature shipped:** M17 WP2 lets a picker row be a project whose Claude Code session runs on another Mac over SSH. The row is keyed `ssh://user@host/path`, exempt from the launch-time prune, and added only after an async ssh preflight checks the key, tmux/claude/perl, the folder and CC's token login. Every remote command string is built by the new `remote_cmd` quoting module.
 - **Backlog resolved:** SURFACE-2026-11-14-REMOTE-CC-AUTH-KEYCHAIN-LOCKED-OVER-SSH (partial) — the add-time preflight now checks the token file and `claude auth status` → `loggedIn: true`; the WP3 spawn export remains open.
 - **Milestone:** WP2: Remote rows: data model, identity, and adding one
+- **Backlog resolved:** SURFACE-2026-11-06-CODIFY-RUNS-THE-FULL-SUITE-EVERY-PHASE — mccc shipped it as `ffaea3d` (2026-11-07): `feature-verify-codify` now runs only nearby tests on non-final phases of a long suite and the full suite once at the last phase (used throughout M17 WP2).
 
 ## 2026-11-14
 

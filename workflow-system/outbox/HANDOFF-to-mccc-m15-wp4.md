@@ -3,6 +3,7 @@
 **From:** Claudesk, M15 WP4 (context-pressure recycle at phase boundaries)
 **Date:** 2026-09-14
 **Status:** ⚠️ **Not applied.** This note is written *in the Claudesk repo*; the edit belongs to a session running *in the mccc repo*. Same posture as `HANDOFF-to-mccc-m15-wp2.md` — see that note's "Why this is a note, not a commit".
+**Delivered:** 2026-09-29, verbatim, to mccc's inbox as `workflow-system/inbox/2026-09-29-claudesk-m15-wp4-pin-work-tree-schema.md`. Still not applied; the Claudesk backlog entries stay open until each ask lands.
 
 ---
 

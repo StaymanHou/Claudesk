@@ -66,6 +66,7 @@
 - [installed-build-verify-deferred-to-release](installed-build-verify-deferred-to-release.md) — Installed-`.app` and native-window manual checks are deferred to the `/release` gate.
 - [verify-human-agent-runs-cli-captures](verify-human-agent-runs-cli-captures.md) — At verify-human, run the CLI/curl captures yourself; ask the operator only for judgment calls.
 - [macos-tcc-permissions-granted](macos-tcc-permissions-granted.md) — Terminal.app has Accessibility + Screen Recording: the agent can screenshot and query the GUI via osascript.
+- [notarytool-credential-unreadable-while-screen-locked](notarytool-credential-unreadable-while-screen-locked.md) — notarytool says "No Keychain password item found" while the screen is locked; unlock and re-check, never re-store on that alone.
 - [verify-trash-via-finder-not-ls](verify-trash-via-finder-not-ls.md) — `~/.Trash` is TCC-blocked; verify a Trash move with a read-only Finder osascript query, never `ls`.
 - [wp4-macos-perf-measurement](wp4-macos-perf-measurement.md) — How to measure CPU, RAM and frame time of the Tauri WKWebView on macOS.
 
