@@ -6,6 +6,16 @@
 - **Backlog resolved:** SURFACE-2026-11-14-REMOTE-CC-AUTH-KEYCHAIN-LOCKED-OVER-SSH (partial) — the add-time preflight now checks the token file and `claude auth status` → `loggedIn: true`; the WP3 spawn export remains open.
 - **Milestone:** WP2: Remote rows: data model, identity, and adding one
 - **Backlog resolved:** SURFACE-2026-11-06-CODIFY-RUNS-THE-FULL-SUITE-EVERY-PHASE — mccc shipped it as `ffaea3d` (2026-11-07): `feature-verify-codify` now runs only nearby tests on non-final phases of a long suite and the full suite once at the last phase (used throughout M17 WP2).
+- **Feature shipped:** M17 WP3 opens a remote row as a real Claude Code pane on the SSH host, running inside tmux over one ssh ControlMaster per host; Claudesk's own sends wait until CC is ready and show a plain-words toast when refused, a close works even when the pane is scrolled up, and a dropped link re-attaches the same session in the same pane.
+- **Backlog resolved:** SURFACE-2026-11-14-REMOTE-MULTILINE-INJECT-BEFORE-CC-READY — every remote injection now waits for the pane's own bracketed-paste flag through `cc_inject`, and a three-line send before CC was ready arrived as one turn live.
+- **Backlog resolved:** SURFACE-2026-11-14-REMOTE-CC-AUTH-KEYCHAIN-LOCKED-OVER-SSH — the remaining spawn export landed as the deployed `cc-launch` launcher, which exports the token file remote-side so the token never appears in a command string.
+- **Backlog resolved:** SURFACE-2026-11-14-REMOTE-CLOSE-SWALLOWED-IN-COPY-MODE — a remote close now cancels tmux copy-mode before typing `/exit`, live-proven against a scrolled-up pane with a positive control.
+- **Backlog resolved:** SURFACE-2026-11-16-REMOTE-OPEN-MUST-CHECK-THE-FOLDER-STILL-EXISTS — opening a remote row first checks the folder over the master and offers Remove (never automatic) when it is gone.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP2-STORE-DOES-NOT-ENFORCE-HOST-AND-PATH-VALIDATION — the store now validates the host and normalizes the path for every remote row, and an invalid stored row stays listed but refuses to open.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP2-REMOTE-PATH-NOT-FULLY-NORMALIZED — `normalize_remote_path` collapses `//` and `.` and refuses `..`, giving each remote project one canonical path form.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP2-SSH-RUNNER-BORROWS-ADJUDICATOR-TYPES — the hardened runner moved to `subprocess::captured` with its own types.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP2-PRINT-HOME-INTOLERANT-OF-RC-NOISE (partial) — the link's pre-connect reads `$HOME` behind a sentinel and ignores rc-file noise; the add-time preflight's connect step remains open.
+- **Milestone:** WP3: The host link and the remote terminal
 
 ## 2026-11-14
 

@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M17 WP3 — the host link and the remote terminal
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** Completed (2026-11-16)
 **Created:** 2026-11-16
 
 ## Problem Statement
@@ -537,10 +537,10 @@ Problem statement unchanged (2026-11-16, F9b re-entry, P5.5) — reattach-as-the
     — evidence: FULL suite: `pnpm verify:auto` → EXIT=0 (46s): vitest 304 / 3888 passed; cargo lib `1199 passed; 0 failed; 4 ignored`; clippy/fmt clean; lint 1 pre-existing warning. `stale_dead_code_allows -- --ignored` → 1 passed. LIVE on the mini (`#[ignore]`, `CLAUDESK_TEST_REMOTE_HOST` + `_PATH`): `live_link_up`, `live_cancel_and_folder_check`, `live_prepare_inject`, `live_preflight_against_a_real_host` (5/5 checks PASS, 0.64 s) → 4/4 ok (one first run panicked on a missing `CLAUDESK_TEST_REMOTE_PATH` — instrument error, re-run with it set).
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship (all 5 phases complete; codify ran the FULL suite at the last phase). ⚠️ NOTHING of WP3 is committed yet.
+- **Path:** Feature > done (archived)
+- **Active scope:** none — completed and archived 2026-11-16 (ship `7f96ce3`).
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
+- **Unvisited:** none
 - **Open discoveries:** SURFACE-2026-11-16-REMOTE-LINK-MASTER-ORPHANED-WHEN-THE-APP-IS-KILLED (→ WP5); SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN (low, pre-existing)
 
 ## Notes for every phase
@@ -556,6 +556,50 @@ Problem statement unchanged (2026-11-16, F9b re-entry, P5.5) — reattach-as-the
 - **Mini hygiene:** at each phase's close, nothing is left of `claudesk-dev` beyond what the phase
   meant to leave. Check `tmux -L claudesk-dev ls` and that `~/claudesk-wp3-scratch` has been removed.
   `~/.claudesk/com.claudesk.app.dev/` (conf, launcher, socket) stays by design.
+
+## Retrospect
+- **What changed in our understanding:** (1) The client-side `?2004h` is not a CC-readiness signal (tmux sends it on every attach); the PANE's `#{bracket_paste_flag}` is, and in copy-mode it reads 0, so the cancel must come FIRST. (2) `ssh -S <ctl> -o ControlMaster=no` silently connects DIRECTLY when the master is gone; a reconnect raced the worker's 200 ms poll and re-attached outside the link. `ProxyCommand=/usr/bin/false` makes a terminal ride the master or fail fast. (3) The guard `sync_commands_do_not_block` resolves calls by name, so a closure built at spawn time made the classifier's waits look reachable from 9 sync commands; the exit hook became a value.
+- **Assumptions that held:** tmux conf C + inline CC, token auth via a deployed launcher, one master per host with a reverse hook forward, cancel-before-inject/`/exit` (live-proven), `attach` never `new -A` for reconnect, 8 sessions/host.
+- **Assumptions that were wrong:** P4.5 first left Recycle out of the not-sent toast, believing recycle's own outcome reported a refused handoff (it took 180 s and reached only the console, and a refused restore read as `ok: true`). The Phase 4 outcome "send within 300 ms of opening" was unreachable by design (Send is disabled until the session exists; a cold mount takes ~0.75 s). A real `/session-restore` fired in a verify-self check ran against a real repo on the mini (restored from the transcript).
+- **Approach delta:** Two back-loops not in the plan: Phase 4 gained P4.5/P4.6 (the toast, operator decision A) and Phase 5 gained P5.5 (no direct fallback + reconnect back-off) after verify-self. Phase 1's runner move and store validation absorbed the WP2 review's MAJOR as planned. Latency was re-measured with the real inner command (cold 1.20–1.24 s, warm 0.33–0.54 s).
+
+**Closure:** Requester = operator — closure notice for self-record. **Feature complete:** M17 WP3 (host link + remote terminal) has shipped (`7f96ce3`). A remote row now opens a real Claude Code pane on the mini over one ssh master, takes Claudesk's sends safely (waiting for CC, a toast on refusal), closes cleanly even when scrolled up, and re-attaches to the same session after a dropped link. Try it from the dev app's picker: open the remote row, toggle Tailscale off and on, and watch the pane resume.
+
+## Code-Quality Review — m17-wp3-remote-terminal
+
+*(ship commit `7f96ce3`, window `7f96ce3^..7f96ce3`; drive_mode=autopilot → 0 CRITICAL, 3 MAJOR, 8 MINOR, all auto-backlogged to `backlog-quality-findings.md` → `# m17-wp3-remote-terminal — 2026-11-16`, one pointer in `backlog.md`.)*
+
+### Strengths
+- `ValidTarget` (private fields, one checked constructor) + quote-only command construction, proven byte-exact through the real shell chain with hostile inputs.
+- `remote_link`'s state machine sits behind injectable `Transport`/`Master`/`Sink`, so connect/Lost/back-off/stop are behaviourally tested; `NO_DIRECT_FALLBACK` is proven against real ssh with a positive control.
+- One backend injection funnel (`cc_inject` → `inject_bytes`), no registry lock across the ssh wait, local parity proven; the frontend funnel guard pins the invoke sites.
+- WHY-comments on the non-obvious decisions (no worker join on stop, ctl removed before connect, attach never `new -A`, exec's deliberate fallback).
+- Quit teardown order pinned by a `syn` guard with a self-test, backed by `Drop for LinkRegistry`.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [src-tauri/src/remote_link/commands.rs `remote_open_check` / `remote_link_ensure`] `ensure()` without a hold leaves a link Up with refs 0 that nothing stops (missing folder, unreachable exec, or an abandoned open) — each such click leaks a master; an offline host is re-pre-connected forever. → `SURFACE-2026-11-16-QUALITY-M17WP3-OPEN-CHECK-LEAKS-AN-UNHELD-LINK`
+- [src-tauri/src/remote_link/mod.rs `acquire`; `cc_spawn_remote`] `ensure` then `hold` is not atomic; a close in between can make a hold count nothing and a later `release` stop a master still in use. → `SURFACE-2026-11-16-QUALITY-M17WP3-ENSURE-THEN-HOLD-IS-NOT-ATOMIC`
+- [src-tauri/src/cc_session/mod.rs `RemoteShared`/`reconnect`/`on_inner_exit`] `AppHandle`-bound emits leave the reconnect loop without a behavioural seam (source guards + live runs). → `SURFACE-2026-11-16-QUALITY-M17WP3-RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM`
+
+**MINOR**
+- [remote_link `run_worker`] stale `master_pid` published after reap. → `…-STALE-MASTER-PID-AFTER-REAP`
+- [cc_session `PtyCcSession::spawn`] remote dispatch inside the PTY constructor. → `…-REMOTE-DISPATCH-INSIDE-PTY-CONSTRUCTOR`
+- [cc_session `RegisteredSession`] `remote_host` and `remote` encode one fact. → `…-REMOTE-HOST-STORED-TWICE`
+- [cc_session `ExitHook`/`finish_output`; subprocess `killpg`] shapes chosen to dodge the blocking guard's name heuristic. → `…-BLOCKING-GUARD-NAME-HEURISTIC-SHAPES-PRODUCTION`
+- [autoResumeFire `injectCommand`; recycleSession `injectRefusal`] refusal as a callback rather than a return value. → `…-INJECT-REFUSAL-AS-CALLBACK`
+- [Workspace.tsx, injectFailure.ts, remote_link, cc_session] 42 WIP-node labels in production comments. → `…-WIP-LABELS-IN-PRODUCTION-COMMENTS`
+- [cc_session/mod.rs] ~4,850 lines; the remote lifecycle would read better as `cc_session/remote.rs`. → `…-CC-SESSION-MODULE-SIZE`
+- [remote_link `remote_link_ensure`] IPC with no frontend caller. → `…-REMOTE-LINK-ENSURE-UNUSED-IPC`
+
+### Assessment
+Careful, well-defended work: the security boundary is the strongest part and is proven with real-shell hostile-input tests, the link worker is an isolated testable state machine, and the funnel keeps local behaviour identical. The debt is in link-lifecycle accounting: holds are not taken atomically with `ensure`, so an open check can leave a link running with refs 0 and a narrow race can point a count at the wrong link — small local fixes, but correctness gaps in exactly what R-1/R-2 promise. The reconnect loop relies on source guards where an emitter seam would allow behavioural tests.
+
+### If you disagree
+Mark a finding `[DISMISSED]` here before `feature-finalize` archives this WIP.
 
 ## Test Triage — 22 vitest tests asserting the injection IPC name (Phase 4 build, P4.4)
 Classification: Obsolete test — the new feature intentionally supersedes what the test checked (the frontend injection funnel `injectCommand` now invokes the backend funnel `cc_inject` instead of `cc_input`).

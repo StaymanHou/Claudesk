@@ -265,8 +265,12 @@ A `pnpm tauri:dev` window launched by the agent reports `document.visibilityStat
   desyncs CM6's state from React. Use
   `document.querySelector('.cm-content').cmTile.root.view.dispatch({ changes: … })` (CM6 here exposes
   `cmTile`, not `cmView`).
-- **Reach the xterm `Terminal` via the React fiber**, since no global is exposed. From `.xterm`, find
-  the element's `__reactFiber$*` key and walk `.return`. On each fiber, scan the `memoizedState` hook
+- **Reach the xterm `Terminal` via the React fiber**, since no global is exposed. ⚠️ **Not from
+  `.xterm`**: xterm.js creates that element itself, so it has NO `__reactFiber$*` key (a walk from it
+  finds nothing, silently; corrected 2026-11-16, M17 WP3). Start from its parent **`.xterm-pane`**, find
+  that element's `__reactFiber$*` key and walk `.return`. ⚠️ The CC **session id** is not an XtermPane
+  prop either: walking up, it is the Workspace fiber's `memoizedProps.workspace.cc_session_id` (e.g.
+  `cc-1`), which is what `cc-output-<id>` / `cc-exit-<id>` listeners need. On each fiber, scan the `memoizedState` hook
   chain (`.next`) for a value, or a ref's `.current`, that has `buffer.active`. Then
   `getLine(y).translateToString(true)` per row.
 - **Or read the buffer the filmstrip mirror reads**: `serializeTerminal(workspaceId)` from

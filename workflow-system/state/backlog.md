@@ -590,65 +590,21 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** pending
 - **Pickup shape:** one small cleanup task; the parse fix wants a "parsed once" test.
 
-## SURFACE-2026-11-14-REMOTE-MULTILINE-INJECT-BEFORE-CC-READY
-- **Source:** feature:build (M17 WP1 probe, Phase 1)
-- **Target level:** product:wbs (WP3 / WP5)
-- **Type:** gap
-- **Summary:** Under tmux, the bracketed-paste envelope reaches the pane app only once that app has enabled `?2004h`; before then tmux strips it and each interior `\r` becomes an Enter. A multi-line injection (the Prompt panel's staged payload, or any future multi-line auto-inject) sent to a remote workspace before CC is up would split into several submits.
-- **Context:** Measured 2026-11-14 with `cat -v` in a `tmux -L claudesk` pane on the mini (`arch/remote-workspaces.md` §C.1). Locally the raw envelope always reaches CC, so this is remote-only. The same timing question affects auto-resume's fixed `INJECT_SETTLE_MS` on remote (WBS 5.6).
-- **Suggested action:** In WP3 (task 3.7), pick a **real** CC-readiness signal for remote multi-line injections and test that a multi-line send during startup arrives as one turn. ⚠️ **Not `cc_ready`:** that is Claudesk's frontend-listener handshake, not CC readiness (firing at it measured NOT-EXECUTED 5/5; `autoResumeFire.ts` header; SURFACE-2026-08-04-CC-READY-NAME-INVITES-MISREADING-AS-CC-READINESS). Nothing holds a Prompt-panel send today. Candidates to probe: the session's first hook event over the link, or an observed `?2004h` mode toggle in the output stream. *(Corrected 2026-11-14 at review-quality; the first version of this entry wrongly named `cc_ready`.)*
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-11-14-REMOTE-CC-AUTH-KEYCHAIN-LOCKED-OVER-SSH
-- **Source:** feature:build (M17 WP1 probe, Phase 2 preflight)
-- **Target level:** product:arch (M17 WP2.5 preflight, WP3 spawn)
-- **Type:** gap
-- **Summary:** CC on macOS stores its OAuth login in the user's login Keychain, and that Keychain is locked/unreadable from ssh sessions. On the mini, after `claude auth login` over `ssh -t`, the `Claude Code-credentials` item exists but `claude auth status` reports `loggedIn: false` from a plain ssh exec, `ssh -tt`, and inside `tmux -L claudesk` (`security show-keychain-info` → "User interaction is not allowed").
-- **Context:** Every remote workspace Claudesk spawns would start CC logged out. research.md and arch/remote-workspaces.md assumed CC on the remote "just works" once installed. Measured 2026-11-14.
-- **Suggested action:** Choose a headless auth mechanism for remote CC (candidates: a long-lived `claude setup-token` OAuth token exported as `CLAUDE_CODE_OAUTH_TOKEN` by the remote spawn from a 0600 file on the host; an API key; unlocking the Keychain per connection, which needs a stored password and is rejected). Record it in arch §C/§H, and make WP2.5's preflight check `claude auth status` → `loggedIn: true`.
-- **Priority:** high
-- **Status:** decided 2026-11-14 (operator: option 1, a `setup-token` token at `~/.claudesk/cc-oauth-token`, exported remote-side; probed working under `ssh -tt` and tmux; arch §C.1 + §H). ✅ The WP2.5 preflight check shipped 2026-11-16 (`d871473`: `remote_cmd::AUTH_CHECK`, token file present + `claude auth status` → `loggedIn: true`, plain-words `setup-token` fix). **Remaining open work: the WP3 spawn export** (arch §C; WP2 recommends option (b), a deployed launcher).
-
-## SURFACE-2026-11-14-REMOTE-CLOSE-SWALLOWED-IN-COPY-MODE
-- **Source:** feature:verify-self (M17 WP1 probe, Phase 2)
-- **Target level:** product:wbs (WP3 spawn/kill, WP5 lifecycle)
-- **Type:** gap
-- **Summary:** On a remote workspace whose CC runs inline under tmux config C, `/exit\r` typed while the pane is scrolled up (tmux copy-mode) is swallowed: CC and the tmux session stay up. `PtyCcSession::kill()` types `/exit\r` and then SIGHUPs the local group, which drops only the ssh. So an explicit close while scrolled up would leave the remote session running, violating R-1.
-- **Context:** Measured on real CC on the mini, 2026-11-14 (`arch/remote-workspaces.md` §C.1). It does not arise if remote CC runs fullscreen (tmux passes the wheel to CC and never enters copy-mode).
-- **Suggested action:** In WP3, the remote kill path runs `send-keys -X cancel` over the master before typing `/exit\r` (the same step every Claudesk injection gets). Add a test: close a remote workspace while scrolled up → the remote session is gone.
-- **Priority:** high
-- **Status:** pending
-
-## SURFACE-2026-11-16-REMOTE-OPEN-MUST-CHECK-THE-FOLDER-STILL-EXISTS
-- **Source:** feature:verify-human (M17 WP2 Phase 3; operator's question "what about a sad path? … the folder is gone?")
-- **Target level:** product:wbs (M17 WP3 / WP5)
-- **Type:** gap
-- **Summary:** A remote row whose folder was deleted or renamed ON THE HOST after it was added has no check anywhere. The add-time preflight (WP2) refuses a missing path, but `prune_missing` deliberately exempts remote rows, because a remote stat at every picker mount would cost an ssh round-trip per row. WP3's open path (`tmux new -A -s … -c <path>`) has no folder check listed in the WBS.
-- **Context:** Today opening a remote row is a stub (WP2), so this is harmless. Once WP3 lands, a missing folder would start CC in tmux's fallback cwd (or fail with an opaque tmux error), not in the project.
-- **Suggested action:** In WP3 (3.2) or WP5, the remote open path runs `test -d <path>` over the master first (through `remote_cmd::quote`, or a constant fragment plus the quoted path, as the WP2 preflight does). On failure it says in plain words "<path> no longer exists on <host>", keeps the row and offers Remove. Do not prune it automatically: an unreachable host and a deleted folder must not look alike.
-- **Priority:** medium
-- **Status:** open
-
 ## Code-quality findings — m17-wp2-remote-rows (2026-11-16)
 
-- **Pointer:** **1 MAJOR + 7 MINOR** from the review of `d871473`.
-  - ⚠️ **MAJOR:** the store doesn't enforce `validate_host` / path normalization for remote rows (only the preflight does), so a hand-edited `projects.json` row reaches WP3's ssh argv unvalidated.
+- **Pointer:** **6 MINOR** remain from the review of `d871473`. WP3 resolved the MAJOR (store validation), path normalization, and the runner move, and half of the `$HOME` read (2026-11-16, see CHANGELOG).
   - MINORs:
     - the token path is duplicated;
-    - the `$HOME` read is intolerant of rc-file output;
+    - the preflight's `$HOME` read is intolerant of rc-file output;
     - the check names are mislabelled;
     - `remote_preflight` has no frontend caller;
-    - the ssh runner borrows the adjudicator's types;
-    - remote paths are only partly normalized;
     - the cwd-trap test writes under `src-tauri/`;
     - history notes sit in code comments.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp2-remote-rows — 2026-11-16`.
-- **Priority:** medium (the MAJOR); low (the MINORs)
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** fold the MAJOR, path normalization and the runner move into WP3's first task (before 3.2 reads rows from disk); the rest is one small cleanup task.
-
+- **Pickup shape:** one small cleanup task (could ride with the m17-wp3 MINORs).
 ## SURFACE-2026-11-16-PRUNE-COMMENT-CLAIMS-UNCHANGED-FILE-BUT-IT-RE-SORTS
 - **Source:** session-reflect (M17 WP2 verify-self evidence)
 - **Target level:** product:arch (doc accuracy, `config_store`)
@@ -677,3 +633,24 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** Reproduce in a HEAD build with the same tap (positive control), check whether a prod build (no StrictMode) raises it, and look upstream for the Tauri unlisten-twice race. If confirmed, swallow the double-unlisten in `useTauriListen` (or guard it) so real rejections stay visible.
 - **Priority:** low
 - **Status:** open
+
+## Code-quality findings — m17-wp3-remote-terminal (2026-11-16)
+
+- **Pointer:** **3 MAJOR + 8 MINOR** from the review of `7f96ce3`.
+  - ⚠️ **MAJOR:** `remote_open_check` leaves an unheld link Up (refs 0) that nothing ever stops, so each missing-folder or abandoned open leaks a master.
+  - ⚠️ **MAJOR:** `ensure` then `hold` is not atomic, so a race can point a session's hold at the wrong link and stop a master still in use.
+  - ⚠️ **MAJOR:** the reconnect loop has no behavioural test seam (an `AppHandle`-bound emitter); it is guarded by source text plus live runs.
+  - MINORs:
+    - a stale `master_pid` after reap;
+    - the remote dispatch sits inside the PTY constructor;
+    - the remote host is stored twice;
+    - the blocking guard's name heuristic shapes production code;
+    - the inject refusal comes back as a callback, not a value;
+    - WIP labels appear in production comments;
+    - `cc_session/mod.rs` is large (~4,850 lines);
+    - `remote_link_ensure` is an IPC command with no caller.
+
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp3-remote-terminal — 2026-11-16`.
+- **Priority:** medium (the MAJORs); low (the MINORs)
+- **Status:** pending
+- **Pickup shape:** the two link-lifecycle MAJORs (unheld open-check link; atomic ensure+hold) and `remote_link_ensure` belong with WP5 (lifecycle) — or a small task before WP4; the reconnect seam fits WP4/WP5, which extend that machinery; the rest is one cleanup task.

@@ -68,6 +68,7 @@
 - [macos-tcc-permissions-granted](macos-tcc-permissions-granted.md) — Terminal.app has Accessibility + Screen Recording: the agent can screenshot and query the GUI via osascript.
 - [notarytool-credential-unreadable-while-screen-locked](notarytool-credential-unreadable-while-screen-locked.md) — notarytool says "No Keychain password item found" while the screen is locked; unlock and re-check, never re-store on that alone.
 - [verify-trash-via-finder-not-ls](verify-trash-via-finder-not-ls.md) — `~/.Trash` is TCC-blocked; verify a Trash move with a read-only Finder osascript query, never `ls`.
+- [remote-verify-hygiene](remote-verify-hygiene.md) — The mini's remote row is a REAL repo: fire real commands only in a scratch remote folder; check for the operator's open remote workspaces before killing the dev app.
 - [wp4-macos-perf-measurement](wp4-macos-perf-measurement.md) — How to measure CPU, RAM and frame time of the Tauri WKWebView on macOS.
 
 ## MCP tauri bridge (caveat chain)
@@ -118,6 +119,7 @@
 - [bsd-sed-lacks-word-boundary](bsd-sed-lacks-word-boundary.md) — BSD `sed` has no `\b`, so a mutation silently no-ops; use `perl -pi -e` and check it landed.
 - [check-payload-before-outward-send](check-payload-before-outward-send.md) — Before any outward send from a file, `test -s` + `head` the payload (an empty public issue, #105187).
 - [zsh-unquoted-var-does-not-word-split](zsh-unquoted-var-does-not-word-split.md) — zsh doesn't word-split `$files` in a `for`; `$rev:src/x` is a modifier, so write `"${rev}:path"`.
+- [zsh-equals-expansion-eats-tmux-exact-targets](zsh-equals-expansion-eats-tmux-exact-targets.md) — zsh expands an unquoted `=word` to a command path: `-t =cd-x` fails and nothing runs; quote it or send the script on stdin.
 - [bash-cargo-env](bash-cargo-env.md) — Bash subshells lack `~/.cargo/env`; give cargo an explicit PATH prefix.
 - [perl-alarm-watchdog-orphans-cargo-test-binary](perl-alarm-watchdog-orphans-cargo-test-binary.md) — A `perl alarm` watchdog around `cargo test` orphans the test binary; `pgrep -fl claudesk_lib-`, kill yours.
 - [hmr-stale-across-file-rename](hmr-stale-across-file-rename.md) — A long-lived HMR window can half-apply after a rename and fake a regression; relaunch first.

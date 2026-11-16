@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-16  # M17 /product-arch: PLANNED design; §A/§C/§H carry WP2 as-built notes. Resync at M17's /product-finalize.
+updated: 2026-11-16  # M17 /product-arch: PLANNED design; §A/§C/§H carry WP2 as-built notes, §B/§E WP3's. Resync at M17's /product-finalize.
 ---
 
 # Remote workspaces (M17)
@@ -69,6 +69,20 @@ workspace.
   A master drop kills all of them together, and the reconnect brings them back together. The mini
   allows `MaxSessions 10` per connection, which caps concurrent remote workspaces per host at about 8.
   The picker refuses a ninth with a clear message rather than failing in ssh.
+- ✅ **WP3 as-built (2026-11-16, `7f96ce3`):** `remote_link` (`{mod,commands,tests}.rs`) exists as
+  designed: a worker per host behind injectable `Transport`/`Master`/`Sink`, pre-connect deploying
+  `tmux.conf` + the `cc-launch` launcher (option (b)) and printing `$HOME` behind a sentinel,
+  `LinkHold` ref-counting (the last session's drop stops the link), `stop_all` in quit teardown
+  (pinned by `tests/quit_teardown_stops_remote_links.rs`), `Drop` + `killpg` so no `ssh -M` outlives
+  the app (except a hard kill: `SURFACE-2026-11-16-REMOTE-LINK-MASTER-ORPHANED-WHEN-THE-APP-IS-KILLED`).
+  ⚠️ **`ssh -S <ctl> -o ControlMaster=no` silently connects DIRECTLY when the master socket is stale
+  or gone** (Phase 5 verify-self: a reconnect raced the worker's 200 ms poll, read a stale Up, and
+  re-attached over its own connection). So **terminals** carry `-o ProxyCommand=/usr/bin/false`
+  (`NO_DIRECT_FALLBACK`): inert while the master lives (ProxyCommand only runs for a NEW connection),
+  a fast 255 when it does not. **Side-channel execs keep the direct fallback on purpose** (short,
+  `ConnectTimeout`-bounded). `LinkRegistry::wait_up` waits THROUGH failed attempts on the link's
+  condvar (a session must ride out a drop), cancellable by a close. Known gaps (backlogged at
+  review-quality): the open check's `ensure` takes no hold; `ensure` then `hold` is not atomic.
 
 ## C. Spawn: answering the seam questions (inbox Q2, vision Q5)
 
@@ -268,6 +282,24 @@ Measured in a real Claudesk xterm.js pane (the second terminal, same `XtermPane`
   the picker row has to say so rather than imply the new mode is live.
 
 ## E. Lifecycle: R-1–R-4 mapped onto the machine
+
+✅ **WP3 as-built (2026-11-16, `7f96ce3`) — reconnect:** a remote CC session is a `RemoteCcSession`
+(one session id, output event, last size and `LinkHold`) over a replaceable `ssh -tt` terminal. When
+the terminal's ssh ends, `classify_inner_exit(killed, code, link_up)` decides: a close → Ended; exit
+255 or a link not Up → **Reconnect**; anything else (CC `/exit`ed, or the session was gone at
+attach) → Ended (`cc-exit-<id>`, once-latched). Reconnect re-attaches with **`tmux attach -t =<name>`,
+never `new -A`** (a session that died while disconnected is never silently restarted), in the SAME
+xterm with CC's state intact (live: an unsubmitted word survived a master SIGKILL). Back-off: a NEW
+drop retries at once; a re-attach that dies within 10 s backs off 2→30 s. The pane shows one dim
+`[Claudesk: connection to <host> lost, reconnecting…]` line per drop (operator decision A,
+2026-11-16), as Claudesk's own bytes, never parsed back. A close during Reconnecting cancels the wait
+and touches nothing remote (the session keeps running: its end-intent is WP5's). Typed keys during
+Reconnecting are dropped (WP4's overlay should say so); Claudesk's own injections refuse with a toast.
+⚠️ **Injections (Phase 4):** every Claudesk-originated injection goes through `cc_inject`, which for
+a remote pane runs ONE exec: cancel copy-mode, poll the pane's `#{bracket_paste_flag}` (≤ 15 s; the
+client-side `?2004h` is NOT a readiness signal, tmux sends it on every attach), cancel again. A
+refusal shows the operator a plain-words toast (operator decision A): Prompt panel, skill buttons,
+and Recycle (a refused handoff stops at once, nothing changed; a refused restore says to run it).
 
 ⚠️ **Reconnect ≠ resume** (operator vocabulary, 2026-11-14; `roadmap.md` → M17). **Reconnect** = the
 session is alive on the remote, so attach to it and fire nothing. **Resume** = the session already

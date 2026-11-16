@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-16  # WP2 remote rows shipped (d871473); WP1 probe shipped 2026-11-14
+updated: 2026-11-16  # WP3 host link + remote terminal shipped (7f96ce3); WP2 (d871473); WP1 (fd4423b)
 cycle: milestone-17-remote-workspaces
 ---
 
@@ -83,19 +83,19 @@ only if the build disproves one.
 
 **WP2 → WP3 rationale:** WP3 keys sessions and links by `remote_key` and builds commands with `quote`, so both must exist and be tested first. The prune exemption must land before *any* build can create a remote row on the operator's real `projects.json`.
 
-### WP3: The host link and the remote terminal
+### WP3: The host link and the remote terminal ✅ SHIPPED 2026-11-16 (commit 7f96ce3)
 **Milestone:** M17
 **Dependencies:** WP1, WP2
 **Size:** L, **~3.5 days** (was 3; +0.5 for task 3.7 after WP1)
 **Description:** a remote row opens a working CC pane on the mini, and the link survives drops. arch §B, §C.
 **Tasks:**
-- [ ] 3.1 `remote_link`: one ControlMaster per host on a worker thread, with a short ControlPath (≤104 bytes, with a test), `ServerAliveInterval 15` × 3, reconnect backoff, and **`rm -f` of the remote socket before every connect**. It broadcasts a `remote-link` state event.
-- [ ] 3.2 `SpawnTarget::{Local, Remote}` in `SessionRegistry::spawn`. The local path is byte-identical (the existing env tests stay green). The remote path runs `ssh -S <ctl> -tt … zsh -lc 'exec tmux -L <srv> -f <conf> new -A -s <name> -c <path> "<inner command>"'`: **the exact shape in arch §C's code block** (token export, `CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1`, `unset TMUX`, `exec claude`).
-- [ ] 3.3 Resize and input go through the unchanged `PtyCcSession`. R-1 close and quit run **`send-keys -X cancel` over the master, then** the existing `kill()`, which types `/exit` and so ends the tmux session. ⚠️ Without the cancel, a scrolled-up pane swallows `/exit` and the remote session leaks (WP1). Test: close while scrolled up → the remote session is gone.
-- [ ] 3.4 On a link drop, the workspace's terminal reconnects automatically once the master is back, as the same session (marker test as in the research).
-- [ ] 3.5 The `MaxSessions` cap: a ninth workspace on one host is refused with a message.
-- [ ] 3.6 ⚠️ All new ssh I/O is `async` or on a worker. New async commands go into `sync_commands_do_not_block.rs`'s `ASYNC_COMMANDS` with reasons.
-- [ ] 3.7 **The WP1 terminal outputs:** deploy the tmux conf (`status off`, `mouse on`, RGB) to `~/.claudesk/<identifier>/` and load it with `-f`; the **one cancel-before-inject funnel** every remote Claudesk injection goes through (skill buttons, Prompt, auto-resume, Recycle, close), with a guard; and a **real CC-readiness signal** for multi-line sends (⚠️ not `cc_ready`, which is the frontend handshake; arch §C.1). Re-measure CC-ready latency with the real inner command.
+- [x] 3.1 `remote_link`: one ControlMaster per host on a worker thread, with a short ControlPath (≤104 bytes, with a test), `ServerAliveInterval 15` × 3, reconnect backoff, and **`rm -f` of the remote socket before every connect**. It broadcasts a `remote-link` state event.
+- [x] 3.2 `SpawnTarget::{Local, Remote}` in `SessionRegistry::spawn`. The local path is byte-identical (the existing env tests stay green). The remote path runs `ssh -S <ctl> -tt … zsh -lc 'exec tmux -L <srv> -f <conf> new -A -s <name> -c <path> "<inner command>"'`: **the exact shape in arch §C's code block** (token export, `CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1`, `unset TMUX`, `exec claude`).
+- [x] 3.3 Resize and input go through the unchanged `PtyCcSession`. R-1 close and quit run **`send-keys -X cancel` over the master, then** the existing `kill()`, which types `/exit` and so ends the tmux session. ⚠️ Without the cancel, a scrolled-up pane swallows `/exit` and the remote session leaks (WP1). Test: close while scrolled up → the remote session is gone.
+- [x] 3.4 On a link drop, the workspace's terminal reconnects automatically once the master is back, as the same session (marker test as in the research).
+- [x] 3.5 The `MaxSessions` cap: a ninth workspace on one host is refused with a message.
+- [x] 3.6 ⚠️ All new ssh I/O is `async` or on a worker. New async commands go into `sync_commands_do_not_block.rs`'s `ASYNC_COMMANDS` with reasons.
+- [x] 3.7 **The WP1 terminal outputs:** deploy the tmux conf (`status off`, `mouse on`, RGB) to `~/.claudesk/<identifier>/` and load it with `-f`; the **one cancel-before-inject funnel** every remote Claudesk injection goes through (skill buttons, Prompt, auto-resume, Recycle, close), with a guard; and a **real CC-readiness signal** for multi-line sends (⚠️ not `cc_ready`, which is the frontend handshake; arch §C.1). Re-measure CC-ready latency with the real inner command.
 
 **WP3 → WP4 rationale:** status needs a link to ride (the `-R` forward lives on the master from 3.1).
 

@@ -97,16 +97,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # m17-wp2-remote-rows — 2026-11-16
 
-*(feature-review-quality on ship commit `d871473`, window `5ac8819..d871473`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 7 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-11-16-QUALITY-M17WP2-STORE-DOES-NOT-ENFORCE-HOST-AND-PATH-VALIDATION
-- **Severity:** MAJOR
-- **Location:** `src-tauri/src/config_store/mod.rs`: `add_remote` / `check_remote_invariants`.
-- **Finding:** The doc says the store enforces the §A invariants "so no caller can skip them", but the security-relevant checks are not among them. The store requires only a non-empty host and a path starting with `/`. `remote_cmd::validate_host` (no leading `-`, allow-listed characters) and `normalize_remote_path` (no control characters, no trailing slash) run only inside `run_preflight`, and nothing re-checks a remote row read back from a hand-edited `projects.json`.
-- **Why it matters:** WP3 puts `remote.host` / `remote.path` from the STORE into the ControlMaster ssh argv and tmux `-c`. Today that depends on the WP3 author re-validating, or on the `--` that only `SshExec` passes. The store also accepts `/r/` and `/r` as two identity keys for one project.
-- **Suggested action:** Call `validate_host` and the path normalization from `check_remote_invariants`, and apply them to remote rows on read (refuse or degrade the row, never fail the whole list, which is the drive-mode blast-radius rule). ⚠️ **Do this before WP3's spawn reads rows from disk (WP3 task 3.2).**
-- **Priority:** medium
-- **Status:** pending
+*(feature-review-quality on ship commit `d871473`, window `5ac8819..d871473`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 7 MINOR, all auto-backlogged. The MAJOR, the path-normalization and the runner MINORs were resolved by M17 WP3 (2026-11-16); the `$HOME` MINOR is partly resolved.)*
 
 ## SURFACE-2026-11-16-QUALITY-M17WP2-AUTH-CHECK-HARDCODES-TOKEN-PATH
 - **Severity:** MINOR
@@ -120,6 +111,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Severity:** MINOR
 - **Location:** `src-tauri/src/remote_cmd/preflight.rs`: the connect step.
 - **Finding:** The connect step requires the whole stdout of `PRINT_HOME` to be one `/…` line, while the check-script parser deliberately ignores rc-file noise. A remote `.zshenv` that prints anything fails connect with "$HOME looked wrong".
+- **Partly resolved (2026-11-16, M17 WP3):** the LINK's pre-connect now prints `$HOME` behind `remote_link::HOME_SENTINEL` and parses the last sentinel line, so it tolerates rc noise. **Remaining:** the add-time preflight's connect step (`remote_cmd::preflight`, `PRINT_HOME`) still requires the whole stdout to be one path line.
 - **Suggested action:** Take the last line, or wrap `$HOME` in a sentinel.
 - **Priority:** low
 - **Status:** pending
@@ -140,22 +132,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-16-QUALITY-M17WP2-SSH-RUNNER-BORROWS-ADJUDICATOR-TYPES
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/remote_cmd/preflight.rs` → `crate::adjudicator::{run_command, AdjudicateError}`.
-- **Finding:** The ssh exec maps errors through a type named after an unrelated subsystem.
-- **Suggested action:** Before WP3 adds more remote execs, move the hardened runner and its error type into `subprocess` under a neutral name.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-16-QUALITY-M17WP2-REMOTE-PATH-NOT-FULLY-NORMALIZED
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/remote_cmd/mod.rs`: `normalize_remote_path`.
-- **Finding:** Only trailing slashes are stripped. `/a//b`, `/a/./b` and `/a/x/../b` each give a different identity key for the same folder.
-- **Suggested action:** Collapse `//` and `.` lexically. For `..`, resolve remotely or refuse it. Do it before rows accumulate (changing the key format later means a migration).
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-11-16-QUALITY-M17WP2-CWD-TRAP-TEST-WRITES-UNDER-SRC-TAURI
 - **Severity:** MINOR
 - **Location:** `src-tauri/src/status_broadcaster/mod.rs`: `canonical_key_passes_a_remote_key_through_even_when_a_cwd_relative_match_exists`.
@@ -169,5 +145,108 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Location:** `src-tauri/src/config_store/mod.rs` module doc ("Re-opened and re-closed by M17 WP2"); `src-tauri/src/remote_cmd/commands.rs` test comment citing `P2.verify-human.1`.
 - **Finding:** Per-WP history in code comments, citing WIP-local ruling IDs that get archived.
 - **Suggested action:** Trim the history note and state the rule.
+- **Priority:** low
+- **Status:** pending
+
+# m17-wp3-remote-terminal — 2026-11-16
+
+*(feature-review-quality on ship commit `7f96ce3`, window `7f96ce3^..7f96ce3`; drive_mode=autopilot. 0 CRITICAL, 3 MAJOR, 8 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-16-QUALITY-M17WP3-OPEN-CHECK-LEAKS-AN-UNHELD-LINK
+- **Severity:** MAJOR
+- **Location:** src-tauri/src/remote_link/commands.rs: `remote_open_check`, `remote_link_ensure`
+- **Finding:** `remote_open_check` (and the frontend-unused `remote_link_ensure`) call `links.ensure()` without a hold, so a successful check leaves a link Up with `refs == 0`. On `FolderMissing`, an exec-level `Unreachable`, or an operator who never opens, nothing releases it: `stop_if_unheld` runs only on `ensure`'s failure path and `run_worker` never checks refs. The `ssh -M`, its remote sshd and the `-R` forward live until quit; an offline host is re-pre-connected every ≤30 s forever.
+- **Why it matters:** R-1/R-2 promise a link lives exactly as long as its sessions; the missing-folder path (Remove offered, never automatic) is normal, so each such click leaks a master.
+- **Suggested action:** The check takes a temporary `LinkHold` for its own duration (its drop stops an unheld link), or the worker exits when Lost with refs == 0. Remove `remote_link_ensure` or give it a hold.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP3-ENSURE-THEN-HOLD-IS-NOT-ATOMIC
+- **Severity:** MAJOR
+- **Location:** src-tauri/src/remote_link/mod.rs: `acquire` / `hold`; `cc_session/commands.rs` `cc_spawn_remote` → `RemoteCcSession::spawn`
+- **Finding:** `acquire` silently no-ops when the host has no link, and `cc_spawn_remote` does `ensure` then `hold` as two unlocked steps. If the host's last other session closes in between, `stop()` removes the link and the new session's hold counts nothing; its later `Drop` `release`s whatever link exists then, which can decrement a LATER session's count to 0 and stop a master still in use (that session then fails `wait_up` and ends).
+- **Why it matters:** A narrow window, but the refcount can point at the wrong link and kill a healthy workspace.
+- **Suggested action:** A combined `ensure_and_hold` that starts the link if absent and increments under one `links` lock.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP3-RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM
+- **Severity:** MAJOR
+- **Location:** src-tauri/src/cc_session/mod.rs: `RemoteShared`, `reconnect`, `on_inner_exit`
+- **Finding:** `RemoteShared` hard-wires `AppHandle` for its emits, so the feature's most intricate concurrency (the `reconnect` loop's under-lock cancel, the 5-spawn-failure cap, the `attached_at` write, `on_inner_exit`'s take-then-reap) is guarded by four `include_str!` source guards plus live runs, not driven by a test.
+- **Why it matters:** The repo's own lessons (`extract-for-import-when-a-raw-guard-cant-express-the-property`) say a regex encodes only the shapes it knows; `remote_link` solved the same problem with an injected `Sink`.
+- **Suggested action:** Give `RemoteShared` an emitter seam (like `remote_link::Sink`) and a fake PTY spawner, drive the reconnect loop for real, and retire most of the source guards. Natural home: WP4/WP5, which extend this machinery.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP3-STALE-MASTER-PID-AFTER-REAP
+- **Severity:** MINOR
+- **Location:** src-tauri/src/remote_link/mod.rs: `run_worker` (`master_pid`)
+- **Finding:** `master_pid` is cleared only at worker exit, so after `try_exit` reaped a dead master (or the up-timeout kill) a stale pid stays published through back-off + the next pre-connect; a `stop()` in that window `killpg`s it.
+- **Why it matters:** A reused pid would SIGKILL an unrelated process group (unlikely).
+- **Suggested action:** Clear `master_pid` when the master is reaped/killed (one line).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP3-REMOTE-DISPATCH-INSIDE-PTY-CONSTRUCTOR
+- **Severity:** MINOR
+- **Location:** src-tauri/src/cc_session/mod.rs: `PtyCcSession::spawn`
+- **Finding:** `PtyCcSession::spawn` returns `Box<dyn CcSession>` and builds `RemoteCcSession` itself, so the local/remote dispatch lives inside one implementation's constructor rather than in `SessionRegistry::spawn`, which owns `SpawnTarget`.
+- **Why it matters:** A reader of the `CcSession` seam must look inside the PTY type to find the remote one.
+- **Suggested action:** Move the dispatch to `SessionRegistry::spawn` (mind the source guards that pin the `PtyCcSession::spawn(` call).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP3-REMOTE-HOST-STORED-TWICE
+- **Severity:** MINOR
+- **Location:** src-tauri/src/cc_session/mod.rs: `RegisteredSession`
+- **Finding:** `RegisteredSession` carries both `remote_host: Option<String>` and `remote: Option<RemoteExit>` for one fact; the test-only `insert_remote` sets one without the other.
+- **Why it matters:** Two fields for one fact can drift.
+- **Suggested action:** Derive the host from `remote` (`remote.as_ref().map(|r| r.target.host())`).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP3-BLOCKING-GUARD-NAME-HEURISTIC-SHAPES-PRODUCTION
+- **Severity:** MINOR
+- **Location:** src-tauri/src/cc_session/mod.rs (`ExitHook`, `finish_output`); src-tauri/src/subprocess/mod.rs (`killpg`)
+- **Finding:** Three production shapes exist only to dodge `sync_commands_do_not_block.rs`'s resolve-by-name heuristic.
+- **Why it matters:** The guard's false positives are now shaping production code.
+- **Suggested action:** A backlog item against the guard (e.g. resolve method calls by receiver type where `syn` can, or a per-call-site cut list).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP3-INJECT-REFUSAL-AS-CALLBACK
+- **Severity:** MINOR
+- **Location:** src/components/workspace/autoResumeFire.ts `injectCommand`; recycleSession.ts `injectRefusal`
+- **Finding:** `onIpcError` grew a `reason` every new caller wants while ignoring `message`; Recycle needs an object-cell trick to turn the callback back into a value.
+- **Why it matters:** Callers reconstruct a return value from a callback.
+- **Suggested action:** Have `injectCommand` resolve to `string | null` (the refusal reason); simplify the three callers.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP3-WIP-LABELS-IN-PRODUCTION-COMMENTS
+- **Severity:** MINOR
+- **Location:** Workspace.tsx, injectFailure.ts, remote_link/*.rs, cc_session/mod.rs
+- **Finding:** 42 added production-comment references to WIP node labels (`P4.verify-human.2`, `P2.verify-self.F1`–`F4`, `P4.3`, `F9b`, …); `singleAuthority.test.ts` already forbids them per module (recycleSession.ts had to be scrubbed).
+- **Why it matters:** Once the WIP is archived these labels point nowhere; the decision content already carries the meaning.
+- **Suggested action:** Reword to the decision content; consider widening the `singleAuthority` absent-rule to these modules.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP3-CC-SESSION-MODULE-SIZE
+- **Severity:** MINOR
+- **Location:** src-tauri/src/cc_session/mod.rs
+- **Finding:** ~4,850 lines; ~450 are new remote-session lifecycle code (classifier, back-off, reconnect, `RemoteCcSession`), while `remote_link` is split `{mod,commands,tests}.rs`.
+- **Why it matters:** Reviewability of the reconnect machinery on its own.
+- **Suggested action:** Split to `cc_session/remote.rs` (with the source guards re-anchored).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP3-REMOTE-LINK-ENSURE-UNUSED-IPC
+- **Severity:** MINOR
+- **Location:** src-tauri/src/remote_link/commands.rs: `remote_link_ensure`
+- **Finding:** A registered IPC command with no frontend caller (a Phase 2 bridge probe), and it has the refs-0 leak above.
+- **Why it matters:** Unused IPC surface.
+- **Suggested action:** Remove it (with a `tauri-command-removal-needs-invoke-sweep` check) or give it a hold until WP4 needs it.
 - **Priority:** low
 - **Status:** pending
