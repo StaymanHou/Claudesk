@@ -14,6 +14,7 @@
 #   source                        (SessionStart)
 #   reason                        (SessionEnd; e.g. prompt_input_exit / other — WP6.5)
 #   background_task_count, background_task_types   (Stop; types only — M16.5 WP1)
+#   origin                        (every event, ONLY when CLAUDESK_ORIGIN is set — M17 WP4)
 # `notification_type` (QoL-WP2) lets the broadcaster gate AwaitingInput on genuine
 # input-needed types (permission_prompt / elicitation_dialog) vs informational ones
 # (idle_prompt / auth_success) — so an idle nudge doesn't flip a busy dot blue. The
@@ -68,6 +69,12 @@ use strict;
 use warnings;
 
 my $sock_path = $ENV{CLAUDESK_HOOK_SOCK} // '';
+
+# M17 WP4 (AC-2): set ONLY in the command Claudesk registers on a REMOTE host, to hash8(host).
+# It tags every line so the local registry routes the event among that host's remote
+# workspaces, never a local one at the same path. Absent or empty = a local invocation, and
+# then the line is exactly what it was before M17 (no `origin` key at all).
+my $origin = $ENV{CLAUDESK_ORIGIN} // '';
 
 require JSON::PP;       JSON::PP->import('decode_json', 'encode_json');
 require Time::HiRes;
@@ -159,6 +166,7 @@ my %out = (
     cwd             => ($payload->{cwd} // ''),
     timestamp       => int(Time::HiRes::time() * 1000),
 );
+$out{origin} = $origin if $origin ne '';
 
 # --- Status fields (M3 + QoL-WP2) — forwarded for the idle/running/awaiting dots. ---
 $out{prompt}  = $payload->{prompt}  if defined $payload->{prompt};
@@ -258,7 +266,11 @@ my $sock = eval {
 if ($sock) {
     print $sock $line;
     close($sock);
-} else {
+} elsif ($origin eq '') {
+    # ⚠️ M17 WP4 (AC-2.2): NOT on a remote invocation. A remote host is machine-global and
+    # usually has no live forward (every CC session there fires this hook, connected or not),
+    # so the trace would grow without bound with lines no local diagnosis ever reads.
+    #
     # M6 WP1 (Phase 2): the socket could not be opened (Claudesk down, or a stale/
     # broken socket). When CC fired this event but Claudesk was running, the absence of
     # a corresponding STATUS line in status-channel.log would otherwise be ambiguous

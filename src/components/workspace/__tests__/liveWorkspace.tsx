@@ -35,6 +35,7 @@ import type { TurnNavState } from "../turnMarkers";
 import type { TurnNavView } from "../XtermPane";
 import type { SupervisorOrigin } from "../../../state/supervisor/turnOrigin";
 import type { Workspace as WorkspaceModel } from "../../../state/workspace";
+import type { WireLinkOverlay } from "../../../state/workspaceStatus";
 import type { OpenIntent } from "../../../state/predictAction";
 import { takeSpawnArgs, type SpawnIntentRef } from "../../../cc/spawnArgs";
 
@@ -53,6 +54,8 @@ export const AT_REST: TurnNavView = {
 /** The props the stub pane records: the callbacks `Workspace` hands the real pane. */
 interface StubPaneProps {
   workspaceId?: string;
+  /** M17 WP4 — what `Workspace` runs when the pane's spawn resolves. */
+  onSessionId?: (sessionId: string) => void;
   onTurnStartRecorded?: (nav: TurnNavView) => void;
   onInputForwarded?: (chunk: string) => void;
   claimTurnOrigin?: () => SupervisorOrigin | null;
@@ -229,6 +232,8 @@ export interface MountOptions {
   statusState?: "idle" | "running" | "unknown";
   /** M16.5 WP4 — the header dot's display state (the verify-human overlay), if any. */
   statusDisplayState?: "awaiting_input";
+  /** M17 WP4 — the workspace's link overlay (a remote pane that is reconnecting). */
+  statusLink?: WireLinkOverlay;
   /** F-b — the profile both `project_get_profile` and `cc_session_profile` answer with. */
   profile?: string | null;
   /** Extra IPC answers by command name, for commands the harness does not otherwise stub. */
@@ -243,6 +248,8 @@ export interface MountOptions {
    * drive-mode apply must survive without leaving its one-shot spawn override behind.
    */
   detachedPane?: boolean;
+  /** M17 WP4 — the workspace's project key (a remote `ssh://` key, say). Defaults to a local path. */
+  projectPath?: string;
 }
 
 let root: Root | null = null;
@@ -277,7 +284,7 @@ export async function mountWorkspace(opts: MountOptions) {
   panes.set(MOUNTED_ID, pane);
   const model = {
     id: MOUNTED_ID,
-    project_path: "/tmp/scratch/scratch-a",
+    project_path: opts.projectPath ?? "/tmp/scratch/scratch-a",
     cc_session_id: "cc-1",
     display_name: "scratch-a",
     pending_action: null,
@@ -293,6 +300,7 @@ export async function mountWorkspace(opts: MountOptions) {
         visible
         statusState={opts.statusState ?? "idle"}
         statusDisplayState={opts.statusDisplayState}
+        statusLink={opts.statusLink}
       />,
     ),
   );

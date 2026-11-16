@@ -30,6 +30,7 @@
 //! - `tool_name` + `tool_use_id` — `PreToolUse` / `PostToolUse` / `PostToolUseFailure`.
 //! - `agent_type` — `SubagentStart` / `SubagentStop`.
 //! - `source` — `SessionStart`.
+//! - `origin` — every event from a REMOTE host's hook (M17 WP4), never a local one.
 //!
 //! The `tool_*` / `agent_type` / `source` / `prompt_length_chars` fields are the M9
 //! WP2 time-analytics additions (`time_store` consumes them; the status machine reads
@@ -153,6 +154,22 @@ pub struct HookEvent {
     /// (`status_broadcaster::stop_leaves_background_work`).
     #[serde(default)]
     pub background_task_types: Option<Vec<String>>,
+
+    /// M17 WP4 (AC-2.3): `hash8(host)` for an event from a REMOTE host's hook; `None` for a
+    /// local one. The registry routes on it ([`crate::status_broadcaster::WorkspaceRegistry`]),
+    /// and `time_store` refuses any event that carries it. An empty string reads as `None`
+    /// (the same rule `session_id` follows downstream): an empty origin names no host.
+    #[serde(default, deserialize_with = "empty_as_none")]
+    pub origin: Option<String>,
+}
+
+/// `""` → `None` (M17 WP4). Absent is handled by `#[serde(default)]`; this sees present values.
+fn empty_as_none<'de, D>(d: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v: Option<String> = Option::deserialize(d)?;
+    Ok(v.filter(|s| !s.is_empty()))
 }
 
 /// Errors from the socket listener's IO/lifecycle (bind, remove-stale, accept).
@@ -421,6 +438,28 @@ mod tests {
         assert_eq!(ev.source, None);
         assert_eq!(ev.tool_use_id, None);
         assert_eq!(ev.reason, None);
+    }
+
+    /// M17 WP4 (AC-2.3): a remote line carries `origin`; a local line has no key; an empty
+    /// value names no host, so it reads as absent (a mutant that keeps `""` makes a local
+    /// event look remote and routes it nowhere).
+    #[test]
+    fn origin_parses_and_an_empty_one_reads_as_absent() {
+        let remote = parse_line(
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","origin":"a1b2c3d4"}"#,
+        )
+        .unwrap();
+        assert_eq!(remote.origin.as_deref(), Some("a1b2c3d4"));
+        let local = parse_line(STOP_LINE).unwrap();
+        assert_eq!(local.origin, None);
+        let empty =
+            parse_line(r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","origin":""}"#)
+                .unwrap();
+        assert_eq!(empty.origin, None);
+        let null =
+            parse_line(r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","origin":null}"#)
+                .unwrap();
+        assert_eq!(null.origin, None);
     }
 
     #[test]

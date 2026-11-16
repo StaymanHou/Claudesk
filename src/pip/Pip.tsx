@@ -37,6 +37,7 @@ import {
   emptyStatusMap,
   snippetFor,
   displayStateFor,
+  linkFor,
   WORKSPACE_STATUS_EVENT,
   type WorkspaceStatusMap,
   type WorkspaceStatusUpdate,
@@ -312,7 +313,8 @@ function LayoutIcon({ layout }: { layout: PipLayout }) {
  *   - minimal → a bare dot only (Phase 4 adds attention-weighting + ordering); a `title`
  *     keeps the project resolvable on hover even with no visible name.
  */
-function PipTile({
+// Exported for its render test (M17 WP4: the link overlay on every layout).
+export function PipTile({
   tile,
   layout,
   statusMap,
@@ -328,6 +330,8 @@ function PipTile({
   // M16.5 WP4: the PiP is a DISPLAY consumer, so it shows the verify-human overlay.
   const state = displayStateFor(statusMap, tile.id);
   const snippet = snippetFor(statusMap, tile.id);
+  // M17 WP4 (AC-6.2) — a remote tile whose terminal is not attached: dimmed + broken-link glyph.
+  const link = linkFor(statusMap, tile.id);
 
   if (layout === "minimal") {
     // Dot only — no name, no mirror. `title` keeps it resolvable to a project on hover
@@ -343,7 +347,7 @@ function PipTile({
         data-testid={`pip-tile-${tile.id}`}
         title={tile.display_name}
       >
-        <WorkspaceStatusIndicator state={state} snippet={snippet} />
+        <WorkspaceStatusIndicator state={state} snippet={snippet} link={link} />
       </div>
     );
   }
@@ -357,7 +361,7 @@ function PipTile({
         title={tile.display_name}
       >
         <span className="pip-tile-name">{tile.display_name}</span>
-        <WorkspaceStatusIndicator state={state} snippet={snippet} />
+        <WorkspaceStatusIndicator state={state} snippet={snippet} link={link} />
       </div>
     );
   }
@@ -391,7 +395,7 @@ function PipTile({
       />
       <div className="pip-tile-header">
         <span className="pip-tile-name">{tile.display_name}</span>
-        <WorkspaceStatusIndicator state={state} snippet={snippet} />
+        <WorkspaceStatusIndicator state={state} snippet={snippet} link={link} />
       </div>
     </div>
   );

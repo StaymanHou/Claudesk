@@ -1113,6 +1113,9 @@ pub struct RemoteSpawn {
     pub session: String,
     /// The LOCAL cwd for the ssh process (the user's home: the project folder is remote).
     pub local_cwd: String,
+    /// Whether the remote holds a transcript for this project's physical path (M17 WP4): the
+    /// remote answer to the `--continue` guard, asked by the caller before the registry lock.
+    pub has_transcript: bool,
 }
 
 /// What a remote session's `kill()` needs to cancel copy-mode over the master.
@@ -1203,6 +1206,24 @@ pub const RECONNECT_DELAY_MAX: Duration = Duration::from_secs(30);
 /// drop (notice, immediate attempt); a shorter one is a failed attempt (back off, no new notice).
 pub const STABLE_TERMINAL: Duration = Duration::from_secs(10);
 
+/// How long a re-attached terminal must hold before the link overlay clears (M17 WP4,
+/// P4.verify-self.F1). An attach that fails dies in milliseconds (`ssh` exits 255 at once when the
+/// master behind a stale Up is gone), so reporting `Attached` at SPAWN cleared the overlay for a
+/// failed attempt and replaced the last hue with Unknown. Only a terminal still in place after this
+/// window counts as attached.
+pub const ATTACH_CONFIRM: Duration = Duration::from_millis(1500);
+
+/// Whether the re-attach made at `at` still holds (pure, M17 WP4): the workspace is open, a
+/// terminal is in place, and it is the SAME re-attach (a later one has its own confirmation).
+pub fn attach_still_held(
+    killed: bool,
+    terminal_present: bool,
+    attached_at: Option<Instant>,
+    at: Instant,
+) -> bool {
+    !killed && terminal_present && attached_at == Some(at)
+}
+
 /// The wait before the next re-attach and whether this end is a NEW drop (pure). `lived` is how
 /// long the ending terminal ran if it was itself a re-attach, `None` for the session's first
 /// terminal (whose end is always a new drop).
@@ -1253,6 +1274,10 @@ struct RemoteShared {
     attached_at: Mutex<Option<Instant>>,
     /// The current back-off between re-attach attempts ([`next_reconnect`]).
     retry_delay: Mutex<Duration>,
+    /// M17 WP4 (AC-6) — where this session reports its attach/detach edges for the link overlay.
+    /// Injected (`status_broadcaster::LinkEdgeSink`), so its body is driven by a test
+    /// (`apply_link_edge`) rather than hard-wired to the `AppHandle`.
+    link_sink: crate::status_broadcaster::LinkEdgeSink,
 }
 
 impl RemoteShared {
@@ -1264,10 +1289,12 @@ impl RemoteShared {
         }
     }
 
-    /// THE one place a remote session's `cc-exit-<id>` is emitted, at most once.
+    /// THE one place a remote session's `cc-exit-<id>` is emitted, at most once. Any link overlay
+    /// goes off with it (M17 WP4): a session that gave up reconnecting must not stay dimmed.
     fn emit_exit(&self) {
         if !self.exited.swap(true, Ordering::SeqCst) {
             let _ = self.app.emit(&format!("cc-exit-{}", self.id), ());
+            (self.link_sink)(crate::status_broadcaster::LinkEdge::Ended);
         }
     }
 
@@ -1319,6 +1346,8 @@ fn on_inner_exit(shared: Arc<RemoteShared>) {
     match classify_inner_exit(shared.killed.load(Ordering::SeqCst), code, link_up) {
         InnerExit::Ended => shared.emit_exit(),
         InnerExit::Reconnect => {
+            // M17 WP4 (AC-6.1): not attached from here until a re-attach holds.
+            (shared.link_sink)(crate::status_broadcaster::LinkEdge::Lost);
             let (delay, new_drop) = reconnect_plan(&shared.retry_delay, &shared.attached_at);
             reconnect(shared, delay, new_drop)
         }
@@ -1361,6 +1390,30 @@ fn sleep_unless_killed(shared: &RemoteShared, d: Duration) -> bool {
     !shared.killed.load(Ordering::SeqCst)
 }
 
+/// Report `Attached` for the re-attach made at `at` once it has held for [`ATTACH_CONFIRM`]
+/// ([`attach_still_held`]), on its own thread so the reconnect returns at once. A re-attach that
+/// died meanwhile reports nothing: its `on_inner_exit` already kept the overlay on.
+fn confirm_attached(shared: Arc<RemoteShared>, at: Instant) {
+    let spawned = thread::Builder::new()
+        .name("claudesk-remote-attach-confirm".into())
+        .spawn(move || {
+            thread::sleep(ATTACH_CONFIRM);
+            let present = shared.inner.lock().is_ok_and(|g| g.is_some());
+            let attached_at = shared.attached_at.lock().ok().and_then(|g| *g);
+            if attach_still_held(
+                shared.killed.load(Ordering::SeqCst),
+                present,
+                attached_at,
+                at,
+            ) {
+                (shared.link_sink)(crate::status_broadcaster::LinkEdge::Attached);
+            }
+        });
+    if let Err(e) = spawned {
+        eprintln!("[claudesk] remote reconnect: could not confirm the attach: {e}");
+    }
+}
+
 /// Wait `delay`, then for the link, and attach a new terminal to the same tmux session. Gives up
 /// (ending the session) only when the workspace is closed or the link is stopped. Only a NEW drop
 /// writes the notice; a failed attempt's retry does not.
@@ -1401,9 +1454,14 @@ fn reconnect(shared: Arc<RemoteShared>, delay: Duration, new_drop: bool) {
         match shared.spawn_terminal(&argv) {
             Ok(term) => {
                 *g = Some(term);
+                let at = Instant::now();
                 if let Ok(mut a) = shared.attached_at.lock() {
-                    *a = Some(Instant::now());
+                    *a = Some(at);
                 }
+                drop(g);
+                // M17 WP4 (AC-6.3): attached again, once the attach HOLDS (P4.verify-self.F1);
+                // then the dot reads Unknown until the next event.
+                confirm_attached(shared, at);
                 return;
             }
             Err(e) => {
@@ -1429,6 +1487,11 @@ impl RemoteCcSession {
         local_env: Vec<(String, String)>,
     ) -> Result<Self, CcError> {
         let hold = remote.hold;
+        let link_sink = crate::status_broadcaster::commands::link_edge_sink(
+            app.clone(),
+            crate::config_store::remote_key(remote.target.host(), remote.target.path()),
+            short_host(remote.target.host()).to_string(),
+        );
         let shared = Arc::new(RemoteShared {
             output_event: format!("cc-output-{id}"),
             app,
@@ -1445,6 +1508,7 @@ impl RemoteCcSession {
             exited: AtomicBool::new(false),
             attached_at: Mutex::new(None),
             retry_delay: Mutex::new(Duration::ZERO),
+            link_sink,
         });
         {
             let mut g = shared.inner.lock().map_err(|_| CcError::Lock)?;
@@ -1486,11 +1550,26 @@ impl CcSession for RemoteCcSession {
     /// session keeps running (recording an end-intent for it is WP5's).
     fn kill(&self) -> Result<(), CcError> {
         self.shared.killed.store(true, Ordering::SeqCst);
-        let g = self.shared.inner.lock().map_err(|_| CcError::Lock)?;
-        match g.as_ref() {
-            Some(t) => t.kill(),
-            None => Ok(()),
+        // M17 WP4: a spawn of this same tmux session waits until the whole close, remote end
+        // included, is done (`cc_spawn_remote` → `wait_not_closing`).
+        let _closing = self.shared.links.begin_close(&self.shared.session);
+        let local = {
+            let g = self.shared.inner.lock().map_err(|_| CcError::Lock)?;
+            match g.as_ref() {
+                Some(t) => t.kill(),
+                None => Ok(()),
+            }
+        };
+        // R-1: an explicit close ENDS the remote session. The terminal's `/exit` usually did; a
+        // CC busy past its 0.5 s window is killed here instead of running on after the close.
+        if let Err(e) = self
+            .shared
+            .links
+            .end_session(&self.shared.target, &self.shared.session)
+        {
+            eprintln!("[claudesk] remote close: could not end the remote session: {e}");
         }
+        local
     }
 
     fn mark_ready(&self) {
@@ -2098,7 +2177,11 @@ impl SessionRegistry {
                 Some(r.target.host().to_string())
             }
         };
-        let is_remote = remote_host.is_some();
+        // M17 WP4: a remote session's transcript answer, asked over the link by the caller.
+        let remote_transcript = match &target {
+            SpawnTarget::Local => None,
+            SpawnTarget::Remote(r) => Some(r.has_transcript),
+        };
         let remote_handle = match &target {
             SpawnTarget::Local => None,
             SpawnTarget::Remote(r) => Some(RemoteExit {
@@ -2193,11 +2276,10 @@ impl SessionRegistry {
         // F-b probe P1.1 (2): `--continue` with nothing to continue EXITS CC. Checked against the
         // profile's own config root — a profile's transcripts are not under `~/.claude`.
         let resume = guard_continue_against_transcripts(resume, || {
-            // M17 WP3 — a REMOTE session's transcripts live on the remote, so the local check
-            // would always say "none" and drop `--continue` by accident. Say so explicitly; the
-            // remote check is WP5 5.2.
-            if is_remote {
-                return false;
+            // M17 WP3/WP4 — a REMOTE session's transcripts live on the remote, so the local
+            // disk is never asked: the answer came over the link (`RemoteSpawn::has_transcript`).
+            if let Some(has) = remote_transcript {
+                return has;
             }
             let root = match profile.as_ref() {
                 Some(p) => p.dir.clone(),
@@ -4490,9 +4572,12 @@ mod tests {
         assert!(at("self.admit_remote(") < at("consume_and_persist("));
         // The transcript guard says "no" for a remote session BEFORE it looks at local disk.
         let guard = &code[at("guard_continue_against_transcripts(")..];
-        let early = guard.find("if is_remote {").expect("the remote early-out");
+        let early = guard
+            .find("if let Some(has) = remote_transcript {")
+            .expect("the remote early-out");
         assert!(early < guard.find("default_config_root").unwrap());
-        assert!(guard[early..].starts_with("if is_remote {\n                return false;"));
+        assert!(guard[early..]
+            .starts_with("if let Some(has) = remote_transcript {\n                return has;"));
         // The target reaches the PTY spawn.
         let call = &code[at("PtyCcSession::spawn(")..];
         let call = &call[..call.find(");").unwrap()];
@@ -4828,6 +4913,218 @@ mod tests {
         *attached.lock().unwrap() = Instant::now().checked_sub(STABLE_TERMINAL);
         assert_eq!(reconnect_plan(&delay, &attached), (Duration::ZERO, true));
         assert_eq!(*delay.lock().unwrap(), Duration::ZERO);
+    }
+
+    /// M17 WP4 (AC-5.2): a reattach after a link drop never changes the session's retained drive
+    /// mode, so `cc_drive_mode` keeps answering the SPAWN-time mode and the stale-readout logic
+    /// stays truthful. The mode lives on the `Registry` entry, written once in `spawn`; the
+    /// reattach path holds only `RemoteShared`, whose `app` could reach the `Registry`. A SOURCE
+    /// question (a real reattach needs a PTY and an AppHandle): no reattach body names the
+    /// registry (`SessionRegistry`, or the `Registry` alias `commands.rs` uses) or the mode. Verified
+    /// live at P3.4 as well.
+    #[test]
+    fn a_reattach_never_touches_the_retained_drive_mode() {
+        let src = include_str!("mod.rs");
+        let production = src.split("mod tests").next().unwrap_or(src);
+        let body_of = |sig: &str| -> String {
+            let start = production
+                .find(sig)
+                .unwrap_or_else(|| panic!("{sig} moved; re-scope this guard"));
+            let body = &production[start..];
+            let body = &body[..body.find("\n}\n").expect("terminates")];
+            body.lines()
+                .filter(|l| !l.trim_start().starts_with("//"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        for sig in [
+            "fn reconnect(shared: Arc<RemoteShared>, delay: Duration, new_drop: bool) {",
+            "fn on_inner_exit(shared: Arc<RemoteShared>) {",
+            "impl RemoteShared {",
+            "struct RemoteShared {",
+        ] {
+            let code = body_of(sig);
+            // Whole identifiers: `LinkRegistry` (the link registry RemoteShared does hold) is not
+            // the session `Registry`.
+            let idents: Vec<&str> = code
+                .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .collect();
+            for forbidden in [
+                "drive_mode",
+                "Registry",
+                "SessionRegistry",
+                "DriveMode",
+                "CLAUDESK_DRIVE_MODE",
+            ] {
+                assert!(
+                    !idents.contains(&forbidden),
+                    "{sig} mentions {forbidden}: a reattach must not reach the retained mode"
+                );
+            }
+        }
+        // Positive control: the guard can see the mode where it IS written (the spawn's insert).
+        assert!(production.contains("drive_mode: spawned_drive_mode,"));
+    }
+
+    /// M17 WP4 caller guard (R-1 + the respawn race): the remote session's `kill` marks the close
+    /// for its whole length and ENDS the remote session after the terminal's `/exit`; the remote
+    /// spawn waits for that close before it reaches the link or the tmux `new -A`. The machines
+    /// (`wait_not_closing`, `tmux_end_session_script`) are tested on their own; this pins that
+    /// their callers use them, in order (`[[extracted-machine-needs-a-live-caller-guard]]`).
+    #[test]
+    fn a_remote_close_ends_its_session_and_a_respawn_waits_for_it() {
+        let flat = |src: &str, sig: &str| -> String {
+            let production = src.split("mod tests").next().unwrap_or(src);
+            let start = production
+                .find(sig)
+                .unwrap_or_else(|| panic!("{sig} moved; re-scope this guard"));
+            let body = &production[start..];
+            // Each body runs to its top-level `}`: the whole impl, and the whole command.
+            let end = body.find("\n}\n").expect("terminates");
+            body[..end]
+                .lines()
+                .filter(|l| !l.trim_start().starts_with("//"))
+                .map(str::trim)
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let kill = flat(
+            include_str!("mod.rs"),
+            "impl CcSession for RemoteCcSession {",
+        );
+        let kill = &kill[kill.find("fn kill(&self)").expect("RemoteCcSession::kill")..];
+        let begin = kill
+            .find(".begin_close(&self.shared.session)")
+            .expect("marks the close");
+        let local = kill
+            .find("Some(t) => t.kill()")
+            .expect("kills the terminal");
+        let end = kill.find(".end_session(").expect("ends the remote session");
+        assert!(begin < local && local < end, "{kill}");
+
+        let spawn = flat(include_str!("commands.rs"), "pub async fn cc_spawn_remote(");
+        // M17 WP4 (pulled from 5.2): the remote `--continue` answer is asked over the link for
+        // the PHYSICAL path, before the session registry lock, and travels in `RemoteSpawn`.
+        // Compared whitespace-free, so a `cargo fmt` reflow cannot break (or satisfy) it.
+        let dense: String = spawn.chars().filter(|c| !c.is_whitespace()).collect();
+        let at = |n: &str| {
+            dense
+                .find(n)
+                .unwrap_or_else(|| panic!("`{n}` not in cc_spawn_remote: {dense}"))
+        };
+        let physical = at("letphysical=real.as_deref().unwrap_or(target.path());");
+        let asked = at("has_transcript_command(&crate::transcript::slug_of_physical(physical");
+        let locked = at("registry.lock()");
+        assert!(physical < asked && asked < locked);
+        at("local_cwd,has_transcript,");
+        // AC-3.3 (verify-codify): the resolved physical path is recorded as the row's alias in the
+        // status registry, so its events resolve. The registry test proves the alias works; this
+        // pins that the spawn records it.
+        let alias = at("reg.set_remote_realpath(&project_path,real.clone());");
+        assert!(
+            alias < physical,
+            "the alias is recorded from the same resolve"
+        );
+        let wait = spawn
+            .find("if !links.wait_not_closing(&session, REMOTE_CLOSE_WAIT) { return Err(")
+            .expect("waits for the close, and refuses the spawn if it does not end");
+        let hold = spawn
+            .find("links.ensure_and_hold(&target)")
+            .expect("takes the link");
+        let new = spawn.find("reg.spawn(").expect("spawns");
+        assert!(wait < hold && hold < new, "{spawn}");
+    }
+
+    /// M17 WP4 caller guard (AC-6): the remote session reports its edges through the injected sink
+    /// at the right points. Lost in `on_inner_exit`'s Reconnect arm BEFORE the reconnect starts;
+    /// Attached in `reconnect` only after the new terminal is stored AND the `inner` lock is
+    /// released; Ended inside `emit_exit`'s once-latch. `apply_link_edge`'s own test drives what
+    /// each edge does; this pins that the edges are reported.
+    #[test]
+    fn a_remote_session_reports_its_link_edges_through_the_sink() {
+        let src = include_str!("mod.rs");
+        let production = src.split("mod tests").next().unwrap_or(src);
+        let dense_body = |sig: &str| -> String {
+            let start = production
+                .find(sig)
+                .unwrap_or_else(|| panic!("{sig} moved; re-scope this guard"));
+            let body = &production[start..];
+            let body = &body[..body.find("\n}\n").expect("terminates")];
+            body.lines()
+                .filter(|l| !l.trim_start().starts_with("//"))
+                .collect::<String>()
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect()
+        };
+        let exit = dense_body("fn on_inner_exit(shared: Arc<RemoteShared>) {");
+        let arm = &exit[exit
+            .find("InnerExit::Reconnect=>{")
+            .expect("the Reconnect arm")..];
+        let lost = arm
+            .find("(shared.link_sink)(crate::status_broadcaster::LinkEdge::Lost);")
+            .expect("Lost on a drop");
+        assert!(lost < arm.find("reconnect(shared").unwrap(), "{arm}");
+
+        let rec = dense_body(
+            "fn reconnect(shared: Arc<RemoteShared>, delay: Duration, new_drop: bool) {",
+        );
+        let stored = rec
+            .find("*g=Some(term);")
+            .expect("the new terminal is stored");
+        let handed = rec
+            .find("drop(g);confirm_attached(shared,at);return;")
+            .expect("the attach is confirmed after the inner lock is released");
+        assert!(stored < handed, "{rec}");
+        assert!(
+            !rec.contains("LinkEdge::Attached"),
+            "reconnect never reports Attached itself (P4.verify-self.F1): {rec}"
+        );
+        // ...and the confirmation reports it only when the attach still holds.
+        let confirm = dense_body("fn confirm_attached(shared: Arc<RemoteShared>, at: Instant) {");
+        let sleep = confirm
+            .find("thread::sleep(ATTACH_CONFIRM);")
+            .expect("waits first");
+        let held = confirm
+            .find("ifattach_still_held(")
+            .expect("checks the attach held");
+        let attached = confirm
+            .find("(shared.link_sink)(crate::status_broadcaster::LinkEdge::Attached);")
+            .expect("then reports it");
+        assert!(sleep < held && held < attached, "{confirm}");
+
+        let latch = dense_body("impl RemoteShared {");
+        let latch = &latch[latch.find("fnemit_exit(&self){").expect("emit_exit")..];
+        assert!(latch.starts_with(
+            "fnemit_exit(&self){if!self.exited.swap(true,Ordering::SeqCst){let_=self.app.emit(&format!(\"cc-exit-{}\",self.id),());(self.link_sink)(crate::status_broadcaster::LinkEdge::Ended);}}"
+        ), "{latch}");
+    }
+
+    /// M17 WP4 (P4.verify-self.F1): only a re-attach that is still in place after the confirmation
+    /// window clears the overlay, and only the re-attach that was confirmed.
+    #[test]
+    fn attach_still_held_requires_the_same_live_terminal() {
+        let at = Instant::now();
+        let later = at + Duration::from_millis(5);
+        assert!(attach_still_held(false, true, Some(at), at));
+        assert!(
+            !attach_still_held(true, true, Some(at), at),
+            "the workspace closed"
+        );
+        assert!(
+            !attach_still_held(false, false, Some(at), at),
+            "the terminal died"
+        );
+        assert!(
+            !attach_still_held(false, true, Some(later), at),
+            "a later re-attach confirms itself"
+        );
+        assert!(!attach_still_held(false, true, None, at));
+        assert!(
+            ATTACH_CONFIRM >= Duration::from_millis(500),
+            "longer than a failed attach"
+        );
+        assert!(ATTACH_CONFIRM < STABLE_TERMINAL);
     }
 
     #[test]

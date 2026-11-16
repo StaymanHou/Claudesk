@@ -9,7 +9,10 @@
 
 import { Workspace } from "./Workspace";
 import type { Workspace as WorkspaceModel } from "../../state/workspace";
-import type { WireWorkspaceState } from "../../state/workspaceStatus";
+import type {
+  WireLinkOverlay,
+  WireWorkspaceState,
+} from "../../state/workspaceStatus";
 
 interface CenterStageProps {
   workspaces: WorkspaceModel[];
@@ -25,6 +28,8 @@ interface CenterStageProps {
   displayStatusFor?: (workspaceId: string) => WireWorkspaceState;
   /** Last prompt/message snippet lookup by workspace id — the status-dot tooltip. */
   snippetFor?: (workspaceId: string) => string | undefined;
+  /** M17 WP4 — a remote workspace's link overlay (the header dot and the reconnecting strip). */
+  linkFor?: (workspaceId: string) => WireLinkOverlay | undefined;
   /** QoL-WP1 — forwarded to each Workspace so its editor registers a dirty probe with
    *  App's workspace-close guard. */
   registerDirtyProbe?: (
@@ -40,6 +45,7 @@ export function CenterStage({
   statusFor,
   displayStatusFor,
   snippetFor,
+  linkFor,
   registerDirtyProbe,
 }: CenterStageProps) {
   return (
@@ -54,6 +60,7 @@ export function CenterStage({
           statusState={statusFor?.(ws.id) ?? "unknown"}
           statusDisplayState={displayStatusFor?.(ws.id)}
           statusSnippet={snippetFor?.(ws.id)}
+          statusLink={linkFor?.(ws.id)}
         />
       ))}
     </div>

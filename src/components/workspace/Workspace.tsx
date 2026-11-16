@@ -27,7 +27,10 @@ import type { Workspace as WorkspaceModel } from "../../state/workspace";
 import { XtermPane, type XtermPaneHandle } from "./XtermPane";
 import { RightPanelHost } from "./RightPanelHost";
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
-import type { WireWorkspaceState } from "../../state/workspaceStatus";
+import type {
+  WireLinkOverlay,
+  WireWorkspaceState,
+} from "../../state/workspaceStatus";
 import { deriveFocusHalf, type FocusHalf } from "./focusHalf";
 import { deriveRightSurface } from "./rightSurface";
 import {
@@ -88,6 +91,8 @@ import {
 // The Recycle operation: a sibling in the skill row, not a skill button (`recycleButton.ts`).
 import { recycleSession, waitForFreshSessionId } from "./recycleSession";
 import { recycleInjectFailure } from "./injectFailure";
+import { readRemoteHookWarning } from "./remoteHookWarning";
+import { reconnectStripText } from "./reconnectStrip";
 // M15 WP4 — the workflow supervisor's per-workspace host. ⚠️ `fanOut` is deliberately NOT wired
 // here; see `useSupervisor`'s header for why the host must be per-workspace.
 import { useSupervisor } from "../../state/supervisor/useSupervisor";
@@ -138,6 +143,12 @@ interface WorkspaceProps {
   statusDisplayState?: WireWorkspaceState;
   /** Last prompt/message snippet for the indicator tooltip (M3 WP6). */
   statusSnippet?: string;
+  /**
+   * M17 WP4 — this REMOTE workspace's link overlay, while its terminal is not attached. Drives
+   * the header dot's dimmed + glyph look and the pane's "keys are not sent" strip (AC-7). Display
+   * only: no guard reads it.
+   */
+  statusLink?: WireLinkOverlay;
 }
 
 export function Workspace({
@@ -148,6 +159,7 @@ export function Workspace({
   statusState = "unknown",
   statusDisplayState,
   statusSnippet,
+  statusLink,
 }: WorkspaceProps) {
   // M4 WP4b — which half (left CC terminal / right panel) holds keyboard focus, so the
   // CSS can paint a #6ea8ff accent on it. Capture-phase focusin/focusout on this
@@ -1237,6 +1249,7 @@ export function Workspace({
         <WorkspaceStatusIndicator
           state={statusDisplayState ?? statusState}
           snippet={statusSnippet}
+          link={statusLink}
         />
       </div>
       {/* M6 WP3 — the ◀ CC collapse hides the left half via display:none. That makes
@@ -1247,11 +1260,33 @@ export function Workspace({
         className="workspace-left"
         style={leftCollapsed ? { display: "none" } : undefined}
       >
+        {/* M17 WP4 (AC-7) — while a remote pane reconnects, keys typed into it are DROPPED (never
+            buffered: replaying them later could submit a stale reply into a CC that has moved
+            on), so say so for as long as it lasts. Claudesk's own DOM, never the PTY stream; it
+            sits above the terminal and goes away on re-attach. The one dim line per drop that the
+            backend writes into the pane is unchanged. */}
+        {statusLink?.status === "reconnecting" && (
+          <div
+            className="workspace-reconnect-strip"
+            role="status"
+            data-testid="workspace-reconnect-strip"
+          >
+            {reconnectStripText(statusLink.host)}
+          </div>
+        )}
         <XtermPane
           ref={ccPaneRef}
           workspaceId={workspace.id}
           projectPath={workspace.project_path}
-          onSessionId={(sid) => onSessionId?.(workspace.id, sid)}
+          onSessionId={(sid) => {
+            onSessionId?.(workspace.id, sid);
+            // M17 WP4 (AC-1.2) — a remote host whose hook could not be registered says so here,
+            // in the same toast as a refused injection (its status dot would otherwise stay grey
+            // with no explanation). A local project never asks.
+            void readRemoteHookWarning(workspace.project_path).then((w) => {
+              if (w !== null) setInjectFailure(w);
+            });
+          }}
           // M14 WP0 — feed the unsent-input watermark. ⚠️ ONLY the CC pane opts in: the
           // right-panel `TerminalPane` mounts this same component for a login SHELL, which the
           // supervisor never fires into, so a watermark fed from it would suppress CC's chain

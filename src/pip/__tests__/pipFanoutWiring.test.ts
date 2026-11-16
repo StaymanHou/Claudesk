@@ -276,10 +276,12 @@ describe("M5 WP4 Phase 5 — cross-layout never-disagree invariant (structural)"
     // prop is the debt-paydown WP2 tooltip wiring). A raw `<div className="status-dot...">`
     // in any branch would be a divergence channel; assert there is none in Pip.tsx, and that
     // the indicator is used for all three rendering branches (minimal/compact/mirror).
+    // M17 WP4: each also carries the link overlay (`link={link}`; rendered per layout in
+    // `linkOverlayRender.test.tsx`).
     expect(pipSource).not.toMatch(/className=["'`][^"'`]*status-dot/);
     const indicatorUses =
       pipSource.match(
-        /<WorkspaceStatusIndicator state=\{state\} snippet=\{snippet\}\s*\/>/g,
+        /<WorkspaceStatusIndicator state=\{state\} snippet=\{snippet\} link=\{link\}\s*\/>/g,
       ) ?? [];
     expect(indicatorUses.length).toBe(3); // minimal + compact + mirror branches
   });

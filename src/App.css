@@ -5485,3 +5485,39 @@ body,
 .substrate-install-button:hover {
   background: rgba(255, 255, 255, 0.14);
 }
+
+/* M17 WP4 (AC-6.2) — a REMOTE workspace whose terminal is not attached: the dot keeps its LAST
+   hue, dimmed, with a broken-link glyph beside it, so a stale colour is never shown as live. The
+   tooltip (title) says "Not connected to <host>: reconnecting". Hex values, not variables: there
+   is no CSS custom-property layer here. */
+.status-link-lost .status-dot {
+  opacity: 0.4;
+  animation: none;
+}
+.status-link-glyph {
+  color: #d29922;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+.status-link-lost .workspace-status-label {
+  opacity: 0.6;
+}
+
+/* M17 WP4 (AC-7) — the remote pane's "keys you type are not sent" strip, while it reconnects.
+   Non-modal: it informs, never takes focus, and lets clicks through. Pinned over the TOP of the
+   pane (`.workspace-left` is the positioning context) rather than above it: a block above would
+   push the terminal's last rows out of the overflow-hidden pane with no refit. The pane is stale
+   while it shows, so covering its first row costs nothing. */
+.workspace-reconnect-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #e3b341;
+  background-color: #2d2208;
+  border-bottom: 1px solid #5c4813;
+  pointer-events: none;
+}

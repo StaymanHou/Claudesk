@@ -114,7 +114,7 @@ function App() {
   } = useWorkspaceList();
   // M3 WP6 — live CC status from the `workspace-status` hook channel + the
   // open/close registration that makes WP4's cwd→workspace match resolve.
-  const { stateFor, displayStateFor, snippetFor } =
+  const { stateFor, displayStateFor, snippetFor, linkFor } =
     useWorkspaceStatus(workspaces);
 
   // M4 WP3 P4 — the user-arranged filmstrip order: workspace IDS, in memory for the app
@@ -839,6 +839,7 @@ function App() {
               tiles={tiles}
               statusFor={displayStateFor}
               snippetFor={snippetFor}
+              linkFor={linkFor}
               collapsed={collapsed}
               onToggleCollapsed={toggleCollapsed}
               onPromote={focusWorkspace}
@@ -855,6 +856,7 @@ function App() {
               statusFor={stateFor}
               displayStatusFor={displayStateFor}
               snippetFor={snippetFor}
+              linkFor={linkFor}
               registerDirtyProbe={registerDirtyProbe}
             />
             {showPicker && (

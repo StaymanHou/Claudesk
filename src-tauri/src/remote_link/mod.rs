@@ -14,7 +14,18 @@
 //! emits it as `remote-link`). Before EVERY master connect it runs the **pre-connect exec**
 //! ([`pre_connect_script`]): `mkdir -p` the state dir, `rm -f` the remote hook socket (the probed
 //! fix for a stale bind; it needs no sshd change, so `StreamLocalBindUnlink` is deliberately NOT
-//! used), write `tmux.conf` and the `cc-launch` launcher, and print the remote `$HOME`.
+//! used), write `tmux.conf`, the `cc-launch` launcher and the hook script (M17 WP4), and print the
+//! remote `$HOME`.
+//!
+//! ## The remote hook (M17 WP4, AC-1)
+//!
+//! Once the master answers and BEFORE the link is reported Up, the worker registers Claudesk's hook
+//! in the remote `~/.claude/settings.json` ([`install_remote_hook`]): fetch the file over the
+//! master, merge LOCALLY with the same `hook_install::merge_claudesk_hooks` the local install uses,
+//! and write it back atomically only when the merge changed something. A failure never fails the
+//! link (status simply stays dark); it is kept on the link in plain words ([`LinkRegistry::hook_warning`])
+//! for the remote workspace to show. Doing it before Up means every `ensure_and_hold` caller sees
+//! the result of the connect it waited for.
 //!
 //! ⚠️ **Blocking, always off the main thread.** Every function here that touches ssh waits on a
 //! process. The worker is its own thread, and the commands are `async` on a blocking worker
@@ -38,10 +49,11 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
+use crate::hook_install::commands::remote_script_basename;
 use crate::remote_cmd::preflight::{
     connect_failure, ExecResult, RemoteExec, SshExec, CONNECT_TIMEOUT_S,
 };
-use crate::remote_cmd::{quote, ValidTarget, TOKEN_FILE};
+use crate::remote_cmd::{hook_origin, quote, ValidTarget, TOKEN_FILE};
 use crate::subprocess::{in_own_group, kill_and_reap, kill_group, run_captured, RunError};
 
 /// How long [`LinkRegistry::ensure`] waits for a link to come Up.
@@ -139,6 +151,15 @@ exec claude \"$@\"\n"
     )
 }
 
+/// The bundled hook script. Deployed to every remote host UNCHANGED, apart from its name: one
+/// script for local and remote (AC-2), whose `CLAUDESK_ORIGIN` arm is the only remote difference.
+pub const HOOK_SCRIPT: &str = include_str!("../../resources/claudesk-hook.pl");
+
+/// The delimiter of every quoted heredoc in [`pre_connect_script`]. ⚠️ No deployed file may contain
+/// a line equal to it, or the heredoc would end there (TC-4): each one is pinned by a test.
+#[cfg(test)]
+pub(crate) const HEREDOC_DELIMITER: &str = "CLAUDESK_EOF";
+
 /// The pre-connect exec, run (by the remote login shell) before every master connect. The
 /// identifier is the only variable value and enters through [`quote`]; the file contents are
 /// written through QUOTED heredocs (`<<'EOF'`), so nothing in them is expanded by this script.
@@ -158,12 +179,122 @@ cat > \"$d/cc-launch.tmp\" <<'CLAUDESK_EOF'\n\
 {launcher}CLAUDESK_EOF\n\
 chmod 700 \"$d/cc-launch.tmp\"\n\
 mv -f \"$d/cc-launch.tmp\" \"$d/cc-launch\"\n\
+h=\"$d/\"{hook}\n\
+cat > \"$h.tmp\" <<'CLAUDESK_EOF'\n\
+{script}CLAUDESK_EOF\n\
+mv -f \"$h.tmp\" \"$h\"\n\
 printf '%s%s\\n' '{sentinel}' \"$HOME\"\n",
         id = quote(identifier),
         conf = TMUX_CONF,
         launcher = cc_launcher(),
+        hook = quote(remote_script_basename(identifier)),
+        script = with_final_newline(HOOK_SCRIPT),
         sentinel = HOME_SENTINEL,
     )
+}
+
+/// A heredoc body must end in a newline, or the delimiter would not start a line.
+fn with_final_newline(s: &str) -> String {
+    if s.ends_with('\n') {
+        s.to_string()
+    } else {
+        format!("{s}\n")
+    }
+}
+
+/// The hook `command` registered in the REMOTE `~/.claude/settings.json` (AC-1.4): the forwarded
+/// socket, the origin (`hook_origin(host)`, TC-3) and the deployed script, each through [`quote`].
+/// Also the idempotency marker: [`install_remote_hook`] re-merging it is a no-op.
+pub fn remote_hook_command(home: &str, identifier: &str, host: &str) -> String {
+    format!(
+        "CLAUDESK_HOOK_SOCK={} CLAUDESK_ORIGIN={} /usr/bin/perl {}",
+        quote(&remote_socket(home, identifier)),
+        quote(&hook_origin(host)),
+        quote(&format!(
+            "{}/{}",
+            remote_state_dir(home, identifier),
+            remote_script_basename(identifier)
+        )),
+    )
+}
+
+/// The first line of [`READ_SETTINGS`]'s own output, followed by `present` or `absent`.
+pub const SETTINGS_SENTINEL: &str = "CLAUDESK-SETTINGS:";
+
+/// Print [`SETTINGS_SENTINEL`]`present` and the remote `~/.claude/settings.json`, or
+/// [`SETTINGS_SENTINEL`]`absent`. Constant: no variable value enters it. A file that exists but
+/// cannot be read fails the exec (non-zero), which is never mistaken for "absent".
+pub const READ_SETTINGS: &str = "f=\"$HOME/.claude/settings.json\"\n\
+if [ -e \"$f\" ]; then printf '%s\\n' 'CLAUDESK-SETTINGS:present'; cat \"$f\"; \
+else printf '%s\\n' 'CLAUDESK-SETTINGS:absent'; fi\n";
+
+/// Replace the remote `~/.claude/settings.json` with stdin, atomically: a temp file in the same
+/// folder (a copy of the old file first, so it keeps its mode), then `mv`. Constant: the new
+/// content arrives on stdin, never inside the command text.
+pub const WRITE_SETTINGS: &str = "set -e\n\
+mkdir -p \"$HOME/.claude\"\n\
+f=\"$HOME/.claude/settings.json\"\n\
+t=\"$f.claudesk.tmp\"\n\
+rm -f \"$t\"\n\
+if [ -e \"$f\" ]; then cp -p \"$f\" \"$t\"; fi\n\
+cat > \"$t\"\n\
+mv -f \"$t\" \"$f\"\n";
+
+/// The remote settings file from [`READ_SETTINGS`]'s output: `None` when absent, else everything
+/// after the sentinel line. ⚠️ The FIRST sentinel line counts: rc-file noise comes before it, and
+/// a later one would be part of the file itself.
+pub fn parse_settings_read(out: &str) -> Result<Option<String>, String> {
+    let mut lines = out.split_inclusive('\n');
+    for line in lines.by_ref() {
+        match line
+            .trim_end_matches(['\n', '\r'])
+            .strip_prefix(SETTINGS_SENTINEL)
+        {
+            Some("absent") => return Ok(None),
+            Some("present") => return Ok(Some(lines.collect())),
+            _ => {}
+        }
+    }
+    Err("the host did not report its settings file".to_string())
+}
+
+/// Register Claudesk's hook in `host`'s `~/.claude/settings.json` over the master at `ctl`
+/// (AC-1.2/1.3). Fetch, merge LOCALLY with [`crate::hook_install::merge_claudesk_hooks`], and
+/// write back only when the merge changed something. ⚠️ A file that does not parse, or has the
+/// wrong shape, is NEVER written: the reason comes back in plain words instead. Every key and
+/// hook group Claudesk did not write survives as a JSON value (the merge is additive and matches
+/// only the exact remote basename). ⚠️ Not atomic against CC writing the same file between the
+/// fetch and the `mv` (TC-6, ~one round trip); accepted, as the local install accepts it.
+pub fn install_remote_hook(
+    transport: &dyn Transport,
+    ctl: &Path,
+    host: &str,
+    home: &str,
+    identifier: &str,
+) -> Result<(), String> {
+    let out = transport.exec(&exec_argv(ctl, host, READ_SETTINGS), "")?;
+    let mut settings = match parse_settings_read(&out)? {
+        None => serde_json::Value::Object(serde_json::Map::new()),
+        Some(text) => serde_json::from_str(&text).map_err(|e| {
+            format!("~/.claude/settings.json is not valid JSON ({e}), so it was left untouched")
+        })?,
+    };
+    let command = remote_hook_command(home, identifier, host);
+    let changed = crate::hook_install::merge_claudesk_hooks(&mut settings, &command)
+        .map_err(|e| format!("~/.claude/settings.json was left untouched: {e}"))?;
+    if !changed {
+        return Ok(());
+    }
+    let mut json = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("could not write the settings: {e}"))?;
+    json.push('\n');
+    transport.exec(&exec_argv(ctl, host, WRITE_SETTINGS), &json)?;
+    Ok(())
+}
+
+/// The plain-words form of a failed [`install_remote_hook`], as the workspace shows it.
+pub fn hook_warning_text(host: &str, reason: &str) -> String {
+    format!("couldn't register the Claudesk hook on {host}: {reason}. Its status will stay grey.")
 }
 
 /// Read `$HOME` from the pre-connect output: the LAST line starting with [`HOME_SENTINEL`].
@@ -280,6 +411,9 @@ pub trait Transport: Send + Sync {
     fn spawn_master(&self, host: &str, argv: &[String]) -> Result<Box<dyn Master>, String>;
     /// Whether `-O check` answers.
     fn check(&self, argv: &[String]) -> bool;
+    /// Run a side-channel exec (`argv` from [`exec_argv`]) with `stdin` as its input; stdout, or
+    /// the failure in plain words (M17 WP4: the remote hook install).
+    fn exec(&self, argv: &[String], stdin: &str) -> Result<String, String>;
 }
 
 /// The real transport: `/usr/bin/ssh`.
@@ -376,6 +510,10 @@ impl Transport for SshTransport {
     fn check(&self, argv: &[String]) -> bool {
         run_captured(command_from(argv), "", 5_000).is_ok()
     }
+
+    fn exec(&self, argv: &[String], stdin: &str) -> Result<String, String> {
+        run_captured(command_from(argv), stdin, EXEC_TIMEOUT_MS).map_err(|e| e.to_string())
+    }
 }
 
 /// State shared between a link's worker and its callers.
@@ -392,6 +530,9 @@ struct SharedInner {
     failures: u64,
     /// The live master's pid, while one runs.
     master_pid: Option<u32>,
+    /// The last connect's remote hook install failure, in plain words (`None` when it worked).
+    /// Sticky across `Lost`: it describes the host, not the connection.
+    hook_warning: Option<String>,
 }
 
 impl Shared {
@@ -402,6 +543,7 @@ impl Shared {
                 home: None,
                 failures: 0,
                 master_pid: None,
+                hook_warning: None,
             }),
             cv: Condvar::new(),
             stop: AtomicBool::new(false),
@@ -538,6 +680,23 @@ fn run_worker(cfg: WorkerCfg, shared: Arc<Shared>) {
             backoff = (backoff * 2).min(cfg.backoff_max);
             continue;
         }
+        // M17 WP4 (AC-1.2): register the hook BEFORE reporting Up, so a caller waiting for Up
+        // reads this connect's result. Never fails the link.
+        let warning = install_remote_hook(
+            &*cfg.transport,
+            &cfg.control_path,
+            &cfg.host,
+            &home,
+            &cfg.identifier,
+        )
+        .err()
+        .map(|reason| hook_warning_text(&cfg.host, &reason));
+        if let Some(w) = &warning {
+            eprintln!("[claudesk] {w}");
+        }
+        if let Ok(mut g) = shared.inner.lock() {
+            g.hook_warning = warning;
+        }
         set_state(&cfg, &shared, LinkState::Up, Some(home));
         backoff = cfg.backoff_min;
 
@@ -586,6 +745,12 @@ fn halt(l: &Link) {
 /// One link per host. Owned by the app as managed state (`commands::init`).
 pub struct LinkRegistry {
     links: Mutex<HashMap<String, Link>>,
+    /// The tmux sessions Claudesk is closing right now, by name, with how many closes are in
+    /// flight (M17 WP4). A spawn of the same session waits on `closing_cv` until its close ends
+    /// ([`Self::wait_not_closing`]): `cc_kill` returns before its teardown does, and a respawn's
+    /// `new -A` would otherwise attach to the session that is being ended.
+    closing: Mutex<HashMap<String, usize>>,
+    closing_cv: Condvar,
     /// The next [`Link::gen`].
     next_gen: AtomicU64,
     transport: Arc<dyn Transport>,
@@ -613,6 +778,8 @@ impl LinkRegistry {
     ) -> Self {
         Self {
             links: Mutex::new(HashMap::new()),
+            closing: Mutex::new(HashMap::new()),
+            closing_cv: Condvar::new(),
             next_gen: AtomicU64::new(1),
             transport,
             app_data,
@@ -941,6 +1108,15 @@ impl LinkRegistry {
         }
     }
 
+    /// The last connect's remote hook install failure for `host`, in plain words (M17 WP4), or
+    /// `None` when it worked or no link exists. A short lock read: safe on the main thread.
+    pub fn hook_warning(&self, host: &str) -> Option<String> {
+        let links = self.links.lock().ok()?;
+        let l = links.get(host)?;
+        let g = l.shared.inner.lock().ok()?;
+        g.hook_warning.clone()
+    }
+
     /// Run `remote_command` (shell text for the remote login shell, built by `remote_cmd`) over
     /// `target`'s master. ⚠️ Blocks for up to `timeout_ms`.
     pub fn exec(
@@ -1063,9 +1239,74 @@ impl LinkRegistry {
         }
     }
 
+    /// Mark `session` as being closed until the returned guard drops (M17 WP4). Taken by a remote
+    /// session's `kill` for its whole teardown, the remote end included.
+    pub fn begin_close(self: &Arc<Self>, session: &str) -> ClosingGuard {
+        if let Ok(mut c) = self.closing.lock() {
+            *c.entry(session.to_string()).or_insert(0) += 1;
+        }
+        ClosingGuard {
+            links: Arc::clone(self),
+            session: session.to_string(),
+        }
+    }
+
+    /// Wait until no close of `session` is in flight, up to `timeout`. `true` when none is (at once
+    /// or in time). ⚠️ Blocks: the spawn calls it on its blocking worker.
+    pub fn wait_not_closing(&self, session: &str, timeout: Duration) -> bool {
+        let deadline = Instant::now() + timeout;
+        let Ok(mut c) = self.closing.lock() else {
+            return false;
+        };
+        loop {
+            if !c.contains_key(session) {
+                return true;
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                return false;
+            }
+            c = match self.closing_cv.wait_timeout(c, deadline - now) {
+                Ok((g, _)) => g,
+                Err(_) => return false,
+            };
+        }
+    }
+
+    /// End `session` on the remote (R-1, M17 WP4): wait for it to exit after the close's `/exit`,
+    /// then kill it if it did not. ⚠️ Blocks up to `END_POLLS` × 0.2 s + one exec.
+    pub fn end_session(&self, target: &ValidTarget, session: &str) -> Result<String, RunError> {
+        let cmd = crate::remote_cmd::tmux_end_session_command(
+            crate::remote_cmd::tmux_server(&self.identifier),
+            session,
+        );
+        let wait_ms = u64::from(crate::remote_cmd::END_POLLS) * 200;
+        self.exec(target, &cmd, wait_ms + EXEC_TIMEOUT_MS)
+    }
+
     /// The identifier this registry deploys under (`~/.claudesk/<identifier>/`).
     pub fn identifier(&self) -> &str {
         &self.identifier
+    }
+}
+
+/// A close in flight ([`LinkRegistry::begin_close`]); dropping it ends the mark and wakes waiters.
+pub struct ClosingGuard {
+    links: Arc<LinkRegistry>,
+    session: String,
+}
+
+impl Drop for ClosingGuard {
+    fn drop(&mut self) {
+        if let Ok(mut c) = self.links.closing.lock() {
+            if let Some(n) = c.get_mut(&self.session) {
+                *n -= 1;
+                if *n == 0 {
+                    c.remove(&self.session);
+                }
+            }
+        }
+        self.links.closing_cv.notify_all();
     }
 }
 

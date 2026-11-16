@@ -28,9 +28,11 @@ import {
   applyStatusUpdate,
   displayStateFor,
   emptyStatusMap,
+  linkFor,
   snippetFor,
   stateFor,
   WORKSPACE_STATUS_EVENT,
+  type WireLinkOverlay,
   type WireWorkspaceState,
   type WorkspaceStatusMap,
   type WorkspaceStatusUpdate,
@@ -47,6 +49,8 @@ export interface WorkspaceStatusApi {
   displayStateFor: (workspaceId: string) => WireWorkspaceState;
   /** The last prompt/message snippet for a workspace id (tooltip), if any. */
   snippetFor: (workspaceId: string) => string | undefined;
+  /** The live link overlay of a remote workspace (M17 WP4), if any. Display only. */
+  linkFor: (workspaceId: string) => WireLinkOverlay | undefined;
 }
 
 export function useWorkspaceStatus(
@@ -130,9 +134,15 @@ export function useWorkspaceStatus(
     [statusMap],
   );
 
+  const linkForCb = useCallback(
+    (workspaceId: string) => linkFor(statusMap, workspaceId),
+    [statusMap],
+  );
+
   return {
     stateFor: stateForCb,
     displayStateFor: displayStateForCb,
     snippetFor: snippetForCb,
+    linkFor: linkForCb,
   };
 }

@@ -198,6 +198,13 @@ pub fn hash8(s: &str) -> String {
     digest.iter().take(4).map(|b| format!("{b:02x}")).collect()
 }
 
+/// The `origin` a remote host's hook tags every event with (M17 WP4, arch §D):
+/// `hash8(host)`, the same value that names the host's ControlPath. The local registry routes
+/// an origin-tagged event only among that host's remote workspaces.
+pub fn hook_origin(host: &str) -> String {
+    hash8(host)
+}
+
 /// The tmux server (`-L`) for this app build: dev and prod never share one (arch §A).
 pub fn tmux_server(identifier: &str) -> &'static str {
     if identifier.ends_with(".dev") {
@@ -280,6 +287,35 @@ pub fn tmux_cancel_copy_mode_command(server: &str, session: &str) -> String {
     ))
 }
 
+/// How long [`tmux_end_session_command`] lets CC finish its `/exit` before killing the session,
+/// in 0.2 s polls (5 s).
+pub const END_POLLS: u32 = 25;
+
+/// The shell script of [`tmux_end_session_command`]: wait up to `polls` × 0.2 s for the session
+/// to end on its own (CC handling the `/exit` the close sent), then `kill-session` it. Prints
+/// `ended=exited` or `ended=killed`. Pure, so a test runs it against a fake `tmux`.
+pub fn tmux_end_session_script(server: &str, session: &str, polls: u32) -> String {
+    let t = quote(&format!("={session}"));
+    let srv = quote(server);
+    format!(
+        "i=0\n\
+while [ \"$i\" -lt {polls} ] && tmux -L {srv} has-session -t {t} 2>/dev/null; do \
+i=$((i+1)); sleep 0.2; done\n\
+if tmux -L {srv} has-session -t {t} 2>/dev/null; then \
+tmux -L {srv} kill-session -t {t} 2>/dev/null; echo ended=killed; \
+else echo ended=exited; fi\n\
+exit 0"
+    )
+}
+
+/// M17 WP4 — the remote command that makes an explicit close END the remote session (R-1): run
+/// after the close's `/exit`, it waits for CC to exit and kills the session if CC did not. Without
+/// it, a CC that is busy past the close's 0.5 s `/exit` window keeps running in tmux after the
+/// workspace closed, and a respawn's `new -A` under the same name ATTACHES to it.
+pub fn tmux_end_session_command(server: &str, session: &str) -> String {
+    login_shell(&tmux_end_session_script(server, session, END_POLLS))
+}
+
 /// How long [`tmux_prepare_inject_command`] waits for the pane to be ready, in 0.2 s polls (15 s).
 pub const READY_POLLS: u32 = 75;
 
@@ -315,6 +351,56 @@ pub fn parse_ready(out: &str) -> Option<bool> {
         .rev()
         .find_map(|l| l.trim().strip_prefix("ready="))
         .map(|v| v == "1")
+}
+
+/// The line [`realpath_command`] prints its answer on, so rc-file noise is never read as a path.
+pub const REALPATH_SENTINEL: &str = "CLAUDESK-REALPATH:";
+
+/// The remote command that prints the PHYSICAL path of `path` (`cd -P` + `pwd -P`) after
+/// [`REALPATH_SENTINEL`], or the sentinel alone when it cannot (M17 WP4, AC-3.3). Always exits 0.
+pub fn realpath_command(path: &str) -> String {
+    format!(
+        "printf '%s%s\\n' '{REALPATH_SENTINEL}' \"$(cd -P -- {} 2>/dev/null && pwd -P)\"",
+        quote(path)
+    )
+}
+
+/// The alias to register for a remote row whose stored path is `stored`, from
+/// [`realpath_command`]'s output: the physical path when it is a normalized absolute path that
+/// DIFFERS from `stored`, else `None` (no symlink, or no usable answer: the stored path is used).
+pub fn parse_realpath_alias(out: &str, stored: &str) -> Option<String> {
+    let real = out
+        .lines()
+        .rev()
+        .find_map(|l| l.trim_end_matches('\r').strip_prefix(REALPATH_SENTINEL))?;
+    (is_normalized_remote_path(real) && real != stored).then(|| real.to_string())
+}
+
+/// The line [`has_transcript_command`] prints its answer on (`yes` / `no`).
+pub const TRANSCRIPT_SENTINEL: &str = "CLAUDESK-TRANSCRIPT:";
+
+/// The remote command that says whether the default config root on the remote holds a transcript
+/// for the project whose slug is `slug` (M17 WP4, pulled from WP5 5.2; operator decision
+/// P3.build): `--continue` with nothing to continue makes CC EXIT, so a remote resume arm is kept
+/// only when this says `yes`. `find`, not a glob, so the answer never depends on the remote
+/// login shell's glob options (a glob inside the `if` measured the same in sh and zsh, so this
+/// is robustness, not a fix).
+pub fn has_transcript_command(slug: &str) -> String {
+    format!(
+        "d=\"$HOME/.claude/projects/\"{}; \
+if [ -n \"$(find \"$d\" -maxdepth 1 -name '*.jsonl' 2>/dev/null | head -n 1)\" ]; \
+then echo '{TRANSCRIPT_SENTINEL}yes'; else echo '{TRANSCRIPT_SENTINEL}no'; fi",
+        quote(slug)
+    )
+}
+
+/// [`has_transcript_command`]'s answer: `true` only for a final `yes` line. No answer is `false`:
+/// a fresh session is the safe side, since a wrong `--continue` kills the pane.
+pub fn parse_has_transcript(out: &str) -> bool {
+    out.lines()
+        .rev()
+        .find_map(|l| l.trim_end_matches('\r').strip_prefix(TRANSCRIPT_SENTINEL))
+        == Some("yes")
 }
 
 /// The remote command for the open path's folder check: prints `yes` or `no` and exits 0, so a
@@ -879,6 +965,199 @@ pub(crate) mod tests {
                 ["-L", "claudesk-dev", "attach", "-t", &format!("={v}")],
                 "{v:?}"
             );
+        }
+        assert!(!canary.exists());
+    }
+
+    /// Run [`realpath_command`] for `path` in a real `/bin/sh` (the remote side, locally).
+    fn realpath_out(path: &str) -> String {
+        let out = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(realpath_command(path))
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "always exits 0");
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    }
+
+    /// M17 WP4 (AC-3.3): a stored path through a symlink yields the physical path; a physical
+    /// path, a missing folder or rc noise yield no alias.
+    #[test]
+    fn realpath_command_finds_the_physical_path_of_a_symlinked_folder() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let real = dir.path().canonicalize().unwrap().join("real");
+        std::fs::create_dir(&real).unwrap();
+        let link = dir.path().canonicalize().unwrap().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let (real, link) = (
+            real.to_string_lossy().into_owned(),
+            link.to_string_lossy().into_owned(),
+        );
+
+        assert_eq!(
+            parse_realpath_alias(&realpath_out(&link), &link),
+            Some(real.clone())
+        );
+        assert_eq!(
+            parse_realpath_alias(&realpath_out(&real), &real),
+            None,
+            "already physical: no alias"
+        );
+        let missing = format!("{real}/nope");
+        assert_eq!(
+            parse_realpath_alias(&realpath_out(&missing), &missing),
+            None
+        );
+        assert_eq!(
+            parse_realpath_alias(&format!("noise\n{REALPATH_SENTINEL}relative\n"), "/a"),
+            None,
+            "a non-absolute answer is no alias"
+        );
+        assert_eq!(parse_realpath_alias("no sentinel\n", "/a"), None);
+    }
+
+    /// A fake `tmux` for [`tmux_end_session_script`]: the session is alive while `$STATE/alive`
+    /// holds a number > 0 (each `has-session` that sees it alive decrements it, so `N` = it ends
+    /// after N polls; `forever` = it never ends on its own). Every call is logged.
+    fn fake_tmux(dir: &std::path::Path, alive: Option<&str>) -> std::path::PathBuf {
+        let bin = dir.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let script = r#"#!/bin/sh
+echo "$*" >> "$STATE/log"
+case "$3" in
+  has-session)
+    [ -f "$STATE/alive" ] || exit 1
+    n=$(cat "$STATE/alive")
+    [ "$n" = forever ] && exit 0
+    [ "$n" -gt 0 ] || { rm -f "$STATE/alive"; exit 1; }
+    echo $((n-1)) > "$STATE/alive"; exit 0 ;;
+  kill-session) rm -f "$STATE/alive"; exit 0 ;;
+esac
+exit 1
+"#;
+        let tmux = bin.join("tmux");
+        std::fs::write(&tmux, script).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmux, std::fs::Permissions::from_mode(0o755)).unwrap();
+        if let Some(a) = alive {
+            std::fs::write(dir.join("alive"), a).unwrap();
+        }
+        bin
+    }
+
+    /// Run the end-session script (2 polls) against the fake; (stdout, the fake's call log).
+    fn run_end(alive: Option<&str>) -> (String, String) {
+        let dir = tempfile::TempDir::new().unwrap();
+        let bin = fake_tmux(dir.path(), alive);
+        let out = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(tmux_end_session_script("claudesk-dev", "cd-abcd1234", 2))
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("STATE", dir.path())
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "always exits 0");
+        let log = std::fs::read_to_string(dir.path().join("log")).unwrap_or_default();
+        (String::from_utf8_lossy(&out.stdout).into_owned(), log)
+    }
+
+    /// M17 WP4 (R-1): a session that ends on its own within the polls is left alone; one that does
+    /// not is killed, by its EXACT name on Claudesk's own server; no session is a no-op.
+    #[test]
+    fn the_end_session_script_waits_then_kills_only_a_session_that_did_not_exit() {
+        let (out, log) = run_end(Some("1"));
+        assert_eq!(out.trim(), "ended=exited");
+        assert!(!log.contains("kill-session"), "{log}");
+
+        let (out, log) = run_end(Some("forever"));
+        assert_eq!(out.trim(), "ended=killed");
+        assert!(
+            log.lines()
+                .any(|l| l == "-L claudesk-dev kill-session -t =cd-abcd1234"),
+            "{log}"
+        );
+        assert_eq!(
+            log.lines().filter(|l| l.contains("has-session")).count(),
+            3,
+            "2 polls, then the final check: {log}"
+        );
+
+        let (out, log) = run_end(None);
+        assert_eq!(out.trim(), "ended=exited");
+        assert!(!log.contains("kill-session"), "{log}");
+    }
+
+    /// Run [`has_transcript_command`] for `slug` in `shell` with `HOME=home`.
+    fn transcript_out(shell: &str, home: &std::path::Path, slug: &str) -> bool {
+        let out = Command::new(shell)
+            .arg("-c")
+            .arg(has_transcript_command(slug))
+            .env("HOME", home)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{shell}: always exits 0");
+        parse_has_transcript(&String::from_utf8_lossy(&out.stdout))
+    }
+
+    /// M17 WP4 (pulled from WP5 5.2): `yes` only when the project's dir holds a `*.jsonl`, in sh AND
+    /// zsh (the remote login shell).
+    #[test]
+    fn has_transcript_command_answers_from_the_projects_dir_in_sh_and_zsh() {
+        for shell in ["/bin/sh", "/bin/zsh"] {
+            let home = tempfile::TempDir::new().unwrap();
+            let slug = "-Users-u-proj";
+            assert!(!transcript_out(shell, home.path(), slug), "{shell}: no dir");
+            let dir = home.path().join(".claude/projects").join(slug);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("notes.txt"), "x").unwrap();
+            assert!(
+                !transcript_out(shell, home.path(), slug),
+                "{shell}: no jsonl"
+            );
+            std::fs::write(dir.join("abc.jsonl"), "{}").unwrap();
+            assert!(
+                transcript_out(shell, home.path(), slug),
+                "{shell}: a transcript"
+            );
+            assert!(
+                !transcript_out(shell, home.path(), "-Users-u-other"),
+                "{shell}: another project's dir is not this one's"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_has_transcript_is_yes_only_for_a_final_yes() {
+        assert!(parse_has_transcript(&format!(
+            "noise\n{TRANSCRIPT_SENTINEL}yes\n"
+        )));
+        assert!(parse_has_transcript(&format!(
+            "{TRANSCRIPT_SENTINEL}yes\r\n"
+        )));
+        assert!(!parse_has_transcript(&format!("{TRANSCRIPT_SENTINEL}no\n")));
+        assert!(!parse_has_transcript("yes\n"));
+        assert!(!parse_has_transcript(""));
+    }
+
+    #[test]
+    fn a_hostile_slug_is_data_in_the_transcript_command() {
+        let home = tempfile::TempDir::new().unwrap();
+        let canary = home.path().join("pwned");
+        for hostile in HOSTILE {
+            let slug = format!("{hostile}; touch {}", canary.display());
+            let _ = transcript_out("/bin/zsh", home.path(), &slug);
+        }
+        assert!(!canary.exists());
+    }
+
+    /// The path is data in the realpath command, whatever it holds.
+    #[test]
+    fn a_hostile_path_is_data_in_the_realpath_command() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let canary = dir.path().join("pwned");
+        for hostile in HOSTILE {
+            let p = format!("/x{hostile}; touch {}", canary.display());
+            let _ = realpath_out(&p);
         }
         assert!(!canary.exists());
     }

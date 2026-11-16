@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-16  # M17 /product-arch: PLANNED design; §A/§C/§H carry WP2 as-built notes, §B/§E WP3's. Resync at M17's /product-finalize.
+updated: 2026-11-16  # M17 /product-arch: PLANNED design; §A/§C/§H carry WP2 as-built notes, §B/§E WP3's, §D WP4's. Resync at M17's /product-finalize.
 ---
 
 # Remote workspaces (M17)
@@ -254,8 +254,10 @@ Measured in a real Claudesk xterm.js pane (the second terminal, same `XtermPane`
 
 ## D. Hook channel and drive mode (vision Q3)
 
-- **The same Perl script, deployed unchanged** to `~/.claudesk/<identifier>/claudesk-hook[-dev].pl` on
-  the remote. The mini has `/usr/bin/perl`. The script already exits 0 on every degraded path (no socket,
+- **The same Perl script, deployed unchanged** to `~/.claudesk/<identifier>/claudesk-remote-hook[-dev].pl`
+  on the remote (⚠️ corrected at WP4 from `claudesk-hook[-dev].pl`: the merge adopts any group whose
+  basename matches EXACTLY, so the local name would rewrite a local Claudesk's own group on a host that
+  runs one, and the two installs would flip-flop each launch; `hook_install::commands::remote_script_basename`). The mini has `/usr/bin/perl`. The script already exits 0 on every degraded path (no socket,
   bad stdin), so a down link or a dev/prod twin never blocks CC there either.
 - **Registration in the remote `~/.claude/settings.json`** reuses `hook_install`'s merge logic. The file
   is read with `cat`, the merge runs **locally**, and the result is written back atomically (`cat > tmp && mv`).
@@ -276,6 +278,43 @@ Measured in a real Claudesk xterm.js pane (the second terminal, same `XtermPane`
   arrive with an origin but no matching workspace, and status drops them. ⚠️ **`time_store` must refuse
   any event that carries an origin** (time analytics for remote is OUT). The filter goes at the
   ingestion point, with a test.
+- **As built (M17 WP4, Phases 2–3):**
+  - **Wire:** the hook adds `origin` only when `CLAUDESK_ORIGIN` is non-empty, and a remote invocation never
+    appends the `HOOK write-failed` trace (a machine-global host with no forward would grow that log
+    without bound). `HookEvent.origin` reads `""` as absent.
+  - **Origin:** `remote_cmd::hook_origin(host)` = `hash8(host)`, the ControlPath's value.
+  - **Routing:** `WorkspaceRegistry` derives a `Route` per key (`Local`, `Remote { origin, path }` from
+    `config_store::split_remote_key`) and `resolve(origin, cwd)` matches only within the event's scope. A
+    remote cwd is never canonicalized locally. The close path looks a row up by its exact key
+    (`workspace_id_for`).
+  - **Symlinked rows:** a stored path that reaches the folder through a symlink gets its physical path
+    (`cd -P && pwd -P` over the master, at each remote spawn) recorded as an alias, which the registry
+    matches too.
+  - **The install runs on the link worker**, after the master answers and BEFORE the link reports Up, so
+    any `ensure_and_hold` caller sees its result. It fetches over the master (`READ_SETTINGS`), merges
+    locally, and writes back only on change (`WRITE_SETTINGS`: the content on stdin, `cp -p` so the mode
+    survives, then `mv`).
+  - **A failed install never fails the link.** A malformed or wrong-shaped file is never written, and
+    the plain-words reason stays on the link (`LinkRegistry::hook_warning`). The remote workspace reads
+    it (`remote_hook_warning`) once its spawn resolves and shows it in its toast. ⚠️ It is READ, not
+    pushed: the link usually comes Up during the picker's open check, before any workspace exists to
+    listen, and a notice written into the pane is wiped by tmux's first redraw.
+  - Like the local install, the rewrite re-serializes the file: values are preserved, but key ORDER
+    follows `serde_json`'s map (sorted).
+  - The read-merge-write is not atomic against CC writing the same file within that one round trip;
+    accepted (TC-6).
+  - **`--continue` on a remote spawn** (pulled from WP5 5.2 at WP4): before the session-registry lock,
+    `cc_spawn_remote` asks the remote whether `~/.claude/projects/<slug of the PHYSICAL path>/` holds a
+    `*.jsonl` (`find`, one exec). `RemoteSpawn::has_transcript` is the guard's answer. A turn-level
+    respawn (drive-mode apply, Recycle) and an unclean-flag reopen now resume remotely, as they do
+    locally. A failed exec reads as "no": a fresh session is the safe side.
+- **An explicit close ENDS the remote session (R-1, made true at WP4).** After the terminal's `/exit`,
+  `RemoteCcSession::kill` runs `remote_cmd::tmux_end_session_command`: wait up to 5 s for CC to exit,
+  then `kill-session`. Before this, a CC busy past the 0.5 s `/exit` window kept running in tmux after
+  the close. While a close is in flight, its tmux session name is marked on the link registry
+  (`begin_close`), and `cc_spawn_remote` waits for it (`wait_not_closing`, 20 s). Without that, a
+  respawn (`cc_kill` is fire-and-forget) ran `new -A` and ATTACHED to the dying session. Both were
+  found live at WP4 P3.4.
 - **Drive mode** arrives on the remote CC as `CLAUDESK_DRIVE_MODE` in the spawn command line, and the
   script prints the same `additionalContext` line it prints locally. It is fixed at spawn, as locally. A
   picker change takes effect at the next spawn. A **reconnect keeps the session's original mode**, and
@@ -340,12 +379,25 @@ remote. Code, UI copy and tests use these two words for these two cases only.
 - **The unclean flag is unchanged.** It is set on open and cleared only by an explicit clean route. A passive
   drop leaves it set, which is correct: if the remote session later dies too (the remote reboots),
   reopening falls to `--continue`.
-- **Status while the link isn't Up is a display overlay, not a fifth state.** This is the same pattern as
-  `attention`. While the link is `Lost` or the workspace is `Detached`, `display_state` reads a
-  **link overlay**: the last state's hue, dimmed, plus a link glyph on the tile, PiP row and tray
-  menu row. `state` keeps the underlying value, and the close/quit and respawn guards keep reading
-  `state`. After a reconnect the state is `Unknown` until the next hook event: events missed while the
-  link was down are not replayed or guessed (`Unknown` is honest).
+- **Status while the terminal isn't attached is a display overlay, not a fifth state** (as built at M17 WP4).
+  This is the same pattern as `attention`, but a separate field: `WorkspaceStatusUpdate::link`
+  (`LinkOverlay { status: reconnecting | detached, host }`, `detached` reserved for WP5's Detach).
+  - **When it is set:** while a remote session's terminal is NOT ATTACHED, i.e. its link is `Lost` OR a
+    re-attach is pending over an Up link.
+  - **Producer:** the session's own edges, reported through an injected `LinkEdgeSink`
+    (`apply_link_edge` → `WorkspaceRegistry::set_link_overlay`), on the one `workspace-status` stream:
+    Lost in `on_inner_exit`'s Reconnect arm, Attached in `reconnect`, Ended in `emit_exit`. A hook
+    event during a pending re-attach keeps it (the drain stamps it, `drain_step`).
+  - **Surfaces:** the filmstrip tile and PiP row show the last state's hue, dimmed, plus a
+    broken-link glyph and the tooltip "Not connected to <host>: reconnecting"
+    (`WorkspaceStatusIndicator`'s `link`). The pane shows a strip, "Keys you type are not sent".
+  - **Tray:** ⚠️ corrected from "tray menu row": the tray has no per-workspace rows (a 2-state alarm,
+    M7). `display_state` IGNORES the overlay, so the tray folds the UNDERLYING state, and a lost
+    session awaiting input keeps the alarm lit.
+  - **Guards:** `state` keeps the underlying value, and the close/quit and respawn guards keep reading
+    `state`. It shows with the workflow gate OFF too (remote status is core).
+  - **After a re-attach** the workspace reads `Unknown` until the next hook event: events missed while
+    unattached are not replayed or guessed (`Unknown` is honest).
 
 ## F. Remote reads and watches (vision Q4)
 

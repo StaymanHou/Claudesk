@@ -90,6 +90,10 @@ pub fn cc_spawn(
     .map_err(|e| e.to_string())
 }
 
+/// How long a remote spawn waits for Claudesk's own close of the same tmux session (M17 WP4):
+/// the close's `/exit` window, the remote end's `END_POLLS` wait and two execs, with margin.
+pub const REMOTE_CLOSE_WAIT: std::time::Duration = std::time::Duration::from_secs(20);
+
 /// M17 WP3 — spawn the CC session of a REMOTE row (`project_path` is its `ssh://` key): bring the
 /// host link up, then register a session whose PTY runs `ssh -tt` into the workspace's tmux
 /// session (arch §C). Returns the session id; output, input, resize and kill use the same
@@ -115,8 +119,49 @@ pub async fn cc_spawn_remote(
             .ok_or("remote links are unavailable in this build")?
             .inner()
             .clone();
+        // M17 WP4: a respawn (drive-mode apply, Recycle) arrives while the previous session's
+        // close is still ending the SAME tmux session; `new -A` would attach to it as it dies.
+        let session = crate::remote_cmd::tmux_session(&project_path);
+        if !links.wait_not_closing(&session, REMOTE_CLOSE_WAIT) {
+            return Err(format!(
+                "the previous session on {} is still closing; try again in a moment",
+                target.host()
+            ));
+        }
         // The hold is counted under the same lock that found or started the link (WP4 AC-0).
         let (link, hold) = links.ensure_and_hold(&target)?;
+        // M17 WP4 (AC-3.3): a stored path that reaches the folder through a symlink. CC reports
+        // the PHYSICAL cwd, so the registry matches the row's real path too. Best-effort: no
+        // answer leaves the stored path alone.
+        let real = links
+            .exec(
+                &target,
+                &crate::remote_cmd::realpath_command(target.path()),
+                crate::remote_link::EXEC_TIMEOUT_MS,
+            )
+            .ok()
+            .and_then(|out| crate::remote_cmd::parse_realpath_alias(&out, target.path()));
+        if let Some(real) = &real {
+            if let Ok(mut reg) = app
+                .state::<crate::status_broadcaster::SharedRegistry>()
+                .lock()
+            {
+                reg.set_remote_realpath(&project_path, real.clone());
+            }
+        }
+        // M17 WP4 (pulled from WP5 5.2, operator decision): does the remote hold a transcript to
+        // `--continue`? Asked HERE, before the session registry lock, because it is an ssh exec.
+        // CC slugs the PHYSICAL cwd. A failed exec reads as "no": a fresh session is the safe side.
+        let physical = real.as_deref().unwrap_or(target.path());
+        let has_transcript = links
+            .exec(
+                &target,
+                &crate::remote_cmd::has_transcript_command(&crate::transcript::slug_of_physical(
+                    physical,
+                )),
+                crate::remote_link::EXEC_TIMEOUT_MS,
+            )
+            .is_ok_and(|out| crate::remote_cmd::parse_has_transcript(&out));
         let local_cwd = app
             .path()
             .home_dir()
@@ -136,8 +181,9 @@ pub async fn cc_spawn_remote(
                 target,
                 link,
                 hold,
-                session: crate::remote_cmd::tmux_session(&project_path),
+                session,
                 local_cwd,
+                has_transcript,
             })),
         )
         .map_err(|e| e.to_string())

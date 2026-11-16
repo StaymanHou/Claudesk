@@ -654,3 +654,23 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium (the MAJORs); low (the MINORs)
 - **Status:** pending
 - **Pickup shape:** the two link-lifecycle MAJORs (unheld open-check link; atomic ensure+hold) and `remote_link_ensure` belong with WP5 (lifecycle) — or a small task before WP4; the reconnect seam fits WP4/WP5, which extend that machinery; the rest is one cleanup task.
+
+## SURFACE-2026-11-16-REMOTE-WORKSPACE-SHOWS-LOCAL-ONLY-PANELS
+- **Source:** feature:verify-self (M17 WP4 Phase 4, live on the mini)
+- **Target level:** product:wbs
+- **Type:** gap
+- **Summary:** A REMOTE workspace's right panel shows the Docs / Editor / Diff / Terminal tabs. The Docs panel reads the `ssh://` key as a LOCAL path and shows "Could not read this project's docs: file I/O error: root \"ssh://<user>@<host>/…\": No such file or directory (os error 2)".
+- **Context:** arch §G says the IDE half is ABSENT on a remote row (vision Core Principle 7; only Prompt and the gated Docs panel are meant to show, and Docs needs remote reads, §F). Pre-existing since WP3; WP4 only made it visible in a screenshot.
+- **Suggested action:** Gate the right-panel tabs on remoteness (hide Editor/Diff/Terminal; Docs either reads over the link (§F) or is absent until it does). Check where the M17 WBS puts §G (likely WP6).
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-16-TRAY-HAS-NO-READOUT-FOR-LIVE-VERIFY
+- **Source:** feature:verify-human (M17 WP4 P4.verify-human.4, operator decision)
+- **Target level:** feature (dev tooling)
+- **Type:** gap
+- **Summary:** The menu-bar tray's alarm state cannot be observed by the agent: it has no IPC readout, and `screencapture` fails in agent sessions ("could not create image from display"). Two WP4 tray behaviours were accepted on unit tests alone: a lost remote session that was awaiting input keeps the alarm lit, and closing an awaiting workspace clears it.
+- **Context:** Accepted twice (P2.verify-human.1, P4.verify-human.4). Any future tray work hits the same wall.
+- **Suggested action:** Add a dev-only command (e.g. `tray_debug_state`, compiled in debug builds only) returning `TrayState.applied` plus the per-workspace map, callable over the MCP bridge. Then verify both WP4 behaviours live.
+- **Priority:** low
+- **Status:** pending

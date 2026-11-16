@@ -121,7 +121,7 @@ only if the build disproves one.
 **Description:** R-2–R-4 as specified in arch §E's table, plus the remote versions of the three file checks the two-signal rule decides on. That avoids research Risk 4, a **silent `--continue` drop**.
 **Tasks:**
 - [ ] 5.1 On open: `tmux has-session` over the master. **Live → attach, ahead of both signals.** The picker announces it ("Reconnect").
-- [ ] 5.2 Dead → the two-signal rule with **remote** `has_session_md`, `transcript::has_any_transcript` (remote slug from the remote realpath) and `folder_trusted`. Each is one dispatch inside the deciding function, not at its callers.
+- [ ] 5.2 Dead → the two-signal rule with **remote** `has_session_md`, `transcript::has_any_transcript` (remote slug from the remote realpath) and `folder_trusted`. Each is one dispatch inside the deciding function, not at its callers. ⚠️ **The transcript check SHIPPED in WP4** (operator decision at WP4 P3 build, 2026-11-16). Apply-now could not keep the conversation without it: `cc_spawn_remote` asks over the link (`remote_cmd::has_transcript_command`, physical-path slug) and `RemoteSpawn::has_transcript` answers the `--continue` guard. Remaining here: `has_session_md` and `folder_trusted`.
 - [ ] 5.3 `CcSession::detach()` (local default: `Unsupported`), the Detach / Reconnect control in the remote workspace's header, and the Detached tile state. The unclean flag is untouched.
 - [ ] 5.4 The R-4 dialogs: closing a detached workspace; a quit or close while the link is down (recorded end-intent, then a dialog at the next open); host unreachable at open; an unrecorded live `cd-*` session.
 - [ ] 5.5 The unclean-flag interplay is tested: a passive drop leaves it set; if the remote session then dies, reopening resolves to `--continue`.

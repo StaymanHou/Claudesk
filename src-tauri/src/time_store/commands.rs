@@ -75,6 +75,12 @@ impl TimeStore {
         if !gate_on {
             return Ok(()); // zero-IO gate: tracking OFF → no SQLite touch at all.
         }
+        // ⚠️ M17 WP4 (AC-4.1): an event from a REMOTE host's hook is refused here, at
+        // ingestion, before any mapping or write. Time analytics records every CC session on
+        // THIS machine; a remote host's sessions are explicitly out (arch §D).
+        if event.origin.is_some() {
+            return Ok(());
+        }
         let Some(row) = event_to_row(event) else {
             return Ok(()); // unmappable (empty event name) — not an error.
         };
@@ -917,6 +923,7 @@ mod tests {
             reason: None,
             background_task_count: None,
             background_task_types: None,
+            origin: None,
         }
     }
 
@@ -1040,6 +1047,23 @@ mod tests {
             .query_row("SELECT event FROM events LIMIT 1", [], |r| r.get(0))
             .unwrap();
         assert_eq!(event, "Stop", "only the gate-ON event persisted");
+    }
+
+    /// AC-4.1: an origin-tagged (remote) event is refused at ingestion with the gate ON. The
+    /// same event without the origin is the positive control: it writes one row.
+    #[test]
+    fn an_origin_tagged_event_is_refused_at_ingestion() {
+        let store = mem_store();
+        for name in ["UserPromptSubmit", "Stop", "PreToolUse", "SessionStart"] {
+            let remote = HookEvent {
+                origin: Some("a1b2c3d4".to_string()),
+                ..base_event(name)
+            };
+            store.write_gated(&remote, true).unwrap();
+        }
+        assert_eq!(count(&store), 0, "no remote event reaches the store");
+        store.write_gated(&base_event("Stop"), true).unwrap();
+        assert_eq!(count(&store), 1, "control: the local event is recorded");
     }
 
     #[test]

@@ -297,6 +297,12 @@ struct FakeTransport {
     check_delay: Mutex<Duration>,
     /// When set, the next spawned master is backed by this real process (so it has a real pid).
     real_child: Mutex<Option<Arc<Mutex<std::process::Child>>>>,
+    /// Every side-channel exec: (the remote command, its stdin).
+    execs: Mutex<Vec<(String, String)>>,
+    /// M17 WP4: when set, an exec runs its remote command in a REAL `/bin/sh` with `HOME` here, so
+    /// the hook install reads and writes real files. When unset, the host has no settings file
+    /// and every write succeeds.
+    shell_home: Mutex<Option<PathBuf>>,
 }
 
 struct FakeMaster(Arc<AtomicBool>, Option<Arc<Mutex<std::process::Child>>>);
@@ -343,6 +349,53 @@ impl Transport for FakeTransport {
         let delay = *self.check_delay.lock().unwrap();
         std::thread::sleep(delay);
         self.check_ok.load(Ordering::SeqCst)
+    }
+
+    fn exec(&self, argv: &[String], stdin: &str) -> Result<String, String> {
+        let remote = argv
+            .last()
+            .expect("an exec argv ends with its command")
+            .clone();
+        self.execs
+            .lock()
+            .unwrap()
+            .push((remote.clone(), stdin.to_string()));
+        let home = self.shell_home.lock().unwrap().clone();
+        match home {
+            None if remote == READ_SETTINGS => Ok(format!("{SETTINGS_SENTINEL}absent\n")),
+            None => Ok(String::new()),
+            Some(home) => run_in_shell(&home, &remote, stdin),
+        }
+    }
+}
+
+/// Run `script` in `/bin/sh` with `HOME=home` and `stdin`: the remote side of an exec, locally.
+fn run_in_shell(home: &Path, script: &str, stdin: &str) -> Result<String, String> {
+    use std::io::Write;
+    let mut child = Command::new("/bin/sh")
+        .arg("-c")
+        .arg(script)
+        .env("HOME", home)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(stdin.as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    } else {
+        Err(format!(
+            "exited {:?} ({})",
+            out.status.code(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ))
     }
 }
 
@@ -1311,4 +1364,387 @@ fn a_remote_terminal_never_falls_back_to_a_direct_connection() {
         None,
         "the control should still be connecting directly"
     );
+}
+
+// ---------------------------------------------------------------------------------------------
+// M17 WP4 Phase 3 — the remote hook: deploy (AC-1.1), registration (AC-1.2–1.4)
+// ---------------------------------------------------------------------------------------------
+
+const DEV: &str = "com.claudesk.app.dev";
+
+/// TC-4: a deployed file holding a line equal to the delimiter would end its heredoc early, and the
+/// rest would RUN as shell. Every file the pre-connect script writes is checked.
+#[test]
+fn the_heredoc_delimiter_never_occurs_as_a_line_in_a_deployed_file() {
+    let launcher = cc_launcher();
+    for (name, body) in [
+        ("claudesk-hook.pl", HOOK_SCRIPT),
+        ("tmux.conf", TMUX_CONF),
+        ("cc-launch", launcher.as_str()),
+    ] {
+        assert!(
+            !body
+                .lines()
+                .any(|l| l.trim_end_matches('\r') == HEREDOC_DELIMITER),
+            "{name} holds a line equal to the heredoc delimiter"
+        );
+    }
+    let s = pre_connect_script(DEV);
+    assert_eq!(
+        s.matches(&format!("<<'{HEREDOC_DELIMITER}'")).count(),
+        3,
+        "every heredoc is quoted and uses the checked delimiter: {s}"
+    );
+}
+
+/// AC-1.1: the pre-connect deploys the bundled script UNCHANGED under the remote basename, through
+/// a temp file and a rename, in sh and zsh, and the deployed copy compiles.
+#[test]
+fn the_pre_connect_script_deploys_the_hook_script_under_its_remote_name() {
+    for shell in ["/bin/sh", "/bin/zsh"] {
+        let home = TempDir::new().unwrap();
+        let out = run_pre_connect(shell, home.path(), DEV);
+        assert!(
+            out.status.success(),
+            "{shell}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let dir = home.path().join(".claudesk").join(DEV);
+        let deployed = dir.join("claudesk-remote-hook-dev.pl");
+        assert_eq!(
+            std::fs::read_to_string(&deployed).unwrap(),
+            HOOK_SCRIPT,
+            "{shell}: byte-identical to the bundled script"
+        );
+        assert!(
+            !dir.join("claudesk-remote-hook-dev.pl.tmp").exists(),
+            "{shell}"
+        );
+        assert!(
+            !dir.join("claudesk-hook-dev.pl").exists(),
+            "{shell}: never under the LOCAL basename (TC-2)"
+        );
+        let perl_ok = Command::new("perl")
+            .arg("-c")
+            .arg(&deployed)
+            .output()
+            .map(|o| o.status.success());
+        if let Ok(ok) = perl_ok {
+            assert!(ok, "{shell}: the deployed script compiles");
+        }
+    }
+}
+
+/// AC-1.4: the exact registered command. Each value is quoted, and the origin is `hook_origin`.
+#[test]
+fn the_remote_hook_command_is_quoted_and_names_the_origin() {
+    let cmd = remote_hook_command("/Users/me", DEV, "me@mini-host");
+    assert_eq!(
+        cmd,
+        format!(
+            "CLAUDESK_HOOK_SOCK='/Users/me/.claudesk/{DEV}/hook.sock' CLAUDESK_ORIGIN='{}' \
+             /usr/bin/perl '/Users/me/.claudesk/{DEV}/claudesk-remote-hook-dev.pl'",
+            crate::remote_cmd::hook_origin("me@mini-host")
+        )
+    );
+    assert_eq!(
+        crate::remote_cmd::hook_origin("me@mini-host"),
+        hash8("me@mini-host"),
+        "TC-3: the origin is the value that names the ControlPath"
+    );
+}
+
+#[test]
+fn parse_settings_read_reads_after_the_first_sentinel() {
+    assert_eq!(
+        parse_settings_read(&format!("rc noise\n{SETTINGS_SENTINEL}absent\n")),
+        Ok(None)
+    );
+    let body = format!("{{\n  \"a\": 1\n}}\n{SETTINGS_SENTINEL}absent\n");
+    assert_eq!(
+        parse_settings_read(&format!("noise\r\n{SETTINGS_SENTINEL}present\r\n{body}")),
+        Ok(Some(body.clone())),
+        "a sentinel-looking line INSIDE the file is part of the file"
+    );
+    assert!(parse_settings_read("no sentinel at all\n").is_err());
+    assert!(parse_settings_read("").is_err());
+}
+
+/// A transport that runs every exec in a real `/bin/sh` with `HOME=home`.
+fn shell_transport(home: &Path) -> FakeTransport {
+    let t = FakeTransport::default();
+    *t.shell_home.lock().unwrap() = Some(home.to_path_buf());
+    t
+}
+
+fn settings_path(home: &Path) -> PathBuf {
+    home.join(".claude").join("settings.json")
+}
+
+fn install_in(t: &FakeTransport, home: &Path) -> Result<(), String> {
+    install_remote_hook(
+        t,
+        Path::new("/AD/ssh/abcd1234"),
+        "me@mini-host",
+        &home.to_string_lossy(),
+        DEV,
+    )
+}
+
+/// The fixture of AC-1.3: keys Claudesk never wrote, a foreign hook group, and a LOCAL Claudesk's
+/// own group (`claudesk-hook.pl`) on the same host.
+fn fixture() -> serde_json::Value {
+    serde_json::json!({
+        "theme": "dark-daltonized",
+        "skipDangerousModePermissionPrompt": true,
+        "model": "opus",
+        "hooks": {
+            "Stop": [
+                { "hooks": [ { "type": "command", "command": "/usr/local/bin/notify.sh stop" } ] },
+                { "hooks": [ { "type": "command",
+                  "command": "CLAUDESK_HOOK_SOCK='/x/hook.sock' /usr/bin/perl '/x/claudesk-hook.pl'" } ] }
+            ],
+            "PreCompact": [
+                { "matcher": "auto", "hooks": [ { "type": "command", "command": "echo hi" } ] }
+            ]
+        }
+    })
+}
+
+/// AC-1.3: the install path, end to end in a real shell, on the fixture. Every key and group
+/// Claudesk did not write survives as a JSON value, the local Claudesk's group included, and our
+/// group is registered once for all 10 events with the exact remote command.
+#[test]
+fn the_remote_install_preserves_every_key_and_group_it_did_not_write() {
+    let home = TempDir::new().unwrap();
+    let path = settings_path(home.path());
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let before = fixture();
+    std::fs::write(&path, serde_json::to_string_pretty(&before).unwrap()).unwrap();
+
+    let t = shell_transport(home.path());
+    install_in(&t, home.path()).expect("installs");
+    let after: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+
+    for key in ["theme", "skipDangerousModePermissionPrompt", "model"] {
+        assert_eq!(after[key], before[key], "{key} survives");
+    }
+    assert_eq!(
+        after["hooks"]["PreCompact"], before["hooks"]["PreCompact"],
+        "an event Claudesk never registers is untouched"
+    );
+    let stop = after["hooks"]["Stop"].as_array().unwrap();
+    for g in before["hooks"]["Stop"].as_array().unwrap() {
+        assert!(
+            stop.contains(g),
+            "a group Claudesk did not write survives: {g}"
+        );
+    }
+    let ours = remote_hook_command(&home.path().to_string_lossy(), DEV, "me@mini-host");
+    for event in crate::hook_install::CLAUDESK_EVENTS {
+        let groups = after["hooks"][event].as_array().unwrap();
+        let mine: Vec<_> = groups
+            .iter()
+            .filter(|g| g["hooks"][0]["command"].as_str() == Some(ours.as_str()))
+            .collect();
+        assert_eq!(mine.len(), 1, "{event}: exactly one remote Claudesk group");
+    }
+    assert!(!home
+        .path()
+        .join(".claude/settings.json.claudesk.tmp")
+        .exists());
+}
+
+/// AC-1.4: re-running the install with the same command writes nothing (only the read happens),
+/// and the file is byte-identical.
+#[test]
+fn a_repeated_remote_install_is_a_no_op_write_skip() {
+    let home = TempDir::new().unwrap();
+    let t = shell_transport(home.path());
+    install_in(&t, home.path()).expect("first install");
+    let path = settings_path(home.path());
+    let first = std::fs::read(&path).unwrap();
+    let writes_after_first = t
+        .execs
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(c, _)| c == WRITE_SETTINGS)
+        .count();
+    assert_eq!(writes_after_first, 1);
+
+    install_in(&t, home.path()).expect("second install");
+    let execs = t.execs.lock().unwrap();
+    assert_eq!(
+        execs.iter().filter(|(c, _)| c == WRITE_SETTINGS).count(),
+        1,
+        "the second install wrote nothing"
+    );
+    assert_eq!(execs.last().unwrap().0, READ_SETTINGS);
+    assert_eq!(std::fs::read(&path).unwrap(), first, "byte-identical");
+}
+
+/// AC-1.2: an absent file is created holding just the hooks block.
+#[test]
+fn an_absent_remote_settings_file_is_created_with_just_the_hooks() {
+    let home = TempDir::new().unwrap();
+    let t = shell_transport(home.path());
+    install_in(&t, home.path()).expect("installs");
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(settings_path(home.path())).unwrap())
+            .unwrap();
+    let keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
+    assert_eq!(keys, ["hooks"]);
+}
+
+/// AC-1.2: a malformed file is NEVER written, and the reason comes back in plain words.
+#[test]
+fn a_malformed_remote_settings_file_is_never_written() {
+    for bad in ["{ \"theme\": ", "", "[1, 2]", "{\"hooks\": 3}"] {
+        let home = TempDir::new().unwrap();
+        let path = settings_path(home.path());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, bad).unwrap();
+        let t = shell_transport(home.path());
+        let err = install_in(&t, home.path()).expect_err("refused");
+        assert!(err.contains("left untouched"), "{bad:?}: {err}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), bad, "{bad:?}");
+        assert!(
+            t.execs
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|(c, _)| c != WRITE_SETTINGS),
+            "{bad:?}: no write was even attempted"
+        );
+    }
+}
+
+/// The write keeps the file's mode (a `0600` settings file must not become world-readable).
+#[test]
+fn the_remote_settings_write_keeps_the_file_mode() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = TempDir::new().unwrap();
+    let path = settings_path(home.path());
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, "{}").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    install_in(&shell_transport(home.path()), home.path()).expect("installs");
+    let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o600);
+}
+
+/// AC-1.2, in the worker: the install runs BEFORE the link is reported Up, a failure leaves the
+/// link Up with the plain-words warning on it, and a later good connect clears it.
+#[test]
+fn a_failed_remote_install_leaves_the_link_up_with_a_warning() {
+    let h = harness();
+    let home = TempDir::new().unwrap();
+    let path = settings_path(home.path());
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, "{ broken").unwrap();
+    *h.t.shell_home.lock().unwrap() = Some(home.path().to_path_buf());
+
+    let t = target();
+    let (_info, hold) = up(&h.reg, &t);
+    let warning = h
+        .reg
+        .hook_warning(t.host())
+        .expect("a warning, readable as soon as Up");
+    assert!(warning.contains("me@mini-host"), "{warning}");
+    assert!(warning.contains("not valid JSON"), "{warning}");
+    assert_eq!(
+        h.reg.state(t.host()),
+        Some(LinkState::Up),
+        "the link is still up"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "{ broken",
+        "never written"
+    );
+    drop(hold);
+
+    // The host is fixed; the next connect's install works and clears the warning.
+    std::fs::write(&path, "{}").unwrap();
+    let (_info, _hold) = up(&h.reg, &t);
+    assert_eq!(h.reg.hook_warning(t.host()), None);
+}
+
+/// AC-1.2 pins the ORDER: a caller that returns from `ensure_and_hold` has already seen the
+/// install's read (it ran before Up was reported).
+#[test]
+fn the_remote_install_runs_before_the_link_reports_up() {
+    let h = harness();
+    let (_info, _hold) = up(&h.reg, &target());
+    let execs = h.t.execs.lock().unwrap();
+    assert!(
+        execs.iter().any(|(c, _)| c == READ_SETTINGS),
+        "the settings were read before Up: {execs:?}"
+    );
+    assert!(
+        execs.iter().any(|(c, _)| c == WRITE_SETTINGS),
+        "and our hook was written (the fake host has no settings file)"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// M17 WP4 — a respawn waits for Claudesk's own close of the same tmux session
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn wait_not_closing_returns_at_once_when_nothing_closes() {
+    let h = harness();
+    let t0 = Instant::now();
+    assert!(h.reg.wait_not_closing("cd-x", Duration::from_secs(5)));
+    assert!(t0.elapsed() < Duration::from_millis(100));
+}
+
+#[test]
+fn wait_not_closing_waits_for_the_close_to_end() {
+    let h = harness();
+    let guard = h.reg.begin_close("cd-x");
+    let t0 = Instant::now();
+    let dropper = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(300));
+        drop(guard);
+    });
+    assert!(h.reg.wait_not_closing("cd-x", Duration::from_secs(5)));
+    assert!(
+        t0.elapsed() >= Duration::from_millis(250),
+        "it waited for the close: {:?}",
+        t0.elapsed()
+    );
+    assert!(
+        t0.elapsed() < Duration::from_secs(2),
+        "and woke when it ended, not at the timeout: {:?}",
+        t0.elapsed()
+    );
+    dropper.join().unwrap();
+}
+
+#[test]
+fn wait_not_closing_times_out_and_only_watches_its_own_session() {
+    let h = harness();
+    let _a = h.reg.begin_close("cd-a");
+    assert!(
+        !h.reg.wait_not_closing("cd-a", Duration::from_millis(150)),
+        "a close that does not end times out"
+    );
+    assert!(
+        h.reg.wait_not_closing("cd-b", Duration::from_millis(150)),
+        "another session's close does not hold this spawn"
+    );
+}
+
+#[test]
+fn two_closes_of_one_session_hold_until_both_end() {
+    let h = harness();
+    let first = h.reg.begin_close("cd-x");
+    let second = h.reg.begin_close("cd-x");
+    drop(first);
+    assert!(!h.reg.wait_not_closing("cd-x", Duration::from_millis(100)));
+    drop(second);
+    assert!(h.reg.wait_not_closing("cd-x", Duration::from_millis(100)));
 }

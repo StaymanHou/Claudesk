@@ -33,6 +33,25 @@ export type WireWorkspaceState =
 export type WireAttention = "verify_human";
 
 /**
+ * M17 WP4 (AC-6) — a REMOTE workspace's terminal is not attached, so its dot cannot be trusted.
+ * The TS mirror of Rust's `status_broadcaster::LinkOverlay`. A **display field** like `attention`:
+ * surfaces show the last hue dimmed with a broken-link glyph, and nothing a guard reads changes.
+ * `detached` is reserved for WP5's Detach (no WP4 path sets it).
+ */
+export interface WireLinkOverlay {
+  status: "reconnecting" | "detached";
+  /** The host as a person would say it (`mini`), for the tooltip. */
+  host: string;
+}
+
+/** The tooltip for a link overlay, in plain words (AC-6.2). */
+export function linkOverlayTitle(link: WireLinkOverlay): string {
+  return link.status === "detached"
+    ? `Detached from ${link.host}`
+    : `Not connected to ${link.host}: reconnecting`;
+}
+
+/**
  * The payload of the `workspace-status` Tauri event — mirrors
  * `status_broadcaster::WorkspaceStatusUpdate` field-for-field, snake_case.
  * Optional fields are omitted on the wire when absent (backend
@@ -123,6 +142,12 @@ export interface WorkspaceStatusUpdate {
    * verify-human pause has nothing in flight to protect (operator ruling Q1, "color only").
    */
   attention?: WireAttention;
+  /**
+   * The link overlay, while a REMOTE workspace's terminal is not attached (M17 WP4). Absent for
+   * every local workspace and every attached remote one. ⚠️ Read it only through {@link linkFor}
+   * (display surfaces and the pane's strip); guards keep reading `state`.
+   */
+  link?: WireLinkOverlay;
 }
 
 /** The Tauri event name — mirrors `status_broadcaster::commands::STATUS_EVENT`. */
@@ -198,6 +223,8 @@ export interface WorkspaceStatusEntry {
   snippet?: string;
   /** The live display overlay, if any (M16.5 WP4). Cleared by the next update without one. */
   attention?: WireAttention;
+  /** The live link overlay, if any (M17 WP4). The backend stamps it on every update while on. */
+  link?: WireLinkOverlay;
 }
 
 /**
@@ -225,6 +252,7 @@ export function applyStatusUpdate(
       state: update.state,
       snippet: update.last_output_snippet,
       attention: update.attention,
+      link: update.link,
     },
   };
 }
@@ -259,6 +287,18 @@ export function displayStateFor(
   return map[workspaceId]?.attention != null
     ? "awaiting_input"
     : stateFor(map, workspaceId);
+}
+
+/**
+ * The live link overlay of a workspace id, or `undefined` (M17 WP4). ⚠️ Display only — the
+ * filmstrip, the PiP and the pane's reconnecting strip. It changes neither {@link stateFor} nor
+ * {@link displayStateFor}: the dot keeps its last hue (dimmed), and the guards' input is unchanged.
+ */
+export function linkFor(
+  map: WorkspaceStatusMap,
+  workspaceId: string,
+): WireLinkOverlay | undefined {
+  return map[workspaceId]?.link ?? undefined;
 }
 
 /**

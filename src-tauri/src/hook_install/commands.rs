@@ -38,6 +38,19 @@ pub(crate) fn script_basename(identifier: &str) -> &'static str {
     }
 }
 
+/// The hook-script basename on a REMOTE host (M17 WP4, TC-2), per identity like
+/// [`script_basename`]. ⚠️ Deliberately NOT the local basename: `merge_claudesk_hooks` adopts any
+/// group whose script basename matches EXACTLY, so a host that also runs its own Claudesk would
+/// have its local group rewritten by our remote install (and the two would flip-flop on every
+/// launch). A distinct basename keeps each install touching only its own groups.
+pub(crate) fn remote_script_basename(identifier: &str) -> &'static str {
+    if identifier.ends_with(".dev") {
+        "claudesk-remote-hook-dev.pl"
+    } else {
+        "claudesk-remote-hook.pl"
+    }
+}
+
 /// The deployed hook-script basename for THIS running build, from its identifier.
 fn hook_script_name(app: &AppHandle) -> &'static str {
     script_basename(&app.config().identifier)
@@ -538,6 +551,25 @@ mod tests {
             script_basename("com.claudesk.app.dev"),
             "claudesk-hook-dev.pl"
         );
+    }
+
+    #[test]
+    /// M17 WP4 (TC-2): the remote basename is per identity and never equals EITHER local one,
+    /// so the exact-basename merge can never adopt a local Claudesk's group on the same host.
+    fn remote_script_basename_is_per_identity_and_never_a_local_one() {
+        assert_eq!(
+            remote_script_basename("com.claudesk.app"),
+            "claudesk-remote-hook.pl"
+        );
+        assert_eq!(
+            remote_script_basename("com.claudesk.app.dev"),
+            "claudesk-remote-hook-dev.pl"
+        );
+        for id in ["com.claudesk.app", "com.claudesk.app.dev"] {
+            for local in [HOOK_SCRIPT_NAME_PROD, HOOK_SCRIPT_NAME_DEV] {
+                assert_ne!(remote_script_basename(id), local);
+            }
+        }
     }
 
     #[test]

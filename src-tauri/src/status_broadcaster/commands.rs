@@ -25,8 +25,7 @@ use std::thread;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use super::{
-    canonical_key, event_to_state, state_label, to_update, Attention, SharedRegistry,
-    WorkspaceRegistry,
+    canonical_key, event_to_state, state_label, Attention, SharedRegistry, WorkspaceRegistry,
 };
 use crate::hook_socket::HookEvent;
 use crate::status_log::{format_event_detail, format_event_line, StatusLog};
@@ -90,7 +89,7 @@ pub fn start_broadcaster(app: AppHandle, receiver: Receiver<HookEvent>) -> threa
 
 /// The drain-loop body — extracted so it reads top-to-bottom and so the per-event
 /// transform path is obvious. Blocks on `rx.recv()`; for each event, locks the
-/// managed registry, runs the pure [`to_update`] transform, and emits the result if
+/// managed registry, runs the pure [`super::to_update`] transform, and emits the result if
 /// the event mapped to a state AND its cwd resolved to an open workspace (otherwise
 /// the event is silently dropped — not an error). A `recv` `Err` (sender dropped =
 /// socket listener gone) ends the loop cleanly.
@@ -126,15 +125,9 @@ fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>, status_log: Option<
                 Ok(r) => r,
                 Err(poisoned) => poisoned.into_inner(), // a poisoned lock is still readable
             };
-            let mapped = event_to_state(&event);
-            let resolved = reg.resolve_cwd(&event.cwd);
-            let update = to_update(&event, &reg);
-            // M16.5 WP4: remember it BEFORE emitting, under the same lock, so a promotion
-            // racing this event compares against it (`WorkspaceRegistry::promote`).
-            if let Some(u) = &update {
-                reg.record_emitted(u);
-            }
-            (mapped, resolved, update)
+            // M16.5 WP4: recorded BEFORE emitting, under the same lock, so a promotion racing
+            // this event compares against it; M17 WP4: stamped with any live link overlay.
+            super::drain_step(&mut reg, &event)
         };
 
         // M6 WP1: one telemetry line per drained event (best-effort; never blocks).
@@ -156,6 +149,22 @@ fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>, status_log: Option<
     // Exit cleanly — nothing more will arrive.
 }
 
+/// The app's [`super::LinkEdgeSink`] for the remote row keyed `key` on `host` (M17 WP4): apply the
+/// edge to the managed registry ([`super::apply_link_edge`]) and emit the result on
+/// [`STATUS_EVENT`], so the filmstrip, PiP and tray all see it on the one stream.
+pub fn link_edge_sink(app: AppHandle, key: String, host: String) -> super::LinkEdgeSink {
+    std::sync::Arc::new(move |edge| {
+        let Some(registry) = app.try_state::<SharedRegistry>() else {
+            return;
+        };
+        super::apply_link_edge(&registry, &key, &host, edge, &|u| {
+            if let Err(e) = app.emit(STATUS_EVENT, u) {
+                eprintln!("[claudesk] status-broadcaster: link overlay emit failed: {e}");
+            }
+        });
+    })
+}
+
 /// The managed [`SharedRegistry`] WP4 registers at launch. Empty until WP6 wires
 /// workspace-open → `register` / close → `deregister`; the broadcaster emits nothing
 /// until a workspace's project path is registered (an unmatched cwd is dropped). Kept
@@ -167,7 +176,7 @@ pub fn init_registry() -> SharedRegistry {
 /// Register an open workspace's project path → `workspace_id` so the broadcaster's
 /// cwd→workspace match can resolve hook events fired from that project dir. Called
 /// by the frontend on workspace-open (M3 WP6). The path is canonicalized inside
-/// [`WorkspaceRegistry::register`], matching how `resolve_cwd` canonicalizes the
+/// [`WorkspaceRegistry::register`], matching how `resolve` canonicalizes the
 /// incoming hook `cwd`.
 ///
 /// A poisoned lock is surfaced as an error rather than swallowed (the never-swallow
@@ -216,8 +225,9 @@ pub fn workspace_deregister(
             .map_err(|_| "workspace registry lock poisoned".to_string())?;
         // M7: resolve the closing workspace's id BEFORE removing it, so the tray can drop
         // it from the alarm map (else a workspace that was AwaitingInput at close keeps the
-        // menu-bar glyph lit forever). resolve_cwd on the project path returns its id.
-        let closed_id = reg.resolve_cwd(&project_path);
+        // menu-bar glyph lit forever). An exact key lookup, so a remote row's id is found too
+        // (M17 WP4: an event resolve never matches a remote key without an origin).
+        let closed_id = reg.workspace_id_for(Path::new(&project_path));
         reg.deregister(Path::new(&project_path));
         (reg.len(), closed_id)
     }; // drop the registry lock before the AppKit reconcile (don't hold it across a window op).
@@ -761,7 +771,7 @@ mod tests {
         }
         // A hook event from that cwd now resolves to the workspace.
         assert_eq!(
-            shared.lock().unwrap().resolve_cwd(&cwd),
+            shared.lock().unwrap().resolve(None, &cwd),
             Some("ws-1".to_string())
         );
 
@@ -771,7 +781,7 @@ mod tests {
             reg.deregister(Path::new(&cwd));
         }
         // Now it misses — the event would be dropped (status stays Unknown).
-        assert_eq!(shared.lock().unwrap().resolve_cwd(&cwd), None);
+        assert_eq!(shared.lock().unwrap().resolve(None, &cwd), None);
     }
 
     #[test]
@@ -796,7 +806,7 @@ mod tests {
             shared
                 .lock()
                 .unwrap()
-                .resolve_cwd(&subdir.to_string_lossy()),
+                .resolve(None, &subdir.to_string_lossy()),
             Some("ws-1".to_string()),
             "a hook event from a workspace subdir must resolve to that workspace"
         );

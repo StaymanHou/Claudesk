@@ -36,7 +36,7 @@
 //! live states or is dropped. `Unknown` is the registry/frontend initial value.
 //!
 //! ## cwd→workspace mapping
-//! [`WorkspaceRegistry::resolve_cwd`] canonicalizes both the event's `cwd` and each
+//! [`WorkspaceRegistry::resolve`] canonicalizes both the event's `cwd` and each
 //! registered project path before comparing (the M2 WP11 path-keying lesson —
 //! symlinks / `.` / relative segments must not defeat the match; see
 //! `git_status/mod.rs`). An event whose `cwd` matches no open workspace is **dropped,
@@ -300,6 +300,78 @@ pub enum Attention {
     VerifyHuman,
 }
 
+/// M17 WP4 (AC-6) — why a REMOTE workspace's dot cannot be trusted right now: its terminal is
+/// not attached (the host link is down, or a re-attach is pending). A **display field**, like
+/// [`Attention`], never a fifth state: the tile and PiP row show the last state's hue dimmed with a
+/// broken-link glyph, and nothing a guard reads changes. ⚠️ [`display_state`] ignores it on
+/// purpose, so the tray folds the UNDERLYING state (a lost session that was awaiting input still
+/// needs the operator, who has to reconnect to answer it).
+///
+/// Not a workflow-gated surface: remote status is core, so it shows with the M10.9 gate OFF too.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LinkOverlay {
+    pub status: LinkOverlayStatus,
+    /// The host as a person would say it (`cc_session::short_host`), for the tooltip.
+    pub host: String,
+}
+
+/// What [`LinkOverlay`] says about the link.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LinkOverlayStatus {
+    /// Not attached, and Claudesk is reconnecting on its own (WP4).
+    Reconnecting,
+    /// The operator detached the workspace (AC-6.4). Reserved: WP5's Detach (5.3) is its
+    /// producer, and no WP4 path sets it.
+    Detached,
+}
+
+/// One edge of a remote session's terminal, as the link overlay sees it (M17 WP4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkEdge {
+    /// The terminal ended and the session is reconnecting: the overlay goes ON.
+    Lost,
+    /// A new terminal is attached: the overlay goes OFF and the workspace reads Unknown until its
+    /// next hook event (AC-6.3: missed events are not replayed or guessed).
+    Attached,
+    /// The session ended (closed, or the reconnect gave up): any overlay goes OFF.
+    Ended,
+}
+
+/// The seam a remote session reports its [`LinkEdge`]s through (the WP3 review's emitter-seam
+/// rule: a new emit inside `RemoteShared` goes through an injected sink, driven by a test). Built by
+/// `commands::link_edge_sink` for the app; [`apply_link_edge`] is its testable body.
+pub type LinkEdgeSink = std::sync::Arc<dyn Fn(LinkEdge) + Send + Sync>;
+
+/// Apply one [`LinkEdge`] for the remote row keyed `key` to the registry under its lock, then emit
+/// the resulting update (if any) with the lock RELEASED. The body of the app's
+/// [`LinkEdgeSink`], split out so a test drives it with a real registry and a recording `emit`.
+pub fn apply_link_edge(
+    registry: &Mutex<WorkspaceRegistry>,
+    key: &str,
+    host: &str,
+    edge: LinkEdge,
+    emit: &dyn Fn(&WorkspaceStatusUpdate),
+) {
+    let update = {
+        let mut reg = match registry.lock() {
+            Ok(r) => r,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let link = match edge {
+            LinkEdge::Lost => Some(LinkOverlay {
+                status: LinkOverlayStatus::Reconnecting,
+                host: host.to_string(),
+            }),
+            LinkEdge::Attached | LinkEdge::Ended => None,
+        };
+        reg.set_link_overlay(key, link)
+    };
+    if let Some(u) = update {
+        emit(&u);
+    }
+}
+
 /// The status update broadcast on the `workspace-status` Tauri event — the single
 /// DTO every status surface consumes.
 ///
@@ -384,7 +456,7 @@ pub struct WorkspaceStatusUpdate {
     ///
     /// ⚠️ **This value was already arriving and was being DROPPED here.** The hook parses it
     /// into [`HookEvent::session_id`], but every DTO built before M15 WP3 discarded it, so
-    /// the only workspace key on the wire was the one [`WorkspaceRegistry::resolve_cwd`]
+    /// the only workspace key on the wire was the one [`WorkspaceRegistry::resolve`]
     /// derives from `cwd` — and that registry is a **1:1 `by_path` map** whose `resolve_cwd`
     /// returns a **single** id by longest-path-ancestor match. Two CC sessions in one tree
     /// therefore collapse onto one workspace and are indistinguishable
@@ -410,6 +482,12 @@ pub struct WorkspaceStatusUpdate {
     /// gate-OFF DTO byte-identical.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub attention: Option<Attention>,
+    /// The link overlay, while a REMOTE workspace's terminal is not attached (M17 WP4, AC-6).
+    /// Display only, like `attention`: surfaces dim the dot and show a broken-link glyph; guards
+    /// keep reading `state`. Absent (omitted on the wire) for every local workspace and every
+    /// attached remote one, so those DTOs are byte-identical to before.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub link: Option<LinkOverlay>,
 }
 
 /// Maps a canonicalized project path → its `workspace_id`. The cwd→workspace seam:
@@ -420,12 +498,63 @@ pub struct WorkspaceStatusUpdate {
 /// workspace.
 #[derive(Debug, Default)]
 pub struct WorkspaceRegistry {
-    /// canonicalized-project-path-string → workspace_id
-    by_path: HashMap<String, String>,
+    /// canonicalized-project-path-string (a remote row's `ssh://host/path` key, unchanged) →
+    /// the workspace and the scope its events route in.
+    by_path: HashMap<String, Registered>,
+    /// A remote row's PHYSICAL path on its host, by its `ssh://` key, when the stored path reaches
+    /// the folder through a symlink (M17 WP4, AC-3.3). CC reports a physical cwd, so the row's
+    /// events match this as well as the stored path. Set at each remote spawn; kept apart from
+    /// `by_path` because the spawn and `workspace_register` race, and it only ever applies to
+    /// its own key's workspace, so a stale entry is harmless.
+    remote_realpaths: HashMap<String, String>,
     /// Each open workspace's LAST EMITTED hook-derived update, plus any live display
     /// overlay (M16.5 WP4). The compare-and-set in [`promote`](Self::promote) reads it, so a
     /// promotion decided for a `Stop` can never overwrite a newer event.
     last_emitted: HashMap<String, LastEmitted>,
+}
+
+/// One open workspace in the registry (M17 WP4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Registered {
+    workspace_id: String,
+    route: Route,
+}
+
+/// Where a workspace's hook events come from, derived from its registry key (M17 WP4, AC-3.1).
+/// An event matches only workspaces of its own scope: no origin → [`Route::Local`] only; an
+/// origin → only the [`Route::Remote`] workspaces of the host with that origin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Route {
+    /// A local project: its canonical path.
+    Local(String),
+    /// A remote row: `hook_origin(host)` and the remote path, never canonicalized locally.
+    Remote { origin: String, path: String },
+    /// A remote key with no host or path (not storable; defensive). Matches no event.
+    Unroutable,
+}
+
+impl Route {
+    fn for_key(key: &str) -> Self {
+        if !crate::config_store::is_remote_key(key) {
+            return Route::Local(key.to_string());
+        }
+        match crate::config_store::split_remote_key(key) {
+            Some((host, path)) => Route::Remote {
+                origin: crate::remote_cmd::hook_origin(host),
+                path: path.to_string(),
+            },
+            None => Route::Unroutable,
+        }
+    }
+
+    /// The path an event's cwd is matched against, if this route is in `origin`'s scope.
+    fn path_in_scope(&self, origin: Option<&str>) -> Option<&str> {
+        match (self, origin) {
+            (Route::Local(p), None) => Some(p),
+            (Route::Remote { origin: o, path }, Some(e)) if o == e => Some(path),
+            _ => None,
+        }
+    }
 }
 
 /// What the registry remembers about one workspace's latest emitted update (M16.5 WP4).
@@ -435,6 +564,9 @@ struct LastEmitted {
     update: WorkspaceStatusUpdate,
     /// The overlay currently shown on top of it, if any.
     attention: Option<Attention>,
+    /// The link overlay currently shown on top of it, if any (M17 WP4). Survives hook events: a
+    /// still-running remote CC can report over an Up link while its re-attach is pending.
+    link: Option<LinkOverlay>,
 }
 
 /// The re-emit for an overlay change: `base` with `attention` set (or cleared).
@@ -446,12 +578,30 @@ struct LastEmitted {
 fn overlay_update(
     base: &WorkspaceStatusUpdate,
     attention: Option<Attention>,
+    link: Option<LinkOverlay>,
 ) -> WorkspaceStatusUpdate {
     WorkspaceStatusUpdate {
         is_turn_start: None,
         is_turn_end: None,
         attention,
+        link,
         ..base.clone()
+    }
+}
+
+/// A workspace that has no observation (M17 WP4): the honest Unknown, with nothing carried over.
+fn unknown_update(workspace_id: &str) -> WorkspaceStatusUpdate {
+    WorkspaceStatusUpdate {
+        workspace_id: workspace_id.to_string(),
+        state: WorkspaceState::Unknown,
+        last_event_at: None,
+        last_output_snippet: None,
+        notification_type: None,
+        is_turn_start: None,
+        is_turn_end: None,
+        session_id: None,
+        attention: None,
+        link: None,
     }
 }
 
@@ -459,6 +609,9 @@ fn overlay_update(
 /// else the hook-derived state (M16.5 WP4). The tray's fold reads this; the TS mirror is
 /// `displayStateFor`. ⚠️ Only display consumers may call it (see
 /// [`WorkspaceStatusUpdate::attention`]).
+///
+/// ⚠️ It IGNORES [`WorkspaceStatusUpdate::link`] on purpose (M17 WP4, AC-6.2): the tray folds the
+/// underlying state, so a lost remote session that was awaiting input keeps the alarm lit.
 pub fn display_state(update: &WorkspaceStatusUpdate) -> WorkspaceState {
     match update.attention {
         Some(Attention::VerifyHuman) => WorkspaceState::AwaitingInput,
@@ -480,30 +633,115 @@ impl WorkspaceRegistry {
     /// Called by WP6's `workspace_register` command (open → register).
     pub fn register(&mut self, project_path: &Path, workspace_id: String) {
         let key = canonical_key(project_path);
-        self.by_path.insert(key, workspace_id);
+        let route = Route::for_key(&key);
+        self.by_path.insert(
+            key,
+            Registered {
+                workspace_id,
+                route,
+            },
+        );
     }
 
     /// Deregister a closed workspace by its project path. Called by WP6's
     /// `workspace_deregister` command (close → deregister).
     pub fn deregister(&mut self, project_path: &Path) {
         let key = canonical_key(project_path);
-        if let Some(workspace_id) = self.by_path.remove(&key) {
+        if let Some(entry) = self.by_path.remove(&key) {
             // A closed workspace's overlay must not outlive it (M16.5 WP4).
-            self.last_emitted.remove(&workspace_id);
+            self.last_emitted.remove(&entry.workspace_id);
         }
+    }
+
+    /// Record `real` as the physical path of the remote row keyed `key` (AC-3.3).
+    pub fn set_remote_realpath(&mut self, key: &str, real: String) {
+        self.remote_realpaths.insert(key.to_string(), real);
+    }
+
+    /// The workspace registered under exactly `project_path` (its key, local or remote), for
+    /// the close path (M17 WP4). ⚠️ Not [`resolve`](Self::resolve): that routes an EVENT's cwd
+    /// within one origin's scope, so a remote key would never resolve through it.
+    pub fn workspace_id_for(&self, project_path: &Path) -> Option<String> {
+        self.by_path
+            .get(&canonical_key(project_path))
+            .map(|e| e.workspace_id.clone())
     }
 
     /// Remember an update the drain loop is about to emit (M16.5 WP4). It replaces the
     /// previous record, which is what clears any overlay on the workspace's next
     /// state-mapped hook event.
     pub fn record_emitted(&mut self, update: &WorkspaceStatusUpdate) {
+        // M17 WP4: the link overlay is NOT cleared by a hook event (see `LastEmitted::link`).
+        let link = self.link_of(&update.workspace_id);
         self.last_emitted.insert(
             update.workspace_id.clone(),
             LastEmitted {
-                update: update.clone(),
+                update: WorkspaceStatusUpdate {
+                    link: None,
+                    ..update.clone()
+                },
                 attention: None,
+                link,
             },
         );
+    }
+
+    /// The live link overlay of `workspace_id`, if any (M17 WP4). The drain stamps it onto every
+    /// hook-derived update it emits for that workspace.
+    pub fn link_of(&self, workspace_id: &str) -> Option<LinkOverlay> {
+        self.last_emitted
+            .get(workspace_id)
+            .and_then(|e| e.link.clone())
+    }
+
+    /// Set (`Some`) or clear (`None`) the link overlay of the remote row keyed `key` (M17 WP4,
+    /// AC-6.1/6.3). Returns the update to emit, or `None` for an unknown key or no change.
+    /// - **On:** the last emitted update (or Unknown, before any event) re-emitted with the
+    ///   overlay, turn markers cleared (`overlay_update`).
+    /// - **Off:** the workspace reads **Unknown** until its next hook event; the old state and any
+    ///   `attention` are dropped, because events missed while unattached are not replayed.
+    pub fn set_link_overlay(
+        &mut self,
+        key: &str,
+        link: Option<LinkOverlay>,
+    ) -> Option<WorkspaceStatusUpdate> {
+        let id = self
+            .by_path
+            .get(&canonical_key(Path::new(key)))?
+            .workspace_id
+            .clone();
+        match link {
+            Some(link) => {
+                let entry = self
+                    .last_emitted
+                    .entry(id.clone())
+                    .or_insert_with(|| LastEmitted {
+                        update: unknown_update(&id),
+                        attention: None,
+                        link: None,
+                    });
+                if entry.link.as_ref() == Some(&link) {
+                    return None;
+                }
+                entry.link = Some(link);
+                Some(overlay_update(
+                    &entry.update,
+                    entry.attention,
+                    entry.link.clone(),
+                ))
+            }
+            None => {
+                let entry = self.last_emitted.get_mut(&id)?;
+                entry.link.take()?;
+                let fresh = unknown_update(&id);
+                *entry = LastEmitted {
+                    update: fresh.clone(),
+                    attention: None,
+                    link: None,
+                };
+                Some(fresh)
+            }
+        }
     }
 
     /// Apply a display overlay to `workspace_id`, but ONLY if its last emitted update is
@@ -528,7 +766,11 @@ impl WorkspaceRegistry {
             return None;
         }
         entry.attention = Some(attention);
-        Some(overlay_update(&entry.update, Some(attention)))
+        Some(overlay_update(
+            &entry.update,
+            Some(attention),
+            entry.link.clone(),
+        ))
     }
 
     /// Clear every live overlay (M16.5 WP4), returning one re-emit per cleared workspace.
@@ -540,13 +782,20 @@ impl WorkspaceRegistry {
             .filter(|e| e.attention.is_some())
             .map(|e| {
                 e.attention = None;
-                overlay_update(&e.update, None)
+                overlay_update(&e.update, None, e.link.clone())
             })
             .collect()
     }
 
-    /// Resolve an event's `cwd` to a `workspace_id`, or `None` if no open workspace
+    /// Resolve an event's `(origin, cwd)` to a `workspace_id`, or `None` if no open workspace
     /// matches (the event is then dropped, not an error).
+    ///
+    /// **Scope first (M17 WP4, AC-3.1).** An event with no `origin` matches only LOCAL
+    /// workspaces; one with an origin matches only the remote workspaces of the host whose
+    /// `hook_origin` it is. So a remote session at `/Users/u/proj` can never light a local
+    /// tile at the same path, nor the reverse, nor host A's event host B's tile. A remote
+    /// event's cwd is matched as-is: it is a path on ANOTHER machine, so local
+    /// canonicalization would resolve it against the wrong disk (AC-3.4).
     ///
     /// **Ancestor / longest-prefix matching (WP2 fix).** A CC turn's shell cwd may have
     /// descended into a *subdirectory* of the workspace root (e.g. `cd src-tauri`), so an
@@ -562,11 +811,24 @@ impl WorkspaceRegistry {
     ///
     /// Matching is on **path components** (via [`is_path_ancestor`]), NOT raw string
     /// prefix — so a registered `/a/src` never spuriously matches a cwd of `/a/src-tauri`.
-    pub fn resolve_cwd(&self, cwd: &str) -> Option<String> {
-        let key = canonical_key(Path::new(cwd));
+    pub fn resolve(&self, origin: Option<&str>, cwd: &str) -> Option<String> {
+        let key = match origin {
+            None => canonical_key(Path::new(cwd)),
+            Some(_) => cwd.to_string(),
+        };
         let cwd_path = Path::new(&key);
         self.by_path
             .iter()
+            .filter_map(|(k, e)| Some((k, e, e.route.path_in_scope(origin)?)))
+            // A remote row matches its physical path too (AC-3.3); a local row has no alias.
+            .flat_map(|(k, e, path)| {
+                let alias = matches!(e.route, Route::Remote { .. })
+                    .then(|| self.remote_realpaths.get(k))
+                    .flatten();
+                std::iter::once(path)
+                    .chain(alias.map(String::as_str))
+                    .map(move |p| (p, &e.workspace_id))
+            })
             .filter(|(registered, _)| is_path_ancestor(Path::new(registered), cwd_path))
             // Longest registered key wins (nearest enclosing workspace). Rank by path-
             // component count — the precise depth measure. (A string-length proxy also
@@ -651,13 +913,14 @@ pub type SharedRegistry = Mutex<WorkspaceRegistry>;
 /// ⚠️ **The two hook-stream consumers filter DIFFERENTLY, and the asymmetry is deliberate.**
 /// An event whose `cwd` matches no open workspace is **DROPPED here** — a status dot needs a
 /// workspace to belong to, so an unmatchable event has no surface. The `time_store` drain
-/// (`time_store::commands::drain_loop`) deliberately does **NOT** filter: time analytics is
-/// machine-global by design and records every Claude Code session on the machine, including
-/// projects Claudesk has never opened. Neither side used to say so, which reads as one of them
+/// (`time_store::commands::drain_loop`) deliberately does **NOT** filter by workspace: time
+/// analytics is machine-global by design and records every Claude Code session on the machine,
+/// including projects Claudesk has never opened. ⚠️ THIS machine only: since M17 WP4 it refuses
+/// any event carrying an `origin` (a remote host's session) in `write_gated`. Neither side used to say so, which reads as one of them
 /// being buggy. (`SURFACE-2026-08-01-TWO-HOOK-DRAINS-FILTER-DIFFERENTLY-UNDOCUMENTED`.)
 pub fn to_update(event: &HookEvent, registry: &WorkspaceRegistry) -> Option<WorkspaceStatusUpdate> {
     let state = event_to_state(event)?;
-    let workspace_id = registry.resolve_cwd(&event.cwd)?;
+    let workspace_id = registry.resolve(event.origin.as_deref(), &event.cwd)?;
     let last_output_snippet = event.prompt.clone().or_else(|| event.message.clone());
     Some(WorkspaceStatusUpdate {
         workspace_id,
@@ -672,7 +935,32 @@ pub fn to_update(event: &HookEvent, registry: &WorkspaceRegistry) -> Option<Work
         session_id: Some(event.session_id.clone()).filter(|s| !s.is_empty()),
         // A hook event never carries an overlay; only `promote` sets one.
         attention: None,
+        // The drain stamps a live link overlay on (`drain_step`); `to_update` never invents one.
+        link: None,
     })
+}
+
+/// One drained hook event against the registry, under the caller's lock (M17 WP4, extracted from
+/// the drain loop so a test drives it): the mapped state and resolved id (for telemetry) and the
+/// update to emit, RECORDED before it is returned (the M16.5 WP4 compare-and-set needs that) and
+/// stamped with the workspace's live link overlay, so a hook event during a pending re-attach does
+/// not clear it on the surfaces.
+pub fn drain_step(
+    reg: &mut WorkspaceRegistry,
+    event: &HookEvent,
+) -> (
+    Option<WorkspaceState>,
+    Option<String>,
+    Option<WorkspaceStatusUpdate>,
+) {
+    let mapped = event_to_state(event);
+    let resolved = reg.resolve(event.origin.as_deref(), &event.cwd);
+    let mut update = to_update(event, reg);
+    if let Some(u) = update.as_mut() {
+        u.link = reg.link_of(&u.workspace_id);
+        reg.record_emitted(u);
+    }
+    (mapped, resolved, update)
 }
 
 /// Is this the hook event that **begins a CC turn**? M13.5 WP3.
@@ -740,6 +1028,7 @@ mod tests {
             reason: None,
             background_task_count: None,
             background_task_types: None,
+            origin: None,
         }
     }
 
@@ -761,6 +1050,7 @@ mod tests {
             reason: None,
             background_task_count: None,
             background_task_types: None,
+            origin: None,
         }
     }
 
@@ -1269,7 +1559,7 @@ mod tests {
         let mut reg = WorkspaceRegistry::new();
         reg.register(dir.path(), "ws-1".to_string());
         assert_eq!(
-            reg.resolve_cwd(&dir.path().to_string_lossy()),
+            reg.resolve(None, &dir.path().to_string_lossy()),
             Some("ws-1".to_string())
         );
     }
@@ -1316,9 +1606,9 @@ mod tests {
         reg.register(dir.path(), "ws-1".to_string());
         // A different (real) path is not registered → dropped.
         let other = tempfile::TempDir::new().unwrap();
-        assert_eq!(reg.resolve_cwd(&other.path().to_string_lossy()), None);
+        assert_eq!(reg.resolve(None, &other.path().to_string_lossy()), None);
         // A non-existent path also misses (canonicalize fails → lossy key → no match).
-        assert_eq!(reg.resolve_cwd("/no/such/path/xyz"), None);
+        assert_eq!(reg.resolve(None, "/no/such/path/xyz"), None);
     }
 
     #[test]
@@ -1333,7 +1623,7 @@ mod tests {
         // Build a non-canonical but equivalent path: <dir>/. (a redundant component).
         let non_canonical = dir.path().join(".");
         assert_eq!(
-            reg.resolve_cwd(&non_canonical.to_string_lossy()),
+            reg.resolve(None, &non_canonical.to_string_lossy()),
             Some("ws-1".to_string()),
             "a non-canonical form of a registered dir must resolve via canonicalization"
         );
@@ -1355,7 +1645,7 @@ mod tests {
         let subdir = dir.path().join("src-tauri");
         std::fs::create_dir(&subdir).unwrap();
         assert_eq!(
-            reg.resolve_cwd(&subdir.to_string_lossy()),
+            reg.resolve(None, &subdir.to_string_lossy()),
             Some("ws-1".to_string()),
             "a Stop fired from a subdirectory of the workspace root must resolve to that workspace"
         );
@@ -1364,7 +1654,7 @@ mod tests {
         let deeper = subdir.join("src/status_broadcaster");
         std::fs::create_dir_all(&deeper).unwrap();
         assert_eq!(
-            reg.resolve_cwd(&deeper.to_string_lossy()),
+            reg.resolve(None, &deeper.to_string_lossy()),
             Some("ws-1".to_string()),
             "a deeply-nested subdir must still resolve to the workspace"
         );
@@ -1386,7 +1676,7 @@ mod tests {
         let inner_subdir = inner.join("sub");
         std::fs::create_dir(&inner_subdir).unwrap();
         assert_eq!(
-            reg.resolve_cwd(&inner_subdir.to_string_lossy()),
+            reg.resolve(None, &inner_subdir.to_string_lossy()),
             Some("ws-inner".to_string()),
             "longest-prefix: a cwd under the inner workspace resolves to the inner one"
         );
@@ -1394,7 +1684,7 @@ mod tests {
         let outer_only = outer.path().join("elsewhere");
         std::fs::create_dir(&outer_only).unwrap();
         assert_eq!(
-            reg.resolve_cwd(&outer_only.to_string_lossy()),
+            reg.resolve(None, &outer_only.to_string_lossy()),
             Some("ws-outer".to_string()),
             "a cwd under only the outer root resolves to the outer workspace"
         );
@@ -1415,13 +1705,13 @@ mod tests {
         let mut reg = WorkspaceRegistry::new();
         reg.register(&ws_dir, "ws-1".to_string());
         assert_eq!(
-            reg.resolve_cwd(&sibling.to_string_lossy()),
+            reg.resolve(None, &sibling.to_string_lossy()),
             None,
             "a sibling sharing only a string prefix must NOT resolve to the workspace"
         );
         // But the workspace dir itself + a real descendant still resolve.
         assert_eq!(
-            reg.resolve_cwd(&ws_dir.to_string_lossy()),
+            reg.resolve(None, &ws_dir.to_string_lossy()),
             Some("ws-1".to_string())
         );
     }
@@ -1434,7 +1724,7 @@ mod tests {
         assert_eq!(reg.len(), 1);
         reg.deregister(dir.path());
         assert_eq!(reg.len(), 0);
-        assert_eq!(reg.resolve_cwd(&dir.path().to_string_lossy()), None);
+        assert_eq!(reg.resolve(None, &dir.path().to_string_lossy()), None);
     }
 
     #[test]
@@ -1454,29 +1744,29 @@ mod tests {
         // Each cwd resolves to its OWN workspace — a status event for one workspace's cwd
         // never bleeds into another's id.
         assert_eq!(
-            reg.resolve_cwd(&dir_a.path().to_string_lossy()),
+            reg.resolve(None, &dir_a.path().to_string_lossy()),
             Some("ws-1".to_string())
         );
         assert_eq!(
-            reg.resolve_cwd(&dir_b.path().to_string_lossy()),
+            reg.resolve(None, &dir_b.path().to_string_lossy()),
             Some("ws-2".to_string())
         );
         assert_eq!(
-            reg.resolve_cwd(&dir_c.path().to_string_lossy()),
+            reg.resolve(None, &dir_c.path().to_string_lossy()),
             Some("ws-3".to_string())
         );
 
         // Deregister the middle one (close one of N workspaces) — the others survive.
         reg.deregister(dir_b.path());
         assert_eq!(reg.len(), 2);
-        assert_eq!(reg.resolve_cwd(&dir_b.path().to_string_lossy()), None);
+        assert_eq!(reg.resolve(None, &dir_b.path().to_string_lossy()), None);
         assert_eq!(
-            reg.resolve_cwd(&dir_a.path().to_string_lossy()),
+            reg.resolve(None, &dir_a.path().to_string_lossy()),
             Some("ws-1".to_string()),
             "deregistering ws-2 must not disturb ws-1"
         );
         assert_eq!(
-            reg.resolve_cwd(&dir_c.path().to_string_lossy()),
+            reg.resolve(None, &dir_c.path().to_string_lossy()),
             Some("ws-3".to_string()),
             "deregistering ws-2 must not disturb ws-3"
         );
@@ -1736,6 +2026,7 @@ mod tests {
             is_turn_end: Some(false),
             session_id: Some("sess-abc".to_string()),
             attention: Some(Attention::VerifyHuman),
+            link: None,
         };
         let json = serde_json::to_string(&full).unwrap();
         let back: WorkspaceStatusUpdate = serde_json::from_str(&json).unwrap();
@@ -1974,6 +2265,7 @@ mod tests {
             session_id: Some("sess-abc".to_string()),
             // Absent, as on every hook-derived update: the key set below must NOT grow.
             attention: None,
+            link: None,
         };
         let value = serde_json::to_value(&update).unwrap();
         let obj = value.as_object().unwrap();
@@ -2023,6 +2315,7 @@ mod tests {
             is_turn_end: None,
             session_id: None,
             attention: None,
+            link: None,
         };
         let value = serde_json::to_value(&update).unwrap();
         let obj = value.as_object().unwrap();
@@ -2424,5 +2717,474 @@ mod tests {
             canonical_key(dir.path()),
             canon.to_string_lossy().into_owned()
         );
+    }
+
+    // ---- M17 WP4: (origin, cwd) routing (AC-3.1, AC-3.2, AC-3.4) ----
+
+    const HOST_A: &str = "u@host-a";
+    const HOST_B: &str = "u@host-b";
+
+    fn origin_of(host: &str) -> String {
+        crate::remote_cmd::hook_origin(host)
+    }
+
+    /// Register a remote row the way the frontend does: by its `ssh://host/path` key.
+    fn register_remote(reg: &mut WorkspaceRegistry, host: &str, path: &str, id: &str) {
+        let key = crate::config_store::remote_key(host, path);
+        reg.register(Path::new(&key), id.to_string());
+    }
+
+    /// AC-3.2 (a): a remote session whose cwd equals a LOCAL workspace's path never lights the
+    /// local tile. With a remote workspace at that path on the same host, the event goes there.
+    #[test]
+    fn a_remote_event_at_a_local_workspace_path_never_lights_the_local_tile() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let canon = dir.path().canonicalize().unwrap();
+        let cwd = canon.to_string_lossy().into_owned();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(dir.path(), "local".to_string());
+        assert_eq!(
+            reg.resolve(None, &cwd),
+            Some("local".to_string()),
+            "control"
+        );
+        let a = origin_of(HOST_A);
+        assert_eq!(reg.resolve(Some(&a), &cwd), None);
+        let stop = HookEvent {
+            origin: Some(a.clone()),
+            ..ev("Stop", &cwd)
+        };
+        assert_eq!(
+            to_update(&stop, &reg),
+            None,
+            "to_update routes the same way"
+        );
+
+        register_remote(&mut reg, HOST_A, &cwd, "remote");
+        assert_eq!(reg.resolve(Some(&a), &cwd), Some("remote".to_string()));
+        assert_eq!(reg.resolve(None, &cwd), Some("local".to_string()));
+    }
+
+    /// AC-3.2 (b): a local session whose cwd equals a REMOTE workspace's path never lights it.
+    /// The path does not exist locally, so the local event's cwd falls back to the same raw
+    /// string as the remote path: only the scope keeps them apart.
+    #[test]
+    fn a_local_event_at_a_remote_workspace_path_never_lights_the_remote_tile() {
+        let path = "/Users/u/claudesk-wp4-no-such-local-dir";
+        let mut reg = WorkspaceRegistry::new();
+        register_remote(&mut reg, HOST_A, path, "remote");
+        assert_eq!(
+            reg.resolve(Some(&origin_of(HOST_A)), path),
+            Some("remote".to_string()),
+            "control"
+        );
+        assert_eq!(reg.resolve(None, path), None);
+        assert_eq!(to_update(&ev("Stop", path), &reg), None);
+    }
+
+    /// AC-3.2 (c): an origin-tagged event from a CC session Claudesk did not start on that host
+    /// (its cwd is outside every remote workspace there) is dropped. A subdirectory of the
+    /// workspace still resolves (the existing longest-ancestor match, on the remote path).
+    #[test]
+    fn an_origin_tagged_event_outside_every_remote_workspace_is_dropped() {
+        let mut reg = WorkspaceRegistry::new();
+        register_remote(&mut reg, HOST_A, "/Users/u/proj", "remote");
+        let a = origin_of(HOST_A);
+        assert_eq!(reg.resolve(Some(&a), "/Users/u/other"), None);
+        assert_eq!(
+            reg.resolve(Some(&a), "/Users/u/proj-two"),
+            None,
+            "a sibling"
+        );
+        assert_eq!(reg.resolve(Some(&a), "/Users/u"), None, "the parent");
+        assert_eq!(
+            reg.resolve(Some(&a), "/Users/u/proj/src-tauri"),
+            Some("remote".to_string()),
+            "a subdirectory still resolves"
+        );
+    }
+
+    /// AC-3.2 (d): host A's event never lights host B's workspace at the same path, and an
+    /// origin no open workspace has (a host with no remote row) lights nothing.
+    #[test]
+    fn an_event_from_host_a_never_lights_host_b_at_the_same_path() {
+        let path = "/Users/u/proj";
+        let mut reg = WorkspaceRegistry::new();
+        register_remote(&mut reg, HOST_A, path, "ws-a");
+        register_remote(&mut reg, HOST_B, path, "ws-b");
+        assert_ne!(origin_of(HOST_A), origin_of(HOST_B));
+        assert_eq!(
+            reg.resolve(Some(&origin_of(HOST_A)), path),
+            Some("ws-a".to_string())
+        );
+        assert_eq!(
+            reg.resolve(Some(&origin_of(HOST_B)), path),
+            Some("ws-b".to_string())
+        );
+        assert_eq!(reg.resolve(Some(&origin_of("u@host-c")), path), None);
+    }
+
+    /// AC-3.4: a remote key never goes through local canonicalization, on either side. The
+    /// remote path here is a REAL local dir in its non-canonical spelling (`/var/folders/...`,
+    /// which canonicalizes to `/private/var/...` on macOS), so canonicalizing either the stored
+    /// path or the event's cwd would break the match.
+    #[test]
+    fn a_remote_path_and_cwd_are_never_canonicalized_locally() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let raw = dir.path().to_string_lossy().into_owned();
+        let canon = dir.path().canonicalize().unwrap();
+        assert_ne!(
+            raw,
+            canon.to_string_lossy(),
+            "precondition: the temp dir's spelling is non-canonical"
+        );
+        let mut reg = WorkspaceRegistry::new();
+        register_remote(&mut reg, HOST_A, &raw, "remote");
+        let key = crate::config_store::remote_key(HOST_A, &raw);
+        assert_eq!(
+            reg.open_project_paths(),
+            vec![key],
+            "the key is stored as given"
+        );
+        assert_eq!(
+            reg.resolve(Some(&origin_of(HOST_A)), &raw),
+            Some("remote".to_string())
+        );
+    }
+
+    /// The close path finds a remote workspace's id by its exact key (the tray forgets it),
+    /// although no event resolve could reach it without an origin.
+    #[test]
+    fn workspace_id_for_finds_local_and_remote_rows_by_key() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(dir.path(), "local".to_string());
+        register_remote(&mut reg, HOST_A, "/Users/u/proj", "remote");
+        let key = crate::config_store::remote_key(HOST_A, "/Users/u/proj");
+        assert_eq!(reg.workspace_id_for(dir.path()), Some("local".to_string()));
+        assert_eq!(
+            reg.workspace_id_for(Path::new(&key)),
+            Some("remote".to_string())
+        );
+        reg.deregister(Path::new(&key));
+        assert_eq!(reg.workspace_id_for(Path::new(&key)), None);
+        assert_eq!(reg.len(), 1);
+    }
+
+    /// M17 WP4 (AC-3.3): a remote row whose stored path reaches the folder through a symlink still
+    /// resolves, because CC reports the PHYSICAL cwd and the registry matches the alias too. The
+    /// alias applies only to its own key's workspace, never a local row or another host's.
+    #[test]
+    fn a_remote_rows_physical_path_alias_resolves_its_events() {
+        let stored = "/Users/u/proj-link";
+        let real = "/Volumes/data/proj";
+        let mut reg = WorkspaceRegistry::new();
+        register_remote(&mut reg, HOST_A, stored, "remote");
+        register_remote(&mut reg, HOST_B, stored, "remote-b");
+        let a = origin_of(HOST_A);
+        assert_eq!(
+            reg.resolve(Some(&a), "/Volumes/data/proj/src"),
+            None,
+            "control: before the alias, the physical cwd matches nothing"
+        );
+        reg.set_remote_realpath(
+            &crate::config_store::remote_key(HOST_A, stored),
+            real.into(),
+        );
+        assert_eq!(
+            reg.resolve(Some(&a), "/Volumes/data/proj/src"),
+            Some("remote".to_string())
+        );
+        assert_eq!(
+            reg.resolve(Some(&a), stored),
+            Some("remote".to_string()),
+            "the stored path still matches"
+        );
+        assert_eq!(
+            reg.resolve(Some(&origin_of(HOST_B)), real),
+            None,
+            "host B's row at the same stored path has no alias"
+        );
+        assert_eq!(reg.resolve(None, real), None, "never a local event");
+    }
+
+    /// An alias recorded for a key never applies to a LOCAL row, even one registered under the
+    /// same string (defensive: the alias map is keyed by remote keys only).
+    #[test]
+    fn an_alias_never_applies_to_a_local_row() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(dir.path(), "local".to_string());
+        let key = canonical_key(dir.path());
+        reg.set_remote_realpath(&key, "/elsewhere".into());
+        assert_eq!(reg.resolve(None, "/elsewhere"), None);
+    }
+
+    // ---- M17 WP4: the link overlay (AC-6) ----
+
+    const PROJ: &str = "/Users/u/proj";
+
+    fn remote_reg() -> (WorkspaceRegistry, String) {
+        let mut reg = WorkspaceRegistry::new();
+        register_remote(&mut reg, HOST_A, PROJ, "ws-r");
+        (reg, crate::config_store::remote_key(HOST_A, PROJ))
+    }
+
+    fn remote_event(name: &str) -> HookEvent {
+        HookEvent {
+            origin: Some(origin_of(HOST_A)),
+            ..ev(name, PROJ)
+        }
+    }
+
+    fn reconnecting() -> Option<LinkOverlay> {
+        Some(LinkOverlay {
+            status: LinkOverlayStatus::Reconnecting,
+            host: "host-a".into(),
+        })
+    }
+
+    /// AC-6.1/6.2: a drop re-emits the LAST state with the overlay, so surfaces dim the last hue;
+    /// the turn markers are cleared (a re-emit must not read as a second turn end).
+    #[test]
+    fn a_link_drop_re_emits_the_last_state_with_the_overlay() {
+        let (mut reg, key) = remote_reg();
+        let (_, _, stop) = drain_step(&mut reg, &remote_event("Stop"));
+        assert_eq!(stop.as_ref().unwrap().is_turn_end, Some(true));
+        let u = reg
+            .set_link_overlay(&key, reconnecting())
+            .expect("an update");
+        assert_eq!(u.workspace_id, "ws-r");
+        assert_eq!(u.state, WorkspaceState::Idle, "the last state, kept");
+        assert_eq!(u.link, reconnecting());
+        assert_eq!((u.is_turn_start, u.is_turn_end), (None, None));
+    }
+
+    /// AC-6.1: a still-running remote CC can report over an Up link while its re-attach is pending;
+    /// those events keep the overlay on the wire and in the record.
+    #[test]
+    fn a_hook_event_during_a_pending_reattach_keeps_the_overlay() {
+        let (mut reg, key) = remote_reg();
+        reg.set_link_overlay(&key, reconnecting());
+        let (_, _, u) = drain_step(&mut reg, &remote_event("UserPromptSubmit"));
+        let u = u.expect("the event still routes");
+        assert_eq!(u.state, WorkspaceState::Running);
+        assert_eq!(u.link, reconnecting(), "stamped on the emitted update");
+        assert_eq!(
+            reg.link_of("ws-r"),
+            reconnecting(),
+            "and kept in the record"
+        );
+    }
+
+    /// AC-6.3: re-attached → the overlay goes off and the workspace reads Unknown (missed events are
+    /// not replayed or guessed); any `attention` goes with it; the next event reads normally.
+    #[test]
+    fn a_reattach_reads_unknown_until_the_next_event() {
+        let (mut reg, key) = remote_reg();
+        drain_step(&mut reg, &remote_event("UserPromptSubmit"));
+        reg.set_link_overlay(&key, reconnecting());
+        let u = reg.set_link_overlay(&key, None).expect("an update");
+        assert_eq!(u.state, WorkspaceState::Unknown);
+        assert_eq!((u.link.clone(), u.attention), (None, None));
+        assert_eq!(u.last_output_snippet, None, "nothing carried over");
+        assert_eq!(
+            reg.set_link_overlay(&key, None),
+            None,
+            "a second clear is a no-op"
+        );
+        let (_, _, next) = drain_step(&mut reg, &remote_event("Stop"));
+        let next = next.unwrap();
+        assert_eq!((next.state, next.link), (WorkspaceState::Idle, None));
+    }
+
+    #[test]
+    fn a_drop_before_any_event_shows_unknown_with_the_overlay() {
+        let (mut reg, key) = remote_reg();
+        let u = reg.set_link_overlay(&key, reconnecting()).unwrap();
+        assert_eq!((u.state, u.link), (WorkspaceState::Unknown, reconnecting()));
+    }
+
+    #[test]
+    fn an_unknown_key_or_a_repeated_edge_changes_nothing() {
+        let (mut reg, key) = remote_reg();
+        let other = crate::config_store::remote_key(HOST_B, PROJ);
+        assert_eq!(reg.set_link_overlay(&other, reconnecting()), None);
+        assert!(reg.set_link_overlay(&key, reconnecting()).is_some());
+        assert_eq!(
+            reg.set_link_overlay(&key, reconnecting()),
+            None,
+            "already on"
+        );
+        assert_eq!(
+            reg.set_link_overlay(&crate::config_store::remote_key(HOST_A, "/x"), None),
+            None
+        );
+    }
+
+    /// A closed workspace's overlay must not outlive it.
+    #[test]
+    fn deregister_drops_the_link_overlay() {
+        let (mut reg, key) = remote_reg();
+        reg.set_link_overlay(&key, reconnecting());
+        reg.deregister(Path::new(&key));
+        assert_eq!(reg.link_of("ws-r"), None);
+    }
+
+    /// AC-6.2: the tray folds the UNDERLYING state, because `display_state` ignores the overlay: a
+    /// lost session that was awaiting input keeps the alarm lit.
+    #[test]
+    fn display_state_ignores_the_link_overlay() {
+        let (_, stop) = registry_after_stop(1);
+        for state in [
+            WorkspaceState::AwaitingInput,
+            WorkspaceState::Running,
+            WorkspaceState::Idle,
+        ] {
+            let u = WorkspaceStatusUpdate {
+                state,
+                link: reconnecting(),
+                ..stop.clone()
+            };
+            assert_eq!(display_state(&u), state);
+        }
+    }
+
+    /// The overlay's wire shape (the TS `WireLinkOverlay` mirror), and its absence otherwise.
+    #[test]
+    fn the_link_overlay_serializes_as_status_and_host() {
+        let (_, stop) = registry_after_stop(1);
+        let on = WorkspaceStatusUpdate {
+            link: reconnecting(),
+            ..stop.clone()
+        };
+        let v = serde_json::to_value(&on).unwrap();
+        assert_eq!(
+            v["link"],
+            serde_json::json!({ "status": "reconnecting", "host": "host-a" })
+        );
+        assert!(serde_json::to_value(&stop).unwrap().get("link").is_none());
+        let detached: LinkOverlayStatus = serde_json::from_str("\"detached\"").unwrap();
+        assert_eq!(
+            detached,
+            LinkOverlayStatus::Detached,
+            "AC-6.4: the reserved arm"
+        );
+    }
+
+    /// The sink's body (the emitter seam): each edge goes through the registry, and the update is
+    /// emitted with the registry lock RELEASED (an emit under the lock would block the drain).
+    #[test]
+    fn apply_link_edge_drives_the_overlay_and_emits_outside_the_lock() {
+        let (reg, key) = remote_reg();
+        let registry = Mutex::new(reg);
+        let emitted = std::cell::RefCell::new(Vec::new());
+        let emit = |u: &WorkspaceStatusUpdate| {
+            assert!(
+                registry.try_lock().is_ok(),
+                "emitted with the lock released"
+            );
+            emitted.borrow_mut().push((u.state, u.link.clone()));
+        };
+        for edge in [
+            LinkEdge::Lost,
+            LinkEdge::Lost,
+            LinkEdge::Attached,
+            LinkEdge::Ended,
+            LinkEdge::Lost,
+            LinkEdge::Ended,
+        ] {
+            apply_link_edge(&registry, &key, "host-a", edge, &emit);
+        }
+        assert_eq!(
+            emitted.into_inner(),
+            vec![
+                (WorkspaceState::Unknown, reconnecting()),
+                (WorkspaceState::Unknown, None),
+                (WorkspaceState::Unknown, reconnecting()),
+                (WorkspaceState::Unknown, None),
+            ],
+            "a repeated Lost and an Ended with no overlay emit nothing"
+        );
+    }
+
+    /// Run the REAL bundled hook script on `payload` with `origin` as `CLAUDESK_ORIGIN`
+    /// (`None` removes it), and return the line it writes to a real socket. `None` when perl
+    /// is absent (it is bundled on macOS, the only supported platform).
+    fn real_hook_line(payload: &str, origin: Option<&str>) -> Option<String> {
+        use std::io::{BufRead, BufReader, Write};
+        use std::process::{Command, Stdio};
+        let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/claudesk-hook.pl");
+        let dir = tempfile::TempDir::new().unwrap();
+        let sock = dir.path().join("hook.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&sock).unwrap();
+        let reader = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().ok()?;
+            let mut line = String::new();
+            BufReader::new(stream).read_line(&mut line).ok()?;
+            Some(line)
+        });
+        let mut cmd = Command::new("perl");
+        cmd.arg(script)
+            .env("CLAUDESK_HOOK_SOCK", &sock)
+            .env_remove("CLAUDESK_DRIVE_MODE")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        match origin {
+            Some(o) => cmd.env("CLAUDESK_ORIGIN", o),
+            None => cmd.env_remove("CLAUDESK_ORIGIN"),
+        };
+        let mut child = cmd.spawn().ok()?;
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(payload.as_bytes())
+            .unwrap();
+        assert!(child.wait().unwrap().success(), "the hook always exits 0");
+        reader.join().unwrap()
+    }
+
+    /// M17 WP4 verify-codify: the producer→consumer chain the drain runs, end to end. The real
+    /// hook script's line goes through the real `parse_line` and `to_update`, against a
+    /// registry holding a local AND a remote workspace at the SAME path. This codifies the live
+    /// verify-self check: the unit tests above prove each side alone, and this proves they agree
+    /// on the wire (the key name, the empty rule, the value `hook_origin` produces).
+    #[test]
+    fn the_real_hook_line_routes_local_and_remote_events_apart() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let cwd = dir.path().canonicalize().unwrap();
+        let cwd = cwd.to_string_lossy();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(dir.path(), "local".to_string());
+        register_remote(&mut reg, HOST_A, &cwd, "remote");
+
+        let payload = format!(
+            r#"{{"hook_event_name":"Notification","session_id":"s","cwd":"{cwd}","message":"m","notification_type":"permission_prompt"}}"#
+        );
+        let a = origin_of(HOST_A);
+        let b = origin_of(HOST_B);
+        let cases = [
+            (None, Some("local")),
+            (Some(""), Some("local")),
+            (Some(a.as_str()), Some("remote")),
+            (Some(b.as_str()), None),
+        ];
+        for (origin, expect) in cases {
+            let Some(line) = real_hook_line(&payload, origin) else {
+                return; // perl unavailable
+            };
+            let event = crate::hook_socket::parse_line(&line).expect("the hook's line parses");
+            let update = to_update(&event, &reg);
+            assert_eq!(
+                update.as_ref().map(|u| u.workspace_id.as_str()),
+                expect,
+                "origin {origin:?}: line {line}"
+            );
+            if let Some(u) = update {
+                assert_eq!(u.state, WorkspaceState::AwaitingInput);
+            }
+        }
     }
 }

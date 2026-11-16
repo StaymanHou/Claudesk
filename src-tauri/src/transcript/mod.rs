@@ -56,8 +56,14 @@ pub fn slug_for(project_path: &Path) -> String {
     let physical = project_path
         .canonicalize()
         .unwrap_or_else(|_| project_path.to_path_buf());
+    slug_of_physical(&physical.to_string_lossy())
+}
+
+/// The slug of an ALREADY-PHYSICAL path: every `/` and `.` becomes `-`. [`slug_for`] canonicalizes
+/// on the local disk first; a REMOTE path's physical form comes from the remote
+/// (`remote_cmd::realpath_command`), so the remote transcript check calls this directly (M17 WP4).
+pub fn slug_of_physical(physical: &str) -> String {
     physical
-        .to_string_lossy()
         .chars()
         .map(|c| if c == '/' || c == '.' { '-' } else { c })
         .collect()
@@ -169,6 +175,18 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn slug_of_physical_is_slug_for_without_the_local_canonicalize() {
+        // M17 WP4: the remote check slugs a path the REMOTE resolved; the transform is the same.
+        let dir = tempfile::TempDir::new().unwrap();
+        let physical = dir.path().canonicalize().unwrap();
+        assert_eq!(
+            slug_of_physical(&physical.to_string_lossy()),
+            slug_for(&physical)
+        );
+        assert_eq!(slug_of_physical("/Users/x/my.app"), "-Users-x-my-app");
     }
 
     #[test]

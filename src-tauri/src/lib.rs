@@ -510,6 +510,7 @@ pub fn run() {
             remote_cmd::commands::remote_preflight,
             remote_cmd::commands::add_remote_project,
             remote_link::commands::remote_open_check,
+            remote_link::commands::remote_hook_warning,
             cc_session::commands::cc_spawn_remote,
             cc_session::commands::cc_inject,
             config_store::commands::record_open,

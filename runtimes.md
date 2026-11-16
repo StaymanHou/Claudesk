@@ -31,13 +31,20 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 53s (2026-11-16, M17 WP4 Phase 1 verify-codify (full), EXIT=0; incremental cache, timeout kept at the cold-run value)
+- **Last:** 44s (2026-11-16, M17 WP4 Phase 4 verify-codify (full), EXIT=0; incremental cache, timeout kept at the cold-run value)
 - **Use timeout:** 263000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 44s — 2026-11-16 (M17 WP4 P4 verify-codify, full)
+  - 49s — 2026-11-16 (M17 WP4 P4 verify-auto, after F9b)
+  - 50s — 2026-11-16 (M17 WP4 P4 verify-auto)
+  - 46s — 2026-11-16 (M17 WP4 P3 verify-codify, full)
+  - 48s — 2026-11-16 (M17 WP4 P3 verify-auto)
+  - 47s — 2026-11-16 (M17 WP4 P2 verify-codify, full)
+  - 53s — 2026-11-16 (M17 WP4 P2 verify-auto)
   - 50s — 2026-11-16 (M17 WP4 P1 verify-auto)
   - 47s / 63s / 59s / 57s / 72s / 54s / 56s / 72s / 50s / 28s(fail) / 45s / 45s / 47s / 47s / 46s — 2026-11-16 (M17 WP3 Phases 1–5)
   - 47s / 97s — 2026-11-14 (M17 WP1; Phase 2 warm / Phase 1 after a full rebuild)

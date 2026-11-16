@@ -129,6 +129,18 @@ pub(crate) fn release_check_hold(hold: super::LinkHold, outcome: &OpenCheck, gra
     }
 }
 
+/// The remote workspace's hook warning (M17 WP4, AC-1.2): the plain-words failure of the last
+/// remote hook install on the host of `project_path` (a remote key), or `None` when it worked,
+/// no link is up, or the key is not remote. The workspace reads it once its spawn resolved, so
+/// the install of the connect it rode has finished (it runs before the link is reported Up).
+///
+/// Sync on purpose: a short lock read, no I/O (`tests/sync_commands_do_not_block.rs`).
+#[tauri::command]
+pub fn remote_hook_warning(links: State<'_, SharedLinks>, project_path: String) -> Option<String> {
+    let (host, _) = config_store::split_remote_key(&project_path)?;
+    links.hook_warning(host)
+}
+
 /// Before the picker opens a remote row: validate it, bring its link up, and check its folder
 /// still exists (`test -d` over the master). Read-only on the remote. The link lingers
 /// [`OPEN_CHECK_GRACE`] after an `Ok`, and stops at once after anything else (if unheld).

@@ -52,7 +52,26 @@ fn run_hook_capture_line(payload: &str) -> Option<String> {
 /// inside a Claudesk workspace would otherwise inherit it and assert against a different
 /// arm than the one it names.
 fn run_hook_capture_line_with_mode(payload: &str, drive_mode: Option<&str>) -> Option<String> {
-    run_hook_script_capture_line(&hook_path(), payload, drive_mode)
+    run_hook_script_capture_line(&hook_path(), payload, drive_mode, None)
+}
+
+/// [`run_hook_capture_line`] with `CLAUDESK_ORIGIN` set (M17 WP4): the remote invocation.
+fn run_hook_capture_line_with_origin(payload: &str, origin: &str) -> Option<String> {
+    run_hook_script_capture_line(&hook_path(), payload, None, Some(origin))
+}
+
+/// Set or REMOVE `CLAUDESK_ORIGIN` (M17 WP4). ⚠️ `None` removes it, for the same reason the
+/// drive-mode var is removed: a run from inside a remote Claudesk workspace would inherit it
+/// and every "local" case would silently exercise the remote arm.
+fn set_origin(cmd: &mut Command, origin: Option<&str>) {
+    match origin {
+        Some(o) => {
+            cmd.env("CLAUDESK_ORIGIN", o);
+        }
+        None => {
+            cmd.env_remove("CLAUDESK_ORIGIN");
+        }
+    }
 }
 
 /// [`run_hook_capture_line_with_mode`] for a hook script at `script` (M16.5 WP1), so a test
@@ -61,6 +80,7 @@ fn run_hook_script_capture_line(
     script: &std::path::Path,
     payload: &str,
     drive_mode: Option<&str>,
+    origin: Option<&str>,
 ) -> Option<String> {
     let dir = tempfile::TempDir::new().unwrap();
     let sock_path = dir.path().join("hook.sock");
@@ -96,6 +116,7 @@ fn run_hook_script_capture_line(
             cmd.env_remove("CLAUDESK_DRIVE_MODE");
         }
     }
+    set_origin(&mut cmd, origin);
     let mut child = cmd.spawn().expect("spawn perl hook");
     child
         .stdin
@@ -133,8 +154,14 @@ fn as_json(line: &str) -> serde_json::Value {
 /// asserted — relevant now because M12 WP4b will make this script emit a
 /// `UserPromptSubmit` `additionalContext` line on stdout, and a malformed emission
 /// must never reach CC as partial JSON.
-fn run_hook_degraded(payload: &str, sock_env: Option<&str>) -> (ExitStatus, Vec<u8>) {
-    run_hook_env(payload, sock_env, None)
+///
+/// M17 WP4: `origin` sets (or, `None`, removes) `CLAUDESK_ORIGIN`, the remote arm.
+fn run_hook_degraded(
+    payload: &str,
+    sock_env: Option<&str>,
+    origin: Option<&str>,
+) -> (ExitStatus, Vec<u8>) {
+    run_hook_env(payload, sock_env, None, origin)
 }
 
 /// [`run_hook_degraded`] plus control of `CLAUDESK_DRIVE_MODE` (M12 WP4b).
@@ -151,6 +178,7 @@ fn run_hook_env(
     payload: &str,
     sock_env: Option<&str>,
     drive_mode: Option<&str>,
+    origin: Option<&str>,
 ) -> (ExitStatus, Vec<u8>) {
     let mut cmd = Command::new("perl");
     cmd.arg(hook_path())
@@ -177,6 +205,7 @@ fn run_hook_env(
             cmd.env_remove("CLAUDESK_DRIVE_MODE");
         }
     }
+    set_origin(&mut cmd, origin);
     let mut child = cmd.spawn().expect("spawn perl hook");
     child
         .stdin
@@ -238,8 +267,15 @@ fn never_blocks_cc_on_degraded_inputs() {
             Some("/nonexistent/nope.sock"),
         ),
     ];
-    for (label, payload, sock) in cases {
-        let (status, stdout) = run_hook_degraded(payload, sock);
+    // M17 WP4 (AC-2.2): every arm runs local AND remote (origin set). The remote arm takes
+    // its own branch on the no-socket path (no write-failure trace) and must hold both
+    // properties just the same.
+    let arms = cases
+        .iter()
+        .flat_map(|c| [(c, None), (c, Some(REMOTE_ORIGIN))]);
+    for ((label, payload, sock), origin) in arms {
+        let (status, stdout) = run_hook_degraded(payload, *sock, origin);
+        let label = format!("{label}, origin {origin:?}");
         assert!(
             status.success(),
             "hook must exit 0 on degraded input ({label}) — got {:?}. A non-zero exit here \
@@ -256,6 +292,82 @@ fn never_blocks_cc_on_degraded_inputs() {
                 panic!("stdout must be valid JSON if non-empty ({label}): {e}")
             });
         }
+    }
+}
+
+// ===========================================================================
+// M17 WP4 — the `origin` field (AC-2.1, AC-2.2).
+//
+// A remote host's registered hook command sets `CLAUDESK_ORIGIN=<hash8(host)>`. The local
+// registry routes on it, so a remote event can never light a local tile at the same path.
+// ===========================================================================
+
+/// A stand-in `hash8(host)` value. The script forwards the string as-is.
+const REMOTE_ORIGIN: &str = "a1b2c3d4";
+
+#[test]
+fn origin_is_emitted_only_when_claudesk_origin_is_non_empty() {
+    if !perl_available() {
+        return;
+    }
+    for payload in [
+        r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_tasks":[]}"#,
+        r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hi"}"#,
+        r#"{"hook_event_name":"Notification","session_id":"s","cwd":"/p","message":"m","notification_type":"permission_prompt"}"#,
+    ] {
+        // Remote: the field is there with the exact value.
+        let remote =
+            as_json(&run_hook_capture_line_with_origin(payload, REMOTE_ORIGIN).expect("line"));
+        assert_eq!(remote["origin"].as_str(), Some(REMOTE_ORIGIN), "{payload}");
+
+        // Local (var removed) and empty (var set to ""): NO `origin` key at all.
+        let local = as_json(&run_hook_capture_line(payload).expect("line"));
+        let empty = as_json(&run_hook_capture_line_with_origin(payload, "").expect("line"));
+        for (arm, v) in [("absent", &local), ("empty", &empty)] {
+            assert!(
+                v.get("origin").is_none(),
+                "{arm} origin must emit no key: {v}"
+            );
+        }
+
+        // Every other key is identical between the local and remote lines. The timestamp
+        // is the send time, so it is left out of the comparison.
+        let strip = |v: &serde_json::Value| {
+            let mut m = v.as_object().expect("an object").clone();
+            m.remove("origin");
+            m.remove("timestamp");
+            m
+        };
+        assert_eq!(strip(&remote), strip(&local), "{payload}");
+    }
+}
+
+/// AC-2.2: a remote host's hook (origin set) with no live forward must not grow a log there.
+/// The local trace is the positive control: same script, same missing socket, origin absent.
+#[test]
+fn a_remote_invocation_never_appends_the_write_failed_trace() {
+    if !perl_available() {
+        return;
+    }
+    let payload = r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p"}"#;
+    for (origin, expect_trace) in [(None, true), (Some(REMOTE_ORIGIN), false)] {
+        let dir = tempfile::TempDir::new().unwrap();
+        // The socket's parent dir exists (the log goes there), but nothing listens.
+        let sock = dir.path().join("hook.sock");
+        let sock = sock.to_string_lossy();
+        let (status, stdout) = run_hook_degraded(payload, Some(&sock), origin);
+        assert!(status.success(), "exit 0 ({origin:?})");
+        assert!(
+            stdout.is_empty(),
+            "a Stop writes nothing to stdout ({origin:?})"
+        );
+        let log =
+            std::fs::read_to_string(dir.path().join("status-channel.log")).unwrap_or_default();
+        assert_eq!(
+            log.contains("HOOK write-failed"),
+            expect_trace,
+            "origin {origin:?}: log was {log:?}"
+        );
     }
 }
 
@@ -564,7 +676,7 @@ fn neither_basename_forwards_payload_key_names() {
             r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","zeta_field":"ZETA_VALUE","background_tasks":[]}"#,
             r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hi","zeta_field":"ZETA_VALUE"}"#,
         ] {
-            let line = run_hook_script_capture_line(&script, payload, None).expect("line");
+            let line = run_hook_script_capture_line(&script, payload, None, None).expect("line");
             assert!(
                 !line.contains("ZETA_VALUE"),
                 "values never ride along: {line}"
@@ -613,6 +725,8 @@ fn status_event_shape_is_unchanged() {
         "source",
         "prompt",
         "message",
+        // M17 WP4: a local invocation never carries `origin`.
+        "origin",
     ] {
         assert!(
             v.get(absent).is_none(),
@@ -690,7 +804,7 @@ fn emits_the_drive_mode_signal_for_every_known_mode() {
     // NOT what `DriveMode` serialized to before WP4b Phase 1 — building on the old values
     // would have shipped a silent no-op for modes 1 and 4.
     for mode in ["stepping", "orchestrated", "autopilot", "fsd"] {
-        let (status, stdout) = run_hook_env(UPS_PAYLOAD, None, Some(mode));
+        let (status, stdout) = run_hook_env(UPS_PAYLOAD, None, Some(mode), None);
         assert!(status.success(), "hook must exit 0 for mode {mode}");
         assert_eq!(
             signal_context(&stdout),
@@ -711,7 +825,7 @@ fn emits_when_the_socket_var_is_absent() {
     // that early exit back up is an easy "tidy-up" that this test is the only thing
     // standing against — and it would present as "the signal silently stopped working",
     // never as a crash.
-    let (status, stdout) = run_hook_env(UPS_PAYLOAD, None, Some("autopilot"));
+    let (status, stdout) = run_hook_env(UPS_PAYLOAD, None, Some("autopilot"), None);
     assert!(status.success());
     assert_eq!(
         signal_context(&stdout),
@@ -720,7 +834,12 @@ fn emits_when_the_socket_var_is_absent() {
     );
 
     // Same with the socket var set but pointing at nothing that listens (Claudesk down).
-    let (status, stdout) = run_hook_env(UPS_PAYLOAD, Some("/nonexistent/nope.sock"), Some("fsd"));
+    let (status, stdout) = run_hook_env(
+        UPS_PAYLOAD,
+        Some("/nonexistent/nope.sock"),
+        Some("fsd"),
+        None,
+    );
     assert!(status.success());
     assert_eq!(signal_context(&stdout), Some(expected_context("fsd")));
 }
@@ -749,7 +868,7 @@ fn an_unknown_or_absent_mode_emits_nothing_never_a_default() {
         ("prefix of a known mode", Some("auto")),
     ];
     for (label, mode) in cases {
-        let (status, stdout) = run_hook_env(UPS_PAYLOAD, None, mode);
+        let (status, stdout) = run_hook_env(UPS_PAYLOAD, None, mode, None);
         assert!(status.success(), "[{label}] must exit 0");
         assert!(
             stdout.is_empty(),
@@ -779,7 +898,7 @@ fn only_user_prompt_submit_emits_the_signal() {
         "SessionEnd",
     ] {
         let payload = format!(r#"{{"hook_event_name":"{event}","session_id":"s","cwd":"/p"}}"#);
-        let (status, stdout) = run_hook_env(&payload, None, Some("autopilot"));
+        let (status, stdout) = run_hook_env(&payload, None, Some("autopilot"), None);
         assert!(status.success(), "[{event}] must exit 0");
         assert!(
             stdout.is_empty(),
@@ -808,7 +927,7 @@ fn the_signal_never_blocks_cc_on_degraded_input() {
             r#"{"session_id":"s","cwd":"/p","prompt":"hi"}"#,
         ),
     ] {
-        let (status, stdout) = run_hook_env(payload, None, Some("autopilot"));
+        let (status, stdout) = run_hook_env(payload, None, Some("autopilot"), None);
         assert!(
             status.success(),
             "[{label}] must exit 0 even with the drive-mode var set — got {status:?}"
@@ -891,7 +1010,7 @@ fn stdout_is_always_empty_or_exactly_one_cc_accepted_object() {
         r#"autopilot","additionalContext":"pwned"#,
     ];
     for mode in hostile {
-        let (status, stdout) = run_hook_env(UPS_PAYLOAD, None, Some(mode));
+        let (status, stdout) = run_hook_env(UPS_PAYLOAD, None, Some(mode), None);
         assert!(status.success(), "[{mode:?}] must exit 0");
         if stdout.is_empty() {
             continue; // byte-empty is always safe

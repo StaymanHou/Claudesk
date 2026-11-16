@@ -238,6 +238,16 @@ pub fn is_remote_key(key: &str) -> bool {
     key.starts_with(REMOTE_KEY_PREFIX)
 }
 
+/// The inverse of [`remote_key`]: `ssh://<host><path>` → `(host, path)` (M17 WP4). The path
+/// starts at the first `/` after the prefix; a host never contains one (`validate_host`'s
+/// allow-list has no `/`). `None` for a local key, or a remote key with no path or no host.
+pub fn split_remote_key(key: &str) -> Option<(&str, &str)> {
+    let rest = key.strip_prefix(REMOTE_KEY_PREFIX)?;
+    let slash = rest.find('/')?;
+    let (host, path) = rest.split_at(slash);
+    (!host.is_empty()).then_some((host, path))
+}
+
 /// The `supervisor_enabled` default: **ON**.
 ///
 /// ⚠️ A named fn rather than `#[serde(default)]`, because `bool`'s `Default` is `false` — the
@@ -2335,6 +2345,28 @@ mod tests {
         assert_eq!(mini("/x").key(), "ssh://user@mini-host/x");
         assert!(is_remote_key("ssh://u@h/a"));
         assert!(!is_remote_key("/Users/x/ssh://"));
+    }
+
+    #[test]
+    fn split_remote_key_inverts_remote_key() {
+        for (host, path) in [
+            ("user@mini-host", "/Users/u/proj"),
+            ("mini", "/"),
+            ("user@[fe80::1%en0]", "/a/b c/d"),
+        ] {
+            assert_eq!(
+                split_remote_key(&remote_key(host, path)),
+                Some((host, path))
+            );
+        }
+        for not_one in [
+            "/Users/u/proj",
+            "ssh://hostonly",
+            "ssh:///no-host",
+            "ssh:/x/y",
+        ] {
+            assert_eq!(split_remote_key(not_one), None, "{not_one}");
+        }
     }
 
     #[test]

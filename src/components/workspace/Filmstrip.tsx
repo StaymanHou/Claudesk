@@ -27,13 +27,18 @@ import type { FilmstripTile } from "./filmstripTiles";
 import { readMirrorFrame, subscribeMirrorFrame } from "./mirrorFrame";
 import { shouldRunMirror } from "./mirrorTicker";
 import { insertionIndex } from "./filmstripOrder";
-import type { WireWorkspaceState } from "../../state/workspaceStatus";
+import type {
+  WireLinkOverlay,
+  WireWorkspaceState,
+} from "../../state/workspaceStatus";
 
 interface FilmstripProps {
   /** The ordered tiles (derived once in App so the ⌘⇧+digit index agrees). */
   tiles: FilmstripTile[];
   /** Live CC state lookup by workspace id (M3 WP6 `workspace-status` channel). */
   statusFor: (workspaceId: string) => WireWorkspaceState;
+  /** M17 WP4 — a remote tile's link overlay (dimmed + glyph), if its terminal is not attached. */
+  linkFor?: (workspaceId: string) => WireLinkOverlay | undefined;
   /** Last prompt/message snippet lookup by workspace id — the status-dot tooltip. */
   snippetFor?: (workspaceId: string) => string | undefined;
   /** M4 WP4 — collapsed = one-line status-pill row (no live mirror); expanded = full
@@ -69,6 +74,7 @@ const DRAG_THRESHOLD_PX = 5;
 export function Filmstrip({
   tiles,
   statusFor,
+  linkFor,
   snippetFor,
   collapsed,
   onToggleCollapsed,
@@ -298,6 +304,7 @@ export function Filmstrip({
               <WorkspaceStatusIndicator
                 state={statusFor(tile.id)}
                 snippet={snippetFor?.(tile.id)}
+                link={linkFor?.(tile.id)}
               />
               {/* QoL-WP1 (P3.6 — operator request) — close (×) on the collapsed pill.
                   Routes through the SAME onClose → App.requestClose (dirty-guard +
@@ -364,6 +371,7 @@ export function Filmstrip({
                 <WorkspaceStatusIndicator
                   state={statusFor(tile.id)}
                   snippet={snippetFor?.(tile.id)}
+                  link={linkFor?.(tile.id)}
                 />
                 {/* QoL-WP1 — close (×). stopPropagation on pointerdown so the strip's
                     drag/promote handler (onStripPointerDown) never treats this as a tile
