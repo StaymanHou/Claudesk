@@ -32,7 +32,11 @@ import {
   shouldScheduleFire,
 } from "./autoResumeFire";
 import type { AutoResumeAction, OpenIntent } from "../../state/predictAction";
-import { takeSpawnArgs, type SpawnIntentRef } from "../../cc/spawnArgs";
+import {
+  takeSpawnArgs,
+  type SpawnIntentRef,
+  spawnCommandFor,
+} from "../../cc/spawnArgs";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
 import {
@@ -687,8 +691,8 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
         // source-text guard can only approximate (`ccInputRouting.ts` explains which property
         // and why `?raw` cannot express it).
         //
-        // ⚠️ This is the ONLY caller that feeds the watermark. `injectCommand` writes to
-        // `cc_input` directly and never routes through xterm, which is what stops the
+        // ⚠️ This is the ONLY caller that feeds the watermark. `injectCommand` writes through
+        // `cc_inject` (M17 WP3) and never routes through xterm, which is what stops the
         // supervisor suppressing itself (AC-7).
         const sid = sessionIdRef.current;
         const routing = routeCcInput(data, sid, encodeBase64);
@@ -796,8 +800,9 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           //
           // Sent for `cc_spawn` only: `term_spawn` (the WP9 shell) has no resume arm and its
           // Rust command takes no such parameter, so passing it would be a wire error.
+          // M17 WP3 — a remote CC pane invokes `cc_spawn_remote` (same args); see `spawnCommandFor`.
           const sessionId = await invoke<string>(
-            spawnCommand,
+            spawnCommandFor(spawnCommand, projectPath),
             takeSpawnArgs(
               spawnCommand,
               projectPath,

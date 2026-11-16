@@ -208,6 +208,14 @@ impl RemoteTarget {
     pub fn key(&self) -> String {
         remote_key(&self.host, &self.path)
     }
+
+    /// Re-check this target exactly as stored (M17 WP3): the host passes
+    /// [`crate::remote_cmd::validate_host`] unchanged and the path is already in
+    /// [`crate::remote_cmd::normalize_remote_path`]'s form. ⚠️ Every path from a stored row to an
+    /// ssh argv goes through this, because a row can come from a hand-edited `projects.json`.
+    pub fn validated(&self) -> Result<crate::remote_cmd::ValidTarget, String> {
+        crate::remote_cmd::ValidTarget::new(&self.host, &self.path)
+    }
 }
 
 /// The scheme prefix every remote identity key starts with. A local project path is always
@@ -442,21 +450,13 @@ pub fn add_or_touch(data_dir: &Path, path: PathBuf, now_ms: i64) -> Result<Proje
 /// them:
 /// - `project.path == remote_key(remote)` — the row's key is its remote identity;
 /// - no non-default `profile` (profiles are local `CLAUDE_CONFIG_DIR`s);
-/// - `target.path` is absolute and `target.host` is non-empty.
+/// - the host and path pass [`RemoteTarget::validated`] as given (an allow-listed host with no
+///   leading `-`; an absolute path already in normal form, so `/r/` and `/r` cannot both exist).
 pub fn add_remote(
     data_dir: &Path,
     target: RemoteTarget,
     now_ms: i64,
 ) -> Result<Project, ConfigError> {
-    if target.host.is_empty() {
-        return Err(ConfigError::Invalid("a remote project needs a host".into()));
-    }
-    if !target.path.starts_with('/') {
-        return Err(ConfigError::Invalid(format!(
-            "the remote path must be absolute, got {:?}",
-            target.path
-        )));
-    }
     let candidate = Project {
         display_name: derive_display_name(Path::new(&target.path)),
         path: PathBuf::from(target.key()),
@@ -482,12 +482,14 @@ pub fn add_remote(
     })
 }
 
-/// The §A invariants of a remote row: its `path` is its [`remote_key`], and it carries no
-/// non-default profile. A local row (`remote: None`) always passes.
+/// The §A invariants of a remote row: its host and path pass [`RemoteTarget::validated`], its
+/// `path` is its [`remote_key`], and it carries no non-default profile. A local row
+/// (`remote: None`) always passes.
 fn check_remote_invariants(project: &Project) -> Result<(), ConfigError> {
     let Some(target) = &project.remote else {
         return Ok(());
     };
+    target.validated().map_err(ConfigError::Invalid)?;
     if project.path != Path::new(&target.key()) {
         return Err(ConfigError::Invalid(format!(
             "remote row key mismatch: path {} is not {}",
@@ -2418,6 +2420,74 @@ mod tests {
     }
 
     #[test]
+    fn add_remote_refuses_an_unsafe_host_or_a_path_not_in_normal_form() {
+        // The WP2 review's MAJOR: these were checked only by the preflight, so a caller that
+        // skipped it (or a future one) could store them. Each case on its own.
+        for (host, path) in [
+            ("-oProxyCommand=touch /tmp/x", "/r"),
+            ("a b", "/r"),
+            ("me@mini", "/r/"),
+            ("me@mini", "/a//b"),
+            ("me@mini", "/a/./b"),
+            ("me@mini", "/a/../b"),
+        ] {
+            let dir = TempDir::new().unwrap();
+            let target = RemoteTarget {
+                host: host.into(),
+                path: path.into(),
+            };
+            assert!(
+                matches!(
+                    add_remote(dir.path(), target, 1),
+                    Err(ConfigError::Invalid(_))
+                ),
+                "{host:?} {path:?} must be refused"
+            );
+            assert!(
+                !dir.path().join(PROJECTS_FILE).exists(),
+                "{host:?} {path:?}: nothing written"
+            );
+        }
+    }
+
+    #[test]
+    fn the_remote_invariants_check_the_host_and_path_of_a_stored_row() {
+        // A hand-edited row whose key matches its (bad) target: only the validation catches it.
+        for (host, path) in [("-oProxyCommand=x", "/r"), ("me@mini", "/r/")] {
+            let target = RemoteTarget {
+                host: host.into(),
+                path: path.into(),
+            };
+            let mut row = p("/whatever", 1);
+            row.path = PathBuf::from(target.key());
+            row.remote = Some(target);
+            assert!(
+                matches!(check_remote_invariants(&row), Err(ConfigError::Invalid(_))),
+                "{host:?} {path:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_stored_row_with_a_bad_target_still_reads_so_the_list_survives() {
+        // Degrade the row, never the list (the drive-mode blast-radius rule): a bad remote row is
+        // listed (so it can be seen and removed) and refuses only at `validated()`.
+        let dir = TempDir::new().unwrap();
+        let bad = RemoteTarget {
+            host: "-oProxyCommand=x".into(),
+            path: "/r".into(),
+        };
+        let mut row = p("/whatever", 1);
+        row.path = PathBuf::from(bad.key());
+        row.remote = Some(bad);
+        write_projects(dir.path(), &[row, p("/local", 2)]).unwrap();
+        let read = read_projects(dir.path()).expect("the list must still read");
+        assert_eq!(read.len(), 2);
+        let remote = read.iter().find(|p| p.is_remote()).unwrap();
+        assert!(remote.remote.as_ref().unwrap().validated().is_err());
+    }
+
+    #[test]
     fn the_remote_invariants_reject_a_key_mismatch_and_a_profile() {
         let mut row = p("/whatever", 1);
         row.remote = Some(mini("/r"));
@@ -2485,6 +2555,46 @@ mod tests {
 
     /// ⚠️ THE data-loss guard (research Risk 1). Mutation-proven at WP2 Phase 1: deleting
     /// `p.is_remote() ||` from `prune_missing`'s partition makes this test fail.
+    /// A remote row that fails [`RemoteTarget::validated`], as a hand-edited `projects.json`
+    /// would hold it. Its key matches its (bad) target, so only the validation can tell.
+    fn invalid_remote_row() -> Project {
+        let bad = RemoteTarget {
+            host: "-oProxyCommand=touch /tmp/x".into(),
+            path: "/r".into(),
+        };
+        let mut row = p("/whatever", 1);
+        row.path = PathBuf::from(bad.key());
+        row.remote = Some(bad);
+        row
+    }
+
+    #[test]
+    fn an_invalid_remote_row_survives_the_picker_mount_prune_so_it_stays_visible() {
+        // M17 WP3 P1.verify-human.1 (operator decision A): an invalid stored remote row is KEPT
+        // in the list and refused at open, never hidden. The picker runs `prune_missing` on every
+        // mount, so a prune that dropped it would hide it after one launch.
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[invalid_remote_row()]).unwrap();
+        let dropped = prune_missing(dir.path()).unwrap();
+        assert!(dropped.is_empty(), "{dropped:?}");
+        let listed = read_projects(dir.path()).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].remote.as_ref().unwrap().validated().is_err());
+    }
+
+    #[test]
+    fn an_invalid_remote_row_can_still_be_removed() {
+        // Decision A's remedy is "remove it and add it again", so Remove must not run the
+        // invariants that make the row invalid.
+        let dir = TempDir::new().unwrap();
+        let bad = invalid_remote_row();
+        write_projects(dir.path(), &[bad.clone(), p("/local", 2)]).unwrap();
+        remove(dir.path(), &bad.path).unwrap();
+        let left = read_projects(dir.path()).unwrap();
+        assert_eq!(left.len(), 1);
+        assert!(!left[0].is_remote());
+    }
+
     #[test]
     fn prune_missing_never_drops_a_remote_row() {
         let dir = TempDir::new().unwrap();

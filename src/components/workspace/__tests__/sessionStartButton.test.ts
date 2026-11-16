@@ -321,7 +321,7 @@ describe("wiring — the properties no value can observe (source guards)", () =>
     ).not.toMatch(/invoke\(\s*"cc_input"/);
   });
 
-  it("the funnel owns the injection contract: cc_input, the shared payload, and a .catch", () => {
+  it("the funnel owns the injection contract: cc_inject, the shared payload, and a .catch", () => {
     // ⚠️ These three assertions MOVED here from the component (M13 WP2) rather than being
     // deleted — the properties still matter, they just have a new home. Each has a named
     // precedent for going wrong:
@@ -344,7 +344,8 @@ describe("wiring — the properties no value can observe (source guards)", () =>
       "autoResumeFire.ts is unreadable — every assertion below would pass vacuously",
     ).toBeGreaterThan(500);
     expect(fire).toContain("slashCommandPayload(");
-    expect(fire).toMatch(/invoke\(\s*"cc_input"/);
+    // M17 WP3 P4.3 — the funnel invokes the backend injection funnel `cc_inject`.
+    expect(fire).toMatch(/invoke\(\s*"cc_inject"/);
     // ⚠️ Was `/\.catch\(|catch\s*\(/` — a two-armed regex whose `.catch(` arm matched ZERO
     // times (this funnel uses `try`/`catch`, not a promise `.catch`), leaving only the loose arm
     // live: it passed on any `catch (` anywhere in the module, unscoped to the injection path.

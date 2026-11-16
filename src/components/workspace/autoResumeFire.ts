@@ -273,19 +273,28 @@ export function slashCommandPayload(command: string): string {
 export async function injectCommand(
   sessionId: string,
   command: string,
-  onIpcError?: (message: string) => void,
+  onIpcError?: (message: string, reason: string) => void,
   label = "auto-resume",
   buildPayload: (command: string) => string = slashCommandPayload,
 ): Promise<void> {
   try {
-    await invoke("cc_input", {
+    // M17 WP3 P4.3 — `cc_inject`, not `cc_input`: the backend funnel. For a LOCAL session it is
+    // `cc_input`'s exact effect; for a REMOTE one it first waits for the pane's bracketed-paste
+    // mode and takes the pane out of tmux copy-mode (a scrolled-up pane swallows input), and
+    // writes nothing if the pane never gets ready. The operator's own typing stays on `cc_input`.
+    await invoke("cc_inject", {
       sessionId,
       data: buildPayload(command),
     });
   } catch (e) {
     console.warn(`${label}: injecting ${command} into ${sessionId} failed`, e);
+    // M17 WP3 P4.verify-human.2 (operator decision A) — `reason` is the backend's own words
+    // (e.g. a remote pane that never got ready: "Claude Code on <host> isn't ready for input
+    // yet (waited 15s)"). A caller with a toast shows THAT, not the diagnostic `message`,
+    // whose label/command strings are for `console.warn` readers.
     onIpcError?.(
       `${label === "auto-resume" ? "Auto-resume" : label} could not run ${command}`,
+      e instanceof Error ? e.message : String(e),
     );
   }
 }

@@ -147,7 +147,7 @@ describe("the plan reaches the REAL funnel with the values it carries", () => {
   // `tsc` or a green suite proves a caller actually passes it. These drive the real funnel and
   // read what crossed the `invoke` boundary.
 
-  it("auto-submit's bytes arrive at cc_input intact", async () => {
+  it("auto-submit's bytes arrive at cc_inject intact", async () => {
     const plan = planSend("compose me", "auto-submit", OFF)!;
     await injectCommand(
       "sess-1",
@@ -162,9 +162,9 @@ describe("the plan reaches the REAL funnel with the values it carries", () => {
       string,
       { sessionId: string; data: string },
     ];
-    // ⚠️ The single injection funnel — `cc_input`, reached through `injectCommand`, NOT a
+    // ⚠️ The single injection funnel — `cc_inject`, reached through `injectCommand`, NOT a
     // second path opened from the panel (F-a decision 2).
-    expect(command).toBe("cc_input");
+    expect(command).toBe("cc_inject");
     expect(args.sessionId).toBe("sess-1");
     expect(sentText()).toBe(`${PASTE_START}compose me${PASTE_END}\r`);
   });
@@ -183,7 +183,7 @@ describe("the plan reaches the REAL funnel with the values it carries", () => {
 
   it("the payload is the STAGED one, not what slashCommandPayload would have produced", async () => {
     // ⚠️ THE MUTATION THIS CATCHES: a caller that forgets to pass `buildPayload` still
-    // compiles, still calls the funnel, and still reaches `cc_input` — it just silently sends
+    // compiles, still calls the funnel, and still reaches `cc_inject` — it just silently sends
     // the WRONG BYTES (newlines stripped, one `\r` appended, no envelope), which for a
     // multi-line dictation fires as N truncated prompts. Asserting inequality against the
     // default is what makes the omission visible.

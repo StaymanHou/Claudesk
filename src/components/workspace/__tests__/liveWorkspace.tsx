@@ -162,10 +162,16 @@ export const gateModule = { useWorkflowFeaturesEnabled: () => gate.enabled };
 
 /** What the stubbed `RightPanelHost` was last rendered with (F-b: the profile it received). */
 export const rightPanel = {
-  props: null as null | { workspaceProfile?: string | null },
+  props: null as null | RightPanelStubProps,
 };
 
-function RightPanelHostStub(props: { workspaceProfile?: string | null }) {
+interface RightPanelStubProps {
+  workspaceProfile?: string | null;
+  /** M17 WP3 P4.verify-human.2 — the workspace's "not sent" toast setter, for the Prompt panel. */
+  onInjectFailure?: (toast: string) => void;
+}
+
+function RightPanelHostStub(props: RightPanelStubProps) {
   useEffect(() => {
     rightPanel.props = props;
   });
@@ -228,6 +234,11 @@ export interface MountOptions {
   /** Extra IPC answers by command name, for commands the harness does not otherwise stub. */
   ipcAnswers?: Record<string, unknown>;
   /**
+   * M17 WP3 P4.verify-human.2 — commands whose IPC REJECTS, with the string a Rust
+   * `Err(String)` would carry (e.g. `cc_inject` on a remote pane that never got ready).
+   */
+  ipcRejects?: Record<string, string>;
+  /**
    * The stub pane exposes NO imperative handle, so `ccPaneRef.current` stays `null`: the state a
    * drive-mode apply must survive without leaving its one-shot spawn override behind.
    */
@@ -248,6 +259,7 @@ export async function mountWorkspace(opts: MountOptions) {
   bootIpc((cmd) => {
     // A per-test answer wins over the defaults below (paydown-2026-11-08 WP5: a test needs to
     // set what `picker_announce_actions` returns).
+    if (opts.ipcRejects && cmd in opts.ipcRejects) throw opts.ipcRejects[cmd];
     if (opts.ipcAnswers && cmd in opts.ipcAnswers) return opts.ipcAnswers[cmd];
     if (cmd === "project_get_default_drive_mode")
       return opts.storedDriveMode ?? null;

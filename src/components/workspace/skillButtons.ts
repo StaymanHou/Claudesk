@@ -57,6 +57,7 @@
 // switching anyway.
 
 import { injectCommand } from "./autoResumeFire";
+import { skillInjectFailure } from "./injectFailure";
 
 /**
  * A workflow command the row offers as a click.
@@ -172,11 +173,24 @@ export function showSkillButtons(inputs: {
 export async function fireSkillCommand(
   sessionId: string,
   command: string,
+  onFailure?: (toast: string) => void,
 ): Promise<void> {
-  // ⚠️ The `"skill-button"` label is load-bearing, not cosmetic. `console.warn` is this path's
-  // ONLY failure channel (no overlay — replacing a working terminal with an error over a command
-  // the user can simply retype would be worse), and `injectCommand` defaults its prefix to
-  // `auto-resume`. Without the label every button failure would be reported as M12's *automatic*
-  // arm misfiring, i.e. the one diagnostic this feature ships would name the wrong feature.
-  await injectCommand(sessionId, command, undefined, "skill-button");
+  // ⚠️ The `"skill-button"` label is load-bearing, not cosmetic. It prefixes the `console.warn`
+  // diagnostic, and `injectCommand` defaults that prefix to `auto-resume`. Without the label every
+  // button failure would be reported as M12's *automatic* arm misfiring, i.e. the diagnostic would
+  // name the wrong feature. Still NO overlay — replacing a working terminal with an error over a
+  // command the user can simply retype would be worse.
+  //
+  // M17 WP3 P4.verify-human.2 (operator decision A) — `onFailure` is the workspace's toast. A
+  // remote pane that never gets ready REFUSES the injection (`cc_inject`), and a refusal that
+  // reached only the console read as "the button did nothing". The toast shows the backend's
+  // own reason (`skillInjectFailure`).
+  await injectCommand(
+    sessionId,
+    command,
+    onFailure
+      ? (_message, reason) => onFailure(skillInjectFailure(command, reason))
+      : undefined,
+    "skill-button",
+  );
 }

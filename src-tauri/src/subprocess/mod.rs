@@ -1,5 +1,6 @@
 //! Process-group primitives shared by every subprocess runner here: `workflow_install::runner`
-//! (git, `install.sh`, `uninstall.sh`) and `adjudicator` (`claude -p`).
+//! (git, `install.sh`, `uninstall.sh`) and [`captured::run_captured`] (`claude -p` for the
+//! adjudicator, one-shot `ssh` execs for M17's remote workspaces).
 //!
 //! The shape both follow: the child leads its own process group, its pipes are read on their own
 //! threads from the moment it spawns, and on a deadline (or an error after the spawn) the whole
@@ -21,6 +22,10 @@
 //!
 //! ⚠️ Memory is bounded by DISCARDING past [`MAX_OUTPUT`], never by backpressure on the pipe: a
 //! pipe nobody empties fills at 64 KB, and the child then blocks on its own write and never exits.
+
+pub mod captured;
+
+pub use captured::{run_captured, RunError};
 
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command};
@@ -48,10 +53,15 @@ pub fn in_own_group(cmd: &mut Command) -> &mut Command {
 /// members still alive are exactly what this is for.
 pub fn kill_group(pgid: u32) {
     if let Ok(pgid) = libc::pid_t::try_from(pgid) {
-        // SAFETY: a negative pid addresses the process group `pgid`. A failure (the group is
-        // already gone) is harmless.
+        // SAFETY: `killpg` signals the process group `pgid`. A failure (the group is already
+        // gone) is harmless.
+        //
+        // ⚠️ `killpg`, not the equivalent `kill(-pgid, …)`: `tests/sync_commands_do_not_block.rs`
+        // resolves calls BY NAME, and a call named `kill` resolves to `PtyCcSession::kill` (which
+        // sleeps). Since M17 WP3 a `Drop` (`LinkRegistry`) reaches this fn, and every `drop(..)` in
+        // the crate then made nine sync commands look blocking. Same syscall, no colliding name.
         unsafe {
-            libc::kill(-pgid, libc::SIGKILL);
+            libc::killpg(pgid, libc::SIGKILL);
         }
     }
 }

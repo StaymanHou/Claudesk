@@ -16,7 +16,7 @@
 use serde::Serialize;
 
 use super::{login_shell, normalize_remote_path, preflight_script, validate_host, PRINT_HOME};
-use crate::adjudicator::AdjudicateError;
+use crate::subprocess::{run_captured, RunError};
 
 /// ssh's own connect timeout, seconds (`-o ConnectTimeout`).
 pub const CONNECT_TIMEOUT_S: u32 = 10;
@@ -44,7 +44,7 @@ pub trait RemoteExec {
 }
 
 /// The real exec: `/usr/bin/ssh -o BatchMode=yes -o ConnectTimeout=10 -- <host> <cmd>`, through
-/// the adjudicator's hardened spawn/wait/kill loop.
+/// the shared hardened spawn/wait/kill loop (`crate::subprocess::run_captured`).
 ///
 /// `--` ends ssh's options, so even a host that slipped past [`validate_host`] cannot become one.
 /// The host is an argv element, never shell text; `remote_command` is shell text for the REMOTE
@@ -61,15 +61,15 @@ impl RemoteExec for SshExec {
             .arg("--")
             .arg(host)
             .arg(remote_command);
-        match crate::adjudicator::run_command(cmd, "", EXEC_TIMEOUT_MS) {
+        match run_captured(cmd, "", EXEC_TIMEOUT_MS) {
             Ok(out) => ExecResult::Ok(out),
-            Err(AdjudicateError::Failed { code, stderr }) => ExecResult::Failed { code, stderr },
-            Err(AdjudicateError::TimedOut(_)) => ExecResult::TimedOut,
-            Err(AdjudicateError::NotFound(_)) => {
+            Err(RunError::Failed { code, stderr }) => ExecResult::Failed { code, stderr },
+            Err(RunError::TimedOut(_)) => ExecResult::TimedOut,
+            Err(RunError::NotFound(_)) => {
                 ExecResult::SpawnFailed("/usr/bin/ssh was not found".into())
             }
-            Err(AdjudicateError::Spawn(e)) => ExecResult::SpawnFailed(e),
-            Err(AdjudicateError::OutputTooLarge(n)) => {
+            Err(RunError::Spawn(e)) => ExecResult::SpawnFailed(e),
+            Err(RunError::OutputTooLarge(n)) => {
                 ExecResult::SpawnFailed(format!("the host sent more than {n} bytes"))
             }
         }
@@ -253,7 +253,7 @@ fn token_fix(host: &str, what: &str) -> String {
 
 /// Plain words for an exec that did not get to run the command (arch §H: "could not resolve
 /// hostname: is Tailscale running?").
-fn connect_failure(host: &str, r: &ExecResult) -> String {
+pub(crate) fn connect_failure(host: &str, r: &ExecResult) -> String {
     match r {
         ExecResult::TimedOut => format!("{host} did not answer within {}s", EXEC_TIMEOUT_MS / 1000),
         ExecResult::SpawnFailed(e) => format!("could not run ssh: {e}"),

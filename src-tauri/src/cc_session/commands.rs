@@ -11,7 +11,7 @@
 use std::sync::Mutex;
 
 use base64::Engine as _;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use super::{CcPermissionMode, OpenIntent, SessionRegistry};
 
@@ -81,8 +81,66 @@ pub fn cc_spawn(
     let mut reg = registry
         .lock()
         .map_err(|_| "session registry lock poisoned".to_string())?;
-    reg.spawn(app, &project_path, resolve_open_intent(intent))
+    reg.spawn(
+        app,
+        &project_path,
+        resolve_open_intent(intent),
+        super::SpawnTarget::Local,
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// M17 WP3 — spawn the CC session of a REMOTE row (`project_path` is its `ssh://` key): bring the
+/// host link up, then register a session whose PTY runs `ssh -tt` into the workspace's tmux
+/// session (arch §C). Returns the session id; output, input, resize and kill use the same
+/// `cc-output-<sid>` / `cc_input` / `cc_resize` / `cc_kill` as a local session.
+///
+/// ⚠️ `async`, on a blocking worker: the link may take seconds to come up. A sync command runs on
+/// the main thread (`tests/sync_commands_do_not_block.rs`). The registry lock is taken only AFTER
+/// the link is Up, for the non-blocking PTY spawn.
+///
+/// The row is re-validated on the way (`remote_link::commands::target_for`), and the per-host cap
+/// and the unclean-flag ordering live in `SessionRegistry::spawn`, shared with the local path.
+#[tauri::command]
+pub async fn cc_spawn_remote(
+    app: AppHandle,
+    project_path: String,
+    intent: Option<OpenIntent>,
+) -> Result<String, String> {
+    let dir = crate::config_store::commands::resolve_data_dir(&app)?;
+    crate::blocking::on_blocking_worker("opening the remote workspace", move || {
+        let target = crate::remote_link::commands::target_for(&dir, &project_path)?;
+        let links = app
+            .try_state::<crate::remote_link::commands::SharedLinks>()
+            .ok_or("remote links are unavailable in this build")?
+            .inner()
+            .clone();
+        let link = links.ensure(&target)?;
+        let local_cwd = app
+            .path()
+            .home_dir()
+            .map_err(|e| format!("could not resolve your home folder: {e}"))?
+            .display()
+            .to_string();
+        let registry = app.state::<Registry>();
+        let mut reg = registry
+            .lock()
+            .map_err(|_| "session registry lock poisoned".to_string())?;
+        reg.spawn(
+            app.clone(),
+            &project_path,
+            resolve_open_intent(intent),
+            super::SpawnTarget::Remote(super::RemoteSpawn {
+                links,
+                target,
+                link,
+                session: crate::remote_cmd::tmux_session(&project_path),
+                local_cwd,
+            }),
+        )
         .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// Read the **effective drive mode the running session spawned under** — `null` when it
@@ -170,6 +228,57 @@ pub fn cc_input(
       // the bytes. Best-effort + gated (zero-IO when tracking is OFF, the WP2 default);
       // a telemetry miss must not affect input delivery, which already succeeded above.
     crate::time_store::commands::record_keystroke_activity(&app, &session_id, byte_count);
+    Ok(())
+}
+
+/// M17 WP3 P4.3 — THE funnel for every Claudesk-originated injection (skill buttons, the Prompt
+/// panel, auto-resume, Recycle), invoked by the frontend's `injectCommand`. The operator's own
+/// keystrokes stay on [`cc_input`] (typing while scrolled up goes to tmux copy-mode by design).
+///
+/// - **Local session:** exactly [`cc_input`]'s effect: the same bytes, then the same keystroke
+///   telemetry call.
+/// - **Remote session:** first `RemoteExit::prepare_inject` (wait for the pane's bracketed-paste
+///   mode, then leave copy-mode; one ssh exec); a pane that never gets ready gets NOTHING written
+///   and the caller sees the error.
+///
+/// ⚠️ `async`, on a blocking worker: the remote preparation waits on ssh. The registry lock is NOT
+/// held across that wait.
+#[tauri::command]
+pub async fn cc_inject(app: AppHandle, session_id: String, data: String) -> Result<(), String> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data.as_bytes())
+        .map_err(|e| format!("invalid base64 input: {e}"))?;
+    crate::blocking::on_blocking_worker("injecting into the session", move || {
+        let registry = app.state::<Registry>();
+        inject_bytes(&registry, &session_id, &bytes, |n| {
+            crate::time_store::commands::record_keystroke_activity(&app, &session_id, n)
+        })
+    })
+    .await
+}
+
+/// [`cc_inject`]'s body, split so a test drives it with a fake registry: prepare a remote pane
+/// (without the lock), write the bytes (under the lock), then `record(byte_count)`.
+pub(crate) fn inject_bytes(
+    registry: &Registry,
+    session_id: &str,
+    bytes: &[u8],
+    record: impl FnOnce(usize),
+) -> Result<(), String> {
+    let remote = registry
+        .lock()
+        .map_err(|_| "session registry lock poisoned".to_string())?
+        .remote_of(session_id)
+        .map_err(|e| e.to_string())?;
+    if let Some(remote) = remote {
+        remote.prepare_inject()?;
+    }
+    registry
+        .lock()
+        .map_err(|_| "session registry lock poisoned".to_string())?
+        .input(session_id, bytes)
+        .map_err(|e| e.to_string())?;
+    record(bytes.len());
     Ok(())
 }
 
@@ -351,5 +460,77 @@ mod tests {
             !code.contains("OpenIntent::Fire") && !code.contains("OpenIntent::NoFire"),
             "cc_spawn must not hardcode an intent variant; found:\n{code}"
         );
+    }
+
+    /// A session that records what it is sent.
+    struct Capturing(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+    impl super::super::CcSession for Capturing {
+        fn send_input(&self, bytes: &[u8]) -> Result<(), super::super::CcError> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(())
+        }
+        fn resize(&self, _c: u16, _r: u16) -> Result<(), super::super::CcError> {
+            Ok(())
+        }
+        fn kill(&self) -> Result<(), super::super::CcError> {
+            Ok(())
+        }
+        fn mark_ready(&self) {}
+    }
+
+    #[test]
+    fn cc_inject_on_a_local_session_is_cc_inputs_bytes_then_its_telemetry() {
+        // P4.3: the funnel must not change local behaviour — the same bytes reach the session,
+        // and the keystroke telemetry sees the same count `cc_input` reports.
+        let sent = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut reg = SessionRegistry::new();
+        let sink = std::sync::Arc::clone(&sent);
+        let id = reg.insert_for_test(move |_| Box::new(Capturing(sink)));
+        let registry: Registry = std::sync::Mutex::new(reg);
+        let payload = b"\x1b[200~line one\nline two\x1b[201~\r";
+        let mut recorded = None;
+        inject_bytes(&registry, &id, payload, |n| recorded = Some(n)).unwrap();
+        assert_eq!(sent.lock().unwrap().as_slice(), payload);
+        assert_eq!(recorded, Some(payload.len()));
+
+        // An unknown session: an error, nothing recorded.
+        let mut called = false;
+        assert!(inject_bytes(&registry, "cc-nope", b"x", |_| called = true).is_err());
+        assert!(!called);
+    }
+
+    #[test]
+    fn cc_inject_wires_inject_bytes_record_to_the_keystroke_telemetry() {
+        // The test above drives `inject_bytes` with its OWN `record`, so it cannot see whether the
+        // `cc_inject` command hands `inject_bytes` a closure that actually records (deleting that
+        // call survived a mutant at WP3 Phase 4 verify-self). The command needs an `AppHandle`,
+        // which no test here can build, so this is a SOURCE question: in the production
+        // `cc_inject`, comment-stripped, the closure given to `inject_bytes` calls
+        // `record_keystroke_activity` with the command's `app` and `session_id` and the closure's
+        // own count — the same call `cc_input` makes.
+        let src = include_str!("commands.rs");
+        let production = src.split("mod tests").next().unwrap_or(src);
+        let start = production
+            .find("pub async fn cc_inject(")
+            .expect("cc_inject moved; re-scope this guard");
+        let body = &production[start..];
+        let body = &body[..body.find("\n}\n").expect("cc_inject terminates")];
+        let code: String = body
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            code.contains(
+                "inject_bytes(&registry, &session_id, &bytes, |n| { \
+                 crate::time_store::commands::record_keystroke_activity(&app, &session_id, n) })"
+            ),
+            "cc_inject must pass inject_bytes a closure that records keystroke activity: {code}"
+        );
+        // ...and `cc_input` records through the same function (the parity claim).
+        assert!(production.contains(
+            "crate::time_store::commands::record_keystroke_activity(&app, &session_id, byte_count);"
+        ));
     }
 }

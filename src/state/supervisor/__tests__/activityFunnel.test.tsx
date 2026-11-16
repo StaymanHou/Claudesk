@@ -88,7 +88,7 @@ interface Setup {
   tail?: () => TranscriptTail;
   wip?: { path: string | null; text: string };
   injectFails?: boolean;
-  /** Turn attribution: claim the origin inside the `cc_input` handler (default true). */
+  /** Turn attribution: claim the origin inside the `cc_inject` handler (default true). */
   claimAtInject?: boolean;
   unsentInput?: boolean;
   onRecycle?: (info: RecycleRequest) => RecycleStatus;
@@ -103,7 +103,7 @@ const injected: string[] = [];
 /** Every `transcript_tail` invoke's arguments, in order. */
 const tailArgs: Record<string, unknown>[] = [];
 const recycles: RecycleRequest[] = [];
-/** Turn attribution: the origin a turn start would claim AT THE MOMENT `cc_input` arrives. */
+/** Turn attribution: the origin a turn start would claim AT THE MOMENT `cc_inject` arrives. */
 let originAtInject: SupervisorOrigin | null | undefined;
 
 function Harness({ setup }: { setup: Setup }) {
@@ -165,7 +165,7 @@ async function mount(setup: Setup = {}, extra: Setup[] = []) {
       if (cmd === "wip_read") return setup.wip ?? { path: null, text: "" };
       if (cmd === "supervisor_adjudicate")
         return setup.adjudicatorReply ?? claudeJsonReply("PROCEED");
-      if (cmd === "cc_input") {
+      if (cmd === "cc_inject") {
         // Claim here, as the turn start this injection produces would: it proves the origin was
         // armed BEFORE the invoke, not after it resolved.
         if (setup.claimAtInject !== false)
@@ -395,8 +395,8 @@ describe("AC-1: exactly one record per turn end, one per exit", () => {
     expect(injected).toEqual([]);
   });
 
-  it("⚠️ inject-failed: a rejected cc_input is an ERROR, never recorded as fired", async () => {
-    // `injectCommand` swallows a rejected `cc_input`; the supervisor's wiring re-throws from
+  it("⚠️ inject-failed: a rejected cc_inject is an ERROR, never recorded as fired", async () => {
+    // `injectCommand` swallows a rejected `cc_inject`; the supervisor's wiring re-throws from
     // `onIpcError` so the failure reaches `fireOne`. Without that, this recorded `fired`.
     await mount({ tail: () => tailFor("F5"), injectFails: true });
     await turnEnd();
@@ -523,11 +523,11 @@ describe("AC-7: with the gate OFF nothing is recorded", () => {
 });
 
 describe("turn attribution: the supervisor arms an origin for the turn it starts", () => {
-  it("⚠️ a fire arms the origin BEFORE cc_input, carrying the command it injects", async () => {
+  it("⚠️ a fire arms the origin BEFORE cc_inject, carrying the command it injects", async () => {
     await mount({ tail: () => tailFor("F5") });
     await turnEnd();
     // The turn start trails the invoke by ~40 ms (the P3.1 probe), so an origin armed only after
-    // the invoke resolved could be missed. Claimed from inside the `cc_input` handler.
+    // the invoke resolved could be missed. Claimed from inside the `cc_inject` handler.
     expect(originAtInject).toEqual({
       command: "/feature-plan",
       firedAt: 1_000,

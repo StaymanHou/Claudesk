@@ -4,7 +4,7 @@ import { matchesFilter, type RecentProject } from "../ProjectPicker";
 import {
   isRemoteRow,
   pathLineFor,
-  remoteOpenRefusal,
+  remoteOpenOutcome,
   shortHost,
 } from "../remoteRow";
 
@@ -37,10 +37,18 @@ describe("remote rows (M17 WP2)", () => {
     expect(shortHost("user@[fe80::1%en0]")).toBe("[fe80::1%en0]");
   });
 
-  it("refuses to open a remote row and lets a local row through", () => {
-    expect(remoteOpenRefusal(remote)).toContain("user@mini-host");
-    expect(remoteOpenRefusal(local)).toBeNull();
-    expect(remoteOpenRefusal(undefined)).toBeNull();
+  // M17 WP3 — the open check replaced WP2's stub refusal.
+  it("opens on ok; a missing folder offers Remove; an unreachable or invalid row never does", () => {
+    expect(remoteOpenOutcome({ kind: "ok" })).toBeNull();
+    expect(
+      remoteOpenOutcome({ kind: "folder-missing", message: "gone" }),
+    ).toEqual({ message: "gone", offerRemove: true });
+    expect(
+      remoteOpenOutcome({ kind: "unreachable", message: "no route" }),
+    ).toEqual({ message: "no route", offerRemove: false });
+    expect(remoteOpenOutcome({ kind: "invalid", message: "bad host" })).toEqual(
+      { message: "bad host", offerRemove: false },
+    );
   });
 
   it("the filter matches a remote row on user@host:path, which its key does not contain", () => {

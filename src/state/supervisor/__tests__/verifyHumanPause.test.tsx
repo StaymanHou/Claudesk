@@ -283,7 +283,7 @@ async function mount(setup: Setup = {}) {
       }
       if (cmd === "wip_read") return { path: null, text: "" };
       if (cmd === "supervisor_adjudicate") return claudeJsonReply("PROCEED");
-      if (cmd === "cc_input") {
+      if (cmd === "cc_inject") {
         injected.push(String((args as { data: string }).data));
         return null;
       }

@@ -30,6 +30,7 @@ import { appendToHistory, loadHistory } from "../draftHistory";
 import { planRecover, discardConfirmSpec } from "./promptRecover";
 import { ConfirmModal } from "../editor/ConfirmModal";
 import { injectCommand } from "../autoResumeFire";
+import { promptInjectFailure } from "../injectFailure";
 import { planSend, type SendMode } from "./sendStagedDraft";
 import { loadDictatedWrap, saveDictatedWrap } from "./promptDictatedWrap";
 import {
@@ -81,6 +82,13 @@ interface PromptPanelProps {
    * warns about.
    */
   onRegisterSend?: (send: ((mode: SendMode) => void) | null) => void;
+  /**
+   * M17 WP3 P4.verify-human.2 (operator decision A) — shows the workspace's toast when a send did
+   * not go through. A remote pane that never gets ready makes `cc_inject` REFUSE; by then this
+   * panel has already archived and cleared the text, so without the toast a dropped send reads
+   * as "sent". Read through a ref at failure time (the injection settles after the click).
+   */
+  onSendFailure?: (toast: string) => void;
 }
 
 export function PromptPanel({
@@ -90,6 +98,7 @@ export function PromptPanel({
   onDraftPresenceChange,
   ccSessionId,
   onRegisterSend,
+  onSendFailure,
 }: PromptPanelProps) {
   // Seeded from the project's persisted draft (P3.1). Lazy initializer so the read happens
   // once at mount rather than on every render.
@@ -253,6 +262,10 @@ export function PromptPanel({
   useEffect(() => {
     ccSessionIdRef.current = ccSessionId;
   }, [ccSessionId]);
+  const onSendFailureRef = useRef(onSendFailure);
+  useEffect(() => {
+    onSendFailureRef.current = onSendFailure;
+  }, [onSendFailure]);
 
   // Paydown WP10 — the "mark as dictated" toggle. Seeded from storage (lazy, read once) and read
   // by `send` THROUGH A REF, for the same stable-identity reason as the refs above.
@@ -283,7 +296,8 @@ export function PromptPanel({
       void injectCommand(
         sessionId,
         plan.command,
-        undefined,
+        (_message, reason) =>
+          onSendFailureRef.current?.(promptInjectFailure(reason)),
         plan.label,
         plan.buildPayload,
       );

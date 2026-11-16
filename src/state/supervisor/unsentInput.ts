@@ -21,9 +21,10 @@
 // and reads **no PTY output at all**. The rule holds by construction, not by discipline.
 //
 // ⚠️ **THE INFERENCE IS SOUND BECAUSE `term.onData` IS A REAL CHOKEPOINT — VERIFIED, NOT
-// ASSUMED.** The spec enumerated every path bytes reach the pty (D-1): exactly two
-// `invoke("cc_input")` sites exist in the frontend — the `onData` handler this module feeds
-// from, and `injectCommand`, which is the machine's own funnel. xterm's `onData` contract
+// ASSUMED.** The spec enumerated every path bytes reach the pty (D-1): exactly two invoke sites
+// exist in the frontend — the `onData` handler this module feeds from (`cc_input`), and
+// `injectCommand`, which is the machine's own funnel (`cc_inject` since M17 WP3; pinned by
+// `injectionFunnelGuard.test.ts`). xterm's `onData` contract
 // covers **paste** ("when the user types *or pastes*") and `term.input()` routes through it too;
 // there are zero callers of `term.input()`/`term.paste()` in this codebase. ⚠️ **Do NOT
 // re-assert the "paste bypasses this" blind spot** from the pre-spec WIP text — it is refuted
@@ -146,7 +147,7 @@ export function clearUnsentInput(): UnsentInputState {
  * fires, which is the failure mode this whole milestone keeps hitting.
  *
  * ⚠️ **`injectCommand`'s writes MUST NOT reach this** (AC-7). Only the `term.onData` handler
- * calls {@link push}. That is satisfied by construction — `injectCommand` invokes `cc_input`
+ * calls {@link push}. That is satisfied by construction — `injectCommand` invokes `cc_inject`
  * directly and never routes through xterm — and it is pinned by a test, because "by
  * construction" is exactly the kind of claim that decays when someone adds a third writer.
  */

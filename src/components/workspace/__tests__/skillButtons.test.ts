@@ -136,8 +136,8 @@ describe("⚠️ EVERY MEMBER HAS A LIVE CALLER — the M12 dead-/exit trap", ()
       void fireSkillCommand("cc-42", command);
       expect(
         invokeMock,
-        `${command} did not reach invoke("cc_input", …) — a set member with no live caller`,
-      ).toHaveBeenCalledWith("cc_input", {
+        `${command} did not reach invoke("cc_inject", …) — a set member with no live caller`,
+      ).toHaveBeenCalledWith("cc_inject", {
         sessionId: "cc-42",
         // ⚠️ Compared against the REAL helper's output, not a hand-built base64 literal. A
         // hardcoded expectation here would pin whatever the test author computed and would
@@ -362,7 +362,7 @@ describe("wiring — properties no value can observe (source guards)", () => {
   });
 
   it("the module composes NO payload and calls NO IPC of its own", () => {
-    // One send path. The module delegates to `injectCommand`, which owns `cc_input`, the
+    // One send path. The module delegates to `injectCommand`, which owns `cc_inject`, the
     // `.catch`, and the `\r` rule — so a second copy of any of the three cannot appear here.
     expect(mod).toContain("injectCommand");
     expect(mod).not.toMatch(/invoke\(/);

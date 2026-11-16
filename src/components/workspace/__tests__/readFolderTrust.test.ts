@@ -45,7 +45,7 @@ describe("readFolderTrust", () => {
 
 describe("fireAutoResume's DEFAULT seams are the real ones", () => {
   // `XtermPane` passes neither `readTrust` nor `inject`, so these defaults ARE production.
-  it("reads folder_trusted, then types through cc_input", async () => {
+  it("reads folder_trusted, then types through cc_inject", async () => {
     invokeMock.mockImplementation((cmd: string) =>
       Promise.resolve(cmd === "folder_trusted" ? true : undefined),
     );
@@ -58,12 +58,12 @@ describe("fireAutoResume's DEFAULT seams are the real ones", () => {
     expect(fired).toBe(true);
     expect(invokeMock.mock.calls.map((c) => c[0])).toEqual([
       "folder_trusted",
-      "cc_input",
+      "cc_inject",
     ]);
     expect(invokeMock.mock.calls[1][1]).toMatchObject({ sessionId: "pty-9" });
   });
 
-  it("an untrusted folder reaches no cc_input at all", async () => {
+  it("an untrusted folder reaches no cc_inject at all", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     invokeMock.mockResolvedValue(false);
     const fired = await fireAutoResume({

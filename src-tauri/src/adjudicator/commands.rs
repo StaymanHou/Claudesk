@@ -53,11 +53,12 @@ mod tests {
         // outcome does not depend on what is installed (the old test forked the real `claude`
         // when it was on PATH, and accepted either of two outcomes).
         let missing = tauri::async_runtime::block_on(on_worker(|| {
-            super::super::run_command(
+            crate::subprocess::run_captured(
                 std::process::Command::new("/nonexistent/claudesk-wp4-no-such-binary"),
                 "x",
                 1_000,
             )
+            .map_err(AdjudicateError::from)
         }));
         let err = missing.expect_err("a missing binary cannot succeed");
         assert!(err.contains("not found"), "got {err}");
@@ -66,7 +67,7 @@ mod tests {
         let slow = tauri::async_runtime::block_on(on_worker(|| {
             let mut sleep = std::process::Command::new("/bin/sleep");
             sleep.arg("5");
-            super::super::run_command(sleep, "x", 50)
+            crate::subprocess::run_captured(sleep, "x", 50).map_err(AdjudicateError::from)
         }));
         let err = slow.expect_err("a 50ms limit on a 5s sleep cannot succeed");
         assert!(err.contains("timed out"), "got {err}");

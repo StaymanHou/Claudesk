@@ -77,13 +77,13 @@ describe("M12 auto-resume — the default path's exact bytes", () => {
     expect(sentBytes()).toEqual([...ascii("/session-restore"), 0x0d]);
   });
 
-  it("reaches cc_input with the session id it was given", async () => {
+  it("reaches cc_inject with the session id it was given", async () => {
     await injectCommand("sess-m12", "/session-restore");
     const [command, args] = invokeMock.mock.calls[0] as [
       string,
       { sessionId: string; data: string },
     ];
-    expect(command).toBe("cc_input");
+    expect(command).toBe("cc_inject");
     expect(args.sessionId).toBe("sess-m12");
   });
 

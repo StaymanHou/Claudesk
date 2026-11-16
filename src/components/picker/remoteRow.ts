@@ -42,14 +42,29 @@ export function remoteSearchText(r: Pick<RecentProject, "remote">): string {
   return r.remote != null ? `${r.remote.host}:${r.remote.path}` : "";
 }
 
+/** M17 WP3 — mirrors `remote_link::commands::OpenCheck`, the picker's pre-open check. */
+export type RemoteOpenCheck =
+  | { kind: "ok" }
+  | { kind: "folder-missing"; message: string }
+  | { kind: "unreachable"; message: string }
+  | { kind: "invalid"; message: string };
+
 /**
- * WP2 stub: opening a remote row does nothing yet, through EITHER door (the row and `⊘`), and says
- * so. Returns the toast text, or `null` for a local row (open normally). The terminal arrives in
- * WP3; until then a click must neither mint an empty workspace nor stamp `record_open`.
+ * What the picker does with a remote row's open check: `null` = open it; otherwise the toast to
+ * show and whether it offers Remove. ⚠️ Only a MISSING FOLDER offers Remove, and only as an offer:
+ * an unreachable host must never look like a deleted project, and nothing is removed by itself
+ * (`SURFACE-2026-11-16-REMOTE-OPEN-MUST-CHECK-THE-FOLDER-STILL-EXISTS`).
  */
-export function remoteOpenRefusal(
-  r: Pick<RecentProject, "remote"> | undefined,
-): string | null {
-  if (r?.remote == null) return null;
-  return `Remote workspaces can't be opened yet: ${r.remote.host} is saved, and opening it arrives in a later build.`;
+export function remoteOpenOutcome(
+  check: RemoteOpenCheck,
+): { message: string; offerRemove: boolean } | null {
+  switch (check.kind) {
+    case "ok":
+      return null;
+    case "folder-missing":
+      return { message: check.message, offerRemove: true };
+    case "unreachable":
+    case "invalid":
+      return { message: check.message, offerRemove: false };
+  }
 }

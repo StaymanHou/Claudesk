@@ -50,13 +50,23 @@ import type { AnnounceMap, AutoResumeAction } from "../../state/predictAction";
 import { NO_TEXT_ASSIST } from "../noTextAssist";
 import { PickerRow } from "./PickerRow";
 import { AddRemoteForm } from "./AddRemoteForm";
-import { pathLineFor, remoteOpenRefusal, remoteSearchText } from "./remoteRow";
+import {
+  pathLineFor,
+  remoteOpenOutcome,
+  remoteSearchText,
+  type RemoteOpenCheck,
+} from "./remoteRow";
 import { orderPickerRows } from "./pickerOrder";
 
 // A picker toast is either an INFO note (e.g. "removed N stale projects" on mount) or
 // an ERROR (an IPC rejection that must surface, not be swallowed — the WP6 MAJOR). The
 // kind drives styling; both are dismissible.
-type PickerToast = { kind: "info" | "error"; message: string };
+type PickerToast = {
+  kind: "info" | "error";
+  message: string;
+  /** M17 WP3 — an optional action button (e.g. Remove on a remote row whose folder is gone). */
+  action?: { label: string; run: () => void };
+};
 
 // Mirrors the Rust `Project` serialization (`path` serializes as `project_path`).
 // Only the fields the picker reads are typed here. `last_opened_at` / `last_closed_at` are
@@ -305,13 +315,42 @@ export function ProjectPicker({
     // Re-derive, do not read the label. `rowAffordances` is the same function the row
     // rendered with, called fresh — so a signal that changed since render is reflected.
     const row = recents.find((r) => r.project_path === projectPath);
-    // M17 WP2 — a REMOTE row opens nothing yet (WP3 builds the terminal). Refused HERE, in the
-    // funnel both doors share, and BEFORE `record_open`, so neither door mints an empty
-    // workspace or stamps a recency for a session that never started.
-    const remoteRefusal = remoteOpenRefusal(row);
-    if (remoteRefusal !== null) {
-      setToast({ kind: "info", message: remoteRefusal });
-      return;
+    // M17 WP3 — a REMOTE row is checked HERE, in the funnel both doors share, and BEFORE
+    // `record_open`: the row is re-validated, its host link brought up, and its folder confirmed
+    // to still exist. A failure opens nothing (no empty workspace, no recency stamp) and says why;
+    // a missing folder also offers Remove, never removing by itself.
+    if (row?.remote != null) {
+      setToast({ kind: "info", message: `Connecting to ${row.remote.host}…` });
+      let check: RemoteOpenCheck;
+      try {
+        check = await invoke<RemoteOpenCheck>("remote_open_check", {
+          projectPath,
+        });
+      } catch (e) {
+        setToast({
+          kind: "error",
+          message: mapIpcError("open remote project", e),
+        });
+        return;
+      }
+      const outcome = remoteOpenOutcome(check);
+      if (outcome !== null) {
+        setToast({
+          kind: "error",
+          message: outcome.message,
+          action: outcome.offerRemove
+            ? {
+                label: "Remove",
+                run: () => {
+                  setToast(null);
+                  void handleRemove(projectPath);
+                },
+              }
+            : undefined,
+        });
+        return;
+      }
+      setToast(null);
     }
     // F-b A.6 — a row naming an unlisted profile opens NOTHING. The backend would refuse the
     // spawn anyway; refusing here means no empty workspace is minted for it.
@@ -545,6 +584,16 @@ export function ProjectPicker({
           data-toast-kind={toast.kind}
         >
           <span>{toast.message}</span>
+          {toast.action !== undefined && (
+            <button
+              type="button"
+              className="picker-toast-action"
+              data-testid="picker-toast-action"
+              onClick={toast.action.run}
+            >
+              {toast.action.label}
+            </button>
+          )}
           <button
             type="button"
             className="picker-toast-dismiss"

@@ -104,17 +104,23 @@ export const RECYCLE_TIMEOUT_MS = 180_000;
 /**
  * Why a Recycle attempt did not fully succeed, beyond the machine's own two reasons.
  *
- * ⚠️ These two are NOT interchangeable, and collapsing them into one string was a real defect.
- * They have **opposite operator consequences**:
+ * ⚠️ These are NOT interchangeable, and collapsing two of them into one string was a real defect.
+ * They have **different operator consequences**:
  *
  *   • `no-session`           — nothing happened. No handoff, no kill, no work at risk.
  *   • `restore-not-injected` — the handoff SUCCEEDED, the clean-exit flag was marked, and CC was
  *                              killed and respawned. Only the final `/session-restore` was
  *                              missed, so the operator must run it by hand.
+ *   • `handoff-not-sent`     — (M17 WP3) the `/session-handoff` injection itself was REFUSED
+ *                              (`cc_inject`: a remote pane that never got ready). Nothing was
+ *                              typed, so nothing happened — but unlike `no-session` the operator
+ *                              DID ask for a recycle and is owed a reason (`onInjectFailure`).
+ *                              Returned at once: waiting for a marker that cannot come would
+ *                              burn the whole `RECYCLE_TIMEOUT_MS` (180 s) in silence.
  *   • `aborted`              — the caller went away mid-operation (workspace closed). Distinct
  *                              from both: NOTHING is owed to the operator, because the workspace
  *                              they would act on no longer exists. A caller must not surface it
- *                              as a failure the way it surfaces the other two.
+ *                              as a failure the way it surfaces the others.
  *
  * A caller switching on `reason` to render a message cannot tell "nothing to do" from "your
  * session was recycled, now restore it" if both arrive as the same value — and the second needs
@@ -122,8 +128,12 @@ export const RECYCLE_TIMEOUT_MS = 180_000;
  */
 export type RecycleCallerFailure =
   | "no-session"
+  | "handoff-not-sent"
   | "restore-not-injected"
   | "aborted";
+
+/** Which of Recycle's two injections was refused (see `RecycleInputs.onInjectFailure`). */
+export type RecycleInjectStep = "handoff" | "restore";
 
 /** What a Recycle attempt produced. */
 export type RecycleOutcome =
@@ -178,9 +188,8 @@ export interface RecycleInputs {
    * caller owns that state and can say when the new id has landed.
    *
    * ⚠️ It must NOT return the pre-recycle id. `relaunch()` kills that session; typing into it
-   * writes to a dead PTY and the restore silently never happens — a failure with no error,
-   * since `cc_input` on an unknown session rejects into `injectCommand`'s `.catch` and only
-   * `console.warn`s.
+   * writes to a dead PTY and the restore never happens. (Since M17 WP3 that rejection is at least
+   * reported — `restore-not-injected` plus `onInjectFailure` — but the restore is still lost.)
    */
   readonly awaitFreshSessionId: () => Promise<string | null>;
   /**
@@ -188,6 +197,15 @@ export interface RecycleInputs {
    * correct without it, and the button decides what (if anything) to show.
    */
   readonly onProgress?: (state: RecycleState) => void;
+  /**
+   * M17 WP3 (an operator decision: a refused injection must be visible) — called when either of
+   * Recycle's two injections is REJECTED by `cc_inject` (any rejection; the motivating one is a
+   * remote pane that never got ready), with the backend's own reason. The caller shows it (the
+   * workspace's "not sent" toast). Without it the operator saw nothing: a refused handoff left
+   * Recycle waiting out `RECYCLE_TIMEOUT_MS`, and a refused restore was reported as `ok: true`;
+   * both reached only `console.warn`.
+   */
+  readonly onInjectFailure?: (step: RecycleInjectStep, reason: string) => void;
   /**
    * How long to wait for the fresh session's PTY before typing `/session-restore`.
    *
@@ -398,7 +416,15 @@ export async function recycleSession(
   const baselineMtimeMs = await readSessionMdMtime(projectPath);
 
   // STEP 2 — type the handoff. `injectCommand` owns the `.catch` and the `\r` payload rule.
-  await injectCommand(ccSessionId, HANDOFF_COMMAND, undefined, "recycle");
+  //
+  // ⚠️ M17 WP3 — a REFUSED handoff (`cc_inject` on a remote pane that never got ready) typed
+  // nothing, so there is no marker to wait for: report it now (`onInjectFailure`) and stop, with
+  // nothing torn down.
+  const handoff = await injectRefusal(ccSessionId, HANDOFF_COMMAND);
+  if (handoff !== null) {
+    inputs.onInjectFailure?.("handoff", handoff);
+    return { ok: false, reason: "handoff-not-sent" };
+  }
 
   // STEP 3 — wait for the composite marker.
   const final = await awaitCompletion(inputs, baselineMtimeMs);
@@ -507,9 +533,38 @@ export async function recycleSession(
   // torn down is at best a wasted write and at worst a slash command in the wrong conversation.
   if (inputs.signal?.aborted) return { ok: false, reason: "aborted" };
 
-  await injectCommand(freshSessionId, RESTORE_COMMAND, undefined, "recycle");
+  // ⚠️ M17 WP3 — a REFUSED restore is `restore-not-injected`, the reason that already means
+  // "recycled, now restore by hand", and it is reported (`onInjectFailure`). Before M17 WP3 this
+  // returned `ok: true` — a recycle that never restored, reported as complete.
+  const restore = await injectRefusal(freshSessionId, RESTORE_COMMAND);
+  if (restore !== null) {
+    inputs.onInjectFailure?.("restore", restore);
+    return { ok: false, reason: "restore-not-injected" };
+  }
 
   return { ok: true };
+}
+
+/**
+ * Inject `command` through THE funnel (`injectCommand`, label `recycle`) and return the refusal
+ * reason, or `null` when the injection went through.
+ */
+async function injectRefusal(
+  sessionId: string,
+  command: string,
+): Promise<string | null> {
+  // Held in an object, not a `let`: TS narrows a `let` to its initial `null` across the `await`
+  // because it cannot see the callback assign it.
+  const refusal: { reason: string | null } = { reason: null };
+  await injectCommand(
+    sessionId,
+    command,
+    (_message, reason) => {
+      refusal.reason = reason;
+    },
+    "recycle",
+  );
+  return refusal.reason;
 }
 
 /**
@@ -530,8 +585,9 @@ export const RESPAWN_POLL_MS = 50;
  * ⚠️ **Waiting for merely non-null is the trap.** After `relaunch()` the caller's mirrored id
  * still holds the OLD value until the respawn resolves and pushes a new one — so a
  * "wait until not null" poll returns immediately with the id of the session that was just
- * killed. The restore would then be typed into a dead PTY and vanish into `injectCommand`'s
- * `.catch` with only a `console.warn`. The comparison against the killed id is the whole point.
+ * killed. The restore would then be typed into a dead PTY and never happen (reported since M17
+ * WP3 as `restore-not-injected`, but still lost). The comparison against the killed id is the
+ * whole point.
  *
  * Returns `null` on timeout rather than throwing: the caller treats that as
  * `restore-not-injected`, which is a reportable outcome, not an exception.

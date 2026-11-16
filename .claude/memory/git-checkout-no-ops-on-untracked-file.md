@@ -82,3 +82,14 @@ uncommitted test in it was gone from the snapshot. Recovery was `git show HEAD:<
 test. Name each copy by its role (`hook_commands.rs`, …) and record `shasum`s BEFORE mutating, then
 `diff` the sums after restoring. And a mutant that does not COMPILE (`error[E0004]`) is an invalid
 probe, not a pass — rewrite it until the test result is printed.
+
+**Corollary — the ASIDE COPY itself can fail, and then so does every restore (hit 2026-11-16, M17
+WP3 P5.5 build).** The harness `cp $f $S/x.orig; …mutate…; cp $S/x.orig $f` ran with `$S` pointing at
+a scratchpad subdir that no longer existed. Both `cp`s failed (stderr only), and the mutant was LEFT
+IN PLACE, three of them, stacked across two files (the restore's `shasum` check printed nothing
+rather than "NOT RESTORED", because it was only an `&& echo restored`). Recovered by reversing each
+single `perl` substitution by hand and re-running the suite. **The rule:** `mkdir -p "$S"`, then
+`cp … || exit 1`, then confirm the aside's `shasum` equals the baseline BEFORE mutating, and make
+the post-restore check print a failure (`|| echo "NOT RESTORED"`) rather than only a success.
+⚠️ A stacked mutant also invalidates the later probe: M3 ran on top of M2, whose mutant already
+failed the same test, so M3 had to be re-run alone.

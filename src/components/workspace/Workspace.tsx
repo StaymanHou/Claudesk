@@ -87,6 +87,7 @@ import {
 } from "./clearButton";
 // The Recycle operation: a sibling in the skill row, not a skill button (`recycleButton.ts`).
 import { recycleSession, waitForFreshSessionId } from "./recycleSession";
+import { recycleInjectFailure } from "./injectFailure";
 // M15 WP4 — the workflow supervisor's per-workspace host. ⚠️ `fanOut` is deliberately NOT wired
 // here; see `useSupervisor`'s header for why the host must be per-workspace.
 import { useSupervisor } from "../../state/supervisor/useSupervisor";
@@ -156,6 +157,12 @@ export function Workspace({
   // "none" on hide prevents a stale accent if a workspace is demoted while focused.
   const rootRef = useRef<HTMLDivElement>(null);
   const [focusHalf, setFocusHalf] = useState<FocusHalf>("none");
+  // M17 WP3 P4.verify-human.2 (operator decision A) — the "not sent" toast. Set by the skill row
+  // and the Prompt panel when `cc_inject` REFUSES (a remote pane that never got ready); the
+  // text is the backend's own reason (`injectFailure.ts`). Scoped to THIS workspace, like
+  // `.drivemode-confirm`, because backgrounded workspaces stay mounted. Dismissed by ×; a later
+  // failure replaces it.
+  const [injectFailure, setInjectFailure] = useState<string | null>(null);
 
   // ── M12 WP3 Phase 5 — the third arm ──────────────────────────────────────────────
   //
@@ -419,14 +426,15 @@ export function Workspace({
    * that duplicated both the `.catch` and the `\r` payload rule — a second injection path for
    * the same rule, which is what task 2.6's "funnel every send through ONE function" forbids.
    *
-   * Error surfacing is settled and lives in `injectCommand`: `console.warn` for diagnosis, and
-   * NO error overlay — replacing a working terminal with an error, over a command the user can
-   * simply type, would be worse.
+   * Error surfacing: `console.warn` for diagnosis (inside `injectCommand`), NO error overlay —
+   * replacing a working terminal with an error, over a command the user can simply type, would
+   * be worse — and, since M17 WP3 (operator decision A), the dismissible `injectFailure` toast
+   * when `cc_inject` refuses (a remote pane that never got ready).
    */
   const fireSkill = (command: string) => {
     const sessionId = workspace.cc_session_id;
     if (sessionId === null) return; // unreachable — the row does not render without one.
-    void fireSkillCommand(sessionId, command);
+    void fireSkillCommand(sessionId, command, setInjectFailure);
   };
 
   // The ungated `clear` button, built once and placed in ONE of two spots below: inside the
@@ -530,6 +538,9 @@ export function Workspace({
       // into a killed PTY, failing silently.
       awaitFreshSessionId: () =>
         waitForFreshSessionId(ccSessionIdRef, sessionId),
+      // M17 WP3 P4.6 — a refused handoff / restore injection shows the "not sent" toast.
+      onInjectFailure: (step, reason) =>
+        setInjectFailure(recycleInjectFailure(step, reason)),
       // ⚠️ No `onProgress`. It exists on the interface for a caller that renders progress, and
       // this one does not: the CC pane is right there and shows the handoff running. Wiring a
       // state setter that only ever feeds an unread variable would be surface with no reader.
@@ -1010,6 +1021,24 @@ export function Workspace({
               )}
             </span>
           ))}
+        {injectFailure !== null && (
+          <div
+            className="workspace-inject-toast"
+            role="alert"
+            data-testid="workspace-inject-toast"
+          >
+            <span>{injectFailure}</span>
+            <button
+              type="button"
+              className="workspace-inject-toast-dismiss"
+              aria-label="Dismiss"
+              title="Dismiss"
+              onClick={() => setInjectFailure(null)}
+            >
+              ×
+            </button>
+          </div>
+        )}
         {/* M13.5 WP4 P4.1 — the confirm. Rendered inside the header so it is scoped to THIS
             workspace (backgrounded workspaces stay mounted, so an app-level dialog would need a
             workspace id to disambiguate). ⚠️ Gated on `pendingDriveMode` alone: it can only be
@@ -1282,6 +1311,7 @@ export function Workspace({
            stay disabled after a session first appears. A recycle updates `workspace`, so this
            value tracks it. */
         ccSessionId={workspace.cc_session_id}
+        onInjectFailure={setInjectFailure}
         workspaceProfile={workspaceProfile}
         collapsed={rightCollapsed}
         registerDirtyProbe={registerDirtyProbe}

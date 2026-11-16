@@ -28,6 +28,7 @@ pub mod commands;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -1025,6 +1026,42 @@ fn drain_backlog_emitting(backlog: &Mutex<Option<Vec<String>>>, mut emit: impl F
     }
 }
 
+/// What a PTY's reader thread does once its output ends (EOF). Fired ON the reader thread by
+/// [`ExitHook::finish_output`].
+///
+/// ⚠️ A VALUE, not a closure. A closure built where the PTY is spawned made
+/// `tests/sync_commands_do_not_block.rs` attribute the remote classifier's waits to every sync
+/// command that reaches a `spawn` (the guard walks closures except those handed to a spawn
+/// boundary). As a value, the only call to the hook's work is inside the reader thread's
+/// `thread::spawn` closure, which is where it runs.
+enum ExitHook {
+    /// A local session: tell the frontend it ended (`cc-exit-<id>`).
+    Emit { app: AppHandle, exit_event: String },
+    /// M17 WP3 Phase 5 — a remote terminal: classify first ([`on_inner_exit`]).
+    Remote(Arc<RemoteShared>),
+}
+
+impl ExitHook {
+    // ⚠️ A deliberately unique name: the blocking guard resolves calls by name, so a common one
+    // (`run`) would make every caller of any other `run` look like it reaches the classifier.
+    fn finish_output(self) {
+        match self {
+            ExitHook::Emit { app, exit_event } => {
+                let _ = app.emit(&exit_event, ());
+            }
+            ExitHook::Remote(shared) => on_inner_exit(shared),
+        }
+    }
+}
+
+/// The default [`ExitHook`]: tell the frontend the session ended (`cc-exit-<id>`).
+fn emit_exit_hook(app: &AppHandle, id: &str) -> ExitHook {
+    ExitHook::Emit {
+        app: app.clone(),
+        exit_event: format!("cc-exit-{id}"),
+    }
+}
+
 /// A live PTY-backed process (CC, or a WP9 shell). Holds the master end (for resize),
 /// a single writer (for input), the child handle (for kill), and the clean-exit
 /// command to attempt before the SIGHUP-first process-group teardown (M10.5 WP3).
@@ -1045,6 +1082,461 @@ pub struct PtyCcSession {
     output_event: String,
     /// Handle to emit the flushed backlog on `mark_ready`.
     app: AppHandle,
+    /// M17 WP3 — a remote session's pane leaves tmux copy-mode before [`CcSession::kill`] types
+    /// `exit_command`: typed into a scrolled-up pane, `/exit` is swallowed and the remote session
+    /// keeps running (WP1; R-1). `None` locally.
+    remote_exit: Option<RemoteExit>,
+}
+
+/// M17 WP3 — WHERE a CC session runs (arch §C: the seam is `SessionRegistry::spawn`'s target,
+/// below `CcSession`; `PtyCcSession` owns everything a remote terminal needs).
+pub enum SpawnTarget {
+    /// A local PTY running `claude` in the project folder. Unchanged from before M17.
+    Local,
+    /// A local PTY running `ssh -tt` into the host's master, which attaches to (or starts) the
+    /// workspace's tmux session on the remote.
+    Remote(RemoteSpawn),
+}
+
+/// Everything a remote spawn needs, resolved by the caller (`cc_spawn_remote`) before the
+/// registry lock is taken: the link is already Up.
+pub struct RemoteSpawn {
+    pub links: std::sync::Arc<crate::remote_link::LinkRegistry>,
+    pub target: crate::remote_cmd::ValidTarget,
+    pub link: crate::remote_link::LinkInfo,
+    /// The tmux session name (`remote_cmd::tmux_session` of the row's key).
+    pub session: String,
+    /// The LOCAL cwd for the ssh process (the user's home: the project folder is remote).
+    pub local_cwd: String,
+}
+
+/// What a remote session's `kill()` needs to cancel copy-mode over the master.
+///
+/// ⚠️ A plain struct called FROM `kill()`, not a closure built in `spawn`: the cancel blocks on an
+/// ssh exec, and `kill()` is where blocking already lives (it runs on a worker: `cc_kill`'s thread,
+/// `kill_all`'s per-session threads). A closure built inside `spawn` made
+/// `tests/sync_commands_do_not_block.rs` attribute the ssh wait to `spawn` itself.
+#[derive(Clone)]
+pub struct RemoteExit {
+    links: std::sync::Arc<crate::remote_link::LinkRegistry>,
+    target: crate::remote_cmd::ValidTarget,
+    session: String,
+}
+
+impl RemoteExit {
+    /// Best effort: with the link down the cancel cannot run, and the close continues (recording an
+    /// end-intent for that case is WP5's R-4 work).
+    fn cancel_before_exit(&self) {
+        if let Err(e) = self.links.cancel_copy_mode(&self.target, &self.session) {
+            eprintln!("[claudesk] remote close: could not cancel copy-mode: {e}");
+        }
+    }
+
+    /// Before a Claudesk injection (P4.3, `cc_inject`): wait for the pane's bracketed-paste mode,
+    /// then leave copy-mode. ⚠️ Blocks (one ssh exec, up to the readiness bound).
+    pub fn prepare_inject(&self) -> Result<(), String> {
+        self.links
+            .prepare_inject(&self.target, &self.session, crate::remote_cmd::READY_POLLS)
+    }
+}
+
+/// M17 WP3 Phase 5 — what a remote terminal's END means, decided when its local `ssh` exits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InnerExit {
+    /// The link dropped under a pane that is still running on the remote: re-attach.
+    Reconnect,
+    /// The session really ended (CC exited, the workspace was closed): emit `cc-exit-<id>`.
+    Ended,
+}
+
+/// `ssh`'s own failure exit code: a connection error, including a mux client whose master died.
+pub const SSH_ERROR_EXIT: u32 = 255;
+
+/// Classify a remote terminal's end (pure, so each arm is mutation-provable).
+///
+/// - `killed` (Claudesk closed the workspace) always ends it: nothing to reconnect to.
+/// - Exit code 255 is ssh failing, not the remote command finishing, so the pane may still be
+///   running: reconnect.
+/// - The link not being Up means the same, whatever the code.
+/// - Otherwise (the remote command exited with the link Up: `/exit` ended the tmux session, or
+///   the session was gone when we attached) it ended.
+pub fn classify_inner_exit(killed: bool, exit_code: Option<u32>, link_up: bool) -> InnerExit {
+    if killed {
+        InnerExit::Ended
+    } else if exit_code == Some(SSH_ERROR_EXIT) || !link_up {
+        InnerExit::Reconnect
+    } else {
+        InnerExit::Ended
+    }
+}
+
+/// `me@mini.example.net` → `mini`: the host as a person would say it.
+pub fn short_host(host: &str) -> &str {
+    let h = host.rsplit_once('@').map_or(host, |(_, h)| h);
+    h.split('.').next().unwrap_or(h)
+}
+
+/// The dim line written into a remote pane while it reconnects (P5.4). ⚠️ Claudesk's own bytes on
+/// the `cc-output-<id>` path, never parsed back; tmux's redraw on re-attach replaces it.
+pub fn reconnect_notice(host: &str) -> String {
+    format!(
+        "\r\n\x1b[2m[Claudesk: connection to {} lost, reconnecting…]\x1b[0m\r\n",
+        short_host(host)
+    )
+}
+
+/// How long to wait, after EOF, for a remote terminal's `ssh` to be reaped so its exit code can be
+/// classified.
+const INNER_REAP_WINDOW: Duration = Duration::from_secs(2);
+
+/// The first back-off after a re-attached terminal fails quickly, so a link that reports Up while
+/// every attach still fails cannot spin. Doubles per quick failure up to [`RECONNECT_DELAY_MAX`].
+pub const RECONNECT_MIN_INTERVAL: Duration = Duration::from_secs(2);
+/// The longest wait between two re-attach attempts (the link worker's own cap).
+pub const RECONNECT_DELAY_MAX: Duration = Duration::from_secs(30);
+/// A re-attached terminal that lived at least this long was a real connection, so its end is a NEW
+/// drop (notice, immediate attempt); a shorter one is a failed attempt (back off, no new notice).
+pub const STABLE_TERMINAL: Duration = Duration::from_secs(10);
+
+/// The wait before the next re-attach and whether this end is a NEW drop (pure). `lived` is how
+/// long the ending terminal ran if it was itself a re-attach, `None` for the session's first
+/// terminal (whose end is always a new drop).
+pub fn next_reconnect(prev_delay: Duration, lived: Option<Duration>) -> (Duration, bool) {
+    match lived {
+        Some(l) if l < STABLE_TERMINAL => (
+            (prev_delay * 2).clamp(RECONNECT_MIN_INTERVAL, RECONNECT_DELAY_MAX),
+            false,
+        ),
+        _ => (Duration::ZERO, true),
+    }
+}
+
+/// M17 WP3 Phase 5 — a remote CC session: a replaceable `ssh -tt` terminal ([`PtyCcSession`])
+/// under ONE session id, output event and link hold. When the terminal's `ssh` ends,
+/// [`classify_inner_exit`] decides: `Ended` emits `cc-exit-<id>` as a local session would;
+/// `Reconnect` waits for the link to be Up again (the link worker retries on its own) and attaches
+/// a new terminal to the SAME tmux session (`attach`, never `new -A`), so the pane resumes in the
+/// same xterm.
+pub struct RemoteCcSession {
+    shared: Arc<RemoteShared>,
+    /// The session's hold on its host link, kept across terminals; released when the session is
+    /// dropped (after `kill`), so the last one stops the link.
+    _hold: crate::remote_link::LinkHold,
+}
+
+struct RemoteShared {
+    app: AppHandle,
+    id: String,
+    output_event: String,
+    links: Arc<crate::remote_link::LinkRegistry>,
+    target: crate::remote_cmd::ValidTarget,
+    session: String,
+    local_cwd: String,
+    local_env: Vec<(String, String)>,
+    /// The current terminal; `None` while reconnecting. ⚠️ A new terminal is spawned and stored
+    /// under this lock, so its exit hook cannot classify before it is stored.
+    inner: Mutex<Option<PtyCcSession>>,
+    /// The last size the frontend asked for, applied to every new terminal.
+    size: Mutex<Option<(u16, u16)>>,
+    /// The frontend is listening (`mark_ready` was called): a new terminal goes live at once.
+    ready: AtomicBool,
+    /// The workspace was closed: no reconnect, and a wait in progress is cancelled.
+    killed: AtomicBool,
+    /// `cc-exit-<id>` has been emitted (exactly once).
+    exited: AtomicBool,
+    /// When the current terminal was RE-attached (`None` for the session's first terminal).
+    attached_at: Mutex<Option<Instant>>,
+    /// The current back-off between re-attach attempts ([`next_reconnect`]).
+    retry_delay: Mutex<Duration>,
+}
+
+impl RemoteShared {
+    fn remote_exit(&self) -> RemoteExit {
+        RemoteExit {
+            links: Arc::clone(&self.links),
+            target: self.target.clone(),
+            session: self.session.clone(),
+        }
+    }
+
+    /// THE one place a remote session's `cc-exit-<id>` is emitted, at most once.
+    fn emit_exit(&self) {
+        if !self.exited.swap(true, Ordering::SeqCst) {
+            let _ = self.app.emit(&format!("cc-exit-{}", self.id), ());
+        }
+    }
+
+    fn emit_notice(&self) {
+        if self.ready.load(Ordering::SeqCst) {
+            let engine = base64::engine::general_purpose::STANDARD;
+            let line = reconnect_notice(self.target.host());
+            let _ = self
+                .app
+                .emit(&self.output_event, engine.encode(line.as_bytes()));
+        }
+    }
+
+    /// Spawn a terminal running `argv` whose end runs [`on_inner_exit`], ready for the current
+    /// size and readiness. Called with `inner` LOCKED by the caller.
+    fn spawn_terminal(self: &Arc<Self>, argv: &[String]) -> Result<PtyCcSession, CcError> {
+        let mut term = PtyCcSession::spawn_argv_with_exit(
+            self.app.clone(),
+            self.id.clone(),
+            argv,
+            &self.local_cwd,
+            &borrow_env(&self.local_env),
+            "/exit",
+            CC_SPAWN_ENV_REMOVE,
+            ExitHook::Remote(Arc::clone(self)),
+        )?;
+        term.remote_exit = Some(self.remote_exit());
+        if let Some((cols, rows)) = self.size.lock().ok().and_then(|g| *g) {
+            let _ = term.resize(cols, rows);
+        }
+        if self.ready.load(Ordering::SeqCst) {
+            term.mark_ready();
+        }
+        Ok(term)
+    }
+}
+
+/// A remote terminal's output ended. Runs on its (finished) reader thread.
+fn on_inner_exit(shared: Arc<RemoteShared>) {
+    // The dead terminal is taken OUT before its exit code is awaited, so `cc_input`/`cc_resize`
+    // (sync commands) never wait on `inner` through the reap window.
+    let term = shared.inner.lock().ok().and_then(|mut g| g.take());
+    let code = term
+        .as_ref()
+        .and_then(|t| t.exit_code_within(INNER_REAP_WINDOW));
+    drop(term);
+    let link_up =
+        shared.links.state(shared.target.host()) == Some(crate::remote_link::LinkState::Up);
+    match classify_inner_exit(shared.killed.load(Ordering::SeqCst), code, link_up) {
+        InnerExit::Ended => shared.emit_exit(),
+        InnerExit::Reconnect => {
+            let (delay, new_drop) = reconnect_plan(&shared.retry_delay, &shared.attached_at);
+            reconnect(shared, delay, new_drop)
+        }
+    }
+}
+
+/// The STATEFUL half of a reconnect decision: read how long the ending terminal lived (if it was
+/// itself a re-attach), apply [`next_reconnect`] to the stored back-off, store the new back-off,
+/// and return `(delay, new_drop)`. Split out so a test drives the persisted state across
+/// consecutive failures (doubling needs the store; a missed `attached_at` read announces every
+/// retry), which [`next_reconnect`]'s own test cannot see.
+fn reconnect_plan(
+    retry_delay: &Mutex<Duration>,
+    attached_at: &Mutex<Option<Instant>>,
+) -> (Duration, bool) {
+    let lived = attached_at
+        .lock()
+        .ok()
+        .and_then(|g| *g)
+        .map(|t| t.elapsed());
+    match retry_delay.lock() {
+        Ok(mut d) => {
+            let next = next_reconnect(*d, lived);
+            *d = next.0;
+            next
+        }
+        Err(_) => (RECONNECT_MIN_INTERVAL, false),
+    }
+}
+
+/// Sleep `d` in short slices, returning early (`false`) when the workspace is closed.
+fn sleep_unless_killed(shared: &RemoteShared, d: Duration) -> bool {
+    let end = Instant::now() + d;
+    while Instant::now() < end {
+        if shared.killed.load(Ordering::SeqCst) {
+            return false;
+        }
+        thread::sleep((end - Instant::now()).min(Duration::from_millis(100)));
+    }
+    !shared.killed.load(Ordering::SeqCst)
+}
+
+/// Wait `delay`, then for the link, and attach a new terminal to the same tmux session. Gives up
+/// (ending the session) only when the workspace is closed or the link is stopped. Only a NEW drop
+/// writes the notice; a failed attempt's retry does not.
+fn reconnect(shared: Arc<RemoteShared>, delay: Duration, new_drop: bool) {
+    if new_drop {
+        shared.emit_notice();
+    }
+    let host = shared.target.host().to_string();
+    let cancelled = || shared.killed.load(Ordering::SeqCst);
+    let mut spawn_failures = 0;
+    let mut delay = delay;
+    loop {
+        if !sleep_unless_killed(&shared, delay) {
+            shared.emit_exit();
+            return;
+        }
+        let Ok(link) = shared.links.wait_up(&host, &cancelled) else {
+            shared.emit_exit();
+            return;
+        };
+        let argv = crate::remote_link::terminal_argv(
+            &link.control_path,
+            &host,
+            &crate::remote_cmd::tmux_attach_command(
+                crate::remote_cmd::tmux_server(shared.links.identifier()),
+                &shared.session,
+            ),
+        );
+        let Ok(mut g) = shared.inner.lock() else {
+            shared.emit_exit();
+            return;
+        };
+        if cancelled() {
+            drop(g);
+            shared.emit_exit();
+            return;
+        }
+        match shared.spawn_terminal(&argv) {
+            Ok(term) => {
+                *g = Some(term);
+                if let Ok(mut a) = shared.attached_at.lock() {
+                    *a = Some(Instant::now());
+                }
+                return;
+            }
+            Err(e) => {
+                drop(g);
+                spawn_failures += 1;
+                eprintln!("[claudesk] remote reconnect: could not start the terminal: {e}");
+                if spawn_failures >= 5 {
+                    shared.emit_exit();
+                    return;
+                }
+                delay = RECONNECT_MIN_INTERVAL;
+            }
+        }
+    }
+}
+
+impl RemoteCcSession {
+    fn spawn(
+        app: AppHandle,
+        id: String,
+        argv: &[String],
+        remote: RemoteSpawn,
+        local_env: Vec<(String, String)>,
+    ) -> Result<Self, CcError> {
+        let hold = remote.links.hold(remote.target.host());
+        let shared = Arc::new(RemoteShared {
+            output_event: format!("cc-output-{id}"),
+            app,
+            id,
+            links: remote.links,
+            target: remote.target,
+            session: remote.session,
+            local_cwd: remote.local_cwd,
+            local_env,
+            inner: Mutex::new(None),
+            size: Mutex::new(None),
+            ready: AtomicBool::new(false),
+            killed: AtomicBool::new(false),
+            exited: AtomicBool::new(false),
+            attached_at: Mutex::new(None),
+            retry_delay: Mutex::new(Duration::ZERO),
+        });
+        {
+            let mut g = shared.inner.lock().map_err(|_| CcError::Lock)?;
+            *g = Some(shared.spawn_terminal(argv)?);
+        }
+        Ok(Self {
+            shared,
+            _hold: hold,
+        })
+    }
+}
+
+impl CcSession for RemoteCcSession {
+    fn send_input(&self, bytes: &[u8]) -> Result<(), CcError> {
+        let g = self.shared.inner.lock().map_err(|_| CcError::Lock)?;
+        match g.as_ref() {
+            Some(t) => t.send_input(bytes),
+            None => Err(CcError::Io(format!(
+                "reconnecting to {}",
+                short_host(self.shared.target.host())
+            ))),
+        }
+    }
+
+    fn resize(&self, cols: u16, rows: u16) -> Result<(), CcError> {
+        if let Ok(mut s) = self.shared.size.lock() {
+            *s = Some((cols, rows));
+        }
+        let g = self.shared.inner.lock().map_err(|_| CcError::Lock)?;
+        match g.as_ref() {
+            Some(t) => t.resize(cols, rows),
+            None => Ok(()),
+        }
+    }
+
+    /// Close: mark killed FIRST (so the terminal's end is classified `Ended`, and a reconnect wait
+    /// in progress gives up), then the terminal's own kill (cancel copy-mode, `/exit`, signals).
+    /// ⚠️ While reconnecting there is no terminal and nothing touches the remote: the remote
+    /// session keeps running (recording an end-intent for it is WP5's).
+    fn kill(&self) -> Result<(), CcError> {
+        self.shared.killed.store(true, Ordering::SeqCst);
+        let g = self.shared.inner.lock().map_err(|_| CcError::Lock)?;
+        match g.as_ref() {
+            Some(t) => t.kill(),
+            None => Ok(()),
+        }
+    }
+
+    fn mark_ready(&self) {
+        self.shared.ready.store(true, Ordering::SeqCst);
+        if let Ok(g) = self.shared.inner.lock() {
+            if let Some(t) = g.as_ref() {
+                t.mark_ready();
+            }
+        }
+    }
+}
+
+/// The most remote CC sessions on one host. The mini allows `MaxSessions 10` per connection, and
+/// the side-channel execs (cancel, `test -d`) need a slot or two (arch §B).
+pub const MAX_REMOTE_SESSIONS_PER_HOST: usize = 8;
+
+/// The local argv of a remote CC terminal: `ssh -tt` over the master into
+/// `remote_cmd::tmux_new_command`. `cc_argv` is `build_cc_argv`'s output (its `claude` is
+/// replaced by the deployed launcher). Pure, so the whole string is pinned by a test.
+#[allow(clippy::too_many_arguments)]
+pub fn remote_terminal_argv(
+    ctl: &Path,
+    host: &str,
+    home: &str,
+    identifier: &str,
+    session: &str,
+    path: &str,
+    drive_mode: Option<&str>,
+    cc_argv: &[String],
+) -> Vec<String> {
+    let dir = crate::remote_link::remote_state_dir(home, identifier);
+    let cmd = crate::remote_cmd::tmux_new_command(
+        crate::remote_cmd::tmux_server(identifier),
+        &format!("{dir}/tmux.conf"),
+        session,
+        path,
+        &format!("{dir}/cc-launch"),
+        drive_mode,
+        cc_argv.get(1..).unwrap_or(&[]),
+    );
+    crate::remote_link::terminal_argv(ctl, host, &cmd)
+}
+
+/// Why a ninth remote session on one host is refused, in plain words. `None` = admitted.
+pub fn remote_cap_refusal(host: &str, live: usize) -> Option<String> {
+    (live >= MAX_REMOTE_SESSIONS_PER_HOST).then(|| {
+        format!(
+            "{host} already has {live} open workspaces, the most one host can carry. Close one \
+             there first."
+        )
+    })
 }
 
 impl PtyCcSession {
@@ -1090,6 +1582,8 @@ impl PtyCcSession {
     /// composition done by one function, "gate off ⇒ no var" cannot be re-decided here — and
     /// [`tests::the_cc_spawn_wires_the_gate_through_the_fail_closed_resolver`] guards that this
     /// receives `cc_spawn_env`'s output rather than the shell-shared [`color_tty_env`] array.
+    // M17 WP3 added `target`; the arguments are the spawn's inputs, not a hidden struct.
+    #[allow(clippy::too_many_arguments)]
     fn spawn(
         app: AppHandle,
         id: String,
@@ -1098,19 +1592,52 @@ impl PtyCcSession {
         model: Option<&str>,
         resume: ResumeArm,
         env: &[(String, String)],
-    ) -> Result<Self, CcError> {
-        Self::spawn_argv(
-            app,
-            id,
+        target: SpawnTarget,
+    ) -> Result<Box<dyn CcSession>, CcError> {
+        let remote = match target {
+            SpawnTarget::Local => {
+                return Self::spawn_argv(
+                    app,
+                    id,
+                    &build_cc_argv(mode, model, resume),
+                    project_path,
+                    &borrow_env(env),
+                    "/exit",
+                    // F-b A.8 — a CC spawn never INHERITS a config dir or a drive mode. See
+                    // `CC_SPAWN_ENV_REMOVE`. Removal runs before `env` is applied, so Claudesk's
+                    // own values (a profile's dir, the gated drive mode) win.
+                    CC_SPAWN_ENV_REMOVE,
+                )
+                .map(|s| Box::new(s) as Box<dyn CcSession>);
+            }
+            SpawnTarget::Remote(r) => r,
+        };
+        // M17 WP3 — the remote arm. The same argv and the same resolved env, but the PTY runs
+        // `ssh -tt` and the drive mode travels in the REMOTE command line (an arbitrary env var
+        // does not cross ssh; arch §C). It is removed from the local ssh's env.
+        let drive_mode = env
+            .iter()
+            .find(|(k, _)| k == DRIVE_MODE_ENV)
+            .map(|(_, v)| v.as_str());
+        let argv = remote_terminal_argv(
+            &remote.link.control_path,
+            remote.target.host(),
+            &remote.link.home,
+            remote.links.identifier(),
+            &remote.session,
+            remote.target.path(),
+            drive_mode,
             &build_cc_argv(mode, model, resume),
-            project_path,
-            &borrow_env(env),
-            "/exit",
-            // F-b A.8 — a CC spawn never INHERITS a config dir or a drive mode. See
-            // `CC_SPAWN_ENV_REMOVE`. Removal runs before `env` is applied, so Claudesk's own
-            // values (a profile's dir, the gated drive mode) win.
-            CC_SPAWN_ENV_REMOVE,
-        )
+        );
+        let local_env: Vec<(String, String)> = env
+            .iter()
+            .filter(|(k, _)| k != DRIVE_MODE_ENV)
+            .cloned()
+            .collect();
+        // Phase 5 — the terminal is wrapped so a dropped link REATTACHES under the same session
+        // id instead of ending the workspace (`RemoteCcSession`).
+        RemoteCcSession::spawn(app, id, &argv, remote, local_env)
+            .map(|s| Box::new(s) as Box<dyn CcSession>)
     }
 
     /// Spawn the WP9 second-terminal panel's interactive login shell with
@@ -1160,6 +1687,24 @@ impl PtyCcSession {
         exit_command: &'static str,
         env_remove: &[&str],
     ) -> Result<Self, CcError> {
+        let on_exit = emit_exit_hook(&app, &id);
+        Self::spawn_argv_with_exit(app, id, argv, cwd, env, exit_command, env_remove, on_exit)
+    }
+
+    /// [`Self::spawn_argv`] with the reader thread's END-OF-OUTPUT action supplied by the caller.
+    /// Local sessions (via `spawn_argv`) emit `cc-exit-<id>`; a remote session's terminal decides
+    /// first whether its pane merely lost the link (M17 WP3 Phase 5, [`RemoteCcSession`]).
+    #[allow(clippy::too_many_arguments)]
+    fn spawn_argv_with_exit(
+        app: AppHandle,
+        id: String,
+        argv: &[String],
+        cwd: &str,
+        env: &[(&str, &str)],
+        exit_command: &'static str,
+        env_remove: &[&str],
+        on_exit: ExitHook,
+    ) -> Result<Self, CcError> {
         let (program, args) = argv
             .split_first()
             .ok_or_else(|| CcError::Spawn("empty argv".to_string()))?;
@@ -1202,10 +1747,10 @@ impl PtyCcSession {
 
         Self::spawn_reader_thread(
             app.clone(),
-            id,
             reader,
             Arc::clone(&backlog),
             output_event.clone(),
+            on_exit,
         );
 
         Ok(Self {
@@ -1216,10 +1761,12 @@ impl PtyCcSession {
             backlog,
             output_event,
             app,
+            remote_exit: None,
         })
     }
 
-    /// Pump PTY → `cc-output-<id>` (base64) until EOF, then emit `cc-exit-<id>`.
+    /// Pump PTY → `cc-output-<id>` (base64) until EOF, then run `on_exit` (for a local session:
+    /// emit `cc-exit-<id>`, see [`emit_exit_hook`]).
     ///
     /// Reader-thread lifecycle (same invariant the WP2 harness documents): the loop
     /// ends on `read() == 0` (EOF), which the master delivers once the child exits
@@ -1230,12 +1777,11 @@ impl PtyCcSession {
     /// guarantees no output is lost between spawn and the frontend's `listen()` attaching.
     fn spawn_reader_thread(
         app: AppHandle,
-        id: String,
         mut reader: Box<dyn std::io::Read + Send>,
         backlog: OutputBacklog,
         output_event: String,
+        on_exit: ExitHook,
     ) {
-        let exit_event = format!("cc-exit-{id}");
         thread::spawn(move || {
             let engine = base64::engine::general_purpose::STANDARD;
             let mut buf = [0u8; READ_CHUNK];
@@ -1255,8 +1801,27 @@ impl PtyCcSession {
                     Err(_) => break,
                 }
             }
-            let _ = app.emit(&exit_event, ());
+            on_exit.finish_output();
         });
+    }
+
+    /// The child's exit code once it has been reaped, polling for up to `window`; `None` if it
+    /// has not exited by then (or the lock is poisoned). Used after EOF, when the child is
+    /// exiting, by a remote session's classifier ([`classify_inner_exit`]).
+    fn exit_code_within(&self, window: Duration) -> Option<u32> {
+        let deadline = Instant::now() + window;
+        loop {
+            {
+                let mut child = self.child.lock().ok()?;
+                if let Ok(Some(status)) = child.try_wait() {
+                    return Some(status.exit_code());
+                }
+            }
+            if Instant::now() >= deadline {
+                return None;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
     }
 }
 
@@ -1307,6 +1872,10 @@ impl CcSession for PtyCcSession {
                 //    here (fastest, and the shell saves its own history); a BUSY one won't
                 //    read it and we fall through.
                 KillStep::CleanExitAttempt(window) => {
+                    // M17 WP3 — a remote pane leaves copy-mode first, or `/exit` is swallowed.
+                    if let Some(remote) = &self.remote_exit {
+                        remote.cancel_before_exit();
+                    }
                     let _ = self.send_input(&slash_command_bytes(self.exit_command));
                     if self.poll_reaped(window)? {
                         return Ok(());
@@ -1392,6 +1961,10 @@ struct RegisteredSession {
     /// frontend reads it back (`cc_session_profile`) because a respawn re-reads `projects.json`,
     /// so the row's value at open is not the truth for the running process.
     profile: Option<String>,
+    /// M17 WP3 — the host a REMOTE session runs on (`None` locally), for the per-host cap.
+    remote_host: Option<String>,
+    /// M17 WP3 P4.3 — what `cc_inject` needs to prepare a REMOTE pane (`None` locally).
+    remote: Option<RemoteExit>,
 }
 
 /// Owns the live sessions. Registered as `State<Mutex<SessionRegistry>>` in `lib.rs`;
@@ -1428,9 +2001,61 @@ impl SessionRegistry {
                 session: make(id.clone()),
                 drive_mode: None,
                 profile: None,
+                remote_host: None,
+                remote: None,
             },
         );
         id
+    }
+
+    /// Test-only, visible to `commands.rs`'s tests: register a fake local session.
+    #[cfg(test)]
+    pub(crate) fn insert_for_test(
+        &mut self,
+        make: impl FnOnce(String) -> Box<dyn CcSession>,
+    ) -> String {
+        self.insert(make)
+    }
+
+    /// Test-only: register a fake REMOTE session on `host` (for the per-host cap).
+    #[cfg(test)]
+    fn insert_remote(&mut self, host: &str, make: impl FnOnce(String) -> Box<dyn CcSession>) {
+        let id = self.mint_id();
+        self.sessions.insert(
+            id.clone(),
+            RegisteredSession {
+                session: make(id),
+                drive_mode: None,
+                profile: None,
+                remote_host: Some(host.to_string()),
+                remote: None,
+            },
+        );
+    }
+
+    /// The remote handle of session `id` (`None` for a local session), for `cc_inject`.
+    pub fn remote_of(&self, id: &str) -> Result<Option<RemoteExit>, CcError> {
+        self.sessions
+            .get(id)
+            .map(|s| s.remote.clone())
+            .ok_or_else(|| CcError::UnknownSession(id.to_string()))
+    }
+
+    /// How many live REMOTE sessions run on `host`.
+    pub fn remote_count(&self, host: &str) -> usize {
+        self.sessions
+            .values()
+            .filter(|s| s.remote_host.as_deref() == Some(host))
+            .count()
+    }
+
+    /// M17 WP3 — refuse a remote session past [`MAX_REMOTE_SESSIONS_PER_HOST`] with a plain
+    /// message rather than failing in ssh (arch §B).
+    fn admit_remote(&self, host: &str) -> Result<(), CcError> {
+        match remote_cap_refusal(host, self.remote_count(host)) {
+            Some(msg) => Err(CcError::Spawn(msg)),
+            None => Ok(()),
+        }
     }
 
     /// Spawn a real CC session for `project_path` and register it.
@@ -1457,7 +2082,26 @@ impl SessionRegistry {
         app: AppHandle,
         project_path: &str,
         intent: OpenIntent,
+        target: SpawnTarget,
     ) -> Result<String, CcError> {
+        // M17 WP3 — a ninth remote session on one host is refused FIRST: before the profile is
+        // resolved and before the unclean flag is consumed, so a refused open spends nothing.
+        let remote_host = match &target {
+            SpawnTarget::Local => None,
+            SpawnTarget::Remote(r) => {
+                self.admit_remote(r.target.host())?;
+                Some(r.target.host().to_string())
+            }
+        };
+        let is_remote = remote_host.is_some();
+        let remote_handle = match &target {
+            SpawnTarget::Local => None,
+            SpawnTarget::Remote(r) => Some(RemoteExit {
+                links: std::sync::Arc::clone(&r.links),
+                target: r.target.clone(),
+                session: r.session.clone(),
+            }),
+        };
         let data_dir = app.path().app_data_dir().ok();
         // F-b — THE PROFILE, resolved FIRST. ⚠️ Before the unclean-exit consume below and before
         // any PTY opens: a refused spawn (unlisted profile, dir gone, unreadable list) must leave
@@ -1544,6 +2188,12 @@ impl SessionRegistry {
         // F-b probe P1.1 (2): `--continue` with nothing to continue EXITS CC. Checked against the
         // profile's own config root — a profile's transcripts are not under `~/.claude`.
         let resume = guard_continue_against_transcripts(resume, || {
+            // M17 WP3 — a REMOTE session's transcripts live on the remote, so the local check
+            // would always say "none" and drop `--continue` by accident. Say so explicitly; the
+            // remote check is WP5 5.2.
+            if is_remote {
+                return false;
+            }
             let root = match profile.as_ref() {
                 Some(p) => p.dir.clone(),
                 None => match app.path().home_dir() {
@@ -1567,6 +2217,7 @@ impl SessionRegistry {
             model.as_deref(),
             resume,
             &cc_env,
+            target,
         );
 
         // M12 WP2 — DEFAULT-SET the unclean-exit flag, so a crash (which runs no code at
@@ -1595,9 +2246,11 @@ impl SessionRegistry {
         self.sessions.insert(
             id.clone(),
             RegisteredSession {
-                session: Box::new(session),
+                session,
                 drive_mode: spawned_drive_mode,
                 profile: profile.map(|p| p.name),
+                remote_host,
+                remote: remote_handle,
             },
         );
         Ok(id)
@@ -1620,6 +2273,8 @@ impl SessionRegistry {
                 drive_mode: None,
                 // A login shell is not CC; it runs under no profile.
                 profile: None,
+                remote_host: None,
+                remote: None,
             },
         );
         Ok(id)
@@ -3800,6 +4455,399 @@ mod tests {
             matches!(steps[1], KillStep::HupGroupThenGrace(_)),
             "first escalation must be SIGHUP-to-group, got {:?}",
             steps[1]
+        );
+    }
+
+    // --- M17 WP3: the remote spawn ---
+
+    /// The production body of `SessionRegistry::spawn`, comment-stripped (the same extraction
+    /// `profile_spawn_caller_orders_its_profile_decisions` uses).
+    fn registry_spawn_code() -> String {
+        let src = include_str!("mod.rs");
+        let production = src.split("mod tests").next().unwrap_or(src);
+        let start = production
+            .find("    pub fn spawn(\n        &mut self,")
+            .expect("SessionRegistry::spawn moved; re-scope this guard");
+        let body = &production[start..];
+        let body = &body[..body.find("\n    pub fn spawn_shell(").unwrap()];
+        body.lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn remote_spawn_caller_admits_first_and_never_continues_from_local_transcripts() {
+        let code = registry_spawn_code();
+        let at = |n: &str| code.find(n).unwrap_or_else(|| panic!("`{n}` not in spawn"));
+        // A refused ninth session spends nothing: the cap runs before the profile and the flag.
+        assert!(at("self.admit_remote(") < at("resolve_spawn_profile("));
+        assert!(at("self.admit_remote(") < at("consume_and_persist("));
+        // The transcript guard says "no" for a remote session BEFORE it looks at local disk.
+        let guard = &code[at("guard_continue_against_transcripts(")..];
+        let early = guard.find("if is_remote {").expect("the remote early-out");
+        assert!(early < guard.find("default_config_root").unwrap());
+        assert!(guard[early..].starts_with("if is_remote {\n                return false;"));
+        // The target reaches the PTY spawn.
+        let call = &code[at("PtyCcSession::spawn(")..];
+        let call = &call[..call.find(");").unwrap()];
+        assert!(call.contains("target,"), "{call}");
+        assert!(code.contains("                remote_host,\n"));
+    }
+
+    #[test]
+    fn a_ninth_remote_session_on_one_host_is_refused_in_plain_words() {
+        assert_eq!(remote_cap_refusal("me@mini", 7), None);
+        let msg = remote_cap_refusal("me@mini", 8).expect("refused at 8");
+        assert!(
+            msg.contains("me@mini already has 8 open workspaces"),
+            "{msg}"
+        );
+
+        let mut reg = SessionRegistry::new();
+        for _ in 0..MAX_REMOTE_SESSIONS_PER_HOST {
+            reg.insert_remote("me@mini", |_| Box::new(FailingSession));
+        }
+        // Other hosts and local sessions do not count against it.
+        reg.insert_remote("me@other", |_| Box::new(FailingSession));
+        reg.insert(|_| Box::new(FailingSession));
+        assert_eq!(reg.remote_count("me@mini"), 8);
+        assert!(
+            matches!(reg.admit_remote("me@mini"), Err(CcError::Spawn(m)) if m.contains("8 open"))
+        );
+        assert!(reg.admit_remote("me@other").is_ok());
+    }
+
+    #[test]
+    fn the_remote_terminal_argv_is_ssh_over_the_master_into_tmux_with_no_expansion() {
+        let argv = remote_terminal_argv(
+            Path::new("/AD/ssh/abcd1234"),
+            "me@mini-host",
+            "/Users/me",
+            "com.claudesk.app.dev",
+            "cd-12345678",
+            "/Users/me/proj",
+            Some("autopilot"),
+            &build_cc_argv(
+                Some(CcPermissionMode::BypassPermissions),
+                None,
+                ResumeArm::Fresh,
+            ),
+        );
+        assert_eq!(
+            argv[..12],
+            [
+                "/usr/bin/ssh",
+                "-S",
+                "/AD/ssh/abcd1234",
+                "-o",
+                "ControlMaster=no",
+                "-o",
+                "ProxyCommand=/usr/bin/false",
+                "-o",
+                "BatchMode=yes",
+                "-tt",
+                "--",
+                "me@mini-host"
+            ]
+        );
+        assert_eq!(argv.len(), 13);
+        let cmd = &argv[12];
+        assert!(cmd.starts_with("zsh -lc '"), "{cmd}");
+        for needle in [
+            "tmux -L",
+            "claudesk-dev",
+            "/Users/me/.claudesk/com.claudesk.app.dev/tmux.conf",
+            "new -A -s",
+            "cd-12345678",
+            "/Users/me/proj",
+            "/Users/me/.claudesk/com.claudesk.app.dev/cc-launch",
+            "CLAUDESK_DRIVE_MODE=autopilot",
+        ] {
+            assert!(cmd.contains(needle), "{needle} missing from {cmd}");
+        }
+        // Option (b): the token, `$(…)`, `~` and `claude` itself never appear in the string.
+        for absent in ["cc-oauth-token", "$(", "~", " claude "] {
+            assert!(!cmd.contains(absent), "{absent:?} in {cmd}");
+        }
+    }
+
+    #[test]
+    fn the_remote_terminal_command_carries_hostile_values_as_data_through_every_shell() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::TempDir::new().unwrap();
+        let home = dir.path().to_str().unwrap().to_string();
+        let canary = dir.path().join("CANARY");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        // A fake tmux: report each argument NUL-terminated (values may hold newlines), then run the
+        // last one (the inner command) the way tmux does, through a shell.
+        let tmux = bin.join("tmux");
+        std::fs::write(
+            &tmux,
+            "#!/bin/sh\nfor a in \"$@\"; do printf 'TMUX=%s\\0' \"$a\"; done\n\
+             last=\"\"; for a in \"$@\"; do last=\"$a\"; done\nexec /bin/sh -c \"$last\"\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&tmux, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // A fake launcher where the real one is deployed.
+        let state = dir.path().join(".claudesk/com.claudesk.app.dev");
+        std::fs::create_dir_all(&state).unwrap();
+        let launcher = state.join("cc-launch");
+        std::fs::write(
+            &launcher,
+            "#!/bin/sh\nprintf 'MODE=%s\\0' \"${CLAUDESK_DRIVE_MODE-unset}\"\n\
+             for a in \"$@\"; do printf 'ARG=%s\\0' \"$a\"; done\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&launcher, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let conf = format!("{home}/.claudesk/com.claudesk.app.dev/tmux.conf");
+
+        let touch = format!("touch {}", canary.display());
+        // The shared hostile set, plus values that would touch the canary if they executed.
+        let mut values: Vec<String> = crate::remote_cmd::tests::HOSTILE
+            .iter()
+            .map(|v| v.to_string())
+            .collect();
+        values.push(format!("/tmp/it's $({touch}) `{touch}` a\"b"));
+        values.push(format!("x'; {touch}; echo '"));
+        values.push(format!("--model=$({touch})'\"`"));
+        for v in &values {
+            // The same value as the path, the drive mode AND a CC argument at once.
+            let cc_argv = vec!["claude".to_string(), v.clone(), String::new()];
+            let argv = remote_terminal_argv(
+                Path::new("/AD/ssh/x"),
+                "me@h",
+                &home,
+                "com.claudesk.app.dev",
+                "cd-00000000",
+                v,
+                Some(v),
+                &cc_argv,
+            );
+            // The remote login shell runs the command; `zsh -lc` becomes `zsh -fc` so no rc file
+            // resets PATH (the quoting is the same).
+            let cmd = argv
+                .last()
+                .unwrap()
+                .replacen("zsh -lc ", "/bin/zsh -fc ", 1);
+            let out = std::process::Command::new("/bin/sh")
+                .arg("-c")
+                .arg(&cmd)
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .env("HOME", &home)
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "{v:?}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            let stdout = String::from_utf8(out.stdout).unwrap();
+            let fields: Vec<&str> = stdout.split('\0').filter(|f| !f.is_empty()).collect();
+            let got_tmux: Vec<&str> = fields
+                .iter()
+                .filter_map(|l| l.strip_prefix("TMUX="))
+                .take(10)
+                .collect();
+            let want_tmux = [
+                "-L",
+                "claudesk-dev",
+                "-f",
+                conf.as_str(),
+                "new",
+                "-A",
+                "-s",
+                "cd-00000000",
+                "-c",
+                v.as_str(),
+            ];
+            assert_eq!(got_tmux, want_tmux, "{v:?}");
+            let modes: Vec<&str> = fields
+                .iter()
+                .filter_map(|l| l.strip_prefix("MODE="))
+                .collect();
+            assert_eq!(modes, [v.as_str()], "{v:?}");
+            let args: Vec<&str> = fields
+                .iter()
+                .filter_map(|l| l.strip_prefix("ARG="))
+                .collect();
+            assert_eq!(args, [v.as_str(), ""], "{v:?}");
+            assert!(!canary.exists(), "{v:?} executed");
+        }
+    }
+
+    #[test]
+    fn kill_cancels_a_remote_panes_copy_mode_before_it_types_exit() {
+        // M17 WP3 (R-1; SURFACE-2026-11-14-REMOTE-CLOSE-SWALLOWED-IN-COPY-MODE): typed into a
+        // scrolled-up tmux pane, `/exit` is swallowed and the remote session keeps running
+        // (reproduced live at WP3 Phase 3 verify-self). A SOURCE-order question, since `kill()`
+        // needs a real PTY: in the production `kill`, comment-stripped, the cancel comes before the
+        // exit command is sent, inside the clean-exit step.
+        let src = include_str!("mod.rs");
+        let production = src.split("mod tests").next().unwrap_or(src);
+        let start = production
+            .find("    fn kill(&self) -> Result<(), CcError> {\n        // SIGHUP-first")
+            .expect("PtyCcSession::kill moved; re-scope this guard");
+        let body = &production[start..];
+        let body = &body[..body.find("\n    }\n").expect("kill terminates")];
+        let code: String = body
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let at = |n: &str| code.find(n).unwrap_or_else(|| panic!("`{n}` not in kill"));
+        let step = at("KillStep::CleanExitAttempt(");
+        let cancel = at("remote.cancel_before_exit()");
+        let exit = at("slash_command_bytes(self.exit_command)");
+        assert!(
+            step < cancel && cancel < exit,
+            "cancel must run in the clean-exit step, before /exit"
+        );
+        assert!(code.contains("if let Some(remote) = &self.remote_exit {"));
+    }
+
+    #[test]
+    fn a_remote_terminal_end_is_classified_reconnect_or_ended() {
+        // M17 WP3 Phase 5 — each arm on its own, so a mutant of any one fails here.
+        use InnerExit::*;
+        // A closed workspace always ends, even with ssh's error code and the link down.
+        assert_eq!(
+            classify_inner_exit(true, Some(SSH_ERROR_EXIT), false),
+            Ended
+        );
+        assert_eq!(classify_inner_exit(true, Some(0), true), Ended);
+        // ssh's own failure (a mux client whose master died): the pane may still be running.
+        assert_eq!(classify_inner_exit(false, Some(255), true), Reconnect);
+        // The link is not Up: reconnect, whatever the code.
+        assert_eq!(classify_inner_exit(false, Some(0), false), Reconnect);
+        assert_eq!(classify_inner_exit(false, None, false), Reconnect);
+        // The remote command exited with the link Up: `/exit` ended tmux (0), or the session was
+        // gone at attach ("can't find session", 1).
+        assert_eq!(classify_inner_exit(false, Some(0), true), Ended);
+        assert_eq!(classify_inner_exit(false, Some(1), true), Ended);
+        assert_eq!(classify_inner_exit(false, None, true), Ended);
+    }
+
+    #[test]
+    fn the_reconnect_notice_names_the_short_host_and_is_dim() {
+        assert_eq!(short_host("me@mini.tail1234.ts.net"), "mini");
+        assert_eq!(short_host("mini"), "mini");
+        assert_eq!(short_host("a@b@host.lan"), "host");
+        let line = reconnect_notice("me@mini.example.net");
+        assert!(line.starts_with("\r\n\x1b[2m"), "{line:?}");
+        assert!(line.contains("[Claudesk: connection to mini lost, reconnecting…]"));
+        assert!(line.ends_with("\x1b[0m\r\n"));
+        assert!(!line.contains("me@"), "no account in the pane: {line:?}");
+    }
+
+    #[test]
+    fn a_remote_session_reconnects_by_attaching_and_emits_exit_only_once() {
+        // The reconnect's argv and the single exit emitter are SOURCE questions (both need a real
+        // PTY and an AppHandle): the reconnect attaches with `tmux_attach_command`, never the
+        // spawn's `remote_terminal_argv` (which runs `new -A`), and every `cc-exit-` emit in a
+        // remote session goes through `emit_exit`'s once-latch.
+        let src = include_str!("mod.rs");
+        let production = src.split("mod tests").next().unwrap_or(src);
+        let start = production
+            .find("fn reconnect(shared: Arc<RemoteShared>, delay: Duration, new_drop: bool) {")
+            .expect("reconnect moved; re-scope this guard");
+        let body = &production[start..];
+        let body = &body[..body.find("\n}\n").expect("reconnect terminates")];
+        let code: String = body
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(code.contains("crate::remote_cmd::tmux_attach_command("));
+        assert!(!code.contains("remote_terminal_argv("));
+        assert!(!code.contains("tmux_new_command("));
+        let shared_impl = &production[production.find("impl RemoteShared {").unwrap()..];
+        let shared_impl = &shared_impl[..shared_impl.find("\n}\n").unwrap()];
+        assert!(shared_impl.contains("if !self.exited.swap(true, Ordering::SeqCst) {"));
+        assert_eq!(
+            production
+                .matches("format!(\"cc-exit-{}\", self.id)")
+                .count(),
+            1,
+            "a remote session emits cc-exit from emit_exit only"
+        );
+    }
+
+    #[test]
+    fn a_quick_reattach_failure_backs_off_and_only_a_new_drop_announces() {
+        let s = Duration::from_secs;
+        // The session's first terminal ending, or a re-attach that held: a NEW drop (notice, and
+        // the first attempt at once).
+        assert_eq!(next_reconnect(s(8), None), (Duration::ZERO, true));
+        assert_eq!(
+            next_reconnect(s(8), Some(STABLE_TERMINAL)),
+            (Duration::ZERO, true)
+        );
+        // A re-attach that died quickly: back off, doubling from the minimum, capped; no notice.
+        let quick = Some(Duration::from_millis(100));
+        assert_eq!(
+            next_reconnect(Duration::ZERO, quick),
+            (RECONNECT_MIN_INTERVAL, false)
+        );
+        assert_eq!(next_reconnect(s(2), quick), (s(4), false));
+        assert_eq!(next_reconnect(s(16), quick), (RECONNECT_DELAY_MAX, false));
+        assert_eq!(
+            next_reconnect(RECONNECT_DELAY_MAX, quick),
+            (RECONNECT_DELAY_MAX, false)
+        );
+    }
+
+    #[test]
+    fn the_reconnect_back_off_persists_across_consecutive_quick_failures() {
+        // Drives the STORED state the way `on_inner_exit` does, call after call.
+        let delay = Mutex::new(Duration::ZERO);
+        let attached = Mutex::new(None);
+        // The session's first terminal drops: a new drop, attempt at once.
+        assert_eq!(reconnect_plan(&delay, &attached), (Duration::ZERO, true));
+        // Each re-attach that dies quickly: the back-off doubles from the STORED value, silently.
+        *attached.lock().unwrap() = Some(Instant::now());
+        assert_eq!(
+            reconnect_plan(&delay, &attached),
+            (RECONNECT_MIN_INTERVAL, false)
+        );
+        assert_eq!(
+            reconnect_plan(&delay, &attached),
+            (RECONNECT_MIN_INTERVAL * 2, false)
+        );
+        assert_eq!(
+            reconnect_plan(&delay, &attached),
+            (RECONNECT_MIN_INTERVAL * 4, false)
+        );
+        // A re-attach that held (older than STABLE_TERMINAL) dropping again: a NEW drop, reset.
+        *attached.lock().unwrap() = Instant::now().checked_sub(STABLE_TERMINAL);
+        assert_eq!(reconnect_plan(&delay, &attached), (Duration::ZERO, true));
+        assert_eq!(*delay.lock().unwrap(), Duration::ZERO);
+    }
+
+    #[test]
+    fn on_inner_exit_takes_its_reconnect_plan_from_the_sessions_stored_state() {
+        // Caller guard for the extracted `reconnect_plan` (its own test cannot see whether
+        // anything calls it): the Reconnect arm of the production `on_inner_exit`, comment-
+        // stripped, feeds `reconnect` from `reconnect_plan` over the session's own fields.
+        let src = include_str!("mod.rs");
+        let production = src.split("mod tests").next().unwrap_or(src);
+        let start = production
+            .find("fn on_inner_exit(shared: Arc<RemoteShared>) {")
+            .expect("on_inner_exit moved; re-scope this guard");
+        let body = &production[start..];
+        let body = &body[..body.find("\n}\n").expect("on_inner_exit terminates")];
+        let flat: String = body
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            flat.contains(
+                "let (delay, new_drop) = reconnect_plan(&shared.retry_delay, &shared.attached_at); reconnect(shared, delay, new_drop)"
+            ),
+            "{flat}"
         );
     }
 }

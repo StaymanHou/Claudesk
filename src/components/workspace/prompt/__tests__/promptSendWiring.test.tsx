@@ -23,6 +23,7 @@ const { loadHistory, clearHistory } = await import("../../draftHistory");
 const { PASTE_START, PASTE_END, DICTATED_OPEN, DICTATED_CLOSE } =
   await import("../../stagedPayload");
 const { PROMPT_DICTATED_WRAP_KEY } = await import("../promptDictatedWrap");
+const { promptInjectFailure } = await import("../../injectFailure");
 
 /** Paydown WP10: the dictated wrap is ON by default, so a default send carries the notes. */
 const wrapped = (body: string) =>
@@ -62,6 +63,8 @@ const onError = (e: ErrorEvent) => uncaught.push(e.error ?? e.message);
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 let registered: ((mode: SendMode) => void) | null = null;
+/** M17 WP3 P4.verify-human.2 — every toast the panel asked its host to show. */
+const failures: string[] = [];
 
 function panel(ccSessionId: string | null) {
   return (
@@ -73,6 +76,7 @@ function panel(ccSessionId: string | null) {
       onRegisterSend={(fn) => {
         registered = fn;
       }}
+      onSendFailure={(toast) => failures.push(toast)}
     />
   );
 }
@@ -116,6 +120,7 @@ beforeEach(() => {
   localStorage.clear();
   clearHistory(PROJECT);
   registered = null;
+  failures.length = 0;
   uncaught.length = 0;
   window.addEventListener("error", onError);
 });
@@ -144,11 +149,11 @@ describe("the harness is live", () => {
 });
 
 describe("auto-submit send", () => {
-  it("sends the bracketed-paste envelope WITH the submitting CR, through cc_input", async () => {
+  it("sends the bracketed-paste envelope WITH the submitting CR, through cc_inject", async () => {
     mount("write the thing");
     await send("auto-submit");
     const sent = lastInvoke();
-    expect(sent.command).toBe("cc_input");
+    expect(sent.command).toBe("cc_inject");
     expect(sent.text).toBe(`${wrapped("write the thing")}\r`);
   });
 
@@ -315,5 +320,33 @@ describe("the storage keys are the WP2 ones — a persisted wire format", () => 
     const keys = Object.keys(localStorage);
     expect(keys.some((k) => k.startsWith(DRAFT_KEY_PREFIX))).toBe(true);
     expect(DRAFT_KEY_PREFIX).toContain("staging");
+  });
+});
+
+describe("a REFUSED send (M17 WP3 P4.verify-human.2, operator decision A)", () => {
+  const NOT_READY =
+    "Claude Code on host.example isn't ready for input yet (waited 15s)";
+
+  it("asks the host for the not-sent toast, carrying the backend's reason", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    invokeMock.mockRejectedValue(NOT_READY);
+    mount("never arrives");
+    await send("auto-submit");
+    expect(lastInvoke().command).toBe("cc_inject");
+    expect(failures).toEqual([promptInjectFailure(NOT_READY)]);
+  });
+
+  it("the toast's 'The text is in Recent' is TRUE: the refused text was archived", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    invokeMock.mockRejectedValue(NOT_READY);
+    mount("recover me");
+    await send("auto-submit");
+    expect(loadHistory(PROJECT)[0]).toBe("recover me");
+  });
+
+  it("a send that SUCCEEDS asks for no toast", async () => {
+    mount("arrives");
+    await send("auto-submit");
+    expect(failures).toEqual([]);
   });
 });

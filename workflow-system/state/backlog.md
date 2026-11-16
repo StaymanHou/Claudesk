@@ -657,3 +657,23 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** Correct the comment (the rows are identical, the order is recency). Optionally note it at `read_projects`.
 - **Priority:** low
 - **Status:** pending
+
+## SURFACE-2026-11-16-REMOTE-LINK-MASTER-ORPHANED-WHEN-THE-APP-IS-KILLED
+- **Source:** feature:verify-human (M17 WP3 Phase 3; observed while stopping the dev app with SIGTERM)
+- **Target level:** product:wbs (M17 WP5 lifecycle)
+- **Type:** gap
+- **Summary:** A host link's `ssh -M -N` master runs in its own process group, so when the app dies WITHOUT running `perform_quit_teardown` (SIGTERM / SIGKILL / a crash), nothing kills it: it keeps running with `ServerAliveInterval` holding the connection and its `-R` forward. A graceful quit (`quit_now`) is fine (verified, WP3 Phase 2 O6), and `LinkRegistry`'s `Drop` does not run on a process kill.
+- **Context:** Observed 2026-11-16: `kill <dev app pid>` left one `ssh -M` (ControlPath under the dev app-data dir). The next launch's pre-connect `rm -f`s the remote socket and binds a new master, so it does not break the new link, but each crash leaks one local ssh process and one remote sshd session until the network drops.
+- **Suggested action:** In WP5 (crash/R-2 work): tie the master's lifetime to the app's, e.g. a stdin pipe the master watches (ssh exits on EOF when not `-N`/`-n`; needs a probe), or on launch reap any `ssh -M` whose `-S` is under this app's `ssh/` dir before starting a link. Add a live test: SIGKILL the app → no `ssh -M` with this app's ControlPath survives the next launch.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN
+- **Source:** feature:verify-self (M17 WP3 Phase 4; a `window` `unhandledrejection` tap in the agent-launched dev app)
+- **Target level:** feature (frontend, `useTauriListen`)
+- **Type:** bug (pre-existing, dev build at least)
+- **Summary:** Opening a workspace, LOCAL as well as remote, raises several unhandled rejections `TypeError: undefined is not an object (evaluating 'listeners[eventId].handlerId')` (≈5–6 per open; 23 over one session). Stack: Tauri's injected `unregisterListener` (a user-script) ← `@tauri-apps/api/event` `_unlisten` ← `src/useTauriListen.ts` (the `cancelled` branch's `fn()`, i.e. the StrictMode first-mount cleanup unlistening after `listen` resolves). Closing a workspace raised none.
+- **Context:** Not WP3's: `useTauriListen.ts` is untouched since 2026-06-30, the `tauri` crate (2.11.2) and `@tauri-apps/api` are unchanged by WP3 (it added only `sha2`), and a local scratch-c open reproduces it. Odd: the identical tap read `[]` across WP3 Phase 3's session, so either the tap missed them there or the trigger is newer; not established. Behavior looked unaffected (sends, status, closes all worked).
+- **Suggested action:** Reproduce in a HEAD build with the same tap (positive control), check whether a prod build (no StrictMode) raises it, and look upstream for the Tauri unlisten-twice race. If confirmed, swallow the double-unlisten in `useTauriListen` (or guard it) so real rejections stay visible.
+- **Priority:** low
+- **Status:** open

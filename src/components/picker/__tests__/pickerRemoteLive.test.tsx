@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // M17 WP2 Phase 3 — the remote row on the LIVE picker (the consuming surface): the real
 // component, real clicks, mocked IPC. Pins what the pure helpers cannot: the row renders its
-// remote path with a short-host marker and no profile line, BOTH open doors refuse before `record_open`,
+// remote path with a short-host marker and no profile line, BOTH open doors run the open check before
+// `record_open` (WP3; WP2 refused them),
 // the add form surfaces the backend's words and prepends the written row, and remove sends the
 // row's `ssh://` key.
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -63,18 +64,79 @@ describe("remote rows on the live picker (M17 WP2)", () => {
     expect(localRow.dataset.remote).toBeUndefined();
   });
 
-  it("BOTH open doors refuse a remote row: a toast, no record_open, no onOpen", async () => {
+  // M17 WP3 — the open check (`remote_open_check`) replaced WP2's stub refusal. It runs in the
+  // funnel both doors share, BEFORE `record_open`.
+  it("BOTH open doors open a remote row whose check passes, passing its ssh:// key", async () => {
     const onOpen = vi.fn();
-    // An announcement makes the ⊘ door render, so both doors can be clicked.
     const { el } = await mountPicker({
       projects: [REMOTE],
       announce: { [KEY]: "continue" },
       onOpen,
+      ipc: (cmd) => (cmd === "remote_open_check" ? { kind: "ok" } : undefined),
     });
     const row = pickerRow(el, "tank");
     await click(q(row, "picker-recent"));
-    expect(q(el, "picker-toast")?.textContent).toContain("can't be opened yet");
     await click(q(row, "picker-recent-nofire"));
+    expect(calls.filter((c) => c.cmd === "remote_open_check")).toEqual([
+      { cmd: "remote_open_check", args: { projectPath: KEY } },
+      { cmd: "remote_open_check", args: { projectPath: KEY } },
+    ]);
+    expect(onOpen).toHaveBeenCalledTimes(2);
+    expect(onOpen.mock.calls.map((c) => c[0])).toEqual([KEY, KEY]);
+    expect(onOpen.mock.calls.map((c) => c[2])).toEqual(["fire", "no-fire"]);
+    // The check comes BEFORE the recency stamp.
+    const cmds = calls.map((c) => c.cmd);
+    expect(cmds.indexOf("remote_open_check")).toBeLessThan(
+      cmds.indexOf("record_open"),
+    );
+  });
+
+  it("a missing folder opens nothing and OFFERS Remove; Remove sends the row's key", async () => {
+    const onOpen = vi.fn();
+    const { el } = await mountPicker({
+      projects: [REMOTE, LOCAL],
+      onOpen,
+      ipc: (cmd) =>
+        cmd === "remote_open_check"
+          ? {
+              kind: "folder-missing",
+              message: "/Users/user/tank no longer exists on user@mini-host",
+            }
+          : undefined,
+    });
+    await click(q(pickerRow(el, "tank"), "picker-recent"));
+    expect(q(el, "picker-toast")?.textContent).toContain(
+      "no longer exists on user@mini-host",
+    );
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(calls.map((c) => c.cmd)).not.toContain("record_open");
+    // Nothing was removed by itself: the row is still listed until the operator clicks Remove.
+    expect(calls.map((c) => c.cmd)).not.toContain("remove_project");
+    expect(el.querySelectorAll("li.picker-recent-row")).toHaveLength(2);
+    await click(q(el, "picker-toast-action"));
+    expect(calls.filter((c) => c.cmd === "remove_project")).toEqual([
+      { cmd: "remove_project", args: { path: KEY } },
+    ]);
+    expect(el.querySelectorAll("li.picker-recent-row")).toHaveLength(1);
+  });
+
+  it("an unreachable host opens nothing and offers NO Remove", async () => {
+    const onOpen = vi.fn();
+    const { el } = await mountPicker({
+      projects: [REMOTE],
+      onOpen,
+      ipc: (cmd) =>
+        cmd === "remote_open_check"
+          ? {
+              kind: "unreachable",
+              message:
+                "could not resolve hostname user@mini-host: is Tailscale running?",
+            }
+          : undefined,
+    });
+    await click(q(pickerRow(el, "tank"), "picker-recent"));
+    expect(q(el, "picker-toast")?.textContent).toContain("Tailscale");
+    expect(q(el, "picker-toast-action")).toBeNull();
     expect(onOpen).not.toHaveBeenCalled();
     expect(calls.map((c) => c.cmd)).not.toContain("record_open");
   });

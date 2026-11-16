@@ -140,9 +140,17 @@ pub fn validate_host(host: &str) -> Result<String, HostError> {
     Ok(host.to_string())
 }
 
-/// Normalize a remote path as typed. `~` / `~/…` are expanded with the REMOTE `home` (read by the
-/// preflight's [`PRINT_HOME`]); the result must be absolute and free of control characters;
-/// trailing slashes are dropped so `/a/b/` and `/a/b` are the same project (one key).
+/// Normalize a remote path as typed, to the ONE form a remote row's identity key is built from.
+/// `~` / `~/…` are expanded with the REMOTE `home` (read by the preflight's [`PRINT_HOME`]); the
+/// result must be absolute and free of control characters. Empty and `.` segments are dropped
+/// (`/a//b/./c/` → `/a/b/c`), so every spelling of one folder gives one key.
+///
+/// ⚠️ **A `..` segment is REFUSED, not resolved.** Resolving it lexically (`/a/x/../b` → `/a/b`)
+/// is wrong when `x` is a symlink on the remote, and resolving it for real needs a remote
+/// `cd -P`. Refusing is honest and costs the operator one retype.
+///
+/// Idempotent: a normalized path is a fixed point, which is how the store checks a stored row
+/// ([`is_normalized_remote_path`]).
 pub fn normalize_remote_path(path: &str, home: &str) -> Result<String, String> {
     let path = path.trim();
     let expanded = if path == "~" {
@@ -160,17 +168,217 @@ pub fn normalize_remote_path(path: &str, home: &str) -> Result<String, String> {
     if expanded.chars().any(char::is_control) {
         return Err("the path contains a control character".into());
     }
-    let trimmed = expanded.trim_end_matches('/');
-    Ok(if trimmed.is_empty() { "/" } else { trimmed }.to_string())
+    let mut segments = Vec::new();
+    for seg in expanded.split('/') {
+        match seg {
+            "" | "." => {}
+            ".." => {
+                return Err(format!(
+                    "the path cannot contain \"..\"; type the folder's real path, got {path:?}"
+                ))
+            }
+            other => segments.push(other),
+        }
+    }
+    Ok(format!("/{}", segments.join("/")))
+}
+
+/// Whether `path` is already in [`normalize_remote_path`]'s form: absolute and a fixed point of
+/// it. The store's check for a remote row (it never sees `~`, which the add path expanded).
+pub fn is_normalized_remote_path(path: &str) -> bool {
+    path.starts_with('/') && normalize_remote_path(path, "/").as_deref() == Ok(path)
+}
+
+/// First 8 hex digits of `sha256(s)`. Stable across Rust and app versions (unlike `std`'s
+/// hasher), which matters: a tmux session name derived from it must still match after an upgrade
+/// (the reconnect finds the session by name). Used for session names and ControlPaths.
+pub fn hash8(s: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(s.as_bytes());
+    digest.iter().take(4).map(|b| format!("{b:02x}")).collect()
+}
+
+/// The tmux server (`-L`) for this app build: dev and prod never share one (arch §A).
+pub fn tmux_server(identifier: &str) -> &'static str {
+    if identifier.ends_with(".dev") {
+        "claudesk-dev"
+    } else {
+        "claudesk"
+    }
+}
+
+/// The tmux session name of the workspace keyed `remote_key` (arch §A): `cd-<hash8>`.
+pub fn tmux_session(remote_key: &str) -> String {
+    format!("cd-{}", hash8(remote_key))
+}
+
+/// The remote command that starts (or attaches to) a workspace's CC session (arch §C; WP3
+/// option (b)): `exec tmux -L <server> -f <conf> new -A -s <session> -c <path> <inner>`, run by
+/// [`login_shell`] because `tmux` is not on the host's non-login PATH.
+///
+/// `<inner>` is the command tmux hands to its default shell: `exec env
+/// [CLAUDESK_DRIVE_MODE=<mode>] <launcher> <cc_args…>`. The deployed launcher does the token
+/// export, the inline TUI and `unset TMUX`, so NOTHING here expands: every value is quoted for
+/// each shell it crosses (inner shell, then the `zsh -lc` script, then the login shell), and the
+/// paths are absolute (from the link's `$HOME`), with no `~`.
+///
+/// `new -A` attaches when the session is live (its inner command is then ignored): the
+/// reconnect (R-2). When CC exits, its session ends, so the next open starts fresh.
+pub fn tmux_new_command(
+    server: &str,
+    conf: &str,
+    session: &str,
+    path: &str,
+    launcher: &str,
+    drive_mode: Option<&str>,
+    cc_args: &[String],
+) -> String {
+    let mut inner = String::from("exec env ");
+    if let Some(mode) = drive_mode {
+        inner.push_str(&quote(&format!("CLAUDESK_DRIVE_MODE={mode}")));
+        inner.push(' ');
+    }
+    inner.push_str(&quote(launcher));
+    for a in cc_args {
+        inner.push(' ');
+        inner.push_str(&quote(a));
+    }
+    login_shell(&format!(
+        "exec tmux -L {} -f {} new -A -s {} -c {} {}",
+        quote(server),
+        quote(conf),
+        quote(session),
+        quote(path),
+        quote(&inner),
+    ))
+}
+
+/// The remote command a RECONNECT runs (M17 WP3 Phase 5; arch §E): re-attach to the workspace's
+/// EXISTING tmux session after the link came back.
+///
+/// ⚠️ `attach`, never `new -A`: a session that died while the link was down must NOT be silently
+/// restarted with a fresh CC (WP5 owns what happens then). tmux refuses a missing session ("can't
+/// find session", exit 1), which the caller classifies as the session having ended. The `=` makes
+/// the match exact, so `cd-1234abcd` never attaches to `cd-1234abcd-x`.
+pub fn tmux_attach_command(server: &str, session: &str) -> String {
+    login_shell(&format!(
+        "exec tmux -L {} attach -t {}",
+        quote(server),
+        quote(&format!("={session}")),
+    ))
+}
+
+/// The remote command that takes a workspace's pane OUT of tmux copy-mode, so the keys Claudesk
+/// types next reach CC (arch §C.1/§E: a scrolled-up pane swallows input). Tolerant by design:
+/// when the pane is not in a mode tmux refuses with "not in a mode", which is success here, so
+/// the command always exits 0 unless ssh or the shell failed.
+pub fn tmux_cancel_copy_mode_command(server: &str, session: &str) -> String {
+    login_shell(&format!(
+        "tmux -L {} send-keys -t {} -X cancel 2>/dev/null; exit 0",
+        quote(server),
+        quote(&format!("={session}:")),
+    ))
+}
+
+/// How long [`tmux_prepare_inject_command`] waits for the pane to be ready, in 0.2 s polls (15 s).
+pub const READY_POLLS: u32 = 75;
+
+/// The remote command run before EVERY Claudesk-originated injection into a remote pane (M17 WP3
+/// P4.2; arch §C.1/§E), in ONE exec:
+/// 1. take the pane out of copy-mode, tolerantly (as [`tmux_cancel_copy_mode_command`]).
+///    ⚠️ FIRST: in copy-mode `#{bracket_paste_flag}` reads 0, so a scrolled-up but ready pane
+///    looked not-ready and was refused (caught live, WP3 P4.2 `live_prepare_inject`);
+/// 2. wait (up to `max_polls` × 0.2 s) for the PANE's bracketed-paste mode, `#{bracket_paste_flag}`
+///    = 1. tmux forwards a paste envelope intact only then, so a multi-line send is one turn
+///    (probed P4.1; ⚠️ the client-side `ESC[?2004h` is NOT a signal: tmux sends it on every
+///    attach). It reads a pane MODE flag, never CC's output;
+/// 3. cancel copy-mode once more (the operator may have scrolled during the wait), then print
+///    `ready=1` or `ready=0` (timed out) and exit 0, so a non-zero exit means ssh failed.
+pub fn tmux_prepare_inject_command(server: &str, session: &str, max_polls: u32) -> String {
+    login_shell(&format!(
+        "t={t}; f=0; i=0\n\
+tmux -L {srv} send-keys -t \"$t\" -X cancel 2>/dev/null\n\
+while [ \"$i\" -lt {max_polls} ]; do \
+f=$(tmux -L {srv} display -p -t \"$t\" '#{{bracket_paste_flag}}' 2>/dev/null); \
+[ \"$f\" = 1 ] && break; i=$((i+1)); sleep 0.2; done\n\
+tmux -L {srv} send-keys -t \"$t\" -X cancel 2>/dev/null\n\
+echo \"ready=$f\"; exit 0",
+        t = quote(&format!("={session}:")),
+        srv = quote(server),
+    ))
+}
+
+/// The readiness answer in [`tmux_prepare_inject_command`]'s output: the LAST `ready=` line
+/// (rc-file noise before it is ignored). `None` = no answer (the exec did not get that far).
+pub fn parse_ready(out: &str) -> Option<bool> {
+    out.lines()
+        .rev()
+        .find_map(|l| l.trim().strip_prefix("ready="))
+        .map(|v| v == "1")
+}
+
+/// The remote command for the open path's folder check: prints `yes` or `no` and exits 0, so a
+/// non-zero exit means ssh failed, never "no folder".
+pub fn test_dir_command(path: &str) -> String {
+    format!("if [ -d {} ]; then echo yes; else echo no; fi", quote(path))
+}
+
+/// A remote target that passed [`validate_host`] and [`is_normalized_remote_path`] exactly as
+/// stored (M17 WP3, the WP2 review's MAJOR). **The only form of a target the spawn and link code
+/// accept**, so a raw string read from `projects.json` cannot reach an ssh argv or a tmux `-c`
+/// without passing both checks: the fields are private and [`ValidTarget::new`] is the only way
+/// to build one.
+///
+/// Built from a stored row by `config_store::RemoteTarget::validated`. A hand-edited row that
+/// fails stays in the list (so the operator can see and remove it) and only refuses to OPEN.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidTarget {
+    host: String,
+    path: String,
+}
+
+impl ValidTarget {
+    /// Check `host` and `path` as stored. Neither is repaired: a value that would change under
+    /// validation or normalization is refused, because the stored row's key was built from it.
+    pub fn new(host: &str, path: &str) -> Result<Self, String> {
+        match validate_host(host) {
+            Ok(h) if h == host => {}
+            Ok(_) => return Err(format!("the host {host:?} has spaces around it")),
+            Err(e) => return Err(format!("the host {host:?} is invalid: {e}")),
+        }
+        if !is_normalized_remote_path(path) {
+            let why = match normalize_remote_path(path, "/") {
+                Err(e) => e,
+                Ok(n) => format!("its normal form is {n:?}"),
+            };
+            return Err(format!("the remote path {path:?} is invalid: {why}"));
+        }
+        Ok(Self {
+            host: host.to_string(),
+            path: path.to_string(),
+        })
+    }
+
+    /// The ssh destination (validated: no leading `-`, allow-listed characters).
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
+    /// The absolute, normalized remote path. ⚠️ Still a VARIABLE value: it enters a remote
+    /// command only through [`quote`].
+    pub fn path(&self) -> &str {
+        &self.path
+    }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::process::Command;
 
     /// The inputs a remote path or mode string could carry on a hostile or careless day.
-    const HOSTILE: &[&str] = &[
+    /// `pub(crate)` so the spawn-string test in `cc_session` loops over the SAME set.
+    pub(crate) const HOSTILE: &[&str] = &[
         "plain",
         "",
         "with space",
@@ -386,5 +594,292 @@ mod tests {
         assert!(normalize_remote_path("~other/p", home).is_err());
         assert!(normalize_remote_path("", home).is_err());
         assert!(normalize_remote_path("/a\nb", home).is_err());
+    }
+
+    #[test]
+    fn normalize_remote_path_gives_every_spelling_of_one_folder_one_form() {
+        let home = "/Users/u";
+        for (typed, want) in [
+            ("/a//b", "/a/b"),
+            ("/a/./b/", "/a/b"),
+            ("//a///b//", "/a/b"),
+            ("/./", "/"),
+            ("~/x//y", "/Users/u/x/y"),
+            ("~/./x", "/Users/u/x"),
+            ("/a/.hidden/b", "/a/.hidden/b"),
+            ("/a/b.", "/a/b."),
+            ("/with space/ok", "/with space/ok"),
+        ] {
+            assert_eq!(
+                normalize_remote_path(typed, home).as_deref(),
+                Ok(want),
+                "{typed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn normalize_remote_path_refuses_a_dot_dot_segment_rather_than_resolving_it() {
+        for typed in ["/a/../b", "/..", "~/../x", "/a/b/..", "/a/b/../"] {
+            let err = normalize_remote_path(typed, "/Users/u").expect_err(typed);
+            assert!(err.contains(".."), "{typed:?}: {err}");
+        }
+        // `..` only as a whole segment: these are ordinary names.
+        assert_eq!(
+            normalize_remote_path("/a/..b", "/").as_deref(),
+            Ok("/a/..b")
+        );
+        assert_eq!(
+            normalize_remote_path("/a/b..", "/").as_deref(),
+            Ok("/a/b..")
+        );
+    }
+
+    #[test]
+    fn a_valid_target_is_built_only_from_a_host_and_path_that_need_no_repair() {
+        let ok = ValidTarget::new("me@mini.example", "/Users/me/p").expect("valid");
+        assert_eq!((ok.host(), ok.path()), ("me@mini.example", "/Users/me/p"));
+        for (host, path) in [
+            ("-oProxyCommand=touch /tmp/x", "/a"),
+            ("a b", "/a"),
+            (" me@mini", "/a"),
+            ("me@mini ", "/a"),
+            ("", "/a"),
+            ("me@mini", "rel"),
+            ("me@mini", "/a/"),
+            ("me@mini", "/a//b"),
+            ("me@mini", "/a/./b"),
+            ("me@mini", "/a/../b"),
+            ("me@mini", "~/a"),
+            ("me@mini", "/a\nb"),
+        ] {
+            let err = ValidTarget::new(host, path).expect_err(&format!("{host:?} {path:?}"));
+            assert!(!err.is_empty());
+        }
+    }
+
+    #[test]
+    fn normalize_remote_path_is_idempotent_and_its_output_passes_the_store_check() {
+        for typed in ["~", "~/p", "/a//b/./c/", "/", "/x y/z", "/a/.b"] {
+            let once = normalize_remote_path(typed, "/Users/u").unwrap();
+            assert_eq!(
+                normalize_remote_path(&once, "/Users/u").as_deref(),
+                Ok(once.as_str())
+            );
+            assert!(is_normalized_remote_path(&once), "{once:?}");
+        }
+        for not_normal in [
+            "/a/", "/a//b", "/a/./b", "/a/../b", "a/b", "", "~/a", " /a", "/a\tb",
+        ] {
+            assert!(!is_normalized_remote_path(not_normal), "{not_normal:?}");
+        }
+    }
+
+    #[test]
+    fn the_folder_check_and_the_copy_mode_cancel_treat_their_values_as_data() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let canary = dir.path().join("CANARY");
+        let touch = format!("touch {}", canary.display());
+        // The folder check answers yes / no for a hostile but real folder name.
+        let hostile = dir.path().join(format!("it's $({touch}) `x`"));
+        std::fs::create_dir_all(&hostile).unwrap();
+        let run = |cmd: &str| {
+            let o = Command::new("/bin/zsh")
+                .arg("-fc")
+                .arg(cmd)
+                .output()
+                .unwrap();
+            (
+                o.status.code(),
+                String::from_utf8_lossy(&o.stdout).trim().to_string(),
+            )
+        };
+        assert_eq!(
+            run(&test_dir_command(hostile.to_str().unwrap())),
+            (Some(0), "yes".into())
+        );
+        let gone = dir.path().join("gone; touch x");
+        assert_eq!(
+            run(&test_dir_command(gone.to_str().unwrap())),
+            (Some(0), "no".into())
+        );
+        // The cancel: with no tmux server at all it still exits 0 (a pane not in a mode, or no
+        // pane, is not a failure of the close), and a hostile session name never executes.
+        let cancel =
+            tmux_cancel_copy_mode_command("claudesk-test-none", &format!("x'; {touch}; '"));
+        assert!(cancel.starts_with("zsh -lc '"));
+        let (code, _) = run(&cancel.replacen("zsh -lc ", "/bin/zsh -fc ", 1));
+        assert_eq!(code, Some(0));
+        assert!(!canary.exists(), "a hostile value executed");
+    }
+
+    #[test]
+    fn tmux_names_are_stable_and_split_dev_from_prod() {
+        assert_eq!(tmux_server("com.claudesk.app"), "claudesk");
+        assert_eq!(tmux_server("com.claudesk.app.dev"), "claudesk-dev");
+        assert_eq!(tmux_session("abc"), "cd-ba7816bf");
+        assert_eq!(hash8("abc"), "ba7816bf");
+    }
+
+    /// Run `tmux_prepare_inject_command` in real zsh against a fake `tmux` that answers
+    /// `bracket_paste_flag` from a file (`0` / `1`) and logs every `send-keys`.
+    fn run_prepare(
+        flag: &str,
+        max_polls: u32,
+        session: &str,
+    ) -> (String, String, std::time::Duration) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::TempDir::new().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(dir.path().join("flag"), flag).unwrap();
+        let tmux = bin.join("tmux");
+        std::fs::write(
+            &tmux,
+            format!(
+                "#!/bin/sh\nd={d}\ncase \"$*\" in\n*display*) cat \"$d/flag\" ;;\n\
+                 *send-keys*) printf '%s\\n' \"$*\" >> \"$d/log\" ;;\nesac\n",
+                d = dir.path().display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&tmux, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let cmd = tmux_prepare_inject_command("claudesk-dev", session, max_polls).replacen(
+            "zsh -lc ",
+            "/bin/zsh -fc ",
+            1,
+        );
+        let t0 = std::time::Instant::now();
+        let out = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(&cmd)
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let log = std::fs::read_to_string(dir.path().join("log")).unwrap_or_default();
+        (
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+            log,
+            t0.elapsed(),
+        )
+    }
+
+    #[test]
+    fn prepare_inject_waits_for_the_panes_paste_mode_then_cancels_copy_mode() {
+        // Ready at once: `ready=1`, no waiting, and the copy-mode cancel targets the session.
+        let (out, log, took) = run_prepare("1", 75, "cd-12345678");
+        assert_eq!(parse_ready(&out), Some(true), "{out}");
+        assert!(took < std::time::Duration::from_secs(2), "{took:?}");
+        // Cancel BEFORE the poll (copy-mode hides the flag) and again just before answering.
+        assert_eq!(
+            log.lines().collect::<Vec<_>>(),
+            ["-L claudesk-dev send-keys -t =cd-12345678: -X cancel"; 2]
+        );
+        // Never ready: `ready=0` after the bound (3 polls ≈ 0.6 s), and still cancels.
+        let (out, log, took) = run_prepare("0", 3, "cd-12345678");
+        assert_eq!(parse_ready(&out), Some(false), "{out}");
+        assert!(took >= std::time::Duration::from_millis(500), "{took:?}");
+        assert!(log.contains("-X cancel"));
+    }
+
+    #[test]
+    fn prepare_inject_treats_a_hostile_session_name_as_data() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let canary = dir.path().join("CANARY");
+        for v in HOSTILE
+            .iter()
+            .map(|v| v.to_string())
+            .chain([format!("x'; touch {}; '", canary.display())])
+        {
+            let (out, log, _) = run_prepare("1", 2, &v);
+            assert_eq!(parse_ready(&out), Some(true), "{v:?}: {out}");
+            assert!(log.contains(&format!("={v}:")), "{v:?}: {log}");
+        }
+        assert!(!canary.exists());
+    }
+
+    #[test]
+    fn parse_ready_reads_the_last_answer_and_ignores_noise() {
+        assert_eq!(parse_ready("ready=1\n"), Some(true));
+        assert_eq!(parse_ready("Welcome!\nready=0\n"), Some(false));
+        assert_eq!(parse_ready("ready=0\nready=1"), Some(true));
+        assert_eq!(parse_ready("ready=\n"), Some(false));
+        assert_eq!(parse_ready("nothing"), None);
+        assert_eq!(parse_ready(""), None);
+    }
+
+    /// Run `tmux_attach_command` through real `/bin/sh` → `/bin/zsh -fc` with a fake `tmux` that
+    /// records its argv NUL-separated, and return that argv.
+    fn run_attach(session: &str) -> Vec<String> {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::TempDir::new().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let tmux = bin.join("tmux");
+        std::fs::write(
+            &tmux,
+            format!(
+                "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\0' \"$a\"; done > {d}/argv\n",
+                d = dir.path().display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&tmux, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let cmd =
+            tmux_attach_command("claudesk-dev", session).replacen("zsh -lc ", "/bin/zsh -fc ", 1);
+        let out = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(&cmd)
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let raw = std::fs::read(dir.path().join("argv")).unwrap();
+        raw.split(|b| *b == 0)
+            .filter(|p| !p.is_empty())
+            .map(|p| String::from_utf8_lossy(p).into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn the_reconnect_attaches_exactly_and_never_creates_a_session() {
+        // Phase 5: a session that died while the link was down must never be silently restarted.
+        let cmd = tmux_attach_command("claudesk-dev", "cd-1234abcd");
+        assert!(cmd.contains("attach -t"), "{cmd}");
+        assert!(
+            !cmd.contains("new"),
+            "a reconnect must never create a session: {cmd}"
+        );
+        assert_eq!(
+            run_attach("cd-1234abcd"),
+            ["-L", "claudesk-dev", "attach", "-t", "=cd-1234abcd"]
+        );
+    }
+
+    #[test]
+    fn the_reconnect_treats_a_hostile_session_name_as_data() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let canary = dir.path().join("CANARY");
+        for v in HOSTILE
+            .iter()
+            .map(|v| v.to_string())
+            .chain([format!("x'; touch {}; '", canary.display())])
+        {
+            assert_eq!(
+                run_attach(&v),
+                ["-L", "claudesk-dev", "attach", "-t", &format!("={v}")],
+                "{v:?}"
+            );
+        }
+        assert!(!canary.exists());
     }
 }

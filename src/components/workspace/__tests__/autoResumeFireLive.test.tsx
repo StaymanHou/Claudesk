@@ -10,9 +10,9 @@ import type { AutoResumeAction } from "../../../state/predictAction";
 //
 // Every other test of the fire drives `fireAutoResume` directly or reads XtermPane's source. This
 // one mounts the real pane and runs its real spawn effect against `mockIPC`: `cc_spawn` → the
-// listeners → `cc_ready` → the `FIRE_DELAY_MS` timer → `folder_trusted` → `cc_input` (or not).
+// listeners → `cc_ready` → the `FIRE_DELAY_MS` timer → `folder_trusted` → `cc_inject` (or not).
 // So it sees what a source guard cannot: that the pane passes THIS project and THIS session id to
-// the trust read, and that an untrusted answer really reaches no `cc_input`.
+// the trust read, and that an untrusted answer really reaches no `cc_inject`.
 //
 // Only what jsdom cannot run is faked: xterm.js and its addons (they measure cells and paint),
 // `ResizeObserver`, and `requestAnimationFrame` where jsdom lacks it.
@@ -121,7 +121,7 @@ describe("the auto-resume fire on the real XtermPane", () => {
   it("positive control: a TRUSTED folder types /session-restore into the spawned session", async () => {
     const cmds = await openAndWaitPastFire({ trusted: true, action: RESTORE });
     expect(cmds).toContain("cc_spawn");
-    const input = ipcCalls.find((c) => c.cmd === "cc_input");
+    const input = ipcCalls.find((c) => c.cmd === "cc_inject");
     expect(input, `IPC seen: ${cmds.join(", ")}`).toBeDefined();
     expect(input?.args.sessionId).toBe(SESSION);
     expect(atob(String(input?.args.data))).toBe("/session-restore\r");
@@ -139,16 +139,16 @@ describe("the auto-resume fire on the real XtermPane", () => {
       cmds.indexOf("folder_trusted"),
     );
     expect(cmds.indexOf("folder_trusted")).toBeLessThan(
-      cmds.indexOf("cc_input"),
+      cmds.indexOf("cc_inject"),
     );
   });
 
-  it("an UNTRUSTED folder reaches no cc_input at all — the reported defect", async () => {
+  it("an UNTRUSTED folder reaches no cc_inject at all — the reported defect", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const cmds = await openAndWaitPastFire({ trusted: false, action: RESTORE });
     // Non-vacuity: the fire DID run and ask, so the silence below is a decision, not a dead timer.
     expect(cmds).toContain("folder_trusted");
-    expect(cmds).not.toContain("cc_input");
+    expect(cmds).not.toContain("cc_inject");
     expect(String(warn.mock.calls.at(-1)?.[0])).toContain(
       "/session-restore withheld",
     );
@@ -163,7 +163,7 @@ describe("the auto-resume fire on the real XtermPane", () => {
       action: RESTORE,
     });
     expect(cmds).toContain("folder_trusted");
-    expect(cmds).not.toContain("cc_input");
+    expect(cmds).not.toContain("cc_inject");
     warn.mockRestore();
   });
 
@@ -171,6 +171,6 @@ describe("the auto-resume fire on the real XtermPane", () => {
     const cmds = await openAndWaitPastFire({ trusted: true, action: null });
     expect(cmds).toContain("cc_spawn");
     expect(cmds).not.toContain("folder_trusted");
-    expect(cmds).not.toContain("cc_input");
+    expect(cmds).not.toContain("cc_inject");
   });
 });

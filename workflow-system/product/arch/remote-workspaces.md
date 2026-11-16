@@ -170,11 +170,18 @@ Measured in a real Claudesk xterm.js pane (the second terminal, same `XtermPane`
   injections (candidates to probe: the session's first hook event over the link, or an observed
   `?2004h` in the output stream, which is a mode toggle, not text parsing for state) and test it: a
   multi-line send during startup arrives as one turn.
-- **Latency:** to tmux-ready, cold **1.0 s** / warm master **0.26 s**; **to CC's prompt, cold 1.30 s /
-  warm master 0.55 s** (3 runs each, host-side PTY, trusted folder). That is vision Metric 7's
-  open-time input (operator-accepted), well inside Metric 1's <10 s. ⚠️ Scope: measured in **default**
-  permission mode and **before** the token export, `CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN` and
-  `unset TMUX` joined the inner command. Re-measure with the real inner command in WP3/WP8.
+- **Latency (RE-MEASURED 2026-11-16, M17 WP3 Phase 4, the real inner command: launcher, token,
+  inline, yolo; trusted folder; Mac↔mini clock offset measured ≈0 ±10 ms):**
+  - **Cold** (no master, no tmux server; picker click in the dev app → the pane's
+    `#{bracket_paste_flag}` = 1, i.e. CC ready for a multi-line send): **1.24 / 1.22 / 1.20 s**. Of
+    that, click → tmux session exists is **0.77 / 0.78 / 0.76 s** (open check + master connect +
+    deploy + spawn); tmux → CC ready is ~0.45 s.
+  - **Warm master** (the app's live master; the same inner command under a throwaway session name →
+    flag = 1; poll granularity ≈ one master exec): **0.33 / 0.47 / 0.54 s**.
+  - Vision Metric 7's open-time input (operator-accepted), well inside Metric 1's <10 s.
+  - *Superseded:* WP1's default-mode figures (to CC's prompt, cold 1.30 s / warm 0.55 s; to
+    tmux-ready, cold 1.0 s / warm 0.26 s), measured before the token export,
+    `CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN` and `unset TMUX` joined the inner command.
 - ✅ **R-1 mechanism PROBED (Phase 2): `/exit\r` ends it all.** Typed into the pane, `/exit\r` ended CC
   (no remote `claude` left), the tmux session (`has-session` → 1) and server, and the outer `ssh`
   returned the local prompt. That is exactly what `PtyCcSession::kill()` types. `/exit\n` alone does
@@ -291,10 +298,13 @@ remote. Code, UI copy and tests use these two words for these two cases only.
   `if -F '#{pane_in_mode}' 'send -X cancel'`), or tolerate that exit. WP3 probes both cases.
 - ⚠️ **Auto-resume's fixed settle delay needs re-measuring for remote.** `/session-restore` fires
   `INJECT_SETTLE_MS` (1500 ms) after `cc_ready` (`autoResumeFire.ts`), about 4× the local flake point.
-  Remote cold CC-ready measured 1.30 s, about 1.15× margin, and that was in default mode before the
-  final inner command. A cold remote open could land `/session-restore` before CC listens. WP5
-  re-measures with the real inner command and either raises the delay for remote or fires on a real
-  readiness signal (the same one §C.1 asks WP3 to choose for multi-line sends).
+  Remote cold CC-ready re-measured at WP3 Phase 4 with the real inner command: **1.20–1.24 s from
+  the picker click** (§C.1), so the fixed delay alone has little margin. ⚠️ **Partly superseded by
+  WP3 Phase 4 (as built, not yet re-verified for this path):** auto-resume injects through
+  `injectCommand` → `cc_inject`, which for a remote session waits (≤ 15 s) for the pane's
+  `#{bracket_paste_flag}` before writing, so a cold remote `/session-restore` should no longer land
+  before CC listens. WP5 confirms this live on the auto-resume path, then decides whether the
+  settle delay is still needed for remote.
 - **The unclean flag is unchanged.** It is set on open and cleared only by an explicit clean route. A passive
   drop leaves it set, which is correct: if the remote session later dies too (the remote reboots),
   reopening falls to `--continue`.

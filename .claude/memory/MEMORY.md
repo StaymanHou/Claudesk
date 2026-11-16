@@ -8,7 +8,7 @@
 
 - [detector-scored-against-its-own-table-is-circular](detector-scored-against-its-own-table-is-circular.md) — A detector scored against its own policy table gets 1.000 by identity; score against an independent signal.
 - [installed-skills-are-symlinks-into-the-mccc-repo](installed-skills-are-symlinks-into-the-mccc-repo.md) — `~/.claude/skills/` entries are symlinks into mccc; editing one dirties THAT repo. `cp -RL`, check its status.
-- [git-checkout-no-ops-on-untracked-file](git-checkout-no-ops-on-untracked-file.md) — Never restore a mutation with `git checkout` (no-op on untracked, destroys dirty work); `cp` aside + `shasum`.
+- [git-checkout-no-ops-on-untracked-file](git-checkout-no-ops-on-untracked-file.md) — Never restore a mutation with `git checkout`; `cp` aside + `shasum` — and `|| exit` if the aside copy fails (a failed aside left 3 mutants in place).
 - [verify-redaction-by-what-remains](verify-redaction-by-what-remains.md) — Verify a redaction by asking what is STILL unredacted across the whole artifact, not field by field.
 - [verify-the-mutation-landed](verify-the-mutation-landed.md) — Confirm a mutant changed EXECUTABLE code (`sed -n '<line>p'`) and require a `Tests N` line per run.
 - [projects-json-resorted-on-every-launch](projects-json-resorted-on-every-launch.md) — Every launch re-sorts projects.json (prune always writes); a shasum check spanning a launch is invalid, compare row sets.

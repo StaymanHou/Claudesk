@@ -248,6 +248,10 @@ A `pnpm tauri:dev` window launched by the agent reports `document.visibilityStat
 
 - **The xterm pane screenshot lags the buffer by seconds.** A staged send read as "nothing arrived"
   while the buffer already held it. Read the buffer (caveat (i)), not a screenshot.
+  ⚠️ **It can also stay blank for good** (M17 WP3 Phase 3, 2026-11-16): every xterm pane, a remote
+  one AND a local CC control, screenshot solid black 40 s+ after open and never painted, while the
+  buffer held CC's screen. A blank xterm screenshot from an agent-launched window is no evidence
+  either way; a local positive control in the same session is what showed it.
 - **The Prompt editor appears not to clear after a send.** `@uiw/react-codemirror` 4.25.10 defers a
   controlled `value` update while a **typing latch** is live: 200 ticks of a 1 ms `setInterval`
   (`TYPING_TIMOUT` in `useCodeMirror.js`), re-armed by every edit. Throttled, the deferred `""`
@@ -265,6 +269,10 @@ A `pnpm tauri:dev` window launched by the agent reports `document.visibilityStat
   the element's `__reactFiber$*` key and walk `.return`. On each fiber, scan the `memoizedState` hook
   chain (`.next`) for a value, or a ref's `.current`, that has `buffer.active`. Then
   `getLine(y).translateToString(true)` per row.
+- **Or read the buffer the filmstrip mirror reads**: `serializeTerminal(workspaceId)` from
+  `import("/src/components/workspace/terminalMirror.ts")` (through Vite; fire, then read next call),
+  with the workspace id from the `XtermPane` fiber's `workspaceId` prop. Strip the HTML tags to get
+  the text of the visible rows.
 - **Promise-returning scripts time out the eval**, `setTimeout` included. Fire in one call and read in
   the next (caveat (d)).
 

@@ -83,10 +83,10 @@ describe("the clear button", () => {
       const el = await mountWorkspace({ gate, profile: null });
       ipcCalls.length = 0;
       await click(el.querySelector(`[data-testid="${CLEAR_TESTID}"]`));
-      const sends = ipcCalls.filter((c) => c.cmd === "cc_input");
+      const sends = ipcCalls.filter((c) => c.cmd === "cc_inject");
       expect(sends).toEqual([
         {
-          cmd: "cc_input",
+          cmd: "cc_inject",
           args: { sessionId: "cc-1", data: slashCommandPayload("/clear") },
         },
       ]);

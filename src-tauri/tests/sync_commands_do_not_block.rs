@@ -90,9 +90,12 @@ const LEDGER: &[(&str, &str)] = &[
         "false positive: git2 `.status()` accessor",
     ),
     // Real, and accepted: the confirmed quit joins one kill thread per session. The joins run
-    // in PARALLEL, so the wait is bounded by one `DEFAULT_KILL_TIMING` window (~800ms), and the
-    // window is about to close anyway. Waiting is the point: an un-joined kill could be cut
-    // short by `app.exit(0)`.
+    // in PARALLEL, so the wait is bounded by the slowest single kill, and the window is about to
+    // close anyway. Waiting is the point: an un-joined kill could be cut short by `app.exit(0)`.
+    // ⚠️ The bound is NOT one `DEFAULT_KILL_TIMING` window (~800ms) once a REMOTE session is
+    // open (M17 WP3): its kill first cancels tmux copy-mode over ssh, an exec bounded by
+    // `remote_link::EXEC_TIMEOUT_MS` (10 s) when the host is unreachable, plus up to the 2 s reap
+    // window if its terminal just ended. Still bounded, still on the terminal path.
     (
         "quit_now",
         "accepted: bounded, parallel kill joins on the terminal quit path",
@@ -131,6 +134,26 @@ const ASYNC_COMMANDS: &[(&str, &str)] = &[
     (
         "supervisor_adjudicate",
         "waits on `claude -p` up to `timeout_ms`; the work runs on `spawn_blocking`",
+    ),
+    (
+        "remote_open_check",
+        "brings up the host link and runs a `test -d` over it (up to `LINK_UP_TIMEOUT` + \
+         `EXEC_TIMEOUT_MS`); the work runs on `spawn_blocking`",
+    ),
+    (
+        "cc_inject",
+        "a remote session waits (one ssh exec, up to `READY_POLLS` x 0.2 s + `EXEC_TIMEOUT_MS`) for \
+         the pane's readiness before the write; the work runs on `spawn_blocking`",
+    ),
+    (
+        "cc_spawn_remote",
+        "brings up the host link before the (non-blocking) PTY spawn; the work, including the \
+         registry lock, runs on `spawn_blocking`",
+    ),
+    (
+        "remote_link_ensure",
+        "brings up an ssh ControlMaster and waits for it (up to `LINK_UP_TIMEOUT` plus the \
+         connect timeout); the work runs on `spawn_blocking`",
     ),
     (
         "supervisor_activity_append",

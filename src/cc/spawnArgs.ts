@@ -35,3 +35,23 @@ export function takeSpawnArgs(
   if (override) override.current = null;
   return { projectPath, intent: taken ?? openIntent };
 }
+
+/** The scheme every remote identity key starts with (Rust `config_store::REMOTE_KEY_PREFIX`). */
+export const REMOTE_KEY_PREFIX = "ssh://";
+
+/**
+ * M17 WP3 — the IPC command a pane actually invokes. A CC pane (`cc_spawn`) whose project key is a
+ * REMOTE key spawns through `cc_spawn_remote`, which brings the host link up and runs `ssh -tt`
+ * into the workspace's tmux session; its args are the same `{ projectPath, intent }`. Every other
+ * pane behaviour keys on the pane KIND (`cc_spawn`), which is why the swap happens only here, at
+ * the invoke, and not in the prop.
+ */
+export function spawnCommandFor(
+  spawnCommand: string,
+  projectPath: string,
+): string {
+  return spawnCommand === "cc_spawn" &&
+    projectPath.startsWith(REMOTE_KEY_PREFIX)
+    ? "cc_spawn_remote"
+    : spawnCommand;
+}

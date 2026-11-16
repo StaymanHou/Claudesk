@@ -49,6 +49,7 @@ mod project_search;
 // mechanics; Phase 3 = the human-state gap machine (focus-fusion + capped-working).
 mod reclassify;
 mod remote_cmd;
+mod remote_link;
 // M12 WP2: the unclean-exit flag store (`session-state.json`) — one boolean per project
 // path, DEFAULT-SET on workspace open and cleared only by a clean exit, so a power loss
 // (which runs no code) leaves it set for free. ABSENT MEANS CLEAN: clearing removes the
@@ -192,6 +193,12 @@ fn perform_quit_teardown(app: &tauri::AppHandle) {
                 paths.iter().map(std::path::PathBuf::from).collect(),
             );
         }
+    }
+    // M17 WP3: stop every remote host link. AFTER `kill_all`, whose remote close path still
+    // needs the master. Kills each master's process group directly, without waiting on its
+    // worker, so an orphaned `ssh -M` never outlives the app.
+    if let Some(links) = app.try_state::<remote_link::commands::SharedLinks>() {
+        links.stop_all();
     }
     // M3 WP3: unlink the hook socket on close (mirror the kill_all reaping discipline).
     // Belt to bind_listener's stale-file removal.
@@ -469,6 +476,15 @@ pub fn run() {
                 }
                 Err(e) => hook_socket::commands::emit_start_error(&handle, &e),
             }
+            // M17 WP3 — the remote host links (one ssh master per host, started on demand).
+            // Managed even when the hook socket failed: the link resolves the socket PATH, and a
+            // remote terminal is still useful without live status.
+            match remote_link::commands::init(&handle) {
+                Ok(links) => {
+                    app.manage(links);
+                }
+                Err(e) => eprintln!("[claudesk] remote links unavailable: {e}"),
+            }
             // M5 WP5 Phase 2 (rework): the persisted PiP MODE governs the panel at rest.
             // M6 WP9 Phase 2: we do NOT show the `On` panel here at launch — the registry is
             // always empty at launch (the frontend webview hasn't mounted, so no
@@ -493,6 +509,10 @@ pub fn run() {
             config_store::commands::add_project,
             remote_cmd::commands::remote_preflight,
             remote_cmd::commands::add_remote_project,
+            remote_link::commands::remote_link_ensure,
+            remote_link::commands::remote_open_check,
+            cc_session::commands::cc_spawn_remote,
+            cc_session::commands::cc_inject,
             config_store::commands::record_open,
             config_store::commands::remove_project,
             // WP9: prune projects whose folder was deleted between sessions.

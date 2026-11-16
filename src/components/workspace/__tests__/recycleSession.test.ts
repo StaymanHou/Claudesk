@@ -774,10 +774,12 @@ describe("P2.7 — the auto-resume latch stays closed across a recycle", () => {
     // added the `label` parameter to fix).
     const promise = recycleSession(baseInputs({ completionTimeoutMs: 10 }));
     await promise;
+    // M17 WP3 P4.6 — the third argument is now the refusal handler (`injectRefusal`), not
+    // `undefined`; the property this test pins is the LABEL.
     expect(injectCommandMock).toHaveBeenCalledWith(
       OLD_SID,
       HANDOFF_COMMAND,
-      undefined,
+      expect.any(Function),
       "recycle",
     );
   });
@@ -1116,5 +1118,92 @@ describe("⚠️ the `stop` signal is the backend's turn-end marker, never a sta
     }
     const outcome = await promise;
     expect(outcome).toEqual({ ok: false, reason: "timeout" });
+  });
+});
+
+describe("⚠️ M17 WP3 P4.6 — a REFUSED injection is reported, never silent", () => {
+  const NOT_READY =
+    "Claude Code on host.example isn't ready for input yet (waited 15s)";
+
+  /** `injectCommand` double that REFUSES `refuse` the way the real funnel does: it calls the
+   *  caller's `onIpcError(message, reason)` and resolves (it never throws). */
+  function refusing(refuse: string) {
+    injectCommandMock.mockImplementation(
+      async (
+        _sid: string,
+        command: string,
+        onIpcError?: (message: string, reason: string) => void,
+      ) => {
+        effects.push(`inject:${command}`);
+        if (command === refuse)
+          onIpcError?.(`recycle could not run ${command}`, NOT_READY);
+      },
+    );
+  }
+
+  it("a refused HANDOFF stops at once: handoff-not-sent, reported, nothing torn down", async () => {
+    refusing(HANDOFF_COMMAND);
+    const reported: [string, string][] = [];
+    // ⚠️ A long deadline: if the operation still waited for a marker, this test would hang to
+    // the vitest timeout instead of resolving — the 180 s silent wait P4.6 removes.
+    const outcome = await recycleSession(
+      baseInputs({
+        completionTimeoutMs: 60_000,
+        onInjectFailure: (step, reason) => reported.push([step, reason]),
+      }),
+    );
+    expect(outcome).toEqual({ ok: false, reason: "handoff-not-sent" });
+    expect(reported).toEqual([["handoff", NOT_READY]]);
+    // Nothing after the refused handoff: no clean mark, no kill, no restore.
+    expect(effects).toEqual([`inject:${HANDOFF_COMMAND}`]);
+    expect(markSessionCleanMock).not.toHaveBeenCalled();
+  });
+
+  it("a refused RESTORE is restore-not-injected and reported — no longer ok:true", async () => {
+    refusing(RESTORE_COMMAND);
+    invokeMock.mockImplementationOnce(() =>
+      Promise.reject(new Error("ENOENT")),
+    );
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "stat_file"
+        ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
+        : Promise.resolve(),
+    );
+    const reported: [string, string][] = [];
+    const promise = recycleSession(
+      baseInputs({
+        onInjectFailure: (step, reason) => reported.push([step, reason]),
+      }),
+    );
+    await tick();
+    emitSessionMdWrite();
+    await tick();
+    emitStop();
+    const outcome = await promise;
+    expect(outcome).toEqual({ ok: false, reason: "restore-not-injected" });
+    expect(reported).toEqual([["restore", NOT_READY]]);
+    // The recycle itself DID happen (the operator restores by hand).
+    expect(effects).toContain("relaunch");
+  });
+
+  it("injections that go through report nothing", async () => {
+    invokeMock.mockImplementationOnce(() =>
+      Promise.reject(new Error("ENOENT")),
+    );
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "stat_file"
+        ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
+        : Promise.resolve(),
+    );
+    const reported: unknown[] = [];
+    const promise = recycleSession(
+      baseInputs({ onInjectFailure: (...a) => reported.push(a) }),
+    );
+    await tick();
+    emitSessionMdWrite();
+    await tick();
+    emitStop();
+    expect(await promise).toEqual({ ok: true });
+    expect(reported).toEqual([]);
   });
 });

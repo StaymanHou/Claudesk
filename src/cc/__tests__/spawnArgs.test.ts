@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { takeSpawnArgs, type SpawnIntentRef } from "../spawnArgs";
+import {
+  spawnCommandFor,
+  takeSpawnArgs,
+  type SpawnIntentRef,
+} from "../spawnArgs";
 import xtermPaneSource from "../../components/workspace/XtermPane.tsx?raw";
 
 // P4.6: the open INTENT must reach `cc_spawn`. Every other check on the `⏵` no-fire door was
@@ -58,7 +62,21 @@ describe("XtermPane routes its spawn through takeSpawnArgs", () => {
 
   it("the spawn invoke's arguments come from takeSpawnArgs with the pane's override ref", () => {
     expect(code).toMatch(
-      /invoke<string>\(\s*spawnCommand,\s*takeSpawnArgs\(\s*spawnCommand,\s*projectPath,\s*openIntent,\s*spawnIntentRef,?\s*\),?\s*\)/,
+      /invoke<string>\(\s*spawnCommandFor\(spawnCommand, projectPath\),\s*takeSpawnArgs\(\s*spawnCommand,\s*projectPath,\s*openIntent,\s*spawnIntentRef,?\s*\),?\s*\)/,
     );
+  });
+});
+
+// M17 WP3 — a remote CC pane spawns through `cc_spawn_remote`; nothing else changes command.
+describe("spawnCommandFor", () => {
+  it("routes a CC pane on a remote key to cc_spawn_remote, and nothing else", () => {
+    expect(spawnCommandFor("cc_spawn", "ssh://me@mini/Users/me/p")).toBe(
+      "cc_spawn_remote",
+    );
+    expect(spawnCommandFor("cc_spawn", "/Users/me/p")).toBe("cc_spawn");
+    // A local folder whose NAME starts with ssh: is still local (keys are absolute paths).
+    expect(spawnCommandFor("cc_spawn", "/Users/me/ssh://x")).toBe("cc_spawn");
+    // The right-panel shell is never rerouted (its remote absence is WP6's).
+    expect(spawnCommandFor("term_spawn", "ssh://me@mini/p")).toBe("term_spawn");
   });
 });

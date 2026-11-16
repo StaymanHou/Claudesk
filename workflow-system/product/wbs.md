@@ -216,7 +216,7 @@ it, Detach / Reconnect works, and there is no system extension on the main box.
 | 1.2 Bracketed paste | ✅ The envelope is forwarded intact when the app has `?2004h` on (CC does). ⚠️ It is stripped before then, so multi-line sends must wait for CC to be ready. |
 | 1.3 TERM / colour / UTF-8 | ✅ with `terminal-features ',xterm*:RGB'` (without it truecolor degrades to 256). UTF-8 glyphs are exact. `status off`: pane = xterm size. ⚠️ `-L` doesn't isolate `~/.tmux.conf`, so WP3 passes `-f`. |
 | 1.4 `/exit` ends tmux | ✅ (Phase 2) `/exit\r` ended CC, the tmux session and server, and the outer ssh. That is the existing `kill()` path. `/exit\n` does not submit. ⚠️ **In inline mode, when the pane is scrolled up, `/exit\r` is swallowed by copy-mode**, and `kill()` would leave the remote session running. The remote close path must cancel copy-mode first (arch §C.1). |
-| 1.5 Latency | tmux-ready **1.0 s cold / 0.26 s warm**; **CC-ready 1.30 s cold / 0.55 s warm** (Phase 2). |
+| 1.5 Latency | tmux-ready **1.0 s cold / 0.26 s warm**; **CC-ready 1.30 s cold / 0.55 s warm** (Phase 2, default mode). Re-measured with the real inner command at WP3 Phase 4: cold 1.20–1.24 s / warm 0.33–0.54 s (arch §C.1). |
 | 1.6 Cleanup | ✅ No `claudesk` tmux server, no master socket, `~/.claudesk-probe/` and the probe transcripts removed. Left by design: `~/.claudesk/cc-oauth-token` (the operator's), CC's own `~/.claude.json` / `settings.json` entries. |
 
 **WP1, Phase 2 (2026-11-14; real CC on the mini).** Details are in arch §C.1 and §I.

@@ -762,8 +762,8 @@ describe("fireOne — unsent-input suppression", () => {
     const forwards = [...pane.matchAll(/onInputForwardedRef\.current\?\.\(/g)];
     expect(forwards).toHaveLength(1);
 
-    // ...and the injection funnel invokes `cc_input` directly, bypassing xterm entirely.
-    expect(autoResume).toMatch(/invoke\("cc_input"/);
+    // ...and the injection funnel invokes `cc_inject` directly, bypassing xterm entirely.
+    expect(autoResume).toMatch(/invoke\("cc_inject"/);
     expect(autoResume).not.toMatch(/onInputForwarded|unsentInput/);
   });
 });

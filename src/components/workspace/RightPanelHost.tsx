@@ -183,6 +183,12 @@ interface RightPanelHostProps {
    */
   ccSessionId?: string | null;
   /**
+   * M17 WP3 P4.verify-human.2 — the workspace's "not sent" toast, handed to the Prompt panel. A
+   * refused injection (a remote pane that never got ready) would otherwise reach only
+   * `console.warn`. Optional so existing callers/tests that don't wire it still work.
+   */
+  onInjectFailure?: (toast: string) => void;
+  /**
    * F-b ruling 4 — the profile this workspace runs under (`useWorkspaceProfile`). A non-default
    * profile has no gated docs panel; `undefined` (not yet known) fails closed.
    * ⚠️ REQUIRED, deliberately: an optional prop would let a caller omit it and silently pick one
@@ -196,6 +202,7 @@ export function RightPanelHost({
   projectPath,
   visible,
   ccSessionId,
+  onInjectFailure,
   collapsed = false,
   registerDirtyProbe,
   terminalPaneRef,
@@ -1398,6 +1405,7 @@ export function RightPanelHost({
               onDraftPresenceChange={setHasDraft}
               ccSessionId={ccSessionId}
               onRegisterSend={registerPromptSend}
+              onSendFailure={onInjectFailure}
             />
           </Suspense>
         </div>
