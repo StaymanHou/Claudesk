@@ -1095,7 +1095,9 @@ pub enum SpawnTarget {
     Local,
     /// A local PTY running `ssh -tt` into the host's master, which attaches to (or starts) the
     /// workspace's tmux session on the remote.
-    Remote(RemoteSpawn),
+    /// Boxed: it carries the link hold and the target, so it dwarfs `Local` (clippy
+    /// `large_enum_variant`).
+    Remote(Box<RemoteSpawn>),
 }
 
 /// Everything a remote spawn needs, resolved by the caller (`cc_spawn_remote`) before the
@@ -1104,6 +1106,9 @@ pub struct RemoteSpawn {
     pub links: std::sync::Arc<crate::remote_link::LinkRegistry>,
     pub target: crate::remote_cmd::ValidTarget,
     pub link: crate::remote_link::LinkInfo,
+    /// The session's hold on the host link, taken WITH the link by `ensure_and_hold` (one lock),
+    /// never afterwards: a separate hold step could count on a link that was stopped in between.
+    pub hold: crate::remote_link::LinkHold,
     /// The tmux session name (`remote_cmd::tmux_session` of the row's key).
     pub session: String,
     /// The LOCAL cwd for the ssh process (the user's home: the project folder is remote).
@@ -1423,7 +1428,7 @@ impl RemoteCcSession {
         remote: RemoteSpawn,
         local_env: Vec<(String, String)>,
     ) -> Result<Self, CcError> {
-        let hold = remote.links.hold(remote.target.host());
+        let hold = remote.hold;
         let shared = Arc::new(RemoteShared {
             output_event: format!("cc-output-{id}"),
             app,
@@ -1610,7 +1615,7 @@ impl PtyCcSession {
                 )
                 .map(|s| Box::new(s) as Box<dyn CcSession>);
             }
-            SpawnTarget::Remote(r) => r,
+            SpawnTarget::Remote(r) => *r,
         };
         // M17 WP3 — the remote arm. The same argv and the same resolved env, but the PTY runs
         // `ssh -tt` and the drive mode travels in the REMOTE command line (an arbitrary env var

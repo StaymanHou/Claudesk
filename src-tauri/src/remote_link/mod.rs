@@ -32,7 +32,7 @@ pub mod commands;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -566,7 +566,11 @@ fn run_worker(cfg: WorkerCfg, shared: Arc<Shared>) {
 struct Link {
     shared: Arc<Shared>,
     control_path: PathBuf,
+    /// How many [`LinkHold`]s count on this link.
     refs: usize,
+    /// Which link this is: unique per registry, so a hold taken on a link that was later stopped
+    /// can never release a NEWER link for the same host (M17 WP4 AC-0).
+    gen: u64,
 }
 
 /// Flag the worker to stop, wake it, and kill its master's process group if one runs.
@@ -582,6 +586,8 @@ fn halt(l: &Link) {
 /// One link per host. Owned by the app as managed state (`commands::init`).
 pub struct LinkRegistry {
     links: Mutex<HashMap<String, Link>>,
+    /// The next [`Link::gen`].
+    next_gen: AtomicU64,
     transport: Arc<dyn Transport>,
     app_data: PathBuf,
     local_socket: PathBuf,
@@ -607,6 +613,7 @@ impl LinkRegistry {
     ) -> Self {
         Self {
             links: Mutex::new(HashMap::new()),
+            next_gen: AtomicU64::new(1),
             transport,
             app_data,
             local_socket,
@@ -635,8 +642,14 @@ impl LinkRegistry {
     /// (so 0 for a new link). Read after the worker started, it could already include that
     /// worker's first failure, and [`Self::ensure`] would then miss it and wait through the next
     /// attempt (a verify-self flake, WP3 P2.verify-self.F1).
-    fn get_or_start(&self, host: &str) -> Result<(Arc<Shared>, PathBuf, u64), String> {
-        let mut links = self.links.lock().map_err(|_| "link registry poisoned")?;
+    ///
+    /// ⚠️ Takes the caller's `links` guard: [`Self::start_and_hold`] must find-or-start AND count
+    /// its hold under ONE lock (`SURFACE-2026-11-16-QUALITY-M17WP3-ENSURE-THEN-HOLD-IS-NOT-ATOMIC`).
+    fn get_or_start_locked(
+        &self,
+        links: &mut HashMap<String, Link>,
+        host: &str,
+    ) -> Result<(Arc<Shared>, PathBuf, u64), String> {
         if let Some(l) = links.get(host) {
             let failures = l
                 .shared
@@ -685,23 +698,77 @@ impl LinkRegistry {
                 shared: Arc::clone(&shared),
                 control_path: ctl.clone(),
                 refs: 0,
+                gen: self.next_gen.fetch_add(1, Ordering::SeqCst),
             },
         );
         Ok((shared, ctl, 0))
     }
 
-    /// Start the link for `target`'s host if needed and wait (up to the Up timeout) until it is
-    /// Up. ⚠️ Blocks: call from a worker, never a sync command.
+    /// [`Self::get_or_start_locked`] under its own lock, holding nothing. Tests only: production
+    /// code always holds what it starts ([`Self::start_and_hold`]).
+    #[cfg(test)]
+    fn get_or_start(&self, host: &str) -> Result<(Arc<Shared>, PathBuf, u64), String> {
+        let mut links = self.links.lock().map_err(|_| "link registry poisoned")?;
+        self.get_or_start_locked(&mut links, host)
+    }
+
+    /// The link for `host`, started if absent, with one more hold counted on it: found-or-started
+    /// and counted under ONE `links` lock, so no stop can land between the two. Returns the
+    /// link's shared state, ControlPath, the failure baseline (see [`Self::get_or_start_locked`])
+    /// and the hold.
+    fn start_and_hold(
+        self: &Arc<Self>,
+        host: &str,
+    ) -> Result<(Arc<Shared>, PathBuf, u64, LinkHold), String> {
+        let mut links = self.links.lock().map_err(|_| "link registry poisoned")?;
+        let (shared, ctl, failures) = self.get_or_start_locked(&mut links, host)?;
+        let link = links
+            .get_mut(host)
+            .ok_or("the link vanished while it was being started")?;
+        link.refs += 1;
+        let hold = LinkHold {
+            links: Arc::clone(self),
+            host: host.to_string(),
+            gen: link.gen,
+            linger: None,
+        };
+        Ok((shared, ctl, failures, hold))
+    }
+
+    /// Start the link for `target`'s host if needed, take a hold on it, and wait (up to the Up
+    /// timeout) until it is Up. ⚠️ Blocks: call from a worker, never a sync command.
+    ///
+    /// The hold is counted BEFORE the wait, under the same lock that found or started the link
+    /// (M17 WP4 AC-0). The old `ensure`-then-`hold` pair left a window in which the host's last
+    /// other session could stop the link, so the new session's hold counted nothing and its later
+    /// drop decremented a different link.
     ///
     /// The first FAILED attempt after the call returns `Err(reason)` in plain words rather than
     /// waiting through the backoff, so the picker can say "could not resolve hostname" at once.
-    /// If no session holds the link at that point, the link is stopped, so a failed open leaves
-    /// nothing retrying in the background.
-    pub fn ensure(&self, target: &ValidTarget) -> Result<LinkInfo, String> {
+    /// The hold is dropped on every `Err`: if nothing else holds the link, it stops, so a failed
+    /// open leaves nothing retrying in the background.
+    pub fn ensure_and_hold(
+        self: &Arc<Self>,
+        target: &ValidTarget,
+    ) -> Result<(LinkInfo, LinkHold), String> {
         let host = target.host();
-        let (shared, ctl, failures_at_start) = self.get_or_start(host)?;
+        let (shared, ctl, failures_at_start, hold) = self.start_and_hold(host)?;
         #[cfg(test)]
         std::thread::sleep(self.pause_after_start);
+        // On `Err` the hold drops here, after the state lock inside is released.
+        let info = self.wait_first_up(host, &shared, ctl, failures_at_start)?;
+        Ok((info, hold))
+    }
+
+    /// Wait until `shared` is Up, or until an attempt fails AFTER `failures_at_start`, or the Up
+    /// timeout passes.
+    fn wait_first_up(
+        &self,
+        host: &str,
+        shared: &Shared,
+        ctl: PathBuf,
+        failures_at_start: u64,
+    ) -> Result<LinkInfo, String> {
         let deadline =
             Instant::now() + self.up_timeout + Duration::from_secs(CONNECT_TIMEOUT_S as u64);
         let mut g = shared.inner.lock().map_err(|_| "link state poisoned")?;
@@ -716,18 +783,13 @@ impl LinkRegistry {
                     }
                 }
                 LinkState::Lost { reason } if g.failures > failures_at_start => {
-                    let reason = reason.clone();
-                    drop(g);
-                    self.stop_if_unheld(host);
-                    return Err(reason);
+                    return Err(reason.clone());
                 }
                 LinkState::Down => return Err(format!("the link to {host} was stopped")),
                 _ => {}
             }
             let now = Instant::now();
             if now >= deadline {
-                drop(g);
-                self.stop_if_unheld(host);
                 return Err(format!("the link to {host} did not come up in time"));
             }
             g = shared
@@ -738,33 +800,49 @@ impl LinkRegistry {
         }
     }
 
-    /// A remote session now depends on `host`'s link.
-    pub fn acquire(&self, host: &str) {
-        if let Ok(mut links) = self.links.lock() {
-            if let Some(l) = links.get_mut(host) {
-                l.refs += 1;
+    /// One hold on `host`'s link `gen` ended. When it was the last, the link is stopped: at once,
+    /// or, for a lingering hold, after `linger` if nothing has taken a new hold by then.
+    ///
+    /// ⚠️ A hold whose link is gone, or was replaced by a newer one (another `gen`), releases
+    /// NOTHING. The count and the stop are decided under one lock, so a hold taken meanwhile on
+    /// the same link always keeps it.
+    fn release(self: &Arc<Self>, host: &str, gen: u64, linger: Option<Duration>) {
+        let last = match self.links.lock() {
+            Ok(mut links) => match links.get_mut(host) {
+                Some(l) if l.gen == gen => {
+                    l.refs = l.refs.saturating_sub(1);
+                    l.refs == 0
+                }
+                _ => false,
+            },
+            Err(_) => false,
+        };
+        if !last {
+            return;
+        }
+        match linger {
+            None => self.stop_if_unheld(host, gen),
+            Some(after) => {
+                let weak = Arc::downgrade(self);
+                let owned = host.to_string();
+                let spawned = std::thread::Builder::new()
+                    .name(format!("remote-link-linger-{}", hash8(host)))
+                    .spawn(move || {
+                        std::thread::sleep(after);
+                        if let Some(reg) = weak.upgrade() {
+                            reg.stop_if_unheld(&owned, gen);
+                        }
+                    });
+                if spawned.is_err() {
+                    // No timer thread: stop now rather than leave an unheld link running.
+                    self.stop_if_unheld(host, gen);
+                }
             }
         }
     }
 
-    /// A remote session on `host` ended. At zero, the link is stopped.
-    pub fn release(&self, host: &str) {
-        let stop = match self.links.lock() {
-            Ok(mut links) => match links.get_mut(host) {
-                Some(l) => {
-                    l.refs = l.refs.saturating_sub(1);
-                    l.refs == 0
-                }
-                None => false,
-            },
-            Err(_) => false,
-        };
-        if stop {
-            self.stop(host);
-        }
-    }
-
-    /// How many sessions hold `host`'s link.
+    /// How many holds count on `host`'s link. Tests only.
+    #[cfg(test)]
     pub fn refs(&self, host: &str) -> usize {
         self.links
             .lock()
@@ -821,9 +899,17 @@ impl LinkRegistry {
         }
     }
 
-    fn stop_if_unheld(&self, host: &str) {
-        if self.refs(host) == 0 {
-            self.stop(host);
+    /// Stop `host`'s link `gen` if no hold counts on it. Decided and removed under one lock.
+    fn stop_if_unheld(&self, host: &str, gen: u64) {
+        let link = match self.links.lock() {
+            Ok(mut links) => match links.get(host) {
+                Some(l) if l.gen == gen && l.refs == 0 => links.remove(host),
+                _ => None,
+            },
+            Err(_) => None,
+        };
+        if let Some(l) = link {
+            halt(&l);
         }
     }
 
@@ -833,6 +919,10 @@ impl LinkRegistry {
     /// ⚠️ Does not join the worker. The worker may be inside a pre-connect exec (up to its 30 s
     /// deadline), and a join would hold the caller, at quit the whole teardown, that long. Killing
     /// the master's group here is what guarantees nothing outlives the app.
+    ///
+    /// Tests only since WP4 AC-0: production stops a link through its last hold
+    /// ([`Self::stop_if_unheld`]) or at quit ([`Self::stop_all`]), never regardless of holds.
+    #[cfg(test)]
     pub fn stop(&self, host: &str) {
         let link = self.links.lock().ok().and_then(|mut l| l.remove(host));
         if let Some(l) = link {
@@ -902,29 +992,37 @@ pub fn terminal_argv(ctl: &Path, host: &str, remote_command: &str) -> Vec<String
     ]
 }
 
-/// A remote session's hold on its host's link. Taken at spawn ([`LinkRegistry::hold`]), released
-/// when dropped, so the last session to go stops the link without any caller remembering to.
+/// A hold on a host's link: a remote session's (taken at spawn), or the open check's (for its own
+/// duration). Taken only through [`LinkRegistry::ensure_and_hold`], released when dropped, so the
+/// last hold to go stops the link without any caller remembering to.
 pub struct LinkHold {
     links: Arc<LinkRegistry>,
     host: String,
+    /// The link this hold counted on ([`Link::gen`]).
+    gen: u64,
+    /// `None`: when this is the last hold, the link stops at once (a session's close, R-1).
+    /// `Some(d)`: it stops `d` later unless a new hold arrived meanwhile (a successful open check,
+    /// whose open follows within a second; see [`Self::linger`]).
+    linger: Option<Duration>,
+}
+
+impl LinkHold {
+    /// When this hold is the last to go, keep the link up for `after` before stopping it, so a
+    /// hold taken in that window (the open that follows a successful open check) finds it Up
+    /// instead of tearing it down and connecting again.
+    pub fn linger(mut self, after: Duration) -> Self {
+        self.linger = Some(after);
+        self
+    }
 }
 
 impl Drop for LinkHold {
     fn drop(&mut self) {
-        self.links.release(&self.host);
+        self.links.release(&self.host, self.gen, self.linger);
     }
 }
 
 impl LinkRegistry {
-    /// Acquire `host`'s link for one session, returning the hold that releases it.
-    pub fn hold(self: &Arc<Self>, host: &str) -> LinkHold {
-        self.acquire(host);
-        LinkHold {
-            links: Arc::clone(self),
-            host: host.to_string(),
-        }
-    }
-
     /// Take `session`'s pane out of tmux copy-mode over the master (arch §C.1/§E), so the next
     /// keys Claudesk types reach CC. ⚠️ Blocks up to [`EXEC_TIMEOUT_MS`].
     pub fn cancel_copy_mode(&self, target: &ValidTarget, session: &str) -> Result<(), RunError> {

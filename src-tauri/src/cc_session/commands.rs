@@ -115,7 +115,8 @@ pub async fn cc_spawn_remote(
             .ok_or("remote links are unavailable in this build")?
             .inner()
             .clone();
-        let link = links.ensure(&target)?;
+        // The hold is counted under the same lock that found or started the link (WP4 AC-0).
+        let (link, hold) = links.ensure_and_hold(&target)?;
         let local_cwd = app
             .path()
             .home_dir()
@@ -130,13 +131,14 @@ pub async fn cc_spawn_remote(
             app.clone(),
             &project_path,
             resolve_open_intent(intent),
-            super::SpawnTarget::Remote(super::RemoteSpawn {
+            super::SpawnTarget::Remote(Box::new(super::RemoteSpawn {
                 links,
                 target,
                 link,
+                hold,
                 session: crate::remote_cmd::tmux_session(&project_path),
                 local_cwd,
-            }),
+            })),
         )
         .map_err(|e| e.to_string())
     })

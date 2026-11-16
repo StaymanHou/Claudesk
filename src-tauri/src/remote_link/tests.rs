@@ -347,13 +347,18 @@ impl Transport for FakeTransport {
 }
 
 struct Harness {
-    reg: LinkRegistry,
+    reg: Arc<LinkRegistry>,
     t: Arc<FakeTransport>,
     events: Arc<(Mutex<Vec<LinkEvent>>, Condvar)>,
     _dir: TempDir,
 }
 
 fn harness() -> Harness {
+    harness_with(|r| r)
+}
+
+/// A harness whose registry is adjusted (timings, test seams) before it is shared.
+fn harness_with(tweak: impl FnOnce(LinkRegistry) -> LinkRegistry) -> Harness {
     let dir = TempDir::new().unwrap();
     let t = Arc::new(FakeTransport::default());
     t.check_ok.store(true, Ordering::SeqCst);
@@ -375,6 +380,7 @@ fn harness() -> Harness {
         Duration::from_millis(20),
         Duration::from_secs(30),
     );
+    let reg = Arc::new(tweak(reg));
     Harness {
         reg,
         t,
@@ -385,6 +391,22 @@ fn harness() -> Harness {
 
 fn target() -> ValidTarget {
     ValidTarget::new("me@mini-host", "/Users/me/p").unwrap()
+}
+
+/// `ensure_and_hold`'s error, for a call expected to fail (`LinkHold` has no `Debug`).
+fn up_err(reg: &Arc<LinkRegistry>, t: &ValidTarget) -> String {
+    match reg.ensure_and_hold(t) {
+        Ok(_) => panic!("expected the link not to come up"),
+        Err(e) => e,
+    }
+}
+
+/// `ensure_and_hold`'s hold, for a call expected to succeed.
+fn up(reg: &Arc<LinkRegistry>, t: &ValidTarget) -> (LinkInfo, LinkHold) {
+    match reg.ensure_and_hold(t) {
+        Ok(v) => v,
+        Err(e) => panic!("link did not come up: {e}"),
+    }
 }
 
 impl Harness {
@@ -421,7 +443,7 @@ impl Harness {
 #[test]
 fn ensure_brings_the_link_up_and_reports_home_and_control_path() {
     let h = harness();
-    let info = h.reg.ensure(&target()).expect("up");
+    let (info, _hold) = up(&h.reg, &target());
     assert_eq!(info.home, "/Users/me");
     assert_eq!(
         info.control_path,
@@ -448,7 +470,7 @@ fn a_failed_first_attempt_returns_its_reason_and_stops_an_unheld_link() {
     h.t.pre.lock().unwrap().push_back(Err(
         "could not resolve hostname me@mini-host: is Tailscale running?".into(),
     ));
-    let err = h.reg.ensure(&target()).unwrap_err();
+    let err = up_err(&h.reg, &target());
     assert!(err.contains("Tailscale"), "{err}");
     h.wait_for("Down", 5, |e| e.iter().any(|e| e.state == LinkState::Down));
     assert!(h.reg.state("me@mini-host").is_none());
@@ -461,8 +483,7 @@ fn a_failed_first_attempt_returns_its_reason_and_stops_an_unheld_link() {
 #[test]
 fn a_dropped_master_reconnects_and_runs_the_pre_connect_again() {
     let h = harness();
-    h.reg.ensure(&target()).unwrap();
-    h.reg.acquire("me@mini-host");
+    let _hold = up(&h.reg, &target());
     h.t.masters.lock().unwrap()[0].store(true, Ordering::SeqCst);
     h.wait_for("a second Up", 5, |e| {
         e.iter().filter(|e| e.state == LinkState::Up).count() == 2
@@ -496,10 +517,7 @@ fn stop_is_prompt_even_in_a_long_backoff() {
     for _ in 0..50 {
         h.t.pre.lock().unwrap().push_back(Err("refused".into()));
     }
-    {
-        let _ = h.reg.get_or_start("me@mini-host").unwrap();
-    }
-    h.reg.acquire("me@mini-host");
+    let (_, _, _, _hold) = h.reg.start_and_hold("me@mini-host").unwrap();
     h.wait_for("two failures", 5, |e| {
         e.iter()
             .filter(|e| matches!(e.state, LinkState::Lost { .. }))
@@ -519,13 +537,12 @@ fn stop_is_prompt_even_in_a_long_backoff() {
 #[test]
 fn releasing_the_last_session_stops_the_link() {
     let h = harness();
-    h.reg.ensure(&target()).unwrap();
-    h.reg.acquire("me@mini-host");
-    h.reg.acquire("me@mini-host");
-    h.reg.release("me@mini-host");
+    let (_, a) = up(&h.reg, &target());
+    let (_, b) = up(&h.reg, &target());
+    drop(a);
     assert_eq!(h.count(&LinkState::Down), 0, "one session still holds it");
     assert_eq!(h.reg.refs("me@mini-host"), 1);
-    h.reg.release("me@mini-host");
+    drop(b);
     h.wait_for("Down", 2, |e| e.iter().any(|e| e.state == LinkState::Down));
     assert!(
         h.t.masters.lock().unwrap()[0].load(Ordering::SeqCst),
@@ -537,7 +554,7 @@ fn releasing_the_last_session_stops_the_link() {
 fn a_master_that_never_answers_check_is_lost_after_the_up_timeout() {
     let h = harness();
     h.t.check_ok.store(false, Ordering::SeqCst);
-    let err = h.reg.ensure(&target()).unwrap_err();
+    let err = up_err(&h.reg, &target());
     assert!(err.contains("did not come up"), "{err}");
     assert!(
         h.t.masters.lock().unwrap()[0].load(Ordering::SeqCst),
@@ -566,26 +583,31 @@ fn a_link_stopped_during_its_pre_connect_never_spawns_a_master() {
 }
 
 #[test]
-fn ensure_never_misses_a_first_attempt_that_fails_instantly() {
+fn ensure_and_hold_never_misses_a_first_attempt_that_fails_instantly() {
     // P2.verify-self.F1: with the baseline read after the worker started, an instant first
     // failure could be counted as "before I started", and `ensure` then waited through the
     // backoff into a SUCCESSFUL retry (the queue is empty after one Err). The pause seam puts
     // the worker's failure inside that window EVERY round, so a late-read baseline fails this
     // test deterministically (a plain 100-round loop caught it only ~1 run in 4).
-    let mut h = harness();
-    h.reg = h.reg.with_timings(
-        Duration::from_millis(800),
-        Duration::from_millis(500),
-        Duration::from_secs(30),
-    );
-    h.reg.pause_after_start = Duration::from_millis(100);
+    let h = harness_with(|r| {
+        let mut r = r.with_timings(
+            Duration::from_millis(800),
+            Duration::from_millis(500),
+            Duration::from_secs(30),
+        );
+        r.pause_after_start = Duration::from_millis(100);
+        r
+    });
     for i in 0..5 {
         h.t.pre
             .lock()
             .unwrap()
             .push_back(Err(format!("refused #{i}")));
-        let r = h.reg.ensure(&target());
-        assert_eq!(r, Err(format!("refused #{i}")), "round {i}");
+        assert_eq!(
+            up_err(&h.reg, &target()),
+            format!("refused #{i}"),
+            "round {i}"
+        );
     }
 }
 
@@ -598,8 +620,7 @@ fn a_stale_control_path_is_removed_before_every_master_spawn() {
     let ctl = control_path(h._dir.path(), "me@mini-host");
     std::fs::create_dir_all(ctl.parent().unwrap()).unwrap();
     std::fs::write(&ctl, "stale").unwrap();
-    h.reg.ensure(&target()).unwrap();
-    h.reg.acquire("me@mini-host");
+    let _hold = up(&h.reg, &target());
     std::fs::write(&ctl, "stale again").unwrap();
     h.t.masters.lock().unwrap()[0].store(true, Ordering::SeqCst);
     h.wait_for("a second Up", 5, |e| {
@@ -621,9 +642,7 @@ fn stop_kills_the_master_process_even_while_the_worker_is_busy() {
     *h.t.real_child.lock().unwrap() = Some(Arc::clone(&child));
     h.t.check_ok.store(false, Ordering::SeqCst);
     *h.t.check_delay.lock().unwrap() = Duration::from_secs(3);
-    {
-        let _ = h.reg.get_or_start("me@mini-host").unwrap();
-    }
+    let _ = h.reg.get_or_start("me@mini-host").unwrap();
     let deadline = Instant::now() + Duration::from_secs(2);
     while h.t.spawned.lock().unwrap().is_empty() {
         assert!(Instant::now() < deadline, "no master spawned");
@@ -650,9 +669,11 @@ fn stop_kills_the_master_process_even_while_the_worker_is_busy() {
 fn dropping_the_registry_stops_its_links() {
     // P2.verify-self.F4: a registry dropped mid-way (a panicking test; the app at exit) must not
     // leave a master running.
+    // Started and Up but held by nothing, so `h.reg` is the registry's only owner.
     let h = harness();
-    h.reg.ensure(&target()).unwrap();
-    h.reg.acquire("me@mini-host");
+    let _ = h.reg.get_or_start("me@mini-host").unwrap();
+    h.reg.wait_up("me@mini-host", &|| false).unwrap();
+    assert_eq!(Arc::strong_count(&h.reg), 1);
     let master = Arc::clone(&h.t.masters.lock().unwrap()[0]);
     let events = Arc::clone(&h.events);
     drop(h.reg);
@@ -672,13 +693,11 @@ fn dropping_the_last_session_hold_stops_the_link() {
     // is dropped (closed, or quit), the link stops by itself (verified live at Phase 3: no
     // `ssh -M` left after the close).
     let h = harness();
-    h.reg.ensure(&target()).unwrap();
-    let reg = Arc::new(h.reg);
-    let a = reg.hold("me@mini-host");
-    let b = reg.hold("me@mini-host");
-    assert_eq!(reg.refs("me@mini-host"), 2);
+    let (_, a) = up(&h.reg, &target());
+    let (_, b) = up(&h.reg, &target());
+    assert_eq!(h.reg.refs("me@mini-host"), 2);
     drop(a);
-    assert_eq!(reg.refs("me@mini-host"), 1);
+    assert_eq!(h.reg.refs("me@mini-host"), 1);
     assert!(
         !h.events
             .0
@@ -700,6 +719,124 @@ fn dropping_the_last_session_hold_stops_the_link() {
         h.t.masters.lock().unwrap()[0].load(Ordering::SeqCst),
         "the master was killed"
     );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Holds: the open check's, atomic start-and-hold, generations (M17 WP4 AC-0)
+// ---------------------------------------------------------------------------------------------
+
+const HOST: &str = "me@mini-host";
+
+/// Wait until `host` has no link at all, or fail after `within`.
+fn wait_no_link(h: &Harness, within: Duration) {
+    let deadline = Instant::now() + within;
+    while h.reg.state(HOST).is_some() {
+        assert!(
+            Instant::now() < deadline,
+            "the link is still there: {:?}",
+            h.states()
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn a_check_that_ends_without_an_open_leaves_no_link() {
+    // `SURFACE-2026-11-16-QUALITY-M17WP3-OPEN-CHECK-LEAKS-AN-UNHELD-LINK`: a check whose outcome
+    // leads to no open must not leave an `ssh -M` (and, for an offline host, a retry loop) behind.
+    use super::commands::{release_check_hold, OpenCheck};
+    for outcome in [
+        OpenCheck::FolderMissing {
+            message: "gone".into(),
+        },
+        OpenCheck::Unreachable {
+            message: "no answer".into(),
+        },
+        OpenCheck::Invalid {
+            message: "bad row".into(),
+        },
+    ] {
+        let h = harness();
+        let (_, hold) = up(&h.reg, &target());
+        release_check_hold(hold, &outcome, Duration::from_secs(30));
+        // Removed synchronously, not after a grace.
+        assert!(h.reg.state(HOST).is_none(), "{outcome:?} left a link");
+        h.wait_for("Down", 2, |e| e.iter().any(|e| e.state == LinkState::Down));
+        assert!(
+            h.t.masters.lock().unwrap()[0].load(Ordering::SeqCst),
+            "{outcome:?}: the master was killed"
+        );
+    }
+}
+
+#[test]
+fn a_successful_check_lingers_then_stops_when_nothing_opens() {
+    use super::commands::{release_check_hold, OpenCheck};
+    let h = harness();
+    let (_, hold) = up(&h.reg, &target());
+    release_check_hold(hold, &OpenCheck::Ok, Duration::from_millis(150));
+    assert_eq!(h.reg.state(HOST), Some(LinkState::Up), "inside the grace");
+    assert_eq!(h.reg.refs(HOST), 0);
+    wait_no_link(&h, Duration::from_secs(2));
+    h.wait_for("Down", 2, |e| e.iter().any(|e| e.state == LinkState::Down));
+}
+
+#[test]
+fn a_successful_check_then_open_reuses_the_link() {
+    use super::commands::{release_check_hold, OpenCheck};
+    let h = harness();
+    let (_, check) = up(&h.reg, &target());
+    release_check_hold(check, &OpenCheck::Ok, Duration::from_millis(150));
+    // The open's spawn, inside the grace.
+    let (_, session) = up(&h.reg, &target());
+    std::thread::sleep(Duration::from_millis(400));
+    assert_eq!(h.reg.state(HOST), Some(LinkState::Up), "past the grace");
+    assert_eq!(h.reg.refs(HOST), 1);
+    assert_eq!(h.t.spawned.lock().unwrap().len(), 1, "one master, reused");
+    assert_eq!(h.count(&LinkState::Down), 0);
+    drop(session);
+    wait_no_link(&h, Duration::from_secs(1));
+}
+
+#[test]
+fn ensure_and_hold_counts_on_the_link_it_returns() {
+    // `SURFACE-2026-11-16-QUALITY-M17WP3-ENSURE-THEN-HOLD-IS-NOT-ATOMIC`: a new session starts on a
+    // host whose LAST other session closes at that moment. The pause seam puts the close exactly
+    // between "found the link" and "waited for it Up", which is where the old two-step
+    // `ensure`-then-`hold` left the new session counting nothing.
+    let h = harness_with(|mut r| {
+        r.pause_after_start = Duration::from_millis(200);
+        r
+    });
+    let (_, other) = up(&h.reg, &target());
+    let reg = Arc::clone(&h.reg);
+    let new = std::thread::spawn(move || reg.ensure_and_hold(&target()).map(|(_, hold)| hold));
+    std::thread::sleep(Duration::from_millis(50)); // inside the new session's pause
+    drop(other);
+    let hold = match new.join().unwrap() {
+        Ok(hold) => hold,
+        Err(e) => panic!("the new session lost its link to the other's close: {e}"),
+    };
+    assert_eq!(h.reg.refs(HOST), 1);
+    assert_eq!(h.reg.state(HOST), Some(LinkState::Up));
+    assert_eq!(h.t.spawned.lock().unwrap().len(), 1, "never torn down");
+    drop(hold);
+    wait_no_link(&h, Duration::from_secs(1));
+}
+
+#[test]
+fn a_hold_from_a_stopped_link_never_releases_a_newer_one() {
+    let h = harness();
+    let (_, old) = up(&h.reg, &target());
+    h.reg.stop(HOST);
+    h.wait_for("Down", 2, |e| e.iter().any(|e| e.state == LinkState::Down));
+    let (_, new) = up(&h.reg, &target());
+    assert_eq!(h.reg.refs(HOST), 1);
+    drop(old);
+    assert_eq!(h.reg.refs(HOST), 1, "the old hold released the NEW link");
+    assert_eq!(h.reg.state(HOST), Some(LinkState::Up));
+    drop(new);
+    wait_no_link(&h, Duration::from_secs(1));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -735,13 +872,13 @@ fn live_link_up() {
         sink_events.0.lock().unwrap().push(e);
         sink_events.1.notify_all();
     });
-    let reg = LinkRegistry::new(
+    let reg = Arc::new(LinkRegistry::new(
         Arc::new(SshTransport),
         dir.path().to_path_buf(),
         local_sock.clone(),
         "com.claudesk.app.dev".into(),
         sink,
-    );
+    ));
     let target = ValidTarget::new(&host, "/").unwrap();
     let wait_ups = |n: usize, secs: u64| {
         let deadline = Instant::now() + Duration::from_secs(secs);
@@ -755,7 +892,7 @@ fn live_link_up() {
 
     // 1. Up.
     let t0 = Instant::now();
-    let info = reg.ensure(&target).expect("link up");
+    let (info, hold) = up(&reg, &target);
     eprintln!("up in {:?}; home={}", t0.elapsed(), info.home);
     assert!(run_captured(
         command_from(&check_argv(&info.control_path, &host)),
@@ -822,7 +959,6 @@ fn live_link_up() {
     assert_eq!(got, "ping\n", "the -R forward did not deliver");
 
     // 4. Hard-kill the master: the link reports Lost, then comes back Up by itself.
-    reg.acquire(&host);
     let pid = {
         let links = reg.links.lock().unwrap();
         let l = links.get(&host).unwrap();
@@ -858,7 +994,7 @@ fn live_link_up() {
     );
 
     // 5. Stop: Down, and the master is gone.
-    reg.release(&host);
+    drop(hold);
     let deadline = Instant::now() + Duration::from_secs(5);
     while !events
         .0
@@ -899,15 +1035,15 @@ fn live_cancel_and_folder_check() {
         .unwrap();
     let local_sock = dir.path().join("hook.sock");
     let _listener = UnixListener::bind(&local_sock).unwrap();
-    let reg = LinkRegistry::new(
+    let reg = Arc::new(LinkRegistry::new(
         Arc::new(SshTransport),
         dir.path().to_path_buf(),
         local_sock,
         "com.claudesk.app.dev".into(),
         Arc::new(|_| {}),
-    );
+    ));
     let target = ValidTarget::new(&host, "/").unwrap();
-    reg.ensure(&target).expect("link up");
+    let _hold = up(&reg, &target);
     let srv = crate::remote_cmd::tmux_server("com.claudesk.app.dev");
     let sh = |script: &str| {
         reg.exec(
@@ -997,15 +1133,15 @@ fn live_prepare_inject() {
         .unwrap();
     let local_sock = dir.path().join("hook.sock");
     let _listener = UnixListener::bind(&local_sock).unwrap();
-    let reg = LinkRegistry::new(
+    let reg = Arc::new(LinkRegistry::new(
         Arc::new(SshTransport),
         dir.path().to_path_buf(),
         local_sock,
         "com.claudesk.app.dev".into(),
         Arc::new(|_| {}),
-    );
+    ));
     let target = ValidTarget::new(&host, "/").unwrap();
-    reg.ensure(&target).expect("link up");
+    let _hold = up(&reg, &target);
     let srv = crate::remote_cmd::tmux_server("com.claudesk.app.dev");
     let sh = |script: &str| {
         reg.exec(
@@ -1076,8 +1212,7 @@ fn wait_up_waits_through_failed_attempts_until_the_link_is_back() {
     // Phase 5: a held link whose master dropped keeps retrying; a session waiting to reattach
     // must ride out the failures (unlike `ensure`, which returns the first one).
     let h = harness();
-    h.reg.ensure(&target()).unwrap();
-    h.reg.acquire("me@mini-host");
+    let _hold = up(&h.reg, &target());
     for _ in 0..2 {
         h.t.pre.lock().unwrap().push_back(Err("refused".into()));
     }
@@ -1112,10 +1247,7 @@ fn wait_up_returns_err_for_a_stopped_link_and_promptly_on_cancel() {
     for _ in 0..50 {
         h.t.pre.lock().unwrap().push_back(Err("refused".into()));
     }
-    {
-        let _ = h.reg.get_or_start("me@mini-host").unwrap();
-    }
-    h.reg.acquire("me@mini-host");
+    let (_, _, _, _hold) = h.reg.start_and_hold("me@mini-host").unwrap();
     let cancel = Arc::new(AtomicBool::new(false));
     let c = Arc::clone(&cancel);
     std::thread::spawn(move || {

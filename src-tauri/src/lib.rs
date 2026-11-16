@@ -509,7 +509,6 @@ pub fn run() {
             config_store::commands::add_project,
             remote_cmd::commands::remote_preflight,
             remote_cmd::commands::add_remote_project,
-            remote_link::commands::remote_link_ensure,
             remote_link::commands::remote_open_check,
             cc_session::commands::cc_spawn_remote,
             cc_session::commands::cc_inject,

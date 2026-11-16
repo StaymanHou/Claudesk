@@ -1,15 +1,16 @@
 //! M17 WP3 — the IPC surface and app wiring of the host links.
 //!
-//! ⚠️ `remote_link_ensure` is `async` and waits on a blocking worker: bringing a link up runs ssh
+//! ⚠️ `remote_open_check` is `async` and waits on a blocking worker: bringing a link up runs ssh
 //! for seconds. A sync `#[command]` runs on the main thread and would freeze the UI that long
 //! (`tests/sync_commands_do_not_block.rs`, where it is listed in `ASYNC_COMMANDS`).
 
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use super::{LinkEvent, LinkRegistry, LinkState, SshTransport};
+use super::{LinkEvent, LinkRegistry, SshTransport};
 use crate::config_store::{self, commands::resolve_data_dir};
 use crate::remote_cmd::ValidTarget;
 
@@ -60,22 +61,10 @@ pub(crate) fn target_for(data_dir: &Path, project_path: &str) -> Result<ValidTar
         .map_err(|e| format!("this remote row is invalid: {e}. Remove it and add it again."))
 }
 
-/// Bring up (or confirm) the link for the remote row `project_path` and return its state.
-/// Errors are in plain words ("could not resolve hostname …: is Tailscale running?").
-#[tauri::command]
-pub async fn remote_link_ensure(
-    app: AppHandle,
-    links: State<'_, SharedLinks>,
-    project_path: String,
-) -> Result<LinkState, String> {
-    let dir = resolve_data_dir(&app)?;
-    let links = Arc::clone(&links);
-    crate::blocking::on_blocking_worker("connecting to the remote host", move || {
-        let target = target_for(&dir, &project_path)?;
-        links.ensure(&target).map(|_| LinkState::Up)
-    })
-    .await
-}
+/// How long a successful open check keeps the link up after it ends, when nothing else holds it.
+/// The open that follows a successful check reaches its spawn well within this (sub-second), so
+/// the spawn finds the link Up instead of a torn-down one (M17 WP4 AC-0).
+pub const OPEN_CHECK_GRACE: Duration = Duration::from_secs(20);
 
 /// What the picker learns before it opens a remote row (P3.3;
 /// `SURFACE-2026-11-16-REMOTE-OPEN-MUST-CHECK-THE-FOLDER-STILL-EXISTS`). Each non-`Ok` kind carries
@@ -129,8 +118,20 @@ pub(crate) fn folder_check_outcome(
     }
 }
 
+/// End the open check's hold on the link. After `Ok` an open follows within a second, so the hold
+/// lingers `grace` (the open's spawn then finds the link Up). After anything else nothing follows,
+/// so the hold drops plainly and an otherwise-unheld link stops at once.
+pub(crate) fn release_check_hold(hold: super::LinkHold, outcome: &OpenCheck, grace: Duration) {
+    if *outcome == OpenCheck::Ok {
+        drop(hold.linger(grace));
+    } else {
+        drop(hold);
+    }
+}
+
 /// Before the picker opens a remote row: validate it, bring its link up, and check its folder
-/// still exists (`test -d` over the master). Read-only on the remote.
+/// still exists (`test -d` over the master). Read-only on the remote. The link lingers
+/// [`OPEN_CHECK_GRACE`] after an `Ok`, and stops at once after anything else (if unheld).
 #[tauri::command]
 pub async fn remote_open_check(
     app: AppHandle,
@@ -144,15 +145,22 @@ pub async fn remote_open_check(
             Ok(t) => t,
             Err(message) => return Ok(OpenCheck::Invalid { message }),
         };
-        if let Err(message) = links.ensure(&target) {
-            return Ok(OpenCheck::Unreachable { message });
-        }
+        // ⚠️ The check HOLDS the link for its own duration
+        // (`SURFACE-2026-11-16-QUALITY-M17WP3-OPEN-CHECK-LEAKS-AN-UNHELD-LINK`). Only an `Ok`
+        // lingers, because only an `Ok` is followed by an open. Every other outcome drops the hold
+        // plainly, so a check that leads nowhere leaves no `ssh -M` behind.
+        let hold = match links.ensure_and_hold(&target) {
+            Ok((_, hold)) => hold,
+            Err(message) => return Ok(OpenCheck::Unreachable { message }),
+        };
         let out = links.exec(
             &target,
             &crate::remote_cmd::test_dir_command(target.path()),
             super::EXEC_TIMEOUT_MS,
         );
-        Ok(folder_check_outcome(out, &target))
+        let outcome = folder_check_outcome(out, &target);
+        release_check_hold(hold, &outcome, OPEN_CHECK_GRACE);
+        Ok(outcome)
     })
     .await
 }
@@ -196,6 +204,14 @@ mod tests {
         let err = target_for(dir.path(), &row.path.display().to_string()).unwrap_err();
         assert!(err.contains("cannot start with \"-\""), "{err}");
         assert!(err.contains("Remove it and add it again"), "{err}");
+    }
+
+    #[test]
+    fn the_open_check_grace_is_the_operator_ruled_20_seconds() {
+        // Operator ruling, M17 WP4 P1.verify-human.1 (2026-11-16): keep 20 s. The live open
+        // reached the link ~1 s after the click, so a shorter grace buys little, and a change
+        // here should be a decision, not a drive-by.
+        assert_eq!(OPEN_CHECK_GRACE, Duration::from_secs(20));
     }
 
     #[test]

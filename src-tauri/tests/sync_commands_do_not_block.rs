@@ -151,11 +151,6 @@ const ASYNC_COMMANDS: &[(&str, &str)] = &[
          registry lock, runs on `spawn_blocking`",
     ),
     (
-        "remote_link_ensure",
-        "brings up an ssh ControlMaster and waits for it (up to `LINK_UP_TIMEOUT` plus the \
-         connect timeout); the work runs on `spawn_blocking`",
-    ),
-    (
         "supervisor_activity_append",
         "one bounded local file append, on the worker directly",
     ),
