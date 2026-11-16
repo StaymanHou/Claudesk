@@ -673,8 +673,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m17-wp4-status-over-the-link (2026-11-16)
 
-- **Pointer:** **1 MAJOR + 6 MINOR** from the review of the WP4 ship commit (`feat(m17-wp4): remote status over the link`).
-  - ⚠️ **MAJOR:** a remote kill now also ends the remote session (≤15 s), so a link-down quit can freeze the UI ~27 s, and the `quit_now` LEDGER understates it.
+- **Pointer:** **6 MINOR** open from the review of the WP4 ship commit (`feat(m17-wp4): remote status over the link`). The MAJOR (the link-down quit freeze) was resolved 2026-11-16 (CHANGELOG).
   - MINORs:
     - the overlay key is derived twice;
     - the realpath alias is never cleared;
@@ -684,6 +683,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
     - a brittle source pin plus stale docs.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp4-status-over-the-link — 2026-11-16`.
-- **Priority:** medium (the MAJOR); low (the MINORs)
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** the MAJOR belongs with WP5 (lifecycle: quit/close with the link down) or a small task before it; the alias/key/emit-race MINORs are one status-path cleanup; the rest fold into WP5's reconnect-seam work.
+- **Pickup shape:** the alias/key/emit-race MINORs are one status-path cleanup; the rest fold into WP5's reconnect-seam work.

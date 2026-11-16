@@ -1367,6 +1367,113 @@ fn a_remote_terminal_never_falls_back_to_a_direct_connection() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The close path's execs (`SURFACE-2026-11-16-QUALITY-M17WP4-QUIT-FREEZE-BOUND-UNDERSTATED`): a
+// sync quit joins every remote kill on the main thread, so a link that is not Up must cost nothing
+// and a stale Up must fail fast.
+// ---------------------------------------------------------------------------------------------
+
+/// An unroutable documentation address (RFC 5737): a direct connect to it waits out
+/// `ConnectTimeout` instead of failing.
+const UNROUTABLE: &str = "probe@192.0.2.1";
+
+fn unroutable_target() -> ValidTarget {
+    ValidTarget::new(UNROUTABLE, "/Users/probe/p").unwrap()
+}
+
+/// Both close-path execs, timed; each must refuse with `LinkNotUp` without running anything.
+fn assert_close_execs_send_nothing(reg: &LinkRegistry, t: &ValidTarget, why: &str) {
+    let started = Instant::now();
+    let cancel = reg.cancel_copy_mode(t, "cd-x");
+    let end = reg.end_session(t, "cd-x");
+    let took = started.elapsed();
+    assert!(
+        matches!(cancel, Err(CloseExecError::LinkNotUp)),
+        "{why}: cancel {cancel:?}"
+    );
+    assert!(
+        matches!(end, Err(CloseExecError::LinkNotUp)),
+        "{why}: end {end:?}"
+    );
+    assert!(took < Duration::from_millis(200), "{why}: took {took:?}");
+}
+
+#[test]
+fn a_close_with_no_link_or_a_lost_link_sends_nothing() {
+    let h = harness();
+    let t = unroutable_target();
+    // No link at all (a close after the link was stopped).
+    assert_close_execs_send_nothing(&h.reg, &t, "no link");
+
+    // A Lost link that stays down (every reconnect's pre-connect fails): the link-down quit.
+    let (_, hold) = up(&h.reg, &t);
+    assert_eq!(h.reg.state(UNROUTABLE), Some(LinkState::Up));
+    h.t.pre
+        .lock()
+        .unwrap()
+        .extend((0..64).map(|_| Err("host is down".to_string())));
+    h.t.masters.lock().unwrap()[0].store(true, Ordering::SeqCst);
+    h.wait_for("the link to drop", 5, |e| {
+        e.iter().any(|e| matches!(e.state, LinkState::Lost { .. }))
+    });
+    assert_ne!(h.reg.state(UNROUTABLE), Some(LinkState::Up));
+    assert_close_execs_send_nothing(&h.reg, &t, "lost link");
+    drop(hold);
+}
+
+#[test]
+fn a_close_exec_on_a_stale_up_link_fails_fast_instead_of_connecting_directly() {
+    // The link reads Up (the fake master), but there is no control socket: the state a real
+    // master's death leaves until the worker's next poll. The close exec must fail at once (255),
+    // not connect directly and wait out `ConnectTimeout` (10 s).
+    let h = harness();
+    let t = unroutable_target();
+    let (_, hold) = up(&h.reg, &t);
+    assert_eq!(h.reg.state(UNROUTABLE), Some(LinkState::Up));
+    let started = Instant::now();
+    let end = h.reg.end_session(&t, "cd-x");
+    let took = started.elapsed();
+    assert!(
+        matches!(
+            end,
+            Err(CloseExecError::Run(RunError::Failed {
+                code: Some(255),
+                ..
+            }))
+        ),
+        "ran, and failed as a connection error: {end:?}"
+    );
+    assert!(took < Duration::from_secs(3), "fast: took {took:?}");
+
+    // Positive control: the plain side-channel argv (with its direct fallback) to the same host is
+    // still connecting, so the speed above is the option's, not the address failing on its own.
+    let ctl = control_path(h._dir.path(), UNROUTABLE);
+    assert_eq!(
+        ssh_ends_within(
+            &exec_argv(&ctl, UNROUTABLE, "true"),
+            Duration::from_millis(1500)
+        ),
+        None,
+        "the control should still be connecting directly"
+    );
+    drop(hold);
+}
+
+#[test]
+fn the_master_only_exec_argv_is_the_exec_argv_plus_no_direct_fallback_before_the_host() {
+    let ctl = Path::new("/AD/ssh/abcd1234");
+    let argv = master_only_exec_argv(ctl, "me@h", "true");
+    let mut expected = exec_argv(ctl, "me@h", "true");
+    let dd = expected.iter().position(|a| a == "--").unwrap();
+    expected.splice(dd..dd, ["-o".to_string(), NO_DIRECT_FALLBACK.to_string()]);
+    assert_eq!(argv, expected);
+    let at = argv.iter().position(|a| a == NO_DIRECT_FALLBACK).unwrap();
+    assert!(
+        at < argv.iter().position(|a| a == "--").unwrap(),
+        "an option, before the host"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
 // M17 WP4 Phase 3 — the remote hook: deploy (AC-1.1), registration (AC-1.2–1.4)
 // ---------------------------------------------------------------------------------------------
 

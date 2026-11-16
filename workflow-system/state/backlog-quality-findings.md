@@ -226,15 +226,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # m17-wp4-status-over-the-link — 2026-11-16
 
-## SURFACE-2026-11-16-QUALITY-M17WP4-QUIT-FREEZE-BOUND-UNDERSTATED
-- **Source:** feature-review-quality (M17 WP4, MAJOR)
-- **Severity:** MAJOR
-- **Location:** src-tauri/src/cc_session/mod.rs: `RemoteCcSession::kill` (`end_session`); src-tauri/tests/sync_commands_do_not_block.rs: the `quit_now` LEDGER
-- **Finding:** Every remote kill now runs the copy-mode cancel (≤10 s), the reap, then `end_session` (≤ `END_POLLS`×0.2 s + `EXEC_TIMEOUT_MS` ≈ 15 s). `quit_now` is sync and joins those kills on the main thread, so with an unreachable host the UI can freeze ~27 s at quit. With no master, `exec_argv` (no `NO_DIRECT_FALLBACK`) attempts a direct connect and waits out `ConnectTimeout`.
-- **Why it matters:** the LEDGER entry is the only justification for this accepted main-thread block, and it now understates it by more than half. The link-down quit, the usual case, pays the most.
-- **Suggested action:** skip `end_session` (and the cancel) when the host link is not Up, or give these side-channel execs `NO_DIRECT_FALLBACK`; update the LEDGER text; add a test that a kill with the link Lost does not exec.
-- **Priority:** medium
-- **Status:** pending
 
 ## SURFACE-2026-11-16-QUALITY-M17WP4-OVERLAY-KEY-DERIVED-TWICE
 - **Source:** feature-review-quality (M17 WP4, MINOR)

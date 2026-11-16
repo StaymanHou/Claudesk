@@ -93,9 +93,16 @@ const LEDGER: &[(&str, &str)] = &[
     // in PARALLEL, so the wait is bounded by the slowest single kill, and the window is about to
     // close anyway. Waiting is the point: an un-joined kill could be cut short by `app.exit(0)`.
     // ⚠️ The bound is NOT one `DEFAULT_KILL_TIMING` window (~800ms) once a REMOTE session is
-    // open (M17 WP3): its kill first cancels tmux copy-mode over ssh, an exec bounded by
-    // `remote_link::EXEC_TIMEOUT_MS` (10 s) when the host is unreachable, plus up to the 2 s reap
-    // window if its terminal just ended. Still bounded, still on the terminal path.
+    // open (M17 WP3/WP4). A remote kill runs two close-path ssh execs around that window: the
+    // copy-mode cancel (≤ `remote_link::EXEC_TIMEOUT_MS`, 10 s) and `end_session` (≤
+    // `END_POLLS` × 0.2 s + 10 s ≈ 15 s), plus up to the 2 s reap window if its terminal just ended.
+    // - Link NOT Up (Lost / Connecting / none, the usual link-down quit): neither exec runs
+    //   (`LinkRegistry::close_exec`'s gate), so the kill costs the local window + reap only.
+    // - Link Up but its master just died (a stale Up): the execs ride the master only
+    //   (`NO_DIRECT_FALLBACK`) and fail at once instead of connecting directly.
+    // - Link Up, master alive, network gone (until keep-alive notices, ~45 s): each exec can wait
+    //   its full timeout, so the worst case is ~27 s. Not bounded tighter today.
+    // Still bounded, still on the terminal path.
     (
         "quit_now",
         "accepted: bounded, parallel kill joins on the terminal quit path",

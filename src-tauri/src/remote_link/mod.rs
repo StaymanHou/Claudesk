@@ -386,6 +386,37 @@ pub fn exec_argv(ctl: &Path, host: &str, remote_command: &str) -> Vec<String> {
     ]
 }
 
+/// A side-channel exec that ONLY rides the master: [`exec_argv`] plus [`NO_DIRECT_FALLBACK`], so a
+/// dead master fails it at once (255) instead of a direct connect waiting out `ConnectTimeout`.
+/// For the close path ([`LinkRegistry::cancel_copy_mode`], [`LinkRegistry::end_session`]), which
+/// a sync quit joins on the main thread (`SURFACE-2026-11-16-QUALITY-M17WP4-QUIT-FREEZE-BOUND-
+/// UNDERSTATED`).
+pub fn master_only_exec_argv(ctl: &Path, host: &str, remote_command: &str) -> Vec<String> {
+    let mut argv = exec_argv(ctl, host, remote_command);
+    let dd = argv.iter().position(|a| a == "--").unwrap_or(argv.len());
+    argv.splice(dd..dd, ["-o".to_string(), NO_DIRECT_FALLBACK.to_string()]);
+    argv
+}
+
+/// Why a close-path exec did not succeed.
+#[derive(Debug)]
+pub enum CloseExecError {
+    /// The host's link is not Up (Lost, Connecting, Down, or no link): nothing was run. A close in
+    /// this state leaves the remote session running (an end-intent for it is WP5's R-4 work).
+    LinkNotUp,
+    /// The exec ran and failed.
+    Run(RunError),
+}
+
+impl std::fmt::Display for CloseExecError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LinkNotUp => f.write_str("the link is not up, so nothing was sent"),
+            Self::Run(e) => write!(f, "{e}"),
+        }
+    }
+}
+
 fn command_from(argv: &[String]) -> Command {
     let mut cmd = Command::new(&argv[0]);
     cmd.args(&argv[1..]);
@@ -1132,6 +1163,29 @@ impl LinkRegistry {
             timeout_ms,
         )
     }
+
+    /// A close-path exec: run `remote_command` only when `target`'s link is Up, and only over the
+    /// master ([`master_only_exec_argv`]). A quit joins these on the main thread, so a link that
+    /// is not Up must cost nothing, and a stale Up (the master died inside the worker's poll) must
+    /// fail fast rather than connect directly. ⚠️ With the link Up it still blocks up to
+    /// `timeout_ms` (a master alive over a dead network, until keep-alive notices).
+    fn close_exec(
+        &self,
+        target: &ValidTarget,
+        remote_command: &str,
+        timeout_ms: u64,
+    ) -> Result<String, CloseExecError> {
+        if self.state(target.host()) != Some(LinkState::Up) {
+            return Err(CloseExecError::LinkNotUp);
+        }
+        let ctl = control_path(&self.app_data, target.host());
+        run_captured(
+            command_from(&master_only_exec_argv(&ctl, target.host(), remote_command)),
+            "",
+            timeout_ms,
+        )
+        .map_err(CloseExecError::Run)
+    }
 }
 
 /// `ssh`'s answer to "connect without the master": a proxy that exits at once. ssh only runs a
@@ -1149,7 +1203,8 @@ pub const NO_DIRECT_FALLBACK: &str = "ProxyCommand=/usr/bin/false";
 /// a reconnect raced the link worker's 200 ms poll, read a stale Up and re-attached over its own
 /// connection, outside the link and with no keep-alive). Failing instead lets the reconnect wait
 /// for the link like everything else. Side-channel execs ([`exec_argv`]) keep the fallback on
-/// purpose: they are short and bounded by `ConnectTimeout`.
+/// purpose: they are short and bounded by `ConnectTimeout`. The close path's are the exception
+/// ([`master_only_exec_argv`]): a quit joins them on the main thread.
 pub fn terminal_argv(ctl: &Path, host: &str, remote_command: &str) -> Vec<String> {
     vec![
         "/usr/bin/ssh".into(),
@@ -1200,13 +1255,18 @@ impl Drop for LinkHold {
 
 impl LinkRegistry {
     /// Take `session`'s pane out of tmux copy-mode over the master (arch §C.1/§E), so the next
-    /// keys Claudesk types reach CC. ⚠️ Blocks up to [`EXEC_TIMEOUT_MS`].
-    pub fn cancel_copy_mode(&self, target: &ValidTarget, session: &str) -> Result<(), RunError> {
+    /// keys Claudesk types reach CC. A close-path exec ([`Self::close_exec`]): nothing runs unless
+    /// the link is Up. ⚠️ Blocks up to [`EXEC_TIMEOUT_MS`] when it is.
+    pub fn cancel_copy_mode(
+        &self,
+        target: &ValidTarget,
+        session: &str,
+    ) -> Result<(), CloseExecError> {
         let cmd = crate::remote_cmd::tmux_cancel_copy_mode_command(
             crate::remote_cmd::tmux_server(&self.identifier),
             session,
         );
-        self.exec(target, &cmd, EXEC_TIMEOUT_MS).map(|_| ())
+        self.close_exec(target, &cmd, EXEC_TIMEOUT_MS).map(|_| ())
     }
 
     /// Before an injection into `session`'s pane (P4.2): wait for the pane's bracketed-paste mode,
@@ -1274,14 +1334,20 @@ impl LinkRegistry {
     }
 
     /// End `session` on the remote (R-1, M17 WP4): wait for it to exit after the close's `/exit`,
-    /// then kill it if it did not. ⚠️ Blocks up to `END_POLLS` × 0.2 s + one exec.
-    pub fn end_session(&self, target: &ValidTarget, session: &str) -> Result<String, RunError> {
+    /// then kill it if it did not. A close-path exec ([`Self::close_exec`]): with the link not Up
+    /// nothing runs and the remote session keeps running (WP5's end-intent). ⚠️ Blocks up to
+    /// `END_POLLS` × 0.2 s + [`EXEC_TIMEOUT_MS`] when it is Up.
+    pub fn end_session(
+        &self,
+        target: &ValidTarget,
+        session: &str,
+    ) -> Result<String, CloseExecError> {
         let cmd = crate::remote_cmd::tmux_end_session_command(
             crate::remote_cmd::tmux_server(&self.identifier),
             session,
         );
         let wait_ms = u64::from(crate::remote_cmd::END_POLLS) * 200;
-        self.exec(target, &cmd, wait_ms + EXEC_TIMEOUT_MS)
+        self.close_exec(target, &cmd, wait_ms + EXEC_TIMEOUT_MS)
     }
 
     /// The identifier this registry deploys under (`~/.claudesk/<identifier>/`).

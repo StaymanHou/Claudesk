@@ -315,6 +315,14 @@ Measured in a real Claudesk xterm.js pane (the second terminal, same `XtermPane`
   (`begin_close`), and `cc_spawn_remote` waits for it (`wait_not_closing`, 20 s). Without that, a
   respawn (`cc_kill` is fire-and-forget) ran `new -A` and ATTACHED to the dying session. Both were
   found live at WP4 P3.4.
+  - ⚠️ **The close's remote calls run only on an Up link, and only over its master** (post-WP4
+    task, 2026-11-16). The copy-mode cancel and the end go through `LinkRegistry::close_exec`. With
+    the link Lost/Connecting/absent it sends NOTHING and returns `CloseExecError::LinkNotUp` at once,
+    and the remote session keeps running (the end-intent is WP5's R-4). With a stale Up it rides
+    `master_only_exec_argv` (`NO_DIRECT_FALLBACK`) and fails fast, never connecting directly. Why:
+    the sync `quit_now` joins every kill on the main thread, and a link-down quit had frozen the UI
+    for up to ~27 s. The remaining bound (master alive, network gone, until keep-alive) is in the
+    `quit_now` LEDGER.
 - **Drive mode** arrives on the remote CC as `CLAUDESK_DRIVE_MODE` in the spawn command line, and the
   script prints the same `additionalContext` line it prints locally. It is fixed at spawn, as locally. A
   picker change takes effect at the next spawn. A **reconnect keeps the session's original mode**, and

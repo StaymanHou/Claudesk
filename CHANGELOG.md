@@ -22,6 +22,8 @@
 - **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-REMOTE-LINK-ENSURE-UNUSED-IPC — the callerless `remote_link_ensure` command was removed with `ensure`/`acquire`/`hold` (M17 WP4 Phase 1).
 - **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM (partial) — the remote session's new link-edge emits go through an injected `LinkEdgeSink` driven by a test; the fake PTY spawner that would drive the reconnect loop itself stays open for WP5.
 - **Milestone:** WP4: Status over the link: hook install, origin, drive mode, link overlay
+- **Task closed:** A remote workspace's close no longer touches the host when its link is not Up, and rides only the master when it is, so a link-down quit no longer freezes the UI for up to ~27 s; the `quit_now` LEDGER now states the real bounds.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP4-QUIT-FREEZE-BOUND-UNDERSTATED — the close-path execs are gated on an Up link and carry `NO_DIRECT_FALLBACK`, mutation-proven by two new tests, and the LEDGER text was rewritten.
 
 
 ## 2026-11-14

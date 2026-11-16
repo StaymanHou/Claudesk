@@ -1132,8 +1132,9 @@ pub struct RemoteExit {
 }
 
 impl RemoteExit {
-    /// Best effort: with the link down the cancel cannot run, and the close continues (recording an
-    /// end-intent for that case is WP5's R-4 work).
+    /// Best effort: with the link not Up the cancel sends nothing and returns at once
+    /// (`CloseExecError::LinkNotUp`), and the close continues (recording an end-intent for that
+    /// case is WP5's R-4 work).
     fn cancel_before_exit(&self) {
         if let Err(e) = self.links.cancel_copy_mode(&self.target, &self.session) {
             eprintln!("[claudesk] remote close: could not cancel copy-mode: {e}");
@@ -1546,8 +1547,10 @@ impl CcSession for RemoteCcSession {
 
     /// Close: mark killed FIRST (so the terminal's end is classified `Ended`, and a reconnect wait
     /// in progress gives up), then the terminal's own kill (cancel copy-mode, `/exit`, signals).
-    /// ⚠️ While reconnecting there is no terminal and nothing touches the remote: the remote
-    /// session keeps running (recording an end-intent for it is WP5's).
+    /// ⚠️ While the link is not Up (reconnecting, or a link-down quit) nothing touches the remote:
+    /// there may be no terminal, and the remote end below sends nothing and returns at once
+    /// (`LinkRegistry::close_exec`), so the remote session keeps running (recording an end-intent
+    /// for it is WP5's). That is what keeps a link-down quit from freezing on the main thread.
     fn kill(&self) -> Result<(), CcError> {
         self.shared.killed.store(true, Ordering::SeqCst);
         // M17 WP4: a spawn of this same tmux session waits until the whole close, remote end
