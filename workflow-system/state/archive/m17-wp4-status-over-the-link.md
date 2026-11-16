@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M17 WP4 — status over the link (hook install, origin, drive mode, link overlay)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-11-16 (finalize)
 **Created:** 2026-11-16
 **Entry:** spec (complex feature)
 **Sources:** `workflow-system/product/wbs.md` → WP4 (4.1–4.6); `arch/remote-workspaces.md` §B, §D, §E;
@@ -515,11 +515,42 @@ default either fails the "expensive to reverse" test or follows from a prior.
       The tray stays on its unit tests by the operator's decision (P4.verify-human.4).
     — evidence: `pnpm verify:auto` → EXIT=0 (44 s): vitest 3905/3905, cargo lib 1253 passed / 4 ignored, every integration target ok, clippy/fmt clean.
 
+## Code-Quality Review: m17-wp4-status-over-the-link
+Reviewed `de02657^..82fc64f` (2026-11-16, `code-quality-reviewer`). **0 CRITICAL, 1 MAJOR, 6 MINOR**, all auto-backlogged (drive_mode=autopilot) → `backlog-quality-findings.md` → `# m17-wp4-status-over-the-link — 2026-11-16`.
+
+### Strengths
+- **AC-0 lifecycle:** `ensure_and_hold` counts the hold under one `links` lock; `Link.gen` stops a stale hold from releasing a newer link; the linger timer checks again under the lock. The API left without callers was deleted along with its `ASYNC_COMMANDS` row.
+- **Routing:** a typed `Route` derived from the registry key; `resolve(origin, cwd)` filters by scope first and never canonicalizes a remote path locally; `origin` comes in through `empty_as_none`. The AC-3.2 tests cover all four cross-scope cases.
+- **Link overlay:** follows the `attention` pattern. It is display-only and omitted when absent, `display_state` ignores it on purpose, a TS test asserts the guards' inputs are unchanged, and the logic is split into testable parts (`drain_step`, `apply_link_edge`, `attach_still_held`).
+- **Remote install:** reuses `merge_claudesk_hooks`; constant read/write commands with the content on stdin; noise-tolerant sentinels; a malformed file is never written; the TC-2 basename and the TC-4 delimiter test hold.
+- **Frontend tests:** they render real components (both filmstrip forms, all four PiP layouts, a live `Workspace` mount) rather than matching source text.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`cc_session/mod.rs` `RemoteCcSession::kill`; `tests/sync_commands_do_not_block.rs` `quit_now` LEDGER] `end_session` (up to ~15 s) now follows the copy-mode cancel (10 s) and the reap in every remote kill. `quit_now` (sync, main thread) joins those kills, so with an unreachable host the UI can freeze for ~27 s at quit. The ledger still says one 10 s exec. With no master, `exec_argv` (no `NO_DIRECT_FALLBACK`) tries a direct connect and waits out `ConnectTimeout`. — *The ledger understates an accepted main-thread block, and the link-down quit pays the most. Skipping `end_session` when the link is not Up (or adding the no-direct proxy to these execs) would restore the bound, and the ledger text needs updating.*
+
+**MINOR**
+- [`cc_session/mod.rs` `RemoteCcSession::spawn`] The overlay sink rebuilds the row key with `remote_key(host, path)`, while `cc_spawn_remote` keys the alias and the close-wait on the caller's `project_path`. A mismatch would mean no overlay, silently. — *Pass `project_path` through `RemoteSpawn`.*
+- [`status_broadcaster/mod.rs` `remote_realpaths`] Never cleared: `deregister` keeps it, and a later spawn whose realpath equals the stored path (symlink removed) or whose exec fails keeps the old alias routing old-folder events. — *Remove the entry when the realpath equals the stored path, or on deregister.*
+- [`Workspace.tsx` `onSessionId`] The hook warning reuses the `injectFailure` toast state and is re-read on every respawn (Recycle, apply-now). — *One channel with two meanings: they can overwrite each other, and a known warning comes back on every respawn.*
+- [`status_broadcaster` `drain_step` vs `apply_link_edge`] `drain_step` stamps the overlay under the lock but the drain emits after releasing it. A hook update emitted after `Attached`'s Unknown keeps a stale overlay until the next event. — *A narrow window, but an idle remote CC may send nothing more.*
+- [`cc_session/commands.rs` `cc_spawn_remote`] Two more sequential ssh round trips per remote spawn (realpath, then transcript). — *One exec printing both sentinels would do the same job.*
+- [`cc_session/mod.rs` `a_remote_session_reports_its_link_edges_through_the_sink`; `status_broadcaster/mod.rs` module doc + the `to_update` doc] The test pins the whole `emit_exit` body as one whitespace-free `starts_with`, which is brittle and adds to the `RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM` debt. The module doc's "canonicalizes both" is now true only for local scope, and the inserted `time_store` sentence is an unwrapped run-on line. — *Brittle pin plus stale and cosmetic docs.*
+
+### Assessment
+The feature is well built and leaves the code in better shape. It extends existing patterns (`attention`, `merge_claudesk_hooks`, the drain's compare-and-set) instead of adding new ones, and the AC-0 rework closes two real races with a small, readable mechanism. Test discipline is high. The main debt is at the edges of the scope that grew during the build: P3.4a's close-ends-session work extended the quit path's main-thread block without updating its ledger. A few small sources of truth are kept by hand (the key derived twice, the uncleared alias map, the shared toast state), and the source-guard surface over the untested reconnect loop grew again.
+
+### If you disagree
+Mark a finding `[DISMISSED]` here before `feature-finalize` archives the WIP.
+
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality against the ship commit (`feat(m17-wp4): remote status over the link`, Phases 2–4; Phase 1 was `de02657`)
+- **Path:** Feature > done (archived)
+- **Active scope:** none (completed 2026-11-16)
 - **Blocked:** none
-- **Unvisited:** review-quality → finalize
+- **Unvisited:** none
 - **Open discoveries:** design-priors.md size guard; arch §E "tray menu row"; `remote-link` has no frontend consumer. At the feature's close: delete-on-resolve the two WP3 MAJORs Phase 1 resolved (`…-OPEN-CHECK-LEAKS-AN-UNHELD-LINK`, `…-ENSURE-THEN-HOLD-IS-NOT-ATOMIC`) from `backlog-quality-findings.md` + their stubs, with CHANGELOG lines.
 
 ## Discoveries
@@ -590,3 +621,33 @@ Confidence: high
 Evidence: the guard's regex matched `<WorkspaceStatusIndicator state={state} snippet={snippet} />` exactly; P4.2 added `link={link}` to all three PiP branches, so it counted 0 instead of 3.
 Action: updated the regex to the new prop set (`state` + `snippet` + `link`), keeping the count of 3 and the no-hand-rolled-dot assertion; the PiP's link reaching every layout is rendered by `linkOverlayRender.test.tsx`.
 [NOTE-2026-11-16] ship — Phases 2–4 committed on `main` as `feat(m17-wp4): remote status over the link …` (40 files). Full suite reused from the last-phase codify run (`Test scope: full — last phase`, EXIT=0, nothing changed since). Every staged blob was scanned for the real host/account identifiers: 0 hits. NOT pushed: `main` is 3 ahead of origin (`0244a44`, `de02657`, and the ship commit); push is the operator's call (public repo).
+
+## Retrospect
+- **What changed in our understanding:**
+  - A remote close never ENDED the remote session. It relied on `/exit` landing within 0.5 s, so a busy CC outlived the close (R-1).
+  - A respawn's `tmux new -A` attached to the session its own close was still ending.
+  - Neither was visible until apply-now was driven live (P3.4a).
+  - "Attached" is not "the terminal process spawned": an attach over a stale Up dies in milliseconds, so the overlay must wait for the attach to hold (P4.verify-self.F1).
+  - The hook-install failure cannot be pushed as an event: the link comes Up during the picker's open check, before any workspace listens, so it is sticky on the link and read.
+- **Assumptions that held:**
+  - `(origin, cwd)` routing from the `ssh://` key with no IPC change.
+  - The local `merge_claudesk_hooks` is reusable as-is for the remote file, and TC-2's distinct basename.
+  - The tray folding the underlying state.
+  - The overlay as a display field beside `attention`.
+  - The live mini setup (scratch rows, the trust dialog aside) was a reliable verification surface.
+- **Assumptions that were wrong:**
+  - That apply-now could keep the conversation remotely without WP5 5.2: WP3 drops `--continue` for every remote spawn, and the transcript check was pulled into WP4 (operator decision).
+  - That the screen could be captured for the tray: it never could this session.
+  - That a single source guard over a prop set (`pipFanoutWiring`) would survive an added prop.
+- **Approach delta:**
+  - Phase 3 grew three in-phase pieces:
+    - the R-1 close end + respawn wait;
+    - WP5 5.2's transcript check;
+    - a caller guard for the alias.
+  - Phase 4 needed one F9b back-loop (attach confirmation).
+  - The spec's emitter-seam rule was met only for the new link-edge emits; a fake PTY spawner driving the reconnect loop stays with WP5.
+  - The review found 1 MAJOR (the quit-path freeze bound) introduced by the in-phase R-1 fix; backlogged.
+
+**Feature complete:** M17 WP4 (status over the link) has shipped. A remote workspace's status dot now moves exactly like a local one on the filmstrip, PiP and tray, never confused with a local or another host's session, carrying the drive mode, and visibly "not connected" (dimmed + broken-link glyph + a "keys are not sent" strip) while its link is down. See it by opening a remote row in a build containing `82fc64f`. Requester = operator — closure notice for self-record.
+
+**Tech debt (finalize §4):** the only debt is the review's 1 MAJOR + 6 MINOR, auto-backlogged under drive_mode=autopilot (`# m17-wp4-status-over-the-link` in `backlog-quality-findings.md`, routed to WP5 / a small task before it). No further debt was found, so the exit is F19 (the WBS still has WP5+ open). The MAJOR (the quit-path freeze bound) is the recommended next task.

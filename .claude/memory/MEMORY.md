@@ -65,10 +65,12 @@
 - [debug-bundle-verifies-bundled-origin](debug-bundle-verifies-bundled-origin.md) — `tauri build --debug --bundles app` + `open` verifies `tauri://localhost` with the bridge (no hardened runtime).
 - [installed-build-verify-deferred-to-release](installed-build-verify-deferred-to-release.md) — Installed-`.app` and native-window manual checks are deferred to the `/release` gate.
 - [verify-human-agent-runs-cli-captures](verify-human-agent-runs-cli-captures.md) — At verify-human, run the CLI/curl captures yourself; ask the operator only for judgment calls.
-- [macos-tcc-permissions-granted](macos-tcc-permissions-granted.md) — Terminal.app has Accessibility + Screen Recording: the agent can screenshot and query the GUI via osascript.
+- [macos-tcc-permissions-granted](macos-tcc-permissions-granted.md) — Terminal.app has Accessibility + Screen Recording, yet `screencapture` can fail a whole session; use the bridge screenshot for webviews.
 - [notarytool-credential-unreadable-while-screen-locked](notarytool-credential-unreadable-while-screen-locked.md) — notarytool says "No Keychain password item found" while the screen is locked; unlock and re-check, never re-store on that alone.
 - [verify-trash-via-finder-not-ls](verify-trash-via-finder-not-ls.md) — `~/.Trash` is TCC-blocked; verify a Trash move with a read-only Finder osascript query, never `ls`.
-- [remote-verify-hygiene](remote-verify-hygiene.md) — The mini's remote row is a REAL repo: fire real commands only in a scratch remote folder; check for the operator's open remote workspaces before killing the dev app.
+- [remote-verify-hygiene](remote-verify-hygiene.md) — The mini's remote row is a REAL repo: fire real commands only in a scratch remote folder; check for the operator's open remote workspaces before killing the dev app; a `tauri:dev` rebuild-restart is a hard stop too.
+- [cc-trust-dialog-defaults-to-exit](cc-trust-dialog-defaults-to-exit.md) — A never-trusted folder opens CC on a trust dialog defaulting to "No, exit"; read the pane, answer ↓ then \r.
+- [drive-status-channel-with-real-hook-script](drive-status-channel-with-real-hook-script.md) — Pipe a crafted payload into the working-tree hook script at the dev socket: the real channel, no CC turn.
 - [wp4-macos-perf-measurement](wp4-macos-perf-measurement.md) — How to measure CPU, RAM and frame time of the Tauri WKWebView on macOS.
 
 ## MCP tauri bridge (caveat chain)

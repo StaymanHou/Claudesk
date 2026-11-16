@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-16  # WP3 host link + remote terminal shipped (7f96ce3); WP2 (d871473); WP1 (fd4423b)
+updated: 2026-11-16  # M17 WP4 shipped (status over the link); WP5 5.2 transcript check pulled into WP4
 cycle: milestone-17-remote-workspaces
 ---
 
@@ -99,18 +99,18 @@ only if the build disproves one.
 
 **WP3 → WP4 rationale:** status needs a link to ride (the `-R` forward lives on the master from 3.1).
 
-### WP4: Status over the link: hook install, origin, drive mode, link overlay
+### WP4: Status over the link: hook install, origin, drive mode, link overlay ✅ SHIPPED 2026-11-16 (commit 82fc64f; Phase 1 de02657)
 **Milestone:** M17
 **Dependencies:** WP3
 **Size:** M, **~2.5 days**
 **Description:** the remote workspace's dot is live on the filmstrip, PiP and tray, and honest while the link is down. arch §D, §E (overlay).
 **Tasks:**
-- [ ] 4.1 Deploy the hook script to `~/.claudesk/<identifier>/` and register it in the remote `~/.claude/settings.json`. The merge runs locally on the fetched JSON and is written back atomically. ⚠️ Provenance: never remove a hook Claudesk didn't install. Dev and prod stay distinct by basename and socket path. ⚠️ **The mini's file already holds `theme` and `skipDangerousModePermissionPrompt`** (the operator's yolo acceptance): the merge preserves every key it didn't write, with a fixture test (arch §D).
-- [ ] 4.2 An optional `origin` field from `CLAUDESK_ORIGIN`. `tests/hook_pl_output.rs` keeps the **local** output byte-identical and gains a remote case.
-- [ ] 4.3 `WorkspaceRegistry` resolves on **(origin, cwd)**. Tests show a remote event never lights a local tile, the reverse, or an unmatched session from another CC on the host.
-- [ ] 4.4 ⚠️ `time_store` refuses origin-tagged events at ingestion, with a test.
-- [ ] 4.5 Drive mode travels in the remote spawn command line (the closed four values only, through `quote`), and the `UserPromptSubmit` line appears in the remote CC. The picker row shows that a reconnected session keeps its original mode.
-- [ ] 4.6 **The link overlay** on `display_state`: Lost or Detached shows the last hue dimmed plus a link glyph on the filmstrip, PiP and tray. `state` is unchanged, and the close/quit and respawn guards still read `state`. After a reconnect the state is `Unknown` until the next event.
+- [x] 4.1 Deploy the hook script to `~/.claudesk/<identifier>/` and register it in the remote `~/.claude/settings.json`. The merge runs locally on the fetched JSON and is written back atomically. ⚠️ Provenance: never remove a hook Claudesk didn't install. Dev and prod stay distinct by basename and socket path. ⚠️ **The mini's file already holds `theme` and `skipDangerousModePermissionPrompt`** (the operator's yolo acceptance): the merge preserves every key it didn't write, with a fixture test (arch §D).
+- [x] 4.2 An optional `origin` field from `CLAUDESK_ORIGIN`. `tests/hook_pl_output.rs` keeps the **local** output byte-identical and gains a remote case.
+- [x] 4.3 `WorkspaceRegistry` resolves on **(origin, cwd)**. Tests show a remote event never lights a local tile, the reverse, or an unmatched session from another CC on the host.
+- [x] 4.4 ⚠️ `time_store` refuses origin-tagged events at ingestion, with a test.
+- [x] 4.5 Drive mode travels in the remote spawn command line (the closed four values only, through `quote`), and the `UserPromptSubmit` line appears in the remote CC. The picker row shows that a reconnected session keeps its original mode.
+- [x] 4.6 **The link overlay** on `display_state`: Lost or Detached shows the last hue dimmed plus a link glyph on the filmstrip, PiP and tray. `state` is unchanged, and the close/quit and respawn guards still read `state`. After a reconnect the state is `Unknown` until the next event.
 
 **WP4 → WP5 rationale:** the lifecycle dialogs and the reconnect path need a truthful status first, so a reconnected workspace's state reads correctly.
 

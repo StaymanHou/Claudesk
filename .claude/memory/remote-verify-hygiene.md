@@ -29,3 +29,13 @@ teardown: its ssh master was left orphaned (PPID 1) and the remote tmux session 
   workspaces through the UI (the bridge `filmstrip-close-*` button) so the close path runs, or ask the
   operator first. After any hard stop, sweep both and clean up what you caused. Related:
   [[lsof-ti-tcp-misses-ipv6-vite]] ("never kill a `target/debug/claudesk` you didn't launch").
+
+**3. A `tauri:dev` rebuild-restart is a hard stop too** (hit twice at M17 WP4, 2026-11-16). The watcher
+rebuilds AND restarts the app on any save under `src-tauri/`, with no teardown. With a remote workspace
+open, that orphans its `ssh -M` (PPID 1) and leaves the remote tmux session running (detached). A later open
+of the same row then runs `new -A` against the leftover session.
+- **How to apply:** before editing Rust mid-live-check, close remote workspaces through the UI and stop the
+  dev app (`TaskStop`), then relaunch after the edit. Stop it before mutation runs too
+  ([[live-dev-app-may-run-a-mutant]]). Sweep after any restart:
+  `ps -axo pid,ppid,command | awk '$3=="/usr/bin/ssh" && $4=="-M"'` (match argv exactly, never
+  `pgrep -f 'ssh -M'` in a loop, which counts itself) and `tmux -L claudesk-dev ls` on the mini.

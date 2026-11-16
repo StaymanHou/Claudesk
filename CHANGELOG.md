@@ -16,6 +16,13 @@
 - **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP2-SSH-RUNNER-BORROWS-ADJUDICATOR-TYPES — the hardened runner moved to `subprocess::captured` with its own types.
 - **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP2-PRINT-HOME-INTOLERANT-OF-RC-NOISE (partial) — the link's pre-connect reads `$HOME` behind a sentinel and ignores rc-file noise; the add-time preflight's connect step remains open.
 - **Milestone:** WP3: The host link and the remote terminal
+- **Feature shipped:** M17 WP4 makes a remote workspace's status first-class: the remote host gets Claudesk's hook (merged into its settings, every other key kept), events carry an `origin` so a remote session never lights a local or another host's tile, time analytics refuses them, the drive mode reaches the remote CC, apply-now and Recycle keep the conversation remotely, an explicit close ends the remote session, and a disconnected remote tile shows its last hue dimmed with a broken-link glyph and a "keys are not sent" strip.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-OPEN-CHECK-LEAKS-AN-UNHELD-LINK — `remote_open_check` now holds the link for its own duration and lingers 20 s only after an Ok (M17 WP4 Phase 1).
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-ENSURE-THEN-HOLD-IS-NOT-ATOMIC — `ensure_and_hold` finds-or-starts the link and counts the hold under one lock, and a generation stops a stale hold releasing a newer link (M17 WP4 Phase 1).
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-REMOTE-LINK-ENSURE-UNUSED-IPC — the callerless `remote_link_ensure` command was removed with `ensure`/`acquire`/`hold` (M17 WP4 Phase 1).
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM (partial) — the remote session's new link-edge emits go through an injected `LinkEdgeSink` driven by a test; the fake PTY spawner that would drive the reconnect loop itself stays open for WP5.
+- **Milestone:** WP4: Status over the link: hook install, origin, drive mode, link overlay
+
 
 ## 2026-11-14
 

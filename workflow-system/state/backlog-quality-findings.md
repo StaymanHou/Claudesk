@@ -152,30 +152,12 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit `7f96ce3`, window `7f96ce3^..7f96ce3`; drive_mode=autopilot. 0 CRITICAL, 3 MAJOR, 8 MINOR, all auto-backlogged.)*
 
-## SURFACE-2026-11-16-QUALITY-M17WP3-OPEN-CHECK-LEAKS-AN-UNHELD-LINK
-- **Severity:** MAJOR
-- **Location:** src-tauri/src/remote_link/commands.rs: `remote_open_check`, `remote_link_ensure`
-- **Finding:** `remote_open_check` (and the frontend-unused `remote_link_ensure`) call `links.ensure()` without a hold, so a successful check leaves a link Up with `refs == 0`. On `FolderMissing`, an exec-level `Unreachable`, or an operator who never opens, nothing releases it: `stop_if_unheld` runs only on `ensure`'s failure path and `run_worker` never checks refs. The `ssh -M`, its remote sshd and the `-R` forward live until quit; an offline host is re-pre-connected every ≤30 s forever.
-- **Why it matters:** R-1/R-2 promise a link lives exactly as long as its sessions; the missing-folder path (Remove offered, never automatic) is normal, so each such click leaks a master.
-- **Suggested action:** The check takes a temporary `LinkHold` for its own duration (its drop stops an unheld link), or the worker exits when Lost with refs == 0. Remove `remote_link_ensure` or give it a hold.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-11-16-QUALITY-M17WP3-ENSURE-THEN-HOLD-IS-NOT-ATOMIC
-- **Severity:** MAJOR
-- **Location:** src-tauri/src/remote_link/mod.rs: `acquire` / `hold`; `cc_session/commands.rs` `cc_spawn_remote` → `RemoteCcSession::spawn`
-- **Finding:** `acquire` silently no-ops when the host has no link, and `cc_spawn_remote` does `ensure` then `hold` as two unlocked steps. If the host's last other session closes in between, `stop()` removes the link and the new session's hold counts nothing; its later `Drop` `release`s whatever link exists then, which can decrement a LATER session's count to 0 and stop a master still in use (that session then fails `wait_up` and ends).
-- **Why it matters:** A narrow window, but the refcount can point at the wrong link and kill a healthy workspace.
-- **Suggested action:** A combined `ensure_and_hold` that starts the link if absent and increments under one `links` lock.
-- **Priority:** medium
-- **Status:** pending
-
 ## SURFACE-2026-11-16-QUALITY-M17WP3-RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM
 - **Severity:** MAJOR
 - **Location:** src-tauri/src/cc_session/mod.rs: `RemoteShared`, `reconnect`, `on_inner_exit`
-- **Finding:** `RemoteShared` hard-wires `AppHandle` for its emits, so the feature's most intricate concurrency (the `reconnect` loop's under-lock cancel, the 5-spawn-failure cap, the `attached_at` write, `on_inner_exit`'s take-then-reap) is guarded by four `include_str!` source guards plus live runs, not driven by a test.
+- **Finding (rewritten 2026-11-16 at WP4 finalize — partially resolved):** the link-edge emits added in WP4 now go through an injected `LinkEdgeSink` (`apply_link_edge`, test-driven). What remains: `RemoteShared` still hard-wires `AppHandle` for its OTHER emits, so the feature's most intricate concurrency (the `reconnect` loop's under-lock cancel, the 5-spawn-failure cap, the `attached_at` write, `on_inner_exit`'s take-then-reap) is guarded by four `include_str!` source guards plus live runs, not driven by a test.
 - **Why it matters:** The repo's own lessons (`extract-for-import-when-a-raw-guard-cant-express-the-property`) say a regex encodes only the shapes it knows; `remote_link` solved the same problem with an injected `Sink`.
-- **Suggested action:** Give `RemoteShared` an emitter seam (like `remote_link::Sink`) and a fake PTY spawner, drive the reconnect loop for real, and retire most of the source guards. Natural home: WP4/WP5, which extend this machinery.
+- **Suggested action:** Route the remaining emits (`emit_exit`, `emit_notice`) through an injected seam, add a fake PTY spawner, drive the reconnect loop for real (incl. WP4's `confirm_attached` timing), and retire most of the source guards. Natural home: WP5, which extends this machinery.
 - **Priority:** medium
 - **Status:** pending
 
@@ -242,11 +224,62 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-16-QUALITY-M17WP3-REMOTE-LINK-ENSURE-UNUSED-IPC
-- **Severity:** MINOR
-- **Location:** src-tauri/src/remote_link/commands.rs: `remote_link_ensure`
-- **Finding:** A registered IPC command with no frontend caller (a Phase 2 bridge probe), and it has the refs-0 leak above.
-- **Why it matters:** Unused IPC surface.
-- **Suggested action:** Remove it (with a `tauri-command-removal-needs-invoke-sweep` check) or give it a hold until WP4 needs it.
+# m17-wp4-status-over-the-link — 2026-11-16
+
+## SURFACE-2026-11-16-QUALITY-M17WP4-QUIT-FREEZE-BOUND-UNDERSTATED
+- **Source:** feature-review-quality (M17 WP4, MAJOR)
+- **Severity:** MAJOR
+- **Location:** src-tauri/src/cc_session/mod.rs: `RemoteCcSession::kill` (`end_session`); src-tauri/tests/sync_commands_do_not_block.rs: the `quit_now` LEDGER
+- **Finding:** Every remote kill now runs the copy-mode cancel (≤10 s), the reap, then `end_session` (≤ `END_POLLS`×0.2 s + `EXEC_TIMEOUT_MS` ≈ 15 s). `quit_now` is sync and joins those kills on the main thread, so with an unreachable host the UI can freeze ~27 s at quit. With no master, `exec_argv` (no `NO_DIRECT_FALLBACK`) attempts a direct connect and waits out `ConnectTimeout`.
+- **Why it matters:** the LEDGER entry is the only justification for this accepted main-thread block, and it now understates it by more than half. The link-down quit, the usual case, pays the most.
+- **Suggested action:** skip `end_session` (and the cancel) when the host link is not Up, or give these side-channel execs `NO_DIRECT_FALLBACK`; update the LEDGER text; add a test that a kill with the link Lost does not exec.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP4-OVERLAY-KEY-DERIVED-TWICE
+- **Source:** feature-review-quality (M17 WP4, MINOR)
+- **Location:** src-tauri/src/cc_session/mod.rs: `RemoteCcSession::spawn` (`link_edge_sink` key)
+- **Finding:** The overlay sink rebuilds the row key as `remote_key(target.host(), target.path())`, while `cc_spawn_remote` keys the alias and the close-wait on the caller's `project_path`. A mismatch would make `set_link_overlay` return None, with no overlay and no error.
+- **Suggested action:** carry `project_path` in `RemoteSpawn` and use it for the sink.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP4-REALPATH-ALIAS-NEVER-CLEARED
+- **Source:** feature-review-quality (M17 WP4, MINOR)
+- **Location:** src-tauri/src/status_broadcaster/mod.rs: `remote_realpaths`, `set_remote_realpath`
+- **Finding:** The alias map is never cleared. A later spawn whose realpath equals the stored path (the symlink was removed) or whose exec fails keeps the old alias, still routing events from the old physical folder.
+- **Suggested action:** remove the entry when the realpath resolves to the stored path (or the resolve fails), and on deregister.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP4-HOOK-WARNING-SHARES-INJECT-TOAST
+- **Source:** feature-review-quality (M17 WP4, MINOR)
+- **Location:** src/components/workspace/Workspace.tsx: `onSessionId` → `readRemoteHookWarning` → `setInjectFailure`
+- **Finding:** The hook-install warning reuses the inject-failure toast state and is re-read after every respawn (Recycle, drive-mode apply-now).
+- **Suggested action:** a separate notice slot (or a "shown once per link connect" latch) for the warning.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP4-STALE-OVERLAY-EMIT-RACE
+- **Source:** feature-review-quality (M17 WP4, MINOR)
+- **Location:** src-tauri/src/status_broadcaster: `drain_step` (stamp under the lock) vs the drain's emit after release; `apply_link_edge(Attached)`
+- **Finding:** A hook update stamped with the overlay can be emitted after `Attached` has already emitted Unknown, leaving a stale dimmed tile until the next hook event.
+- **Suggested action:** emit under a per-workspace sequence (drop an update older than the last emitted), or re-stamp at emit time.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP4-TWO-SEQUENTIAL-SPAWN-EXECS
+- **Source:** feature-review-quality (M17 WP4, MINOR)
+- **Location:** src-tauri/src/cc_session/commands.rs: `cc_spawn_remote` (`realpath_command`, then `has_transcript_command`)
+- **Finding:** Two extra sequential ssh round trips per remote spawn.
+- **Suggested action:** one exec that prints both sentinel lines (the slug transform stays in Rust: return the physical path, then test the transcript dir in a second line computed remotely from it, or accept one exec + one local slug).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-16-QUALITY-M17WP4-BRITTLE-PIN-AND-STALE-DOCS
+- **Source:** feature-review-quality (M17 WP4, MINOR)
+- **Location:** src-tauri/src/cc_session/mod.rs: `a_remote_session_reports_its_link_edges_through_the_sink`; src-tauri/src/status_broadcaster/mod.rs: module doc ("canonicalizes both"), the `to_update` doc's inserted `time_store` sentence
+- **Finding:** The test pins the whole `emit_exit` body as one whitespace-free `starts_with` string. The module doc's canonicalization claim is now true only for local scope, and one inserted doc sentence is an unwrapped run-on.
+- **Suggested action:** narrow the pin to "Ended is inside the latch", fix the two docs. The behavioural seam itself stays with `…M17WP3-RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM`.
 - **Priority:** low
 - **Status:** pending
