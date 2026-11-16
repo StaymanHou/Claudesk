@@ -1,7 +1,7 @@
 ---
 stage: design-priors
 state: active
-updated: 2026-11-14
+updated: 2026-11-16
 ---
 
 # Design Priors — Claudesk
@@ -324,3 +324,18 @@ There is a second, sharper reason for the destructive half specifically: a user 
 **Why (⚠️ INFERRED; approved as proposed by the operator 2026-11-14, why not yet sharpened; directional + overridable):** A click carries intent; a passive event doesn't. So the app acts on clicks at face value, never treats an accident as a decision, and asks only when it truly can't tell.
 
 **Origin:** the M17 roadmap grill, 2026-11-14 (lifecycle rulings R-1–R-4, `roadmap.md` → "### Milestone 17"; mapped in `arch/remote-workspaces.md` §E). Proposed at that session's close, approved 2026-11-14. Related: [[a-session-behaves-the-same-wherever-it-runs]] (R-1's "local parity" is that prior applied to close), [[paired-actions-need-paired-affordances]].
+
+## a-silent-non-action-must-not-read-as-done
+
+**Axis:** feedback design (what the operator sees when Claudesk does NOT do something)
+
+**Lean:** When Claudesk does not carry out something the operator would assume happened (a command not injected, typed keys not sent, a hook not installed, a session not reached or not ended), it **says so visibly**, where the operator will meet it, even at the cost of a toast, a strip or a notice line. A non-action never looks the same as success.
+
+**Decision rule:** for any path that can refuse, skip or fail, ask **"if this quietly did nothing, would the operator believe it was done?"**
+- **Yes** → surface it in plain words at the place the operator acts or looks (a toast for a refused action, a strip or notice line for a degraded pane). A `console.warn`, an `eprintln!` or an `ok: true` does not count.
+- **No** (the operator would plainly see it didn't happen, or nothing depends on it) → no notice needed.
+- This prior is about **non-actions**. It does not ask for confirmations of things that worked: routine success stays quiet.
+
+**Why (⚠️ INFERRED; approved as proposed by the operator 2026-11-16, why not yet sharpened; directional + overridable):** The operator runs parallel sessions and does not re-check what they believe happened. A silent non-action is read as done, the operator moves on, and the miss surfaces much later (a workspace that never got its `/session-restore`, keys typed into nothing) at a far higher cost than the notice would have had (`claudesk-philosophy`: attention is the scarce resource).
+
+**Origin:** four operator calls across M17 WP3–WP4 (2026-11-16): a refused injection shows a toast (WP3 P4; it had been fully silent, a refused `/session-restore` even reported `ok: true`); the dim "reconnecting" notice line rather than a silent freeze (WP3 P5.verify-human.2, option A); the "keys are not sent" strip while the link is down (WP4 AC-7); the remote hook-install warning toast (WP4). Proposed at the WP4 close, approved 2026-11-16. ⚠️ **Known open instance:** since the 2026-11-16 quit-freeze task, a close with the link down ends nothing on the remote, and nothing says so. That is the "unclear → ask, once" case of [[explicit-action-keeps-its-meaning-passive-event-preserves-work]], owned by WP5's R-4 dialogs. Related: [[a-session-behaves-the-same-wherever-it-runs]] (its "stated where the operator meets it, never discovered" clause is this prior applied to a missing surface), [[needs-you-outranks-busy]].
