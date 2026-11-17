@@ -309,3 +309,44 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
+# m17-wp6-workspace-surfaces — 2026-11-17
+
+## SURFACE-2026-11-17-QUALITY-M17WP6-PANEL-FUNCS-FAIL-OPEN-LOCAL-DEFAULT
+- **Source:** feature-review-quality (M17 WP6, MINOR)
+- **Location:** `src/components/workspace/panelHost.ts` (`defaultPanel` / `availablePanels` / `selectPanel` / `reconcilePanel`), 6 `selectPanel(cur, "<panel>")` sites in `RightPanelHost.tsx` (`addTerminal`, `openFile`, `handleSearchResults`, the ⌘N branch, two tab `onClick`s)
+- **Finding:** `surfaces = LOCAL_SURFACES` is a fail-OPEN default: a new call site that forgets it treats a remote workspace as local. Today each of the 6 sites is behind an upstream gate and `reconcilePanel(…, surfaces)` corrects at render, so correctness rests on the reconcile backstop. Asymmetric with the gate's fail-closed `enabled = false` default.
+- **Suggested action:** make `surfaces` required on the four functions (or pass it at the 6 sites); keep `availablePanels(false)` working for the OFF-invariant guard by passing `LOCAL_SURFACES` explicitly there only if the guard file may change, else keep the default on `availablePanels` alone.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-M17WP6-GUARD-HEADER-OVERCLAIMS-CONTAINMENT
+- **Source:** feature-review-quality (M17 WP6, MINOR)
+- **Location:** `src/state/__tests__/workspaceSurfacesGuard.test.ts` (header: "moving the mount out from under it fails here")
+- **Finding:** `nearestFlag` checks the nearest PRECEDING `surfaces.<flag>` within a distance, not that the token is INSIDE the gate's expression; a mount moved just past a closed `{surfaces.editor && (…)}` block still passes the pin (the live render tests catch that case). The claim exceeds what the guard checks (source-text-guards failure class).
+- **Suggested action:** narrow the comment to "removing or reflagging a gate" and name the DOM tests as the containment instrument.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-M17WP6-DUPLICATED-EMPTY-WITHHOLD-VALUE
+- **Source:** feature-review-quality (M17 WP6, MINOR)
+- **Location:** `src-tauri/src/wip/commands.rs` (`wip_read`), `src-tauri/src/transcript/commands.rs` (`transcript_tail`)
+- **Finding:** the refusal block builds its own empty `WipRead` / `TranscriptTail` right above an identical `let empty = …` (forced by the first-statement pin). Two copies of the withhold value can drift.
+- **Suggested action:** `#[derive(Default)]` + `return WipRead::default()` / `TranscriptTail::default()` in both places (pin still satisfied).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-M17WP6-NOTICE-SHAPE-INLINED-THREE-TIMES
+- **Source:** feature-review-quality (M17 WP6, MINOR)
+- **Location:** `src/App.tsx` (`workspaceNotices` state), `src/components/workspace/CenterStage.tsx` (`noticeFor`), `src/components/workspace/Workspace.tsx` (`notice` prop)
+- **Finding:** `{ text: string; seq: number; kind?: "error" | "info" }` is spelled inline in three files; a new kind means three edits.
+- **Suggested action:** export one `WorkspaceNotice` type and use it at all three.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-M17WP6-REFUSAL-DOC-IMPLIES-FRONTEND-CONTRACT
+- **Source:** feature-review-quality (M17 WP6, MINOR)
+- **Location:** `src-tauri/src/workspace_surfaces/mod.rs` (module doc)
+- **Finding:** says the frontend matches the exact `REMOTE_REFUSAL` text, but nothing in `src/` does (the frontend gates before invoking). The WIP plan's per-module `#[from] RemoteRefused` variants became `From<RemoteRefused> for String` (a recorded deviation).
+- **Suggested action:** reword to "display text; the frontend never relies on it today" (or note WP7 as the expected consumer).
+- **Priority:** low
+- **Status:** pending

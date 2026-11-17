@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-17  # M17 WP5 shipped (remote lifecycle); WP9 added (no raw local-fs errors on remote rows)
+updated: 2026-11-17  # M17 WP6 shipped (workspaceSurfaces funnel, 991307e); WP9 folded into it
 cycle: milestone-17-remote-workspaces
 ---
 
@@ -127,16 +127,16 @@ only if the build disproves one.
 - [x] 5.5 The unclean-flag interplay is tested: a passive drop leaves it set; if the remote session then dies, reopening resolves to `--continue`.
 - [x] 5.6 Auto-resume's `/session-restore` fires `INJECT_SETTLE_MS` (1500 ms) after `cc_ready`; remote cold CC-ready is ~1.3 s, about 1.15× margin. Re-measure with the real inner command, then raise the remote delay or fire on WP3's readiness signal (arch §E).
 
-### WP6: OUT rows absent: the `workspaceSurfaces` funnel
+### WP6: OUT rows absent: the `workspaceSurfaces` funnel ✅ SHIPPED 2026-11-17 (commit 991307e; WP9 folded in; turn jump ruled absent permanently)
 **Milestone:** M17
 **Dependencies:** WP2 (it reads `Project.remote`); otherwise independent and can run in parallel with WP3–WP5
 **Size:** M, **~1.5 days**
 **Description:** arch §G. Every OUT surface is absent on a remote workspace, and the backend refuses local-fs commands for it.
 **Tasks:**
-- [ ] 6.1 `workspaceSurfaces(project)` in TS and its Rust twin. `availablePanels` and every OUT mount site consult it: editor, diff, second terminal, file tree, ⌘P, project search, Sublime ×2, Finder reveal, media, supervisor, **turn-marker jump**: hide or rebuild is ⚠️ open (agent leans hide; the WP6 spec or the operator confirms after costing a tmux-history rebuild; arch §G).
-- [ ] 6.2 Backend typed refusals for `editor_fs` / `git_*` / `fs_index` / `sublime_*` / `finder` / `project_search` on a remote workspace.
-- [ ] 6.3 `workspaceSurfacesGuard`, **mutation-proven per site**. The subject list is a floor: grep repo-wide before trusting it.
-- [ ] 6.4 ⚠️ `offInvariantGuard` (6 arms / 10 subjects) and `workflowApplicableGuard` stay green **unchanged**. That is the evidence the kind funnel didn't leak into the gate.
+- [x] 6.1 `workspaceSurfaces(project)` in TS and its Rust twin. `availablePanels` and every OUT mount site consult it: editor, diff, second terminal, file tree, ⌘P, project search, Sublime ×2, Finder reveal, media, supervisor, **turn-marker jump**: ✅ **ruled at the WP6 spec (operator, 2026-11-17): hidden, PERMANENTLY** (a tmux-history rebuild was costed at ~1 day and declined; arch §G as-built).
+- [x] 6.2 Backend typed refusals for `editor_fs` / `git_*` / `fs_index` / `sublime_*` / `finder` / `project_search` on a remote workspace.
+- [x] 6.3 `workspaceSurfacesGuard`, **mutation-proven per site**. The subject list is a floor: grep repo-wide before trusting it.
+- [x] 6.4 ⚠️ `offInvariantGuard` (6 arms / 10 subjects) and `workflowApplicableGuard` stay green **unchanged**. That is the evidence the kind funnel didn't leak into the gate.
 
 **⭐ Partial-release point after WP6:** remote terminal, live status, reconnect, Detach / Reconnect, OUT rows absent. This is cut only if the tank checkpoint asks for an interim; the milestone's exit is still full parity.
 
@@ -164,16 +164,16 @@ only if the build disproves one.
 - [ ] 8.4 Resilience: a network drop (Tailscale off/on) reconnects to the same session. Close and quit end it (R-1), and Detach / Reconnect works (R-3).
 - [ ] 8.5 No system extension on the main box. Nothing left running on the mini beyond CC, tmux and the master link. Dev and prod against the same mini don't cross.
 
-### WP9: No raw local-fs errors on a remote workspace
+### WP9: No raw local-fs errors on a remote workspace ✅ FOLDED INTO WP6, SHIPPED 2026-11-17 (commit 991307e)
 **Milestone:** M17
 **Dependencies:** WP2 (it reads `Project.remote`); independent of WP3–WP8 and can run any time
 **Size:** S, **~0.5 day**
 **Added:** 2026-11-17, operator ruling at WP5 P2.verify-human.4 ("add it to the wbs plan as a new wp").
 **Description:** Found live at WP5 Phase 2: on a remote workspace the right panel's **Docs** tab reads the row's `ssh://` key as a LOCAL path and shows a raw error ("Could not read this project's docs: file I/O error: root \"ssh://…\": No such file or directory (os error 2)"). Any surface that reaches the local filesystem with a remote key fails the same way. ⚠️ **Overlap, stated:** WP7.3 makes Docs READ the remote (so this symptom ends there), and WP6 removes the OUT surfaces; this WP covers what neither does: no remote row ever shows a raw local-fs error, before or after they land. Fold into WP7 at the next `/product-wbs` if preferred.
 **Tasks:**
-- [ ] 9.1 Every right-panel surface that reads the local filesystem recognises a remote key (`isRemoteRow` / `config_store::split_remote_key`) BEFORE any fs call, and shows a plain note ("Not available on a remote workspace yet" for an IN row pending WP7; nothing for an OUT row once WP6 hides it), never an `os error`.
-- [ ] 9.2 Backend: a local-fs command handed an `ssh://` key returns a typed, plain-words refusal (shared with WP6.2's), never an io error string.
-- [ ] 9.3 A test per surface that mounts it with a remote key and asserts no error text containing `os error` / `No such file` (render the DOM question, per the source-guard lesson).
+- [x] 9.1 Every right-panel surface that reads the local filesystem recognises a remote key (`isRemoteRow` / `config_store::split_remote_key`) BEFORE any fs call, and shows a plain note ("Not available on a remote workspace yet" for an IN row pending WP7; nothing for an OUT row once WP6 hides it), never an `os error`.
+- [x] 9.2 Backend: a local-fs command handed an `ssh://` key returns a typed, plain-words refusal (shared with WP6.2's), never an io error string.
+- [x] 9.3 A test per surface that mounts it with a remote key and asserts no error text containing `os error` / `No such file` (render the DOM question, per the source-guard lesson).
 
 ## Dependency map
 

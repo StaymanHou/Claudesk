@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-11-17  # M17 WP5 shipped: R-3 as built (Detach closes the tile; reconnect = reopen)
+updated: 2026-11-17  # M17 WP6 shipped: OUT rows absent (workspaceSurfaces funnel); turn jump ruled absent permanently
 ---
 
 # Roadmap
@@ -120,6 +120,9 @@ as a local one, and it survives the network or the remote going away (vision Met
 - **OUT:** the editor, diff viewer and second terminal; ⌘P, the file tree, project search and the
   Sublime launchers. These are **hidden** on a remote workspace (Core Principle 7), never greyed
   out or erroring. Time analytics and the supervisor are deferred.
+  ✅ **As built (M17 WP6, 2026-11-17):** all of these are absent, plus the supervisor and the
+  **turn-marker jump** (operator ruling: absent permanently, no tmux-history rebuild). A chord or menu
+  item for an absent surface shows one neutral info notice rather than doing nothing (arch §G).
 - **Constraints:** the per-workspace config lives in `projects.json`, with no multi-host screen; no
   system extension on the main box; no long-running remote process beyond CC, its session host and
   the hook path. Windows isn't needed but shouldn't be foreclosed.

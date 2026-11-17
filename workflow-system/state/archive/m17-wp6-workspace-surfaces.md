@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M17 WP6 — OUT rows absent: the `workspaceSurfaces` funnel (+ WP9 folded in)
 
 **Workflow:** feature
-**State:** ship (complete) — shipped `991307e`
+**State:** Completed 2026-11-17 (shipped `991307e`; review: 5 MINOR backlogged)
 **Created:** 2026-11-17
 **Entry:** spec (complex feature)
 **WBS:** `workflow-system/product/wbs.md` → "### WP6" (M17), with "### WP9" (no raw local-fs errors on a remote workspace) folded in. Design: `arch/remote-workspaces.md` §G (PLANNED).
@@ -352,12 +352,54 @@ Problem statement unchanged (2026-11-17, F12 from P3.verify-human.2): the operat
 - **Leak check (public repo):** remote account references in this WIP redacted to `<user>@<mini-host>` / `~/claudesk-scratch-remote` before staging.
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality against `991307e`
+- **Path:** Feature > done (archived)
+- **Active scope:** none
 - **Live state:** clean (dev app stopped, scratch row removed, no ssh master, no remote tmux server)
 - **Blocked:** none
 - **Unvisited:** none after Phase 3
 - **Open discoveries:** none
+
+## Code-Quality Review
+
+## Code-Quality Review — m17-wp6-workspace-surfaces (ship `991307e`, reviewed 2026-11-17)
+
+### Strengths
+- One documented funnel (`workspaceSurfaces.ts`, frozen LOCAL/REMOTE tables) replaced five ad hoc `startsWith("ssh://")` sites; a source scan stops a sixth.
+- The kind funnel stays beside the M10.9 gate: `availablePanels(false)` is still `AVAILABLE_PANELS` by identity; the supervisor ANDs the two at its call site; both must-not-change guards pass unedited.
+- The backend refusal pin is well-built: `syn`-parsed first-statement check, a two-way set pin, an anti-vacuity test; behavioral tests assert exact equality, not `is_err`.
+- The render-vs-source split follows `docs/lessons/source-text-guards.md`: DOM questions rendered (real RightPanelHost/Workspace/App, local positive controls), the new-reach question as a re-scanned source floor tied to the Rust `REFUSED` list.
+- Chords for absent surfaces are consumed and answered with one plain notice, styled as info, not error.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [`panelHost.ts` panel functions; 6 `selectPanel(cur, …)` sites in `RightPanelHost.tsx`] `surfaces = LOCAL_SURFACES` is a fail-open default; correctness at those sites rests on the `reconcilePanel` backstop. → backlogged `SURFACE-2026-11-17-QUALITY-M17WP6-PANEL-FUNCS-FAIL-OPEN-LOCAL-DEFAULT`
+- [`workspaceSurfacesGuard.test.ts` header] claims "moving a mount out from under its gate fails here"; `nearestFlag` checks proximity, not containment (the DOM tests catch that). → `…-GUARD-HEADER-OVERCLAIMS-CONTAINMENT`
+- [`wip/commands.rs`, `transcript/commands.rs`] the refusal block duplicates the empty withhold value. → `…-DUPLICATED-EMPTY-WITHHOLD-VALUE`
+- [`App.tsx`, `CenterStage.tsx`, `Workspace.tsx`] the notice shape is inlined three times. → `…-NOTICE-SHAPE-INLINED-THREE-TIMES`
+- [`workspace_surfaces/mod.rs` doc] implies a frontend text contract on `REMOTE_REFUSAL` that does not exist. → `…-REFUSAL-DOC-IMPLIES-FRONTEND-CONTRACT`
+
+### Assessment
+A well-executed feature that leaves the codebase better than it found it: a scattered remote check became one documented funnel, kept beside the M10.9 gate as arch §G demands, with a backend refusal as defense in depth. Every guard is genuine (equality not `is_err`, `syn` not regex, a two-way set pin, render tests with positive controls); the large RightPanelHost/Workspace diffs are mostly mechanical JSX wrapping with a WP-tagged comment at each gate. Findings are minor; the only one with a real latent cost is the fail-open `LOCAL_SURFACES` default, cheap to make required.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+**Disposition (drive_mode=autopilot, Case C):** 5 MINOR auto-backlogged to `workflow-system/state/backlog-quality-findings.md` under `# m17-wp6-workspace-surfaces — 2026-11-17`; one pointer added to `workflow-system/state/backlog.md`.
+
+## Retrospect
+- **What changed in our understanding:** the "kind funnel" needed THREE delivery paths, not one: render absence (JSX), consumed chords (RightPanelHost's capture listener), and the app-global native menu (App's callbacks reach the workspace only through the `notice` channel). The spec named the menu problem (AC-4) but not that the existing workspace toast was error-styled; the operator's decision B (a neutral info style) only surfaced once the toast was seen live.
+- **Assumptions that held:** keying on the `ssh://` project key (no row threading needed); an optional LOCAL default on the panel functions kept `offInvariantGuard` / `workflowApplicableGuard` byte-unchanged; a `String`-error backend made one exact refusal text sufficient (no per-module enum); local workspaces stayed byte-identical (proven against a HEAD worktree).
+- **Assumptions that were wrong:** (1) "per-command behavioral tests" for the refusal: most commands take an `AppHandle`, so 9 are called for real and all 26 are pinned by `syn` instead. (2) The first floor grep shape missed 3 reaching files (an injected `invoker(...)`, a `term_spawn` prop literal); matching any quoted command string fixed it. (3) The first mutation pass left 5 survivors: 4 unreachable defense-in-depth gates (now source-pinned) and 1 real gap (the chord-notice wiring had no test because the harness stubs RightPanelHost). (4) The first HEAD-worktree render diff was non-deterministic (a lazy chunk raced fixed sleeps) until it waited on the condition.
+- **Approach delta:** WP9 folded in as planned. Added beyond plan: `absentSurfaceNotice` / `launcherSurfaceFor`, a `kind` on the workspace toast + the app `notice` channel (decision B), silent consumption of ⌘W / ⌘1–9 (never fall through to a window close), and an F12 back-loop for the restyle. Dev-time hazard found: an `App.tsx` edit under `tauri:dev` Fast-Refresh-resets the workspace list and ENDS open remote sessions (backlogged).
+
+**Closure (Communicate):** Requester = operator — closure notice for self-record.
+> **Feature complete:** M17 WP6 (OUT rows absent, with WP9 folded in) has shipped. A remote workspace now shows only what works for a remote session (Docs + Prompt, the CC pane and its header), never the local editor, diff, terminal, file tree, finder, search, launchers, supervisor or turn jump, and the backend refuses those commands for an `ssh://` key in plain words. Open a remote row and press ⌘P or use View → Editor to see the neutral "isn't available on a remote workspace" notice.
 
 ## Discoveries
 

@@ -650,16 +650,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** pending
 - **Pickup shape:** one cleanup task.
 
-## SURFACE-2026-11-16-REMOTE-WORKSPACE-SHOWS-LOCAL-ONLY-PANELS
-- **Source:** feature:verify-self (M17 WP4 Phase 4, live on the mini)
-- **Target level:** product:wbs
-- **Type:** gap
-- **Summary:** A REMOTE workspace's right panel shows the Docs / Editor / Diff / Terminal tabs. The Docs panel reads the `ssh://` key as a LOCAL path and shows "Could not read this project's docs: file I/O error: root \"ssh://<user>@<host>/…\": No such file or directory (os error 2)".
-- **Context:** arch §G says the IDE half is ABSENT on a remote row (vision Core Principle 7; only Prompt and the gated Docs panel are meant to show, and Docs needs remote reads, §F). Pre-existing since WP3; WP4 only made it visible in a screenshot.
-- **Suggested action:** Gate the right-panel tabs on remoteness (hide Editor/Diff/Terminal; Docs either reads over the link (§F) or is absent until it does). Check where the M17 WBS puts §G (likely WP6).
-- **Priority:** medium
-- **Status:** pending
-
 ## SURFACE-2026-11-16-TRAY-HAS-NO-READOUT-FOR-LIVE-VERIFY
 - **Source:** feature:verify-human (M17 WP4 P4.verify-human.4, operator decision)
 - **Target level:** feature (dev tooling)
@@ -744,4 +734,14 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** Add to the remote-verify hygiene memory: close remote workspaces (or use a scratch row) before editing `App.tsx` or running App.tsx mutants. Optionally move App's workspace state into a module that Fast Refresh preserves.
 - **Priority:** low
 - **Status:** pending
+
+## Code-quality findings — m17-wp6-workspace-surfaces (2026-11-17)
+
+- **Pointer:** **5 MINOR** open from the review of the WP6 ship commit (`991307e`); no CRITICAL, no MAJOR.
+  - MINORs: the panel functions' fail-open `LOCAL_SURFACES` default (6 call sites rely on the reconcile backstop); the guard header over-claims containment; a duplicated empty withhold value in `wip_read` / `transcript_tail`; the notice shape inlined in 3 files; the refusal module doc implies a frontend text contract.
+
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp6-workspace-surfaces — 2026-11-17`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** one small `/feature-refactor` pass, or fold into WP7 (which touches the same panel host and backend refusal).
 

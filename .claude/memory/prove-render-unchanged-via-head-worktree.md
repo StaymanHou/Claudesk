@@ -50,6 +50,12 @@ for `SettingsPanel` (8 fixtures) and `ProjectPicker` (8 fixtures):
   control (one mutated attribute must change the dumps).
 - jsdom lacks `scrollIntoView`; stub it on `Element.prototype` in the spec if a dialog calls it.
 
+**⚠️ A lazy (`Suspense`) panel makes fixed sleeps NON-deterministic (M17 WP6, 2026-11-17).** A live-mount dump of
+`RightPanelHost` with the gate ON differed between two HEAD runs: the lazy `DocsPanel` chunk sometimes loaded
+inside the sleeps and sometimes not (cold first run). A "HEAD vs working tree identical" result from one run of
+each is then luck. Wait on the lazy panel's own DOM condition (bounded poll for `[data-testid="docs-panel"]`),
+and **run HEAD twice** (and the working tree twice) before trusting `diff` exit 0.
+
 **An identical render does NOT prove the extraction's new prop seams are pinned.** After WP13,
 passing `workflowApplicable={true}` to every row, or making the row's × and commit callbacks
 no-ops, passed all 750 picker/app tests. So after extracting a component, **mutate each new prop

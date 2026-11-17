@@ -8,6 +8,9 @@
 - **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP4-OVERLAY-KEY-DERIVED-TWICE — the overlay sink now uses the caller's row key carried in `RemoteSpawn.project_path`.
 - **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP4-TWO-SEQUENTIAL-SPAWN-EXECS — the spawn's realpath, transcript and reconnect-mode reads are one remote exec (`spawn_facts_command`).
 - **Milestone:** WP5: Lifecycle: reconnect, detach, the R-4 dialogs, and the resume rule's remote checks
+- **Feature shipped:** M17 WP6 hides every local-only surface on a remote workspace through one `workspaceSurfaces` funnel: the right half becomes Docs + Prompt (Docs with a plain "not available yet" note), the editor, diff, terminal, file tree, finder, search, launchers, supervisor and turn jump are absent, chords and menu items for them show one neutral notice, and 26 backend commands refuse an `ssh://` key in plain words.
+- **Backlog resolved:** SURFACE-2026-11-16-REMOTE-WORKSPACE-SHOWS-LOCAL-ONLY-PANELS — a remote workspace no longer shows the Editor/Diff/Terminal tabs, and its Docs panel shows a plain note instead of a raw `os error`.
+- **Milestone:** WP6: OUT rows absent: the `workspaceSurfaces` funnel (with WP9, No raw local-fs errors on a remote workspace, folded in)
 
 ## 2026-11-16
 

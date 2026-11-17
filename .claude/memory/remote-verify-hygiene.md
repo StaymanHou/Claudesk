@@ -39,3 +39,13 @@ of the same row then runs `new -A` against the leftover session.
   ([[live-dev-app-may-run-a-mutant]]). Sweep after any restart:
   `ps -axo pid,ppid,command | awk '$3=="/usr/bin/ssh" && $4=="-M"'` (match argv exactly, never
   `pgrep -f 'ssh -M'` in a loop, which counts itself) and `tmux -L claudesk-dev ls` on the mini.
+
+**4. An `App.tsx` edit is a hard stop for open workspaces too** (hit twice at M17 WP6, 2026-11-17). Under
+`pnpm tauri:dev`, saving `src/App.tsx` (an edit, or an App.tsx mutation run) makes React Fast Refresh RESET
+App's state: the workspace list empties, every open workspace unmounts and closes through the NORMAL close
+path, and that ENDS a remote session (R-1 `/exit`). It is clean (no orphaned master or tmux session), but the
+live check silently loses its workspace; on a real (non-scratch) row it would end the operator's session.
+Edits to child components (`RightPanelHost.tsx`, `Workspace.tsx`) hot-swap without this.
+- **How to apply:** close remote workspaces (or use only the scratch row) before editing `App.tsx` or
+  running App.tsx mutants; after any App.tsx save, reload the webview and reopen before trusting a live read.
+  Backlog: `SURFACE-2026-11-17-APP-TSX-FAST-REFRESH-CLOSES-REMOTE-WORKSPACES`.

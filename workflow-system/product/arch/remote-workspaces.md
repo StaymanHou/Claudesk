@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-17  # M17 /product-arch: PLANNED design; §A/§C/§H carry WP2 as-built notes, §B/§E WP3's, §D WP4's, §E WP5's lifecycle table. Resync at M17's /product-finalize.
+updated: 2026-11-17  # M17 /product-arch: PLANNED design; §A/§C/§H carry WP2 as-built notes, §B/§E WP3's, §D WP4's, §E WP5's lifecycle table, §G WP6's funnel. Resync at M17's /product-finalize.
 ---
 
 # Remote workspaces (M17)
@@ -473,6 +473,16 @@ remote. Code, UI copy and tests use these two words for these two cases only.
   - **Standing rulings that bind:** never infer state from PTY output (still hooks-only across the
     link); never write into `workflow-system/`; provenance for every `~/.claude` hook write; drive-mode
     values are the closed four, with no free strings into the remote command.
+
+- ✅ **As built (WP6, 2026-11-17, `991307e`; WP9 folded in).** Where this differs from the plan above, this wins:
+  - **The funnel keys on the project KEY, not a `remote` field** (no component carries the row): `src/state/workspaceSurfaces.ts` → `isRemoteKey` / `remoteAuthority` / `workspaceSurfaces(projectPath)`, 14 boolean surfaces (the OUT list + `fsWatch` + `docsRead`). It is the ONLY frontend remote test: `REMOTE_KEY_PREFIX` moved there and a source scan rejects a second one.
+  - **The turn-marker jump is ABSENT on remote panes, PERMANENTLY** (operator ruling at the WP6 spec; no tmux-history rebuild planned). This overrides the prior `a-session-behaves-the-same-wherever-it-runs` for this surface, by ruling.
+  - **The panel functions take the kind as a second input** (`availablePanels(enabled, surfaces = LOCAL_SURFACES)` etc.): remote = Prompt (gate OFF) or Docs + Prompt (gate ON), opening on Prompt / Docs; a one-tab row stays (operator decision A). ⚠️ The default fails OPEN; render-time `reconcilePanel(…, surfaces)` is the backstop (review MINOR, backlogged).
+  - **Docs on remote shows a plain note** ("Docs aren't available on a remote workspace yet.") rendered by `RightPanelHost` in place of `DocsPanel`, so no `docs_list` runs. WP7.3 replaces the note with remote reads.
+  - **Triggers that cannot be absent** (the app-global native menu, chords): a chord or menu item for an absent surface invokes nothing and shows ONE neutral info notice (`is-info`, `role="status"`; operator decision B: not the red error toast). ⌘W / ⌘1–9 are consumed silently. App's launcher items reach the focused workspace through the per-workspace `notice` channel (now with a `kind`).
+  - **Backend refusal:** `src-tauri/src/workspace_surfaces` → `refuse_remote(root)` as the FIRST statement of 26 local-only commands, returning exactly "Not available on a remote workspace." (`REMOTE_REFUSAL`; errors cross IPC as `String`, so there is no per-module enum variant). `wip_read` / `transcript_tail` have no error channel and return empty. Pinned by `tests/remote_refusal_is_first.rs` (`syn`, first statement + a two-way set pin; `workspace_watch_stop` exempt).
+  - **`workspaceSurfacesGuard`** (`src/state/__tests__/`): a re-scanned FLOOR (every production file whose code names a refused command or mounts/launches an OUT surface is listed in `SITES` with its gate reason; the command list mirrors Rust `REFUSED`) + 24 gate pins (nearest `surfaces.<flag>` before the token). ⚠️ The pins check proximity, not containment; the DOM tests (`remoteRightPanelLive`, `remoteWorkspaceHeaderLive`, `remoteMenuLaunchers`, `remoteWatcherSkip`) are the containment instrument. All 30 gate sites mutation-proven.
+  - `offInvariantGuard` (6 arms / 10 subjects) and `workflowApplicableGuard` passed **unedited**; a local workspace renders byte-identical to HEAD (gate OFF + ON).
 
 ## H. Adding a remote project
 

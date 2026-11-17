@@ -38,7 +38,7 @@
 - [Handoff detail vs conclusion](handoff-detail-can-be-wrong-while-its-conclusion-is-right.md) — Check shipped-state claims against `git tag` / `git log`.
 - [Grep-addressed docs](grep-addressed-doc-loses-value-to-prose-rewrite.md) — Move near-verbatim, diff the token set (a rewrite dropped 259 identifiers).
 - [Prove formatter sweep](prove-mechanical-transform-by-rerunning-it.md) — Re-run it on the pre-change input and diff.
-- [Prove render unchanged](prove-render-unchanged-via-head-worktree.md) — `renderToStaticMarkup` at a HEAD worktree vs working tree.
+- [Prove render unchanged](prove-render-unchanged-via-head-worktree.md) — `renderToStaticMarkup` at a HEAD worktree vs working tree; wait on lazy panels, run HEAD twice.
 - [Prove old guard hole](prove-guard-hole-via-head-test-copy.md) — Run HEAD's test as a throwaway `zz*.test.ts` beside the real one.
 - [Comments-only diff](prove-comments-only-diff-via-parser-tokens.md) — Compare parser leaf tokens (filter JSDoc), with a positive control.
 - [Execution evidence](observable-outcomes-execution-evidence.md) — Needs typing-side AND execution-side evidence; a marker in output is too weak.
@@ -55,6 +55,7 @@
 - [HEAD control vs moved exports](positive-control-from-head-can-break-on-moved-exports.md) — Blanks the app; revert only the behavior.
 - [Background focus sets no :focus-within](background-webview-focus-sets-no-focus-within.md) — Hover/focus-revealed controls stay hidden to the bridge; reveal inline to capture; `el.click()` still works.
 - [No real keystrokes](agent-cannot-send-real-keystrokes-to-dev-app.md) — Synthetic keydowns skip native defaults; ⌘R-type checks go to the operator.
+- [Drive the native menu](drive-native-menu-via-event-emit.md) — Emit `menu` via `plugin:event|emit` from the webview; it reaches App's real listener.
 - [Read DOM a frame later](react-state-read-needs-a-deferred-frame.md) — Else you see the PREVIOUS render (a false FAIL).
 - [xterm DOM fakes blank](xterm-dom-reads-fake-a-blank-pane.md) — `.xterm-rows` reads empty; `innerText` returns a stylesheet.
 - [read_logs console empty](read-logs-console-captures-nothing.md) — Captures nothing for this app; empty is a false green.
@@ -70,7 +71,7 @@
 - [notarytool when locked](notarytool-credential-unreadable-while-screen-locked.md) — "No Keychain password item" while locked; unlock, don't re-store.
 - [Trash via Finder](verify-trash-via-finder-not-ls.md) — `~/.Trash` is TCC-blocked; read-only Finder osascript query.
 - [Mini account](mini-remote-user-is-stayman.md) — Which account to use (never root-ops), token location, `zsh -l` PATH. Gitignored: names real accounts.
-- [Remote verify hygiene](remote-verify-hygiene.md) — Real commands only in a scratch remote folder; check open remote workspaces before stopping the app; rebuilds are hard stops.
+- [Remote verify hygiene](remote-verify-hygiene.md) — Real commands only in a scratch remote folder; check open remote workspaces before stopping the app; rebuilds and App.tsx edits are hard stops.
 - [Trust dialog exits](cc-trust-dialog-defaults-to-exit.md) — Defaults to "No, exit"; read the pane, answer ↓ then \r.
 - [Drive the real hook](drive-status-channel-with-real-hook-script.md) — Pipe a payload into the working-tree hook script at the dev socket.
 - [WKWebView perf](wp4-macos-perf-measurement.md) — How to measure CPU, RAM and frame time on macOS.
