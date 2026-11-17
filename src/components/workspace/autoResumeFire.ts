@@ -51,6 +51,8 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { encodeBase64 } from "../../cc/bridge";
+import { REMOTE_KEY_PREFIX } from "../../cc/spawnArgs";
+import { shortHost } from "../picker/remoteRow";
 import {
   INJECT_SETTLE_MS,
   requiresInjection,
@@ -138,6 +140,27 @@ export interface FireRun {
   isCancelled: () => boolean;
   readTrust?: (projectPath: string, ptySessionId: string) => Promise<boolean>;
   inject?: (sessionId: string, command: string) => Promise<void>;
+  /**
+   * M17 WP5 (operator ruling at P2.verify-human.3) — told when a REMOTE folder's trust withholds
+   * the command, with the plain-words notice ({@link withheldNotice}). A local row needs none: its
+   * picker label already said the command waits for trust (paydown-2026-11-08 WP5).
+   */
+  onWithheld?: (notice: string) => void;
+}
+
+/**
+ * M17 WP5 — what a REMOTE workspace says when an untrusted folder withheld `command`, or `null`
+ * for a local project (its picker row warned before the click). A remote row's label comes from
+ * Claudesk's LOCAL record, so nothing warned it, and a silent non-fire would read as "nothing to
+ * resume" (prior `a-silent-non-action-must-not-read-as-done`).
+ */
+export function withheldNotice(
+  projectPath: string,
+  command: string,
+): string | null {
+  if (!projectPath.startsWith(REMOTE_KEY_PREFIX)) return null;
+  const authority = projectPath.slice(REMOTE_KEY_PREFIX.length).split("/")[0];
+  return `Claude Code hasn't trusted this folder on ${shortHost(authority)} yet, so ${command} was not typed. Trust the folder, then type ${command}.`;
 }
 
 /**
@@ -162,6 +185,10 @@ export async function fireAutoResume(run: FireRun): Promise<boolean> {
       console.warn(
         `auto-resume: ${injectionCommand(run.action) ?? "command"} withheld for ${run.projectPath} — Claude Code has not trusted this folder yet`,
       );
+      const command = injectionCommand(run.action);
+      const notice =
+        command === null ? null : withheldNotice(run.projectPath, command);
+      if (notice !== null) run.onWithheld?.(notice);
     }
     return false;
   }

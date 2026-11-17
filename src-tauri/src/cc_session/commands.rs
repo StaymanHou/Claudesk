@@ -130,18 +130,31 @@ pub async fn cc_spawn_remote(
         }
         // The hold is counted under the same lock that found or started the link (WP4 AC-0).
         let (link, hold) = links.ensure_and_hold(&target)?;
-        // M17 WP4 (AC-3.3): a stored path that reaches the folder through a symlink. CC reports
-        // the PHYSICAL cwd, so the registry matches the row's real path too. Best-effort: no
-        // answer leaves the stored path alone.
-        let real = links
-            .exec(
-                &target,
-                &crate::remote_cmd::realpath_command(target.path()),
-                crate::remote_link::EXEC_TIMEOUT_MS,
-            )
-            .ok()
-            .and_then(|out| crate::remote_cmd::parse_realpath_alias(&out, target.path()));
-        if let Some(real) = &real {
+        // M17 WP5 (AC-8.2): ONE exec over the link, before the session registry lock, answers
+        // everything the spawn needs from the remote (`remote_cmd::spawn_facts_command`):
+        // - the PHYSICAL path (M17 WP4, AC-3.3): CC reports the physical cwd, so the status
+        //   registry matches the row's real path too. No answer leaves the stored path alone;
+        // - whether the remote holds a transcript to `--continue` (M17 WP4, pulled from WP5 5.2),
+        //   for the physical path's slug. A failed exec reads as "no": a fresh session is safe;
+        // - on a reconnect, the mode the live session was spawned under (the tmux option the
+        //   start stored), registered as its running mode (A9).
+        let attach = intent == Some(OpenIntent::Reconnect);
+        let facts = crate::remote_cmd::parse_spawn_facts(
+            &links
+                .exec(
+                    &target,
+                    &crate::remote_cmd::spawn_facts_command(
+                        crate::remote_cmd::tmux_server(links.identifier()),
+                        &session,
+                        target.path(),
+                        attach,
+                    ),
+                    crate::remote_link::EXEC_TIMEOUT_MS,
+                )
+                .unwrap_or_default(),
+            target.path(),
+        );
+        if let Some(real) = &facts.real_alias {
             if let Ok(mut reg) = app
                 .state::<crate::status_broadcaster::SharedRegistry>()
                 .lock()
@@ -149,19 +162,8 @@ pub async fn cc_spawn_remote(
                 reg.set_remote_realpath(&project_path, real.clone());
             }
         }
-        // M17 WP4 (pulled from WP5 5.2, operator decision): does the remote hold a transcript to
-        // `--continue`? Asked HERE, before the session registry lock, because it is an ssh exec.
-        // CC slugs the PHYSICAL cwd. A failed exec reads as "no": a fresh session is the safe side.
-        let physical = real.as_deref().unwrap_or(target.path());
-        let has_transcript = links
-            .exec(
-                &target,
-                &crate::remote_cmd::has_transcript_command(&crate::transcript::slug_of_physical(
-                    physical,
-                )),
-                crate::remote_link::EXEC_TIMEOUT_MS,
-            )
-            .is_ok_and(|out| crate::remote_cmd::parse_has_transcript(&out));
+        let has_transcript = facts.has_transcript;
+        let running_mode = if attach { facts.mode } else { None };
         let local_cwd = app
             .path()
             .home_dir()
@@ -181,9 +183,12 @@ pub async fn cc_spawn_remote(
                 target,
                 link,
                 hold,
+                project_path: project_path.clone(),
                 session,
                 local_cwd,
                 has_transcript,
+                attach,
+                running_mode,
             })),
         )
         .map_err(|e| e.to_string())
@@ -423,6 +428,39 @@ pub fn cc_kill(
     // Best-effort + gated (zero-IO when tracking is OFF); a telemetry miss must not affect
     // the kill. ⚠️ Recorded on the REMOVAL, not the reap — the session is gone from the
     // registry either way, and this must not wait on the worker.
+    crate::time_store::commands::record_workspace_close(&app, &session_id);
+    Ok(())
+}
+
+/// M17 WP5 (AC-4) — Detach a REMOTE workspace's session: leave its CC running on the host and let
+/// go of it (no `/exit`, no remote end, no record write: `RemoteCcSession::detach`). The session
+/// is taken out of the registry first (only if it can detach; a local one stays and the call
+/// fails), so the pane's unmount `cc_kill` finds nothing to kill. The hang-up runs on a worker,
+/// like `cc_kill`'s teardown: it signals and waits for the local `ssh` client to be reaped.
+///
+/// Sync on purpose, like `cc_kill`: a short lock hold, then a detached worker
+/// (`tests/sync_commands_do_not_block.rs`).
+#[tauri::command]
+pub fn cc_detach(
+    app: AppHandle,
+    registry: State<'_, Registry>,
+    session_id: String,
+) -> Result<(), String> {
+    let session = {
+        let mut reg = registry
+            .lock()
+            .map_err(|_| "session registry lock poisoned".to_string())?;
+        reg.take_detachable(&session_id)
+            .map_err(|e| e.to_string())?
+    };
+    let detach_id = session_id.clone();
+    std::thread::spawn(move || {
+        if let Err(e) = session.detach() {
+            eprintln!("[cc_detach] hang-up failed for {detach_id}: {e}");
+        }
+    });
+    // The workspace closes in Claudesk, so its time-analytics session ends here too (gated,
+    // best-effort), as a close's does; the remote CC itself keeps running.
     crate::time_store::commands::record_workspace_close(&app, &session_id);
     Ok(())
 }

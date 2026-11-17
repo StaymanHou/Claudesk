@@ -65,13 +65,28 @@ pub fn is_trusted(claude_json: &str, project_path: &Path) -> bool {
     let physical = project_path
         .canonicalize()
         .unwrap_or_else(|_| project_path.to_path_buf());
-    physical.ancestors().any(|dir| {
-        dir.to_str()
-            .and_then(|key| projects.get(key))
-            .and_then(|entry| entry.get("hasTrustDialogAccepted"))
-            .and_then(serde_json::Value::as_bool)
-            == Some(true)
-    })
+    let trusted: Vec<&str> = projects
+        .iter()
+        .filter(|(_, entry)| {
+            entry
+                .get("hasTrustDialogAccepted")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true)
+        })
+        .map(|(key, _)| key.as_str())
+        .collect();
+    trust_covers(&trusted, &physical)
+}
+
+/// THE trust walk (M17 WP5): `physical` is trusted when it, or any ancestor, is one of the
+/// `trusted` folders (keys whose `hasTrustDialogAccepted` is JSON `true`). Shared by the local read
+/// ([`is_trusted`]) and the remote one, whose trusted keys come over the link
+/// (`remote_cmd::open_check_command`) and whose `physical` path is the REMOTE `pwd -P`, never
+/// canonicalized locally.
+pub fn trust_covers(trusted: &[&str], physical: &Path) -> bool {
+    physical
+        .ancestors()
+        .any(|dir| dir.to_str().is_some_and(|key| trusted.contains(&key)))
 }
 
 /// Read the trust record from disk. Any read error is `false` (D4).
@@ -82,6 +97,23 @@ pub fn is_trusted_on_disk(claude_json: &Path, project_path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trust_covers_the_folder_and_its_descendants_only() {
+        let trusted = ["/u/a", "/v"];
+        assert!(trust_covers(&trusted, Path::new("/u/a")));
+        assert!(trust_covers(&trusted, Path::new("/u/a/b/c")));
+        assert!(trust_covers(&trusted, Path::new("/v/x")));
+        assert!(
+            !trust_covers(&trusted, Path::new("/u")),
+            "an ancestor of a trusted folder"
+        );
+        assert!(
+            !trust_covers(&trusted, Path::new("/u/ab")),
+            "a sibling sharing a prefix"
+        );
+        assert!(!trust_covers(&[], Path::new("/u/a")));
+    }
 
     /// A `.claude.json` with the given `(path, value)` trust entries, values as raw JSON.
     fn json(entries: &[(&str, &str)]) -> String {

@@ -164,6 +164,17 @@ only if the build disproves one.
 - [ ] 8.4 Resilience: a network drop (Tailscale off/on) reconnects to the same session. Close and quit end it (R-1), and Detach / Reconnect works (R-3).
 - [ ] 8.5 No system extension on the main box. Nothing left running on the mini beyond CC, tmux and the master link. Dev and prod against the same mini don't cross.
 
+### WP9: No raw local-fs errors on a remote workspace
+**Milestone:** M17
+**Dependencies:** WP2 (it reads `Project.remote`); independent of WP3–WP8 and can run any time
+**Size:** S, **~0.5 day**
+**Added:** 2026-11-17, operator ruling at WP5 P2.verify-human.4 ("add it to the wbs plan as a new wp").
+**Description:** Found live at WP5 Phase 2: on a remote workspace the right panel's **Docs** tab reads the row's `ssh://` key as a LOCAL path and shows a raw error ("Could not read this project's docs: file I/O error: root \"ssh://…\": No such file or directory (os error 2)"). Any surface that reaches the local filesystem with a remote key fails the same way. ⚠️ **Overlap, stated:** WP7.3 makes Docs READ the remote (so this symptom ends there), and WP6 removes the OUT surfaces; this WP covers what neither does: no remote row ever shows a raw local-fs error, before or after they land. Fold into WP7 at the next `/product-wbs` if preferred.
+**Tasks:**
+- [ ] 9.1 Every right-panel surface that reads the local filesystem recognises a remote key (`isRemoteRow` / `config_store::split_remote_key`) BEFORE any fs call, and shows a plain note ("Not available on a remote workspace yet" for an IN row pending WP7; nothing for an OUT row once WP6 hides it), never an `os error`.
+- [ ] 9.2 Backend: a local-fs command handed an `ssh://` key returns a typed, plain-words refusal (shared with WP6.2's), never an io error string.
+- [ ] 9.3 A test per surface that mounts it with a remote key and asserts no error text containing `os error` / `No such file` (render the DOM question, per the source-guard lesson).
+
 ## Dependency map
 
 ```
@@ -171,6 +182,7 @@ WP1 (probe) ──┐
               ├─► WP3 (link + terminal) ─► WP4 (status) ─► WP5 (lifecycle) ─► WP7 (reads) ─► WP8 (acceptance)
 WP2 (rows) ───┤
               └─► WP6 (OUT absent) ───────────────────────────────────────────────────────────┘
+WP2 ─► WP9 (no raw local-fs errors on remote; any time) ─────────────────────────────────────┘
 ```
 
 - **Critical path:** WP1/WP2 → WP3 → WP4 → WP5 → WP7 → WP8.
@@ -188,6 +200,7 @@ WP2 (rows) ───┤
 | WP6 OUT absent | M | 1.5 |
 | WP7 reads | M | 2.5 |
 | WP8 acceptance | S | 1 + a release |
+| WP9 no raw local-fs errors (added 2026-11-17) | S | 0.5 |
 | **Total** | | **~16 working days nominal; range 12.5–21** (agent's re-estimate after WP1, 2026-11-14) |
 
 - **Velocity reference:** M16.5 shipped 9 WPs in 19 calendar days.

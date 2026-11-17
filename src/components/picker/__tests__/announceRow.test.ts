@@ -5,6 +5,7 @@ import {
   actionForIntent,
   rowAffordances,
   type OpenIntent,
+  remoteSessionLabel,
 } from "../announceRow";
 import {
   cellsAreFlatSiblings,
@@ -80,6 +81,7 @@ describe("rowAffordances — an untrusted folder (paydown-2026-11-08 WP5)", () =
       showNoFireDoor: false,
       action: { kind: "inject", command: "/session-restore" },
       manual: true,
+      title: null,
     });
   });
 
@@ -95,6 +97,7 @@ describe("rowAffordances — an untrusted folder (paydown-2026-11-08 WP5)", () =
       showNoFireDoor: false,
       action: null,
       manual: false,
+      title: null,
     });
   });
 });
@@ -526,5 +529,42 @@ describe("the component's structure (source guards — STRUCTURE only, never run
     const args = call![1];
     expect(args).toContain("null"); // inject arm
     expect(args).toContain("no-fire"); // argv arm
+  });
+});
+
+describe("rowAffordances — a remote row's session label (M17 WP5)", () => {
+  it("a session left running reads reconnect, with no action and no ⊘ door, gate on or off", () => {
+    for (const gate of [true, false]) {
+      const r = rowAffordances(P, { [P]: "reconnect" }, gate);
+      expect(r.announcement).toBe("reconnect");
+      expect(r.action).toBeNull();
+      expect(r.showNoFireDoor).toBe(false);
+      expect(r.title).toContain("reconnects to that session");
+    }
+  });
+
+  it("says when the running session keeps a mode other than the row's stored one", () => {
+    const r = rowAffordances(P, { [P]: "reconnect@fsd" }, true);
+    expect(r.announcement).toBe("reconnect (still fsd)");
+    expect(r.title).toContain("keeps fsd");
+  });
+
+  it("a session closed while offline says the open will ask", () => {
+    const r = rowAffordances(P, { [P]: "ask-offline" }, false);
+    expect(r.announcement).toBe("closed offline");
+    expect(r.action).toBeNull();
+    expect(r.title).toContain("will ask whether to end it or reconnect");
+  });
+
+  it("is not a remote label for the auto-resume values", () => {
+    for (const v of [
+      "continue",
+      "restore",
+      "restore-manual",
+      undefined,
+    ] as const) {
+      expect(remoteSessionLabel(v)).toBeNull();
+    }
+    expect(rowAffordances(P, { [P]: "continue" }, true).title).toBeNull();
   });
 });

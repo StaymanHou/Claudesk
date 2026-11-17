@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
@@ -7,6 +7,7 @@ import {
   injectionCommand,
   shouldInject,
   slashCommandPayload,
+  withheldNotice,
 } from "../autoResumeFire";
 import type { AutoResumeAction } from "../../../state/predictAction";
 
@@ -298,5 +299,78 @@ describe("the wiring in XtermPane (source guard — STRUCTURE, not runtime)", ()
     expect(fireBlock).not.toContain('type:"spawn-failed"');
     // Non-vacuity: the window must actually contain the fire, or "no dispatch" is trivial.
     expect(fireBlock).toContain("fireAutoResume(");
+  });
+});
+
+// M17 WP5 (operator ruling, P2.verify-human.3) — the withheld notice for a REMOTE folder.
+describe("withheldNotice + fireAutoResume's onWithheld", () => {
+  it("names the short host and the command for a remote key; null for a local path", () => {
+    expect(
+      withheldNotice(
+        "ssh://me@mini-host.tail0000.ts.net/Users/me/p",
+        "/session-restore",
+      ),
+    ).toBe(
+      "Claude Code hasn't trusted this folder on mini-host yet, so /session-restore was not typed. Trust the folder, then type /session-restore.",
+    );
+    expect(withheldNotice("/Users/me/p", "/session-restore")).toBeNull();
+  });
+
+  const fire = (
+    projectPath: string,
+    trusted: boolean,
+    action: AutoResumeAction = INJECT,
+  ) => {
+    const notices: string[] = [];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    return fireAutoResume({
+      action,
+      sessionId: "pty-7",
+      projectPath,
+      isCancelled: () => false,
+      readTrust: async () => trusted,
+      inject: async () => {},
+      onWithheld: (n) => notices.push(n),
+    }).then((typed) => {
+      warn.mockRestore();
+      return { typed, notices };
+    });
+  };
+  const REMOTE = "ssh://me@mini-host/Users/me/p";
+
+  it("an untrusted remote folder: nothing typed, one notice", async () => {
+    const r = await fire(REMOTE, false);
+    expect(r.typed).toBe(false);
+    expect(r.notices).toHaveLength(1);
+    expect(r.notices[0]).toContain("on mini-host yet");
+  });
+
+  it("no notice for a run cancelled during the trust read (the pane is gone)", async () => {
+    const notices: string[] = [];
+    let cancelled = false;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const typed = await fireAutoResume({
+      action: INJECT,
+      sessionId: "pty-7",
+      projectPath: REMOTE,
+      isCancelled: () => cancelled,
+      readTrust: async () => {
+        cancelled = true;
+        return false;
+      },
+      inject: async () => {},
+      onWithheld: (n) => notices.push(n),
+    });
+    warn.mockRestore();
+    expect(typed).toBe(false);
+    expect(notices).toEqual([]);
+    // Positive control: the same run, not cancelled, does give the notice.
+    expect((await fire(REMOTE, false)).notices).toHaveLength(1);
+  });
+
+  it("no notice when trusted, when local, or for the argv arm", async () => {
+    expect((await fire(REMOTE, true)).notices).toEqual([]);
+    expect((await fire("/u/proj", false)).notices).toEqual([]);
+    expect((await fire(REMOTE, false, ARGV)).notices).toEqual([]);
   });
 });

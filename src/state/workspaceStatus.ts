@@ -36,19 +36,18 @@ export type WireAttention = "verify_human";
  * M17 WP4 (AC-6) — a REMOTE workspace's terminal is not attached, so its dot cannot be trusted.
  * The TS mirror of Rust's `status_broadcaster::LinkOverlay`. A **display field** like `attention`:
  * surfaces show the last hue dimmed with a broken-link glyph, and nothing a guard reads changes.
- * `detached` is reserved for WP5's Detach (no WP4 path sets it).
+ * ⚠️ `reconnecting` is the only status: WP4's reserved `detached` was removed at M17 WP5 (a
+ * Detach closes the tile; there is no detached tile to mark).
  */
 export interface WireLinkOverlay {
-  status: "reconnecting" | "detached";
+  status: "reconnecting";
   /** The host as a person would say it (`mini`), for the tooltip. */
   host: string;
 }
 
 /** The tooltip for a link overlay, in plain words (AC-6.2). */
 export function linkOverlayTitle(link: WireLinkOverlay): string {
-  return link.status === "detached"
-    ? `Detached from ${link.host}`
-    : `Not connected to ${link.host}: reconnecting`;
+  return `Not connected to ${link.host}: reconnecting`;
 }
 
 /**

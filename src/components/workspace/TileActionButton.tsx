@@ -65,6 +65,11 @@ interface TileActionsProps {
    * The × and the ⏸ are now a coherent universal pair: × clears the flag, ⏸ declines to.
    */
   onPauseClose: () => void;
+  /**
+   * M17 WP5 (AC-4) — Detach: close the tile and LEAVE the remote Claude Code session running.
+   * Passed only for a REMOTE workspace; absent → no control (AC-4.4: local tiles have none).
+   */
+  onDetach?: () => void;
   /** Site-specific class for the cluster (`filmstrip-pill-actions` / `-tile-actions`). */
   className: string;
 }
@@ -76,7 +81,7 @@ function ActionControl({
   label,
   onActivate,
 }: {
-  kind: "close" | "pause";
+  kind: "close" | "pause" | "detach";
   testId: string;
   label: string;
   onActivate: () => void;
@@ -104,6 +109,9 @@ function ActionControl({
     >
       {kind === "close" ? (
         "×"
+      ) : kind === "detach" ? (
+        // A text-presentation arrow (no emoji variant): "leave it running and step out".
+        <span aria-hidden="true">⇥</span>
       ) : (
         // Two bars rather than the literal "⏸" codepoint: the emoji-presentation glyph
         // renders inconsistently across fonts and can pick up a colour-emoji fallback,
@@ -130,6 +138,7 @@ export function TileActions({
   displayName,
   onClose,
   onPauseClose,
+  onDetach,
   className,
 }: TileActionsProps) {
   return (
@@ -156,6 +165,14 @@ export function TileActions({
         label={`Close ${displayName}, resume later`}
         onActivate={onPauseClose}
       />
+      {onDetach !== undefined && (
+        <ActionControl
+          kind="detach"
+          testId={`${testIdPrefix}-detach-${workspaceId}`}
+          label={`Detach ${displayName}: close it here and leave its Claude Code session running`}
+          onActivate={onDetach}
+        />
+      )}
     </span>
   );
 }

@@ -43,17 +43,10 @@ describe("the reconnecting strip", () => {
     expect(uncaught).toEqual([]);
   });
 
-  it("is absent when attached, and for a detached (not reconnecting) pane", async () => {
-    let el = await mountWorkspace({
+  it("is absent when attached", async () => {
+    const el = await mountWorkspace({
       gate: false,
       projectPath: "ssh://me@mini-host/Users/me/proj",
-    });
-    expect(stripOf(el)).toBeNull();
-    await unmountWorkspace();
-    el = await mountWorkspace({
-      gate: false,
-      projectPath: "ssh://me@mini-host/Users/me/proj",
-      statusLink: { status: "detached", host: "mini" },
     });
     expect(stripOf(el)).toBeNull();
   });

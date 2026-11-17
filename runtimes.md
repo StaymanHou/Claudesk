@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-11-16
+updated: 2026-11-17
 ---
 
 # Runtime Registry
@@ -31,7 +31,13 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 44s (2026-11-16, M17 WP4 Phase 4 verify-codify (full), EXIT=0; incremental cache, timeout kept at the cold-run value)
+- **Last:** 75s (2026-11-17, M17 WP5 Phase 4 verify-self/codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 68s (2026-11-17, M17 WP5 Phase 3 verify-self/codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 69s (2026-11-17, M17 WP5 Phase 3 build, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 46s (2026-11-17, M17 WP5 Phase 2 verify-codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 68s (2026-11-17, M17 WP5 Phase 2 build, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 57s (2026-11-16, M17 WP5 Phase 1 verify-auto, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 44s (2026-11-16, M17 WP4 Phase 4 verify-codify (full), EXIT=0; incremental cache, timeout kept at the cold-run value)
 - **Use timeout:** 263000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history

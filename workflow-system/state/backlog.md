@@ -686,3 +686,43 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** pending
 - **Pickup shape:** the alias/key/emit-race MINORs are one status-path cleanup; the rest fold into WP5's reconnect-seam work.
+
+## SURFACE-2026-11-17-REMOTE-CLAUDE-ONLY-ON-INTERACTIVE-PATH
+- **Source:** feature:build (M17 WP5 Phase 2)
+- **Target level:** product:arch
+- **Type:** gap
+- **Summary:** Claudesk runs every remote command under `zsh -lc` (a NON-interactive login shell), which reads `.zprofile` but not `.zshrc`. Claude Code's native installer puts `claude` in `~/.local/bin` and, on an account set up interactively, the PATH line often lives only in `.zshrc`. The preflight's `command -v claude` then fails (`fail:tools:claude`), and `cc-launch`'s `exec claude` would too.
+- **Context:** Hit 2026-11-17 when the mini's dev user moved to a fresh personal account: `zsh -lc 'command -v claude'` found nothing. Fixed on that host by one `~/.zprofile` line, but any new remote host can hit it.
+- **Suggested action:** In the deployed `cc-launch` and the preflight, fall back to `$HOME/.local/bin/claude` when `claude` is not on PATH (both constant fragments, no variable value), and make the preflight's failure message name the PATH/`.zprofile` cause in plain words.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-17-REMOTE-EXEC-COUNT-NEEDS-A-BEHAVIOURAL-HARNESS
+- **Source:** feature:verify-self (M17 WP5 Phase 2, AC-8.2)
+- **Target level:** product:arch
+- **Type:** tech-debt
+- **Summary:** "An open asks the remote host at most twice" (the open check's one exec, then the spawn's one exec) is pinned only by SOURCE guards (`remote_link::commands::assert_remote_reach_is_closed` + the downstream scan in `cc_session`'s `a_remote_close_ends_its_session_and_a_respawn_waits_for_it`). Five fresh verify-self rounds each found one new route for a second exec; all are closed by class now, with a stated residual (a retry around the one allowed exec; a brand-new ssh spawner under a new name, imported bare).
+- **Context:** The commands take an `AppHandle`, and `LinkRegistry::exec` spawns a real `/usr/bin/ssh` outside the `Transport` seam, so no fake can count execs behaviourally. Operator ruling 2026-11-17: accept the guards, log this.
+- **Suggested action:** Make the ssh binary path injectable for tests (or route `LinkRegistry::exec` through `Transport`), split `remote_open_check` / `cc_spawn_remote` into AppHandle-free worker functions, and replace the source guards' exec count with a test that drives an open and counts real ssh invocations.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-17-AUTO-RESUME-INJECT-ANSWERS-BYPASS-PERMISSIONS-DIALOG-NO-EXIT
+- **Source:** feature:verify-self (M17 WP5 Phase 2, live)
+- **Target level:** product:arch
+- **Type:** bug
+- **Summary:** On an account that has never accepted Claude Code's "Bypass Permissions mode" warning, a `--dangerously-skip-permissions` spawn (Claudesk's default) opens on that dialog, whose DEFAULT is "No, exit". An auto-fired `/session-restore` ends in `\r`, which confirms "No, exit": CC quits, the pane reads "Session ended", and no transcript is written.
+- **Context:** Hit live 2026-11-17 on a fresh remote account; reproduces outside Claudesk with `cc-launch --dangerously-skip-permissions` in a pty. Same class as the folder-trust dialog that the fire-time trust read already guards (paydown-2026-11-08 WP5, ruling R1), which the inject path does not cover for this dialog. Local accounts that ever accepted the warning never see it, which is why it went unnoticed. ⚠️ WP1's probe outcomes (M17 `wbs.md`, "First open on a fresh host") had already recorded this warning as "WP5 input"; WP5's spec did not pick it up.
+- **Suggested action:** Extend the fire-time read so the inject is withheld unless CC has also accepted bypass mode for the spawn's account/profile (live-captured 2026-11-17, CC 2.1.325: accepting writes `skipDangerousModePermissionPrompt: true` to the account's `~/.claude/settings.json`, so for a profile read its config dir's `settings.json`; nothing else in `~/.claude.json` changes), local and remote alike; and say so in the same withheld diagnostic.
+- **Priority:** high
+- **Status:** pending
+
+## SURFACE-2026-11-17-REMOTE-SETTLE-COULD-BE-READINESS-ONLY
+- **Source:** feature:build (M17 WP5 P2.4, AC-7)
+- **Target level:** product:arch
+- **Type:** tech-debt
+- **Summary:** A remote auto-resume waits `INJECT_SETTLE_MS` (1500 ms) after `cc_ready` AND for the pane's `#{bracket_paste_flag}`. Measured live (5 instrumented cold opens, 2026-11-17): the pane is ready 0.4–0.5 s after its tmux session exists, and the inject lands 1.1–1.3 s after readiness, so the settle alone costs ~1.2 s per remote resume.
+- **Context:** WP5 kept 1500 ms because no run fired on readiness alone; the local cliff (350 ms unreliable) is why the margin exists.
+- **Suggested action:** Probe ≥10 cold remote opens with the settle at 0 (readiness only) through `cc_inject`; if all land, drop the settle for remote panes only.
+- **Priority:** low
+- **Status:** pending

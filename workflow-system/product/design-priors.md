@@ -339,3 +339,18 @@ There is a second, sharper reason for the destructive half specifically: a user 
 **Why (⚠️ INFERRED; approved as proposed by the operator 2026-11-16, why not yet sharpened; directional + overridable):** The operator runs parallel sessions and does not re-check what they believe happened. A silent non-action is read as done, the operator moves on, and the miss surfaces much later (a workspace that never got its `/session-restore`, keys typed into nothing) at a far higher cost than the notice would have had (`claudesk-philosophy`: attention is the scarce resource).
 
 **Origin:** four operator calls across M17 WP3–WP4 (2026-11-16): a refused injection shows a toast (WP3 P4; it had been fully silent, a refused `/session-restore` even reported `ok: true`); the dim "reconnecting" notice line rather than a silent freeze (WP3 P5.verify-human.2, option A); the "keys are not sent" strip while the link is down (WP4 AC-7); the remote hook-install warning toast (WP4). Proposed at the WP4 close, approved 2026-11-16. ⚠️ **Known open instance:** since the 2026-11-16 quit-freeze task, a close with the link down ends nothing on the remote, and nothing says so. That is the "unclear → ask, once" case of [[explicit-action-keeps-its-meaning-passive-event-preserves-work]], owned by WP5's R-4 dialogs. Related: [[a-session-behaves-the-same-wherever-it-runs]] (its "stated where the operator meets it, never discovered" clause is this prior applied to a missing surface), [[needs-you-outranks-busy]].
+
+## a-display-prediction-may-be-stale-when-the-click-decides
+
+**Axis:** cost of a display surface vs. its freshness (what a label may read to predict an action)
+
+**Lean:** A label that **predicts** what a click will do may come from **cheap, possibly stale local state**, as long as the click **re-decides** from the real state and **says so** when the outcome differs from the label. Don't pay a connection, a network round trip or project-dir I/O just to draw a label.
+
+**Decision rule:** for a label that predicts an action, ask **"does the click re-derive the decision, rather than read the label back?"**
+- **Yes** → read the label from whatever is local and cheap (Claudesk's own stores, the last-known record). A stale label is a display miss; the click's toast names what actually happened.
+- **No** (the label IS the input to the action) → the label must be fresh, or the action must stop reading it. Fix the action first.
+- This prior covers **predictions** only. A state the operator acts on directly (a status dot, a confirmation's content) is not a prediction.
+
+**Why (⚠️ INFERRED; approved as proposed by the operator 2026-11-16, why not yet sharpened; directional + overridable):** labels are glanced at constantly, while the click is rare and already pays for the real check. Making every glance pay that check (a picker that opens an ssh link to label one row) costs attention and resources on every open for a slightly fresher guess (`claudesk-philosophy`). The M12 auto-resume announcement set the precedent: *"the announcement is a prediction, never the input to the action"*.
+
+**Origin:** M17 WP5 spec, 2026-11-16. Asked when a remote picker row should say "Reconnect" vs. "resume" (knowing needs a connection), the operator ruled: *"Just assume it by a locally stored state from last time it was disconnected knowing that the state might be outdated."* Related: [[a-silent-non-action-must-not-read-as-done]] (the click's toast when the label was stale is that prior applied), [[chooser-leads-with-what-you-can-act-on]].

@@ -389,7 +389,7 @@ remote. Code, UI copy and tests use these two words for these two cases only.
   reopening falls to `--continue`.
 - **Status while the terminal isn't attached is a display overlay, not a fifth state** (as built at M17 WP4).
   This is the same pattern as `attention`, but a separate field: `WorkspaceStatusUpdate::link`
-  (`LinkOverlay { status: reconnecting | detached, host }`, `detached` reserved for WP5's Detach).
+  (`LinkOverlay { status: reconnecting, host }`; WP4's reserved `detached` was removed at WP5: a Detach closes the tile, so there is no detached tile to mark).
   - **When it is set:** while a remote session's terminal is NOT ATTACHED, i.e. its link is `Lost` OR a
     re-attach is pending over an Up link.
   - **Producer:** the session's own edges, reported through an injected `LinkEdgeSink`

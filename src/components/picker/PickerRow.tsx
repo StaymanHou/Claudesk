@@ -147,9 +147,10 @@ export function PickerRow({
                         data-testid="picker-recent-announce"
                         data-manual={manual ? "true" : undefined}
                         title={
-                          manual
+                          affordances.title ??
+                          (manual
                             ? `Claude Code will first ask whether to trust this folder, so Claudesk will not type ${announcement}. Trust the folder, then run it yourself.`
-                            : `Opening this project will run ${announcement}`
+                            : `Opening this project will run ${announcement}`)
                         }
                       >
                         {/* paydown-2026-11-08 WP5: an untrusted folder's badge carries NO glyph

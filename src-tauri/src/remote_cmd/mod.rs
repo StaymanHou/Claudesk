@@ -219,9 +219,26 @@ pub fn tmux_session(remote_key: &str) -> String {
     format!("cd-{}", hash8(remote_key))
 }
 
-/// The remote command that starts (or attaches to) a workspace's CC session (arch §C; WP3
-/// option (b)): `exec tmux -L <server> -f <conf> new -A -s <session> -c <path> <inner>`, run by
-/// [`login_shell`] because `tmux` is not on the host's non-login PATH.
+/// Exit code of a START whose tmux session already exists (M17 WP5, AC-3.5): the start refuses
+/// rather than attaching. Distinct from tmux's own 1, so the terminal's end is classified
+/// `SessionExists`, never "CC exited".
+pub const EXIT_SESSION_EXISTS: u32 = 3;
+/// Exit code of an ATTACH whose tmux session does not exist (M17 WP5): the session has ended.
+pub const EXIT_NO_SESSION: u32 = 4;
+/// The tmux user option holding the drive mode a session was SPAWNED under (M17 WP5, A9), read back
+/// by the open check so a reconnect registers the mode the session really runs under.
+pub const MODE_OPTION: &str = "@cd_mode";
+/// [`MODE_OPTION`]'s value for a session spawned with no drive mode. An UNSET option (a session
+/// started before WP5) is different: its mode is unknown.
+pub const NO_MODE: &str = "none";
+
+/// The remote command that STARTS a workspace's CC session (arch §C; WP3 option (b)), run by
+/// [`login_shell`] because `tmux` is not on the host's non-login PATH:
+///
+/// ```text
+/// tmux -L <server> has-session -t =<session> 2>/dev/null && exit 3
+/// exec tmux -L <server> -f <conf> new -s <session> -c <path> <inner> \; set-option -q @cd_mode <mode>
+/// ```
 ///
 /// `<inner>` is the command tmux hands to its default shell: `exec env
 /// [CLAUDESK_DRIVE_MODE=<mode>] <launcher> <cc_args…>`. The deployed launcher does the token
@@ -229,8 +246,11 @@ pub fn tmux_session(remote_key: &str) -> String {
 /// each shell it crosses (inner shell, then the `zsh -lc` script, then the login shell), and the
 /// paths are absolute (from the link's `$HOME`), with no `~`.
 ///
-/// `new -A` attaches when the session is live (its inner command is then ignored): the
-/// reconnect (R-2). When CC exits, its session ends, so the next open starts fresh.
+/// ⚠️ M17 WP5: a start NEVER attaches (no `new -A`). Whether to attach is the open check's
+/// decision (a live session Claudesk left running is reconnected with [`tmux_attach_command`]); a
+/// session that appeared between that check and this start exits [`EXIT_SESSION_EXISTS`] instead
+/// of being joined silently. tmux's own `duplicate session` refusal (a race inside the window
+/// between the two tmux calls) exits 1, which reads as ended: the next open asks.
 pub fn tmux_new_command(
     server: &str,
     conf: &str,
@@ -251,27 +271,32 @@ pub fn tmux_new_command(
         inner.push_str(&quote(a));
     }
     login_shell(&format!(
-        "exec tmux -L {} -f {} new -A -s {} -c {} {}",
-        quote(server),
+        "tmux -L {srv} has-session -t {exact} 2>/dev/null && exit {EXIT_SESSION_EXISTS}\n\
+exec tmux -L {srv} -f {} new -s {} -c {} {} \\; set-option -q {} {}",
         quote(conf),
         quote(session),
         quote(path),
         quote(&inner),
+        quote(MODE_OPTION),
+        quote(drive_mode.unwrap_or(NO_MODE)),
+        srv = quote(server),
+        exact = quote(&format!("={session}")),
     ))
 }
 
-/// The remote command a RECONNECT runs (M17 WP3 Phase 5; arch §E): re-attach to the workspace's
-/// EXISTING tmux session after the link came back.
+/// The remote command that ATTACHES to a workspace's live tmux session: a reconnect after the link
+/// came back (M17 WP3 Phase 5) or a reconnect on open (M17 WP5).
 ///
 /// ⚠️ `attach`, never `new -A`: a session that died while the link was down must NOT be silently
-/// restarted with a fresh CC (WP5 owns what happens then). tmux refuses a missing session ("can't
-/// find session", exit 1), which the caller classifies as the session having ended. The `=` makes
-/// the match exact, so `cd-1234abcd` never attaches to `cd-1234abcd-x`.
+/// restarted with a fresh CC. A missing session exits [`EXIT_NO_SESSION`] (checked first, so the
+/// end is classified without reading tmux's output). The `=` makes the match exact, so
+/// `cd-1234abcd` never attaches to `cd-1234abcd-x`.
 pub fn tmux_attach_command(server: &str, session: &str) -> String {
     login_shell(&format!(
-        "exec tmux -L {} attach -t {}",
-        quote(server),
-        quote(&format!("={session}")),
+        "tmux -L {srv} has-session -t {exact} 2>/dev/null || exit {EXIT_NO_SESSION}\n\
+exec tmux -L {srv} attach -t {exact}",
+        srv = quote(server),
+        exact = quote(&format!("={session}")),
     ))
 }
 
@@ -353,60 +378,214 @@ pub fn parse_ready(out: &str) -> Option<bool> {
         .map(|v| v == "1")
 }
 
-/// The line [`realpath_command`] prints its answer on, so rc-file noise is never read as a path.
-pub const REALPATH_SENTINEL: &str = "CLAUDESK-REALPATH:";
+/// Prefix of every line [`spawn_facts_command`] prints, so rc-file noise is never read as an answer.
+pub const SPAWN_SENTINEL: &str = "CLAUDESK-SPAWN:";
 
-/// The remote command that prints the PHYSICAL path of `path` (`cd -P` + `pwd -P`) after
-/// [`REALPATH_SENTINEL`], or the sentinel alone when it cannot (M17 WP4, AC-3.3). Always exits 0.
-pub fn realpath_command(path: &str) -> String {
-    format!(
-        "printf '%s%s\\n' '{REALPATH_SENTINEL}' \"$(cd -P -- {} 2>/dev/null && pwd -P)\"",
-        quote(path)
-    )
-}
-
-/// The alias to register for a remote row whose stored path is `stored`, from
-/// [`realpath_command`]'s output: the physical path when it is a normalized absolute path that
-/// DIFFERS from `stored`, else `None` (no symlink, or no usable answer: the stored path is used).
-pub fn parse_realpath_alias(out: &str, stored: &str) -> Option<String> {
-    let real = out
-        .lines()
-        .rev()
-        .find_map(|l| l.trim_end_matches('\r').strip_prefix(REALPATH_SENTINEL))?;
-    (is_normalized_remote_path(real) && real != stored).then(|| real.to_string())
-}
-
-/// The line [`has_transcript_command`] prints its answer on (`yes` / `no`).
-pub const TRANSCRIPT_SENTINEL: &str = "CLAUDESK-TRANSCRIPT:";
-
-/// The remote command that says whether the default config root on the remote holds a transcript
-/// for the project whose slug is `slug` (M17 WP4, pulled from WP5 5.2; operator decision
-/// P3.build): `--continue` with nothing to continue makes CC EXIT, so a remote resume arm is kept
-/// only when this says `yes`. `find`, not a glob, so the answer never depends on the remote
-/// login shell's glob options (a glob inside the `if` measured the same in sh and zsh, so this
-/// is robustness, not a fix).
-pub fn has_transcript_command(slug: &str) -> String {
-    format!(
-        "d=\"$HOME/.claude/projects/\"{}; \
+/// M17 WP5 (AC-8.2) — the remote spawn's ONE exec, replacing WP4's two sequential ones (realpath,
+/// then transcript) and WP5 Phase 1's third (the reconnect's mode read). It prints:
+///
+/// - `real:<p>` — the PHYSICAL path of `path` (`cd -P` + `pwd -P`), empty when it does not
+///   resolve (M17 WP4, AC-3.3: CC reports the physical cwd, so the status registry needs it);
+/// - `transcript:yes|no` — whether the remote default config root holds a transcript for the
+///   project (M17 WP4, pulled from WP5 5.2): `--continue` with nothing to continue makes CC EXIT.
+///   The slug is computed REMOTELY from the physical path (the stored one when it does not
+///   resolve) by `sed 's|[/.]|-|g'`, which is `transcript::slug_of_physical`'s rule (tested
+///   equal). Not `tr '/.' '--'`: a GNU `tr` reads that `--` as the end of its options;
+/// - `mode:<v>` — only when `read_mode` (a reconnect): the live session's stored spawn mode.
+///
+/// Run by [`login_shell`] (`tmux` is not on the non-login PATH). Read-only, always exits 0. `$p`,
+/// `$r`, `$s`, `$d`, `$m` are this script's own variables, never values: the only value is `path`,
+/// quoted once into `$p` and quoted again by [`login_shell`]. `find`, not a glob, so the answer
+/// never depends on the login shell's glob options.
+pub fn spawn_facts_command(server: &str, session: &str, path: &str, read_mode: bool) -> String {
+    let mode = if read_mode {
+        format!(
+            "\nm=$(tmux -L {srv} show-options -qv -t {pane} {opt} 2>/dev/null); \
+printf '%s%s\\n' '{S}mode:' \"$m\"",
+            S = SPAWN_SENTINEL,
+            srv = quote(server),
+            pane = quote(&format!("={session}:")),
+            opt = quote(MODE_OPTION),
+        )
+    } else {
+        String::new()
+    };
+    login_shell(&format!(
+        "p={p}\n\
+r=$(cd -P -- \"$p\" 2>/dev/null && pwd -P); printf '%s%s\\n' '{S}real:' \"$r\"\n\
+if [ -n \"$r\" ]; then s=$r; else s=$p; fi; s=$(printf '%s' \"$s\" | sed 's|[/.]|-|g'); \
+d=\"$HOME/.claude/projects/$s\"; \
 if [ -n \"$(find \"$d\" -maxdepth 1 -name '*.jsonl' 2>/dev/null | head -n 1)\" ]; \
-then echo '{TRANSCRIPT_SENTINEL}yes'; else echo '{TRANSCRIPT_SENTINEL}no'; fi",
-        quote(slug)
-    )
+then echo '{S}transcript:yes'; else echo '{S}transcript:no'; fi{mode}",
+        S = SPAWN_SENTINEL,
+        p = quote(path),
+    ))
 }
 
-/// [`has_transcript_command`]'s answer: `true` only for a final `yes` line. No answer is `false`:
-/// a fresh session is the safe side, since a wrong `--continue` kills the pane.
-pub fn parse_has_transcript(out: &str) -> bool {
-    out.lines()
-        .rev()
-        .find_map(|l| l.trim_end_matches('\r').strip_prefix(TRANSCRIPT_SENTINEL))
-        == Some("yes")
+/// What [`spawn_facts_command`] found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpawnFacts {
+    /// The alias to register for the row: the physical path when it is a normalized absolute path
+    /// that DIFFERS from the stored one, else `None` (no symlink, or no usable answer).
+    pub real_alias: Option<String>,
+    /// The remote holds a transcript to `--continue`. No answer is `false`: a fresh session is the
+    /// safe side, since a wrong `--continue` kills the pane.
+    pub has_transcript: bool,
+    /// The live session's stored mode (see [`OpenFacts::mode`]); `None` when not read or unknown.
+    pub mode: Option<Option<String>>,
 }
 
-/// The remote command for the open path's folder check: prints `yes` or `no` and exits 0, so a
-/// non-zero exit means ssh failed, never "no folder".
-pub fn test_dir_command(path: &str) -> String {
-    format!("if [ -d {} ]; then echo yes; else echo no; fi", quote(path))
+/// [`spawn_facts_command`]'s answer for a row stored as `stored`. Every fact degrades on its own
+/// to its safe side when its line is missing (an ssh failure is `out` = "").
+pub fn parse_spawn_facts(out: &str, stored: &str) -> SpawnFacts {
+    let mut facts = SpawnFacts {
+        real_alias: None,
+        has_transcript: false,
+        mode: None,
+    };
+    for line in out.lines() {
+        let Some(rest) = line.trim_end_matches('\r').strip_prefix(SPAWN_SENTINEL) else {
+            continue;
+        };
+        if let Some(v) = rest.strip_prefix("real:") {
+            facts.real_alias = (is_normalized_remote_path(v) && v != stored).then(|| v.to_string());
+        } else if let Some(v) = rest.strip_prefix("transcript:") {
+            facts.has_transcript = v == "yes";
+        } else if let Some(v) = rest.strip_prefix("mode:") {
+            facts.mode = parse_mode_value(v);
+        }
+    }
+    facts
+}
+
+/// Prefix of every line the open check prints, so rc-file noise before it is ignored.
+pub const OPEN_SENTINEL: &str = "CLAUDESK-OPEN:";
+
+/// The drive modes a session can be spawned under (the closed four; `transitions.md`). A stored
+/// [`MODE_OPTION`] outside this set reads as unknown, never as a mode.
+const DRIVE_MODES: [&str; 4] = ["stepping", "orchestrated", "autopilot", "fsd"];
+
+/// M17 WP5 — the open check's ONE exec (AC-3.1): does the folder exist, is the workspace's tmux
+/// session live, and (if live) which drive mode was it spawned under. Run by [`login_shell`]
+/// (`tmux` is not on the non-login PATH). Read-only, and always exits 0, so a non-zero exit means
+/// ssh or the shell failed, never an answer. `$m` is this script's own variable, not a value.
+///
+/// ⚠️ The option read targets `=<session>:` (a PANE target, exact session), NOT `=<session>`:
+/// tmux 3.8's option commands refuse the bare `=name` ("no such session"), and `-q` hides that, so
+/// the mode silently read as unset (found live at WP5 Phase 1 verify-human). An unqualified name is
+/// worse: it prefix-matches (`-t cd-1` can hit `cd-1x`).
+pub fn open_check_command(
+    server: &str,
+    session: &str,
+    path: &str,
+    check_session_md: bool,
+) -> String {
+    let session_md = if check_session_md {
+        format!(
+            "\nif [ -f {sm} ]; then echo '{S}session-md:yes'; else echo '{S}session-md:no'; fi",
+            S = OPEN_SENTINEL,
+            sm = quote(&format!("{path}/workflow-system/state/.session.md")),
+        )
+    } else {
+        String::new()
+    };
+    login_shell(&format!(
+        "if [ -d {p} ]; then echo '{S}dir:yes'; else echo '{S}dir:no'; fi\n\
+if tmux -L {srv} has-session -t {exact} 2>/dev/null; then echo '{S}live:yes'; \
+m=$(tmux -L {srv} show-options -qv -t {pane} {opt} 2>/dev/null); printf '%s%s\\n' '{S}mode:' \"$m\"; \
+else echo '{S}live:no'; fi\n\
+r=$(cd -P -- {p} 2>/dev/null && pwd -P); printf '%s%s\\n' '{S}real:' \"$r\"{session_md}\n{TRUSTED_KEYS}",
+        S = OPEN_SENTINEL,
+        p = quote(path),
+        srv = quote(server),
+        exact = quote(&format!("={session}")),
+        pane = quote(&format!("={session}:")),
+        opt = quote(MODE_OPTION),
+    ))
+}
+
+/// Constant fragment (no variable value): print every folder the remote `~/.claude.json` records
+/// as TRUSTED (`hasTrustDialogAccepted` a JSON `true`), one `CLAUDESK-OPEN:trusted:<path>` line
+/// each. Only the trusted keys cross the link, never the file (it can be megabytes). The match
+/// against the project's physical path happens locally, by `folder_trust::trust_covers`, the
+/// same walk the local check uses. Any failure (no file, bad JSON, no JSON::PP) prints nothing:
+/// untrusted, the safe side (D4).
+const TRUSTED_KEYS: &str = "perl -MJSON::PP -e 'open(my $h, q(<), qq($ENV{HOME}/.claude.json)) or exit 0; \
+local $/; my $j = eval { JSON::PP->new->decode(<$h>) }; \
+exit 0 unless ref $j eq q(HASH) && ref $j->{projects} eq q(HASH); \
+for my $k (sort keys %{$j->{projects}}) { my $v = $j->{projects}{$k}; \
+next unless ref $v eq q(HASH) && JSON::PP::is_bool($v->{hasTrustDialogAccepted}) && $v->{hasTrustDialogAccepted}; \
+next if $k =~ /\\n/; print qq(CLAUDESK-OPEN:trusted:$k\\n) }' 2>/dev/null";
+
+/// What the open check found on the remote.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenFacts {
+    /// The project folder exists.
+    pub folder: bool,
+    /// The workspace's tmux session is live.
+    pub live: bool,
+    /// The live session's spawn mode: `Some(Some(m))` a mode, `Some(None)` spawned with none,
+    /// `None` unknown (not live, or a session started before WP5 stored it).
+    pub mode: Option<Option<String>>,
+    /// The project folder's PHYSICAL path on the remote (`cd -P && pwd -P`), when it resolves.
+    pub real: Option<String>,
+    /// The remote `workflow-system/state/.session.md` exists. `false` when not checked (gate off).
+    pub session_md: bool,
+    /// Every folder the remote `~/.claude.json` records as trusted.
+    pub trusted_keys: Vec<String>,
+}
+
+/// [`open_check_command`]'s answer, or `None` when the folder or liveness line is missing (no
+/// answer is never read as "no folder" or "not live").
+pub fn parse_open_facts(out: &str) -> Option<OpenFacts> {
+    let mut folder = None;
+    let mut live = None;
+    let mut mode = None;
+    let mut real = None;
+    let mut session_md = false;
+    let mut trusted_keys = Vec::new();
+    for line in out.lines() {
+        let Some(rest) = line.trim_end_matches('\r').strip_prefix(OPEN_SENTINEL) else {
+            continue;
+        };
+        match rest {
+            "dir:yes" => folder = Some(true),
+            "dir:no" => folder = Some(false),
+            "live:yes" => live = Some(true),
+            "live:no" => live = Some(false),
+            "session-md:yes" => session_md = true,
+            _ => {
+                if let Some(v) = rest.strip_prefix("mode:") {
+                    mode = parse_mode_value(v);
+                } else if let Some(v) = rest.strip_prefix("real:") {
+                    real = is_normalized_remote_path(v).then(|| v.to_string());
+                } else if let Some(v) = rest.strip_prefix("trusted:") {
+                    trusted_keys.push(v.to_string());
+                }
+            }
+        }
+    }
+    let live = live?;
+    Some(OpenFacts {
+        folder: folder?,
+        live,
+        mode: if live { mode } else { None },
+        real,
+        session_md,
+        trusted_keys,
+    })
+}
+
+/// A stored [`MODE_OPTION`] value: one of the four → that mode; [`NO_MODE`] → none; anything else
+/// (empty = unset, or not a mode) → unknown.
+fn parse_mode_value(v: &str) -> Option<Option<String>> {
+    if v == NO_MODE {
+        Some(None)
+    } else if DRIVE_MODES.contains(&v) {
+        Some(Some(v.to_string()))
+    } else {
+        None
+    }
 }
 
 /// A remote target that passed [`validate_host`] and [`is_normalized_remote_path`] exactly as
@@ -766,9 +945,22 @@ pub(crate) mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let canary = dir.path().join("CANARY");
         let touch = format!("touch {}", canary.display());
-        // The folder check answers yes / no for a hostile but real folder name.
+        // The open check answers yes / no for a hostile but real folder name.
         let hostile = dir.path().join(format!("it's $({touch}) `x`"));
         std::fs::create_dir_all(&hostile).unwrap();
+        let folder = |p: &str| {
+            parse_open_facts(&run_with_fake_tmux(
+                &open_check_command("claudesk-dev", "cd-1", p, false),
+                false,
+                None,
+            ))
+            .map(|f| f.folder)
+        };
+        assert_eq!(folder(hostile.to_str().unwrap()), Some(true));
+        assert_eq!(
+            folder(dir.path().join("gone; touch x").to_str().unwrap()),
+            Some(false)
+        );
         let run = |cmd: &str| {
             let o = Command::new("/bin/zsh")
                 .arg("-fc")
@@ -780,15 +972,6 @@ pub(crate) mod tests {
                 String::from_utf8_lossy(&o.stdout).trim().to_string(),
             )
         };
-        assert_eq!(
-            run(&test_dir_command(hostile.to_str().unwrap())),
-            (Some(0), "yes".into())
-        );
-        let gone = dir.path().join("gone; touch x");
-        assert_eq!(
-            run(&test_dir_command(gone.to_str().unwrap())),
-            (Some(0), "no".into())
-        );
         // The cancel: with no tmux server at all it still exits 0 (a pane not in a mode, or no
         // pane, is not a failure of the close), and a hostile session name never executes.
         let cancel =
@@ -951,6 +1134,287 @@ pub(crate) mod tests {
         );
     }
 
+    /// Run a remote command locally (`zsh -lc` → `/bin/zsh -fc`) with a fake `tmux` whose
+    /// `has-session` answers `live` and whose `show-options` prints `mode` (`None`: prints nothing,
+    /// an unset option).
+    fn run_with_fake_tmux(cmd: &str, live: bool, mode: Option<&str>) -> String {
+        let home = tempfile::TempDir::new().unwrap();
+        run_with_fake_tmux_home(cmd, live, mode, home.path())
+    }
+
+    /// [`run_with_fake_tmux`] with `$HOME` set to `home` (the remote `~/.claude.json` lives there).
+    fn run_with_fake_tmux_home(
+        cmd: &str,
+        live: bool,
+        mode: Option<&str>,
+        home: &std::path::Path,
+    ) -> String {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::TempDir::new().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let tmux = bin.join("tmux");
+        std::fs::write(
+            &tmux,
+            format!(
+                // Like real tmux 3.8, an option command refuses a target that is not a pane-style
+                // `=<session>:` ("no such session: =x"); the open check's read must use that form.
+                "#!/bin/sh\nt=\"\"; prev=\"\"; for a in \"$@\"; do [ \"$prev\" = -t ] && t=\"$a\"; prev=\"$a\"; done\n\
+                 case \" $* \" in\n *\" has-session \"*) exit {rc};;\n *\" show-options \"*) case \"$t\" in =*:) {show};; *) echo \"no such session: $t\" >&2; exit 1;; esac;;\nesac\nexit 0\n",
+                rc = if live { 0 } else { 1 },
+                show = match mode {
+                    Some(m) => format!("printf '%s\\n' {}", quote(m)),
+                    None => "exit 0".into(),
+                },
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&tmux, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let out = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(cmd.replacen("zsh -lc ", "/bin/zsh -fc ", 1))
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("HOME", home)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "always exits 0");
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    }
+
+    #[test]
+    fn the_open_check_reports_the_folder_the_live_session_and_its_mode_in_one_exec() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let here = dir.path().to_str().unwrap();
+        let check = |path: &str, live: bool, mode: Option<&str>| {
+            parse_open_facts(&run_with_fake_tmux(
+                &open_check_command("claudesk-dev", "cd-1234abcd", path, false),
+                live,
+                mode,
+            ))
+        };
+        let key = |f: Option<OpenFacts>| f.map(|f| (f.folder, f.live, f.mode));
+        assert_eq!(
+            key(check(here, true, Some("autopilot"))),
+            Some((true, true, Some(Some("autopilot".into()))))
+        );
+        assert_eq!(
+            key(check(here, true, Some(NO_MODE))),
+            Some((true, true, Some(None)))
+        );
+        // An unset option (a session started before WP5) or a value outside the four: unknown.
+        assert_eq!(check(here, true, None).unwrap().mode, None);
+        assert_eq!(check(here, true, Some("$(evil)")).unwrap().mode, None);
+        // Not live: no mode, whatever tmux would say.
+        assert_eq!(
+            key(check(here, false, Some("fsd"))),
+            Some((true, false, None))
+        );
+        assert!(!check("/nonexistent/x", false, None).unwrap().folder);
+    }
+
+    /// M17 WP5 Phase 2 (AC-3.1, 3.3): the same exec reports the folder's PHYSICAL path, the remote
+    /// `.session.md` (only when asked: a gate-OFF open stats nothing in the project), and the
+    /// folders the remote `~/.claude.json` trusts (only those keys, never the file).
+    #[test]
+    fn the_open_check_reports_the_resume_signals_of_a_dead_session() {
+        let home = tempfile::TempDir::new().unwrap();
+        let root = home.path().canonicalize().unwrap();
+        let real = root.join("real proj");
+        std::fs::create_dir_all(real.join("workflow-system/state")).unwrap();
+        let link = root.join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let real_s = real.to_str().unwrap().to_string();
+        std::fs::write(
+            root.join(".claude.json"),
+            format!(
+                r#"{{"numStartups": 9, "projects": {{
+                    {real:?}: {{"hasTrustDialogAccepted": true}},
+                    "/untrusted": {{"hasTrustDialogAccepted": false}},
+                    "/stringy": {{"hasTrustDialogAccepted": "true"}},
+                    "/odd": 3
+                }}}}"#,
+                real = real_s
+            ),
+        )
+        .unwrap();
+        let facts = |path: &str, check: bool| {
+            parse_open_facts(&run_with_fake_tmux_home(
+                &open_check_command("claudesk-dev", "cd-1", path, check),
+                false,
+                None,
+                &root,
+            ))
+            .unwrap()
+        };
+        let f = facts(link.to_str().unwrap(), true);
+        assert_eq!(
+            f.real.as_deref(),
+            Some(real_s.as_str()),
+            "the physical path"
+        );
+        assert!(!f.session_md, "no pointer yet");
+        // Only the JSON-true entry; a "true" string, a false and a non-object are not trust.
+        assert_eq!(f.trusted_keys, vec![real_s.clone()]);
+        std::fs::write(real.join("workflow-system/state/.session.md"), "---\n").unwrap();
+        assert!(facts(link.to_str().unwrap(), true).session_md);
+        assert!(
+            !facts(link.to_str().unwrap(), false).session_md,
+            "gate OFF: not checked"
+        );
+        // A missing folder has no physical path; a malformed record trusts nothing.
+        assert_eq!(facts("/nonexistent/x", true).real, None);
+        std::fs::write(root.join(".claude.json"), "{not json").unwrap();
+        assert!(facts(link.to_str().unwrap(), true).trusted_keys.is_empty());
+    }
+
+    #[test]
+    fn the_open_check_treats_a_hostile_path_as_data() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let canary = dir.path().join("CANARY");
+        for v in HOSTILE
+            .iter()
+            .map(|v| v.to_string())
+            .chain([format!("x'; touch {}; '", canary.display())])
+        {
+            let facts = parse_open_facts(&run_with_fake_tmux(
+                &open_check_command("claudesk-dev", &v, &v, true),
+                false,
+                None,
+            ));
+            assert_eq!(facts.map(|f| f.folder), Some(false), "{v:?}");
+        }
+        assert!(!canary.exists());
+    }
+
+    #[test]
+    fn open_facts_need_both_answers_and_ignore_noise() {
+        let s = OPEN_SENTINEL;
+        assert_eq!(parse_open_facts(""), None);
+        assert_eq!(
+            parse_open_facts(&format!("{s}dir:yes\n")),
+            None,
+            "no liveness answer"
+        );
+        assert_eq!(
+            parse_open_facts(&format!("{s}live:no\n")),
+            None,
+            "no folder answer"
+        );
+        assert_eq!(
+            parse_open_facts(&format!("Welcome!\r\n{s}dir:no\r\n{s}live:no\r\n")),
+            Some(OpenFacts {
+                folder: false,
+                live: false,
+                mode: None,
+                real: None,
+                session_md: false,
+                trusted_keys: vec![],
+            })
+        );
+        // `dir:yes` / `live:yes` printed by rc noise without the sentinel does not count.
+        assert_eq!(parse_open_facts("dir:yes\nlive:yes\n"), None);
+    }
+
+    #[test]
+    fn the_reconnect_spawn_reads_the_sessions_stored_mode_in_the_same_exec() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let here = dir.path().canonicalize().unwrap();
+        let here = here.to_str().unwrap();
+        let mode = |read: bool, stored: Option<&str>| {
+            parse_spawn_facts(
+                &run_with_fake_tmux(
+                    &spawn_facts_command("claudesk-dev", "cd-1234abcd", here, read),
+                    true,
+                    stored,
+                ),
+                here,
+            )
+            .mode
+        };
+        assert_eq!(
+            mode(true, Some("orchestrated")),
+            Some(Some("orchestrated".into()))
+        );
+        assert_eq!(mode(true, Some(NO_MODE)), Some(None));
+        assert_eq!(mode(true, None), None, "unset: unknown");
+        assert_eq!(mode(true, Some("$(evil)")), None, "not a mode: unknown");
+        // A start does not read it (its line is absent), whatever tmux holds.
+        assert_eq!(mode(false, Some("orchestrated")), None);
+        assert!(!spawn_facts_command("s", "cd-1", here, false).contains("show-options"));
+    }
+
+    /// M17 WP5: the attach checks for the session FIRST and exits [`EXIT_NO_SESSION`] when it is
+    /// gone, so the end is classified without reading tmux's output; the start refuses a live
+    /// session with [`EXIT_SESSION_EXISTS`] and never runs `new`.
+    #[test]
+    fn the_attach_and_the_start_answer_a_missing_or_live_session_with_their_own_exit_codes() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::TempDir::new().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let tmux = bin.join("tmux");
+        let run = |has_session: bool, cmd: String| -> (Option<i32>, String) {
+            std::fs::write(
+                &tmux,
+                format!(
+                    "#!/bin/sh\necho \"$*\" >> {d}/calls\ncase \" $* \" in *\" has-session \"*) exit {rc};; esac\nexit 0\n",
+                    d = dir.path().display(),
+                    rc = if has_session { 0 } else { 1 },
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&tmux, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let _ = std::fs::remove_file(dir.path().join("calls"));
+            let out = Command::new("/bin/sh")
+                .arg("-c")
+                .arg(cmd.replacen("zsh -lc ", "/bin/zsh -fc ", 1))
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .output()
+                .unwrap();
+            let calls = std::fs::read_to_string(dir.path().join("calls")).unwrap_or_default();
+            (out.status.code(), calls)
+        };
+        let attach = || tmux_attach_command("claudesk-dev", "cd-1234abcd");
+        let (code, calls) = run(false, attach());
+        assert_eq!(code, Some(EXIT_NO_SESSION as i32), "{calls}");
+        assert!(!calls.contains(" attach "), "never attaches: {calls}");
+        let (code, calls) = run(true, attach());
+        assert_eq!(code, Some(0));
+        assert!(calls.contains("attach -t =cd-1234abcd"), "{calls}");
+
+        let start = || {
+            tmux_new_command(
+                "claudesk-dev",
+                "/h/conf",
+                "cd-1234abcd",
+                "/p",
+                "/h/cc-launch",
+                Some("autopilot"),
+                &[],
+            )
+        };
+        let (code, calls) = run(true, start());
+        assert_eq!(code, Some(EXIT_SESSION_EXISTS as i32), "{calls}");
+        assert!(!calls.contains(" new "), "never starts or joins: {calls}");
+        let (code, calls) = run(false, start());
+        assert_eq!(code, Some(0));
+        assert!(calls.contains(" new -s cd-1234abcd -c /p "), "{calls}");
+        assert!(!calls.contains("new -A"), "{calls}");
+        assert!(
+            calls
+                .trim_end()
+                .ends_with("; set-option -q @cd_mode autopilot"),
+            "the spawn mode is stored on the session: {calls}"
+        );
+        // No mode: stored as `none`, never left unset (unset = a pre-WP5 session, mode unknown).
+        let none = tmux_new_command("s", "/c", "cd-1", "/p", "/l", None, &[]);
+        let (_, calls) = run(false, none);
+        assert!(
+            calls.trim_end().ends_with("set-option -q @cd_mode none"),
+            "{calls}"
+        );
+    }
+
     #[test]
     fn the_reconnect_treats_a_hostile_session_name_as_data() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -969,21 +1433,26 @@ pub(crate) mod tests {
         assert!(!canary.exists());
     }
 
-    /// Run [`realpath_command`] for `path` in a real `/bin/sh` (the remote side, locally).
-    fn realpath_out(path: &str) -> String {
+    /// Run [`spawn_facts_command`] (a start: no mode read) for `path` the way the link does, with
+    /// `HOME=home` (the remote config root lives there) and the remote login shell.
+    fn spawn_facts_out(shell: &str, home: &std::path::Path, path: &str) -> String {
+        let cmd = spawn_facts_command("claudesk-dev", "cd-1234abcd", path, false);
         let out = Command::new("/bin/sh")
             .arg("-c")
-            .arg(realpath_command(path))
+            .arg(cmd.replacen("zsh -lc ", &format!("{shell} -c "), 1))
+            .env("HOME", home)
+            .env("PATH", "/usr/bin:/bin")
             .output()
             .unwrap();
-        assert!(out.status.success(), "always exits 0");
+        assert!(out.status.success(), "{shell}: always exits 0");
         String::from_utf8_lossy(&out.stdout).into_owned()
     }
 
-    /// M17 WP4 (AC-3.3): a stored path through a symlink yields the physical path; a physical
-    /// path, a missing folder or rc noise yield no alias.
+    /// M17 WP4 (AC-3.3), now in WP5's one spawn exec: a stored path through a symlink yields the
+    /// physical path; a physical path, a missing folder or rc noise yield no alias.
     #[test]
-    fn realpath_command_finds_the_physical_path_of_a_symlinked_folder() {
+    fn the_spawn_exec_finds_the_physical_path_of_a_symlinked_folder() {
+        let home = tempfile::TempDir::new().unwrap();
         let dir = tempfile::TempDir::new().unwrap();
         let real = dir.path().canonicalize().unwrap().join("real");
         std::fs::create_dir(&real).unwrap();
@@ -993,27 +1462,21 @@ pub(crate) mod tests {
             real.to_string_lossy().into_owned(),
             link.to_string_lossy().into_owned(),
         );
-
+        let alias =
+            |p: &str| parse_spawn_facts(&spawn_facts_out("/bin/zsh", home.path(), p), p).real_alias;
+        assert_eq!(alias(&link), Some(real.clone()));
+        assert_eq!(alias(&real), None, "already physical: no alias");
+        assert_eq!(alias(&format!("{real}/nope")), None, "missing: no alias");
         assert_eq!(
-            parse_realpath_alias(&realpath_out(&link), &link),
-            Some(real.clone())
-        );
-        assert_eq!(
-            parse_realpath_alias(&realpath_out(&real), &real),
-            None,
-            "already physical: no alias"
-        );
-        let missing = format!("{real}/nope");
-        assert_eq!(
-            parse_realpath_alias(&realpath_out(&missing), &missing),
-            None
-        );
-        assert_eq!(
-            parse_realpath_alias(&format!("noise\n{REALPATH_SENTINEL}relative\n"), "/a"),
+            parse_spawn_facts(&format!("noise\n{SPAWN_SENTINEL}real:relative\n"), "/a").real_alias,
             None,
             "a non-absolute answer is no alias"
         );
-        assert_eq!(parse_realpath_alias("no sentinel\n", "/a"), None);
+        assert_eq!(
+            parse_spawn_facts("real:/b\n", "/a").real_alias,
+            None,
+            "no sentinel"
+        );
     }
 
     /// A fake `tmux` for [`tmux_end_session_script`]: the session is alive while `$STATE/alive`
@@ -1087,77 +1550,100 @@ exit 1
         assert!(!log.contains("kill-session"), "{log}");
     }
 
-    /// Run [`has_transcript_command`] for `slug` in `shell` with `HOME=home`.
-    fn transcript_out(shell: &str, home: &std::path::Path, slug: &str) -> bool {
-        let out = Command::new(shell)
-            .arg("-c")
-            .arg(has_transcript_command(slug))
-            .env("HOME", home)
-            .output()
-            .unwrap();
-        assert!(out.status.success(), "{shell}: always exits 0");
-        parse_has_transcript(&String::from_utf8_lossy(&out.stdout))
-    }
-
-    /// M17 WP4 (pulled from WP5 5.2): `yes` only when the project's dir holds a `*.jsonl`, in sh AND
-    /// zsh (the remote login shell).
+    /// M17 WP4 (pulled from WP5 5.2), now in WP5's one spawn exec: `yes` only when the project's
+    /// dir holds a `*.jsonl`, in sh AND zsh (the remote login shell).
     #[test]
-    fn has_transcript_command_answers_from_the_projects_dir_in_sh_and_zsh() {
+    fn the_spawn_exec_answers_the_transcript_from_the_projects_dir_in_sh_and_zsh() {
         for shell in ["/bin/sh", "/bin/zsh"] {
             let home = tempfile::TempDir::new().unwrap();
-            let slug = "-Users-u-proj";
-            assert!(!transcript_out(shell, home.path(), slug), "{shell}: no dir");
-            let dir = home.path().join(".claude/projects").join(slug);
+            let proj = home.path().canonicalize().unwrap().join("work/u.proj");
+            std::fs::create_dir_all(&proj).unwrap();
+            let proj = proj.to_string_lossy().into_owned();
+            let has = || {
+                parse_spawn_facts(&spawn_facts_out(shell, home.path(), &proj), &proj).has_transcript
+            };
+            assert!(!has(), "{shell}: no dir");
+            let dir = home
+                .path()
+                .join(".claude/projects")
+                .join(crate::transcript::slug_of_physical(&proj));
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("notes.txt"), "x").unwrap();
-            assert!(
-                !transcript_out(shell, home.path(), slug),
-                "{shell}: no jsonl"
-            );
+            assert!(!has(), "{shell}: no jsonl");
             std::fs::write(dir.join("abc.jsonl"), "{}").unwrap();
-            assert!(
-                transcript_out(shell, home.path(), slug),
-                "{shell}: a transcript"
-            );
-            assert!(
-                !transcript_out(shell, home.path(), "-Users-u-other"),
-                "{shell}: another project's dir is not this one's"
-            );
+            assert!(has(), "{shell}: a transcript");
+        }
+    }
+
+    /// The slug the remote computes is `transcript::slug_of_physical`'s, for the PHYSICAL path:
+    /// a transcript under the stored (symlinked) path's slug is NOT the project's, the physical
+    /// one is. Paths with `.`, spaces and quotes, in sh and zsh.
+    #[test]
+    fn the_remote_slug_is_slug_of_physical_for_the_physical_path() {
+        for shell in ["/bin/sh", "/bin/zsh"] {
+            for name in ["plain", "a.b.c", "with space", "it's", "-dash", "x..y"] {
+                let home = tempfile::TempDir::new().unwrap();
+                let base = home.path().canonicalize().unwrap();
+                let real = base.join("real").join(name);
+                std::fs::create_dir_all(&real).unwrap();
+                let link = base.join("link");
+                std::os::unix::fs::symlink(base.join("real"), &link).unwrap();
+                let stored = link.join(name).to_string_lossy().into_owned();
+                let physical = real.to_string_lossy().into_owned();
+                let projects = home.path().join(".claude/projects");
+                // A transcript under the STORED path's slug only: not this project's.
+                let wrong = projects.join(crate::transcript::slug_of_physical(&stored));
+                std::fs::create_dir_all(&wrong).unwrap();
+                std::fs::write(wrong.join("t.jsonl"), "{}").unwrap();
+                let has = || {
+                    parse_spawn_facts(&spawn_facts_out(shell, home.path(), &stored), &stored)
+                        .has_transcript
+                };
+                assert!(
+                    !has(),
+                    "{shell} {name:?}: the stored path's slug is not asked"
+                );
+                let right = projects.join(crate::transcript::slug_of_physical(&physical));
+                std::fs::create_dir_all(&right).unwrap();
+                std::fs::write(right.join("t.jsonl"), "{}").unwrap();
+                assert!(has(), "{shell} {name:?}: the physical path's slug is");
+            }
         }
     }
 
     #[test]
-    fn parse_has_transcript_is_yes_only_for_a_final_yes() {
-        assert!(parse_has_transcript(&format!(
-            "noise\n{TRANSCRIPT_SENTINEL}yes\n"
-        )));
-        assert!(parse_has_transcript(&format!(
-            "{TRANSCRIPT_SENTINEL}yes\r\n"
-        )));
-        assert!(!parse_has_transcript(&format!("{TRANSCRIPT_SENTINEL}no\n")));
-        assert!(!parse_has_transcript("yes\n"));
-        assert!(!parse_has_transcript(""));
+    fn parse_spawn_facts_degrades_each_fact_to_its_safe_side() {
+        let none = SpawnFacts {
+            real_alias: None,
+            has_transcript: false,
+            mode: None,
+        };
+        assert_eq!(parse_spawn_facts("", "/a"), none, "a failed exec");
+        assert_eq!(
+            parse_spawn_facts("transcript:yes\n", "/a"),
+            none,
+            "no sentinel"
+        );
+        assert!(
+            parse_spawn_facts(&format!("noise\n{SPAWN_SENTINEL}transcript:yes\r\n"), "/a")
+                .has_transcript
+        );
+        assert!(
+            !parse_spawn_facts(&format!("{SPAWN_SENTINEL}transcript:no\n"), "/a").has_transcript
+        );
+        assert!(
+            !parse_spawn_facts(&format!("{SPAWN_SENTINEL}transcript:yess\n"), "/a").has_transcript
+        );
     }
 
+    /// The path is data in the spawn exec, whatever it holds (it crosses two shells).
     #[test]
-    fn a_hostile_slug_is_data_in_the_transcript_command() {
+    fn a_hostile_path_is_data_in_the_spawn_exec() {
         let home = tempfile::TempDir::new().unwrap();
         let canary = home.path().join("pwned");
         for hostile in HOSTILE {
-            let slug = format!("{hostile}; touch {}", canary.display());
-            let _ = transcript_out("/bin/zsh", home.path(), &slug);
-        }
-        assert!(!canary.exists());
-    }
-
-    /// The path is data in the realpath command, whatever it holds.
-    #[test]
-    fn a_hostile_path_is_data_in_the_realpath_command() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let canary = dir.path().join("pwned");
-        for hostile in HOSTILE {
             let p = format!("/x{hostile}; touch {}", canary.display());
-            let _ = realpath_out(&p);
+            let _ = spawn_facts_out("/bin/zsh", home.path(), &p);
         }
         assert!(!canary.exists());
     }

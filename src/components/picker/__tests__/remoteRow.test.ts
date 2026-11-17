@@ -4,8 +4,10 @@ import { matchesFilter, type RecentProject } from "../ProjectPicker";
 import {
   isRemoteRow,
   pathLineFor,
-  remoteOpenOutcome,
+  remoteAskSpec,
+  remoteOpenPlan,
   shortHost,
+  startAnnounced,
 } from "../remoteRow";
 
 const remote: RecentProject = {
@@ -37,18 +39,110 @@ describe("remote rows (M17 WP2)", () => {
     expect(shortHost("user@[fe80::1%en0]")).toBe("[fe80::1%en0]");
   });
 
-  // M17 WP3 — the open check replaced WP2's stub refusal.
-  it("opens on ok; a missing folder offers Remove; an unreachable or invalid row never does", () => {
-    expect(remoteOpenOutcome({ kind: "ok" })).toBeNull();
+  // M17 WP3 — the open check replaced WP2's stub refusal; M17 WP5 — it decides the open.
+  it("starts or reconnects; a missing folder offers Remove; an unreachable or invalid row never does", () => {
+    const K = remote.project_path;
     expect(
-      remoteOpenOutcome({ kind: "folder-missing", message: "gone" }),
-    ).toEqual({ message: "gone", offerRemove: true });
+      remoteOpenPlan(K, {
+        kind: "start",
+        uncleanFlag: false,
+        sessionMd: false,
+        trusted: true,
+      }),
+    ).toEqual({ open: "start", announce: {} });
+    expect(remoteOpenPlan(K, { kind: "reconnect", mode: "fsd" })).toEqual({
+      open: "reconnect",
+    });
     expect(
-      remoteOpenOutcome({ kind: "unreachable", message: "no route" }),
-    ).toEqual({ message: "no route", offerRemove: false });
-    expect(remoteOpenOutcome({ kind: "invalid", message: "bad host" })).toEqual(
-      { message: "bad host", offerRemove: false },
+      remoteOpenPlan(K, { kind: "folder-missing", message: "gone" }),
+    ).toEqual({
+      open: null,
+      message: "gone",
+      offerRemove: true,
+      offerRetry: false,
+    });
+    // M17 WP5 (AC-5.4): an unreachable host offers Retry, never Remove.
+    expect(
+      remoteOpenPlan(K, { kind: "unreachable", message: "no route" }),
+    ).toEqual({
+      open: null,
+      message: "no route",
+      offerRemove: false,
+      offerRetry: true,
+    });
+    expect(remoteOpenPlan(K, { kind: "invalid", message: "bad host" })).toEqual(
+      {
+        open: null,
+        message: "bad host",
+        offerRemove: false,
+        offerRetry: false,
+      },
     );
+  });
+
+  // M17 WP5 (R-4) — a live session Claudesk did not leave running is never joined (A8) or ended
+  // without an answer: the plan asks, with the check's own words.
+  it("a live session Claudesk did not leave running asks first", () => {
+    expect(
+      remoteOpenPlan(remote.project_path, {
+        kind: "ask-end-pending",
+        message: "It is running.",
+      }),
+    ).toEqual({ open: "ask", kind: "end-pending", message: "It is running." });
+    expect(
+      remoteOpenPlan(remote.project_path, {
+        kind: "ask-unrecorded",
+        message: "It is running.",
+      }),
+    ).toEqual({ open: "ask", kind: "unrecorded", message: "It is running." });
+  });
+
+  it("dialog A defaults to ending it, dialog B to reconnecting; Esc cancels both", () => {
+    const a = remoteAskSpec("end-pending", "m");
+    expect(a.buttons.map((b) => [b.label, b.value, b.variant ?? null])).toEqual(
+      [
+        ["End it and open", "end", "primary"],
+        ["Reconnect", "reconnect", null],
+        ["Cancel", "cancel", null],
+      ],
+    );
+    const b = remoteAskSpec("unrecorded", "m");
+    expect(b.buttons.map((x) => [x.label, x.value, x.variant ?? null])).toEqual(
+      [
+        ["Reconnect", "reconnect", "primary"],
+        ["End it and start fresh", "end", "danger"],
+        ["Cancel", "cancel", null],
+      ],
+    );
+    for (const spec of [a, b]) {
+      expect(spec.escValue).toBe("cancel");
+      expect(spec.message).toBe("m");
+    }
+  });
+
+  // M17 WP5 Phase 2 (AC-3.3) — a dead session's start resolves through `predictAction` from the
+  // check's REMOTE signals: the flag wins; then the remote `.session.md`, manual when untrusted.
+  it("a remote start resolves the two-signal rule from the check's signals", () => {
+    const s = (uncleanFlag: boolean, sessionMd: boolean, trusted: boolean) =>
+      startAnnounced({ uncleanFlag, sessionMd, trusted });
+    expect(s(true, true, true)).toBe("continue");
+    expect(s(true, false, false)).toBe("continue");
+    expect(s(false, true, true)).toBe("restore");
+    expect(s(false, true, false)).toBe("restore-manual");
+    expect(s(false, false, true)).toBeUndefined();
+    expect(s(false, false, false)).toBeUndefined();
+    // The plan carries it as a one-row map keyed by the row's own key.
+    expect(
+      remoteOpenPlan(remote.project_path, {
+        kind: "start",
+        uncleanFlag: false,
+        sessionMd: true,
+        trusted: true,
+      }),
+    ).toEqual({
+      open: "start",
+      announce: { [remote.project_path]: "restore" },
+    });
   });
 
   it("the filter matches a remote row on user@host:path, which its key does not contain", () => {

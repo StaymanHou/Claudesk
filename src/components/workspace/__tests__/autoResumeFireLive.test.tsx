@@ -88,10 +88,12 @@ afterEach(async () => {
 async function openAndWaitPastFire(opts: {
   trusted: unknown;
   action: AutoResumeAction;
+  projectPath?: string;
+  onAutoResumeWithheld?: (notice: string) => void;
 }) {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   bootIpc((cmd) => {
-    if (cmd === "cc_spawn") return SESSION;
+    if (cmd === "cc_spawn" || cmd === "cc_spawn_remote") return SESSION;
     if (cmd === "folder_trusted") return opts.trusted;
     return null;
   });
@@ -104,9 +106,10 @@ async function openAndWaitPastFire(opts: {
       <XtermPane
         ref={createRef()}
         workspaceId="ws-1"
-        projectPath={PROJECT}
+        projectPath={opts.projectPath ?? PROJECT}
         pendingAction={opts.action}
         openIntent="fire"
+        onAutoResumeWithheld={opts.onAutoResumeWithheld}
       />,
     );
   });
@@ -164,6 +167,95 @@ describe("the auto-resume fire on the real XtermPane", () => {
     });
     expect(cmds).toContain("folder_trusted");
     expect(cmds).not.toContain("cc_inject");
+    warn.mockRestore();
+  });
+
+  // M17 WP5 (operator ruling, P2.verify-human.3) — a REMOTE folder's withheld command reaches the
+  // workspace's toast through the pane's prop; a local one's does not (its picker row warned).
+  it("an untrusted REMOTE folder hands the workspace a notice naming the host and the command", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const onWithheld = vi.fn();
+    const cmds = await openAndWaitPastFire({
+      trusted: false,
+      action: RESTORE,
+      projectPath: "ssh://me@mini-host.tail0000.ts.net/Users/me/p",
+      onAutoResumeWithheld: onWithheld,
+    });
+    expect(cmds).toContain("folder_trusted");
+    expect(cmds).not.toContain("cc_inject");
+    expect(onWithheld).toHaveBeenCalledTimes(1);
+    const notice = String(onWithheld.mock.calls[0][0]);
+    expect(notice).toContain("on mini-host yet");
+    expect(notice).toContain("type /session-restore");
+    warn.mockRestore();
+    expect(uncaught).toEqual([]);
+  });
+
+  // The pane reads the handler through a latest-ref when its timer wakes: a parent that re-renders
+  // with a NEW handler before the fire gets the notice in the new one (a direct prop read in the
+  // timer's closure would call the stale first one).
+  it("a handler swapped by a re-render before the fire is the one told", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    bootIpc((cmd) => {
+      if (cmd === "cc_spawn" || cmd === "cc_spawn_remote") return SESSION;
+      if (cmd === "folder_trusted") return false;
+      return null;
+    });
+    const { XtermPane } = await import("../XtermPane");
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+    const first = vi.fn();
+    const second = vi.fn();
+    const pane = (onWithheld: (n: string) => void) => (
+      <XtermPane
+        ref={createRef()}
+        workspaceId="ws-1"
+        projectPath="ssh://me@mini-host/Users/me/p"
+        pendingAction={RESTORE}
+        openIntent="fire"
+        onAutoResumeWithheld={onWithheld}
+      />
+    );
+    await act(async () => root?.render(pane(first)));
+    // Let the spawn resolve and the fire be scheduled, but not elapse.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    await act(async () => root?.render(pane(second)));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FIRE_DELAY_MS + 500);
+    });
+    expect(ipcCalls.map((c) => c.cmd)).toContain("folder_trusted");
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+    expect(uncaught).toEqual([]);
+  });
+
+  it("no notice for a LOCAL untrusted folder, nor for a trusted remote one", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const local = vi.fn();
+    await openAndWaitPastFire({
+      trusted: false,
+      action: RESTORE,
+      onAutoResumeWithheld: local,
+    });
+    expect(local).not.toHaveBeenCalled();
+    vi.useRealTimers();
+    await teardownIpc(root, host);
+    root = null;
+    host = null;
+    const trustedRemote = vi.fn();
+    const cmds = await openAndWaitPastFire({
+      trusted: true,
+      action: RESTORE,
+      projectPath: "ssh://me@mini-host/Users/me/p",
+      onAutoResumeWithheld: trustedRemote,
+    });
+    expect(cmds).toContain("cc_inject");
+    expect(trustedRemote).not.toHaveBeenCalled();
     warn.mockRestore();
   });
 

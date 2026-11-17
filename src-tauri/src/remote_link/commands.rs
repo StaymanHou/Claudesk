@@ -13,6 +13,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use super::{LinkEvent, LinkRegistry, SshTransport};
 use crate::config_store::{self, commands::resolve_data_dir};
 use crate::remote_cmd::ValidTarget;
+use crate::remote_record::SessionRecordState;
 
 /// The managed state: one registry for the app's lifetime.
 pub type SharedLinks = Arc<LinkRegistry>;
@@ -67,41 +68,74 @@ pub(crate) fn target_for(data_dir: &Path, project_path: &str) -> Result<ValidTar
 pub const OPEN_CHECK_GRACE: Duration = Duration::from_secs(20);
 
 /// What the picker learns before it opens a remote row (P3.3;
-/// `SURFACE-2026-11-16-REMOTE-OPEN-MUST-CHECK-THE-FOLDER-STILL-EXISTS`). Each non-`Ok` kind carries
-/// its plain-words message. ⚠️ A missing folder and an unreachable host are DIFFERENT kinds on
-/// purpose: only the first may offer Remove, and neither removes anything by itself.
+/// `SURFACE-2026-11-16-REMOTE-OPEN-MUST-CHECK-THE-FOLDER-STILL-EXISTS`), and since M17 WP5 what the
+/// open DOES (AC-3). Each kind that stops the open carries its plain-words message. ⚠️ A missing
+/// folder and an unreachable host are DIFFERENT kinds on purpose: only the first may offer Remove,
+/// and neither removes anything by itself.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum OpenCheck {
-    Ok,
-    FolderMissing { message: String },
-    Unreachable { message: String },
-    Invalid { message: String },
+    /// No live session: start CC through the two-signal rule, from these signals (M17 WP5 Phase 2).
+    Start(StartSignals),
+    /// A live session Claudesk left running: attach to it and fire nothing (R-2). `mode` is the
+    /// mode it was spawned under, when known.
+    Reconnect {
+        mode: Option<String>,
+    },
+    /// A live session the operator closed while the host was unreachable (R-4, dialog A).
+    AskEndPending {
+        message: String,
+    },
+    /// A live session Claudesk has no record of starting (R-4, dialog B).
+    AskUnrecorded {
+        message: String,
+    },
+    FolderMissing {
+        message: String,
+    },
+    Unreachable {
+        message: String,
+    },
+    Invalid {
+        message: String,
+    },
 }
 
-/// The folder check's answer, from the exec's result. `yes` = the folder exists; `no` = it does
-/// not; anything else (an ssh failure, rc noise without an answer) is "could not check", which is
-/// NOT a missing folder.
-pub(crate) fn folder_check_outcome(
+/// The resume signals of a dead remote session (M17 WP5 Phase 2, AC-3.3): the frontend's
+/// `predictAction` turns them into the action (its precedence rule has ONE home, there). Every
+/// signal reads as `false` when it could not be read: a fresh session is the safe side.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartSignals {
+    /// The LOCAL unclean-exit flag for the row (read, never consumed here: the spawn consumes it).
+    pub unclean_flag: bool,
+    /// The REMOTE `workflow-system/state/.session.md` exists (`false` with the gate off: not read).
+    pub session_md: bool,
+    /// The remote CC has trusted the folder (its physical path or an ancestor).
+    pub trusted: bool,
+}
+
+/// The open decision (M17 WP5, AC-3), from the open check's exec and the LOCAL record. Pure, so
+/// each arm is mutation-provable.
+///
+/// - No answer (an ssh failure, or noise without both lines) → unreachable. ⚠️ NEVER a missing
+///   folder: only a definite `dir:no` may lead to Remove.
+/// - Live: the record decides. `running` → reconnect; `end-pending` → ask (A); anything else → ask
+///   (B): a live session Claudesk did not leave running is never joined without asking (A8).
+/// - Not live: a missing folder → folder-missing; otherwise start.
+pub(crate) fn decide_open(
     out: Result<String, crate::subprocess::RunError>,
+    record: Option<SessionRecordState>,
+    unclean_flag: bool,
     target: &ValidTarget,
-) -> OpenCheck {
-    let answer = out.as_ref().ok().and_then(|o| {
-        o.lines()
-            .rev()
-            .map(str::trim)
-            .find(|l| *l == "yes" || *l == "no")
-    });
-    match answer {
-        Some("yes") => OpenCheck::Ok,
-        Some(_) => OpenCheck::FolderMissing {
-            message: format!(
-                "{} no longer exists on {}. Remove this project, or restore the folder there.",
-                target.path(),
-                target.host()
-            ),
-        },
-        None => OpenCheck::Unreachable {
+) -> OpenDecision {
+    let host = crate::cc_session::short_host(target.host());
+    let Some(facts) = out
+        .as_ref()
+        .ok()
+        .and_then(|o| crate::remote_cmd::parse_open_facts(o))
+    else {
+        return OpenDecision::plain(OpenCheck::Unreachable {
             message: match out {
                 Err(e) => format!(
                     "could not check {} on {}: {e}",
@@ -114,15 +148,164 @@ pub(crate) fn folder_check_outcome(
                     target.path()
                 ),
             },
-        },
+        });
+    };
+    if facts.live {
+        let decision = match record {
+            Some(SessionRecordState::Running) => OpenCheck::Reconnect {
+                mode: facts.mode.flatten(),
+            },
+            Some(SessionRecordState::EndPending) => OpenCheck::AskEndPending {
+                message: format!(
+                    "You closed this while {host} was unreachable, so its Claude Code session is \
+                     still running there."
+                ),
+            },
+            Some(SessionRecordState::Ended) | None => OpenCheck::AskUnrecorded {
+                message: format!(
+                    "A Claude Code session for this project is already running on {host}."
+                ),
+            },
+        };
+        return OpenDecision::plain(decision);
+    }
+    let clear = record == Some(SessionRecordState::EndPending);
+    if !facts.folder {
+        return OpenDecision {
+            check: OpenCheck::FolderMissing {
+                message: format!(
+                    "{} no longer exists on {}. Remove this project, or restore the folder there.",
+                    target.path(),
+                    target.host()
+                ),
+            },
+            clear_end_pending: clear,
+            notice: None,
+        };
+    }
+    // AC-2.3: the label promised a live session (or a question) that is no longer there.
+    let notice = match record {
+        Some(SessionRecordState::Running) => Some(format!(
+            "The Claude Code session on {host} had ended since Claudesk last saw it, so it was \
+             started again."
+        )),
+        Some(SessionRecordState::EndPending) => Some(format!(
+            "The session you closed while {host} was unreachable had already ended, so there was \
+             nothing to ask."
+        )),
+        _ => None,
+    };
+    let physical = facts.real.as_deref().unwrap_or(target.path());
+    let trusted_keys: Vec<&str> = facts.trusted_keys.iter().map(String::as_str).collect();
+    OpenDecision {
+        check: OpenCheck::Start(StartSignals {
+            unclean_flag,
+            session_md: facts.session_md,
+            trusted: crate::folder_trust::trust_covers(
+                &trusted_keys,
+                std::path::Path::new(physical),
+            ),
+        }),
+        clear_end_pending: clear,
+        notice,
     }
 }
 
-/// End the open check's hold on the link. After `Ok` an open follows within a second, so the hold
+/// [`decide_open`]'s result.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct OpenDecision {
+    pub check: OpenCheck,
+    /// A stale `end-pending` to clear: the session it was about has ended anyway (A7).
+    pub clear_end_pending: bool,
+    /// What the workspace should say because the picker's label (read from the local record)
+    /// predicted something else (AC-2.3).
+    pub notice: Option<String>,
+}
+
+impl OpenDecision {
+    fn plain(check: OpenCheck) -> Self {
+        Self {
+            check,
+            clear_end_pending: false,
+            notice: None,
+        }
+    }
+}
+
+/// Apply an open decision's LOCAL side effects for the row `key`, and return what the picker is
+/// told (M17 WP5). Extracted from `remote_open_check` so each write is driven by a test:
+/// - a stale `end-pending` is cleared (A7);
+/// - the workspace's notice is left (or an older one cleared) (AC-2.3);
+/// - the fire-time trust answer is OVERWRITTEN by every check: a start's remote trust, else
+///   untrusted. ⚠️ `folder_trusted` answers a remote row from it, and it is what withholds the
+///   auto-fired `/session-restore` in an untrusted folder, so no outcome may leave an older `true`.
+pub(crate) fn settle_open_decision(
+    dir: &std::path::Path,
+    links: &super::LinkRegistry,
+    key: &str,
+    decision: OpenDecision,
+) -> OpenCheck {
+    if decision.clear_end_pending {
+        crate::remote_record::record_state(dir, key, SessionRecordState::Ended);
+    }
+    links.set_open_notice(key, decision.notice);
+    links.set_open_trust(
+        key,
+        matches!(&decision.check, OpenCheck::Start(signals) if signals.trusted),
+    );
+    decision.check
+}
+
+/// M17 WP5 (R-4 dialogs' "End it" buttons, P4.2): end the remote CC session of the row
+/// `project_path` so the open that follows starts fresh: cancel copy-mode, then end the tmux
+/// session over the link (the same end a close runs), marked as a close so a racing respawn waits.
+/// The record becomes `ended` only when the end ran ([`settle_end`]). The link lingers
+/// [`OPEN_CHECK_GRACE`], since the picker re-runs the open check at once.
+#[tauri::command]
+pub async fn remote_end_session(
+    app: AppHandle,
+    links: State<'_, SharedLinks>,
+    project_path: String,
+) -> Result<(), String> {
+    let dir = resolve_data_dir(&app)?;
+    let links = Arc::clone(&links);
+    crate::blocking::on_blocking_worker("ending the remote session", move || {
+        let target = target_for(&dir, &project_path)?;
+        let (_, hold) = links.ensure_and_hold(&target)?;
+        let session = crate::remote_cmd::tmux_session(&project_path);
+        let result = {
+            let _closing = links.begin_close(&session);
+            let _ = links.cancel_copy_mode(&target, &session);
+            links.end_session(&target, &session).map(|_| ())
+        };
+        drop(hold.linger(OPEN_CHECK_GRACE));
+        settle_end(&dir, &project_path, result)
+    })
+    .await
+}
+
+/// [`remote_end_session`]'s outcome: a delivered end records the session `ended` (so the next
+/// open's decision starts fresh and the label clears); a failed one writes nothing (the record
+/// keeps saying what is true: the session may still run) and says why in plain words.
+pub(crate) fn settle_end(
+    dir: &std::path::Path,
+    key: &str,
+    result: Result<(), super::CloseExecError>,
+) -> Result<(), String> {
+    match result {
+        Ok(()) => {
+            crate::remote_record::record_state(dir, key, SessionRecordState::Ended);
+            Ok(())
+        }
+        Err(e) => Err(format!("could not end the Claude Code session: {e}")),
+    }
+}
+
+/// End the open check's hold on the link. After a start or reconnect an open follows within a second, so the hold
 /// lingers `grace` (the open's spawn then finds the link Up). After anything else nothing follows,
 /// so the hold drops plainly and an otherwise-unheld link stops at once.
 pub(crate) fn release_check_hold(hold: super::LinkHold, outcome: &OpenCheck, grace: Duration) {
-    if *outcome == OpenCheck::Ok {
+    if matches!(outcome, OpenCheck::Start(_) | OpenCheck::Reconnect { .. }) {
         drop(hold.linger(grace));
     } else {
         drop(hold);
@@ -141,9 +324,19 @@ pub fn remote_hook_warning(links: State<'_, SharedLinks>, project_path: String) 
     links.hook_warning(host)
 }
 
-/// Before the picker opens a remote row: validate it, bring its link up, and check its folder
-/// still exists (`test -d` over the master). Read-only on the remote. The link lingers
-/// [`OPEN_CHECK_GRACE`] after an `Ok`, and stops at once after anything else (if unheld).
+/// The notice the last open check left for the workspace it opened (M17 WP5, AC-2.3), taken once,
+/// or `None`. Read by the remote workspace once its spawn resolved, like `remote_hook_warning`.
+///
+/// Sync on purpose: a short lock read, no I/O (`tests/sync_commands_do_not_block.rs`).
+#[tauri::command]
+pub fn remote_open_notice(links: State<'_, SharedLinks>, project_path: String) -> Option<String> {
+    links.take_open_notice(&project_path)
+}
+
+/// Before the picker opens a remote row: validate it, bring its link up, and decide what the open
+/// does (M17 WP5, AC-3) from ONE exec over the master (folder, live session, its mode) and the
+/// LOCAL session record. Read-only on the remote. The link lingers [`OPEN_CHECK_GRACE`] after a
+/// start or reconnect, and stops at once after anything else (if unheld).
 #[tauri::command]
 pub async fn remote_open_check(
     app: AppHandle,
@@ -153,28 +346,129 @@ pub async fn remote_open_check(
     let dir = resolve_data_dir(&app)?;
     let links = Arc::clone(&links);
     crate::blocking::on_blocking_worker("checking the remote project", move || {
-        let target = match target_for(&dir, &project_path) {
-            Ok(t) => t,
-            Err(message) => return Ok(OpenCheck::Invalid { message }),
+        // ⚠️ EVERY outcome, the invalid row and the unreachable host included, goes through
+        // `settle_open_decision`, so each check overwrites the fire-time trust answer: no earlier
+        // `true` survives a later check that could not read the remote.
+        let (decision, hold) = match target_for(&dir, &project_path) {
+            Err(message) => (OpenDecision::plain(OpenCheck::Invalid { message }), None),
+            // ⚠️ The check HOLDS the link for its own duration
+            // (`SURFACE-2026-11-16-QUALITY-M17WP3-OPEN-CHECK-LEAKS-AN-UNHELD-LINK`). Only a start
+            // or a reconnect lingers, because only those are followed by an open. Every other
+            // outcome drops the hold plainly, so a check that leads nowhere leaves no `ssh -M`.
+            Ok(target) => match links.ensure_and_hold(&target) {
+                Err(message) => (
+                    OpenDecision::plain(OpenCheck::Unreachable { message }),
+                    None,
+                ),
+                Ok((_, hold)) => {
+                    let out = links.exec(
+                        &target,
+                        &crate::remote_cmd::open_check_command(
+                            crate::remote_cmd::tmux_server(links.identifier()),
+                            &crate::remote_cmd::tmux_session(&project_path),
+                            target.path(),
+                            // The `/session-restore` arm is gated (a remote row has no profile):
+                            // with the gate OFF the remote project folder is not read at all.
+                            crate::config_store::profiles::workflow_applicable(
+                                crate::config_store::settings::read_workflow_features_enabled(&dir)
+                                    .unwrap_or(false),
+                                None,
+                            ),
+                        ),
+                        super::EXEC_TIMEOUT_MS,
+                    );
+                    let record = crate::remote_record::get(&dir, &project_path).map(|r| r.state);
+                    let unclean = crate::session_state::is_unclean_keyed(
+                        &crate::session_state::read(&dir),
+                        &project_path,
+                    );
+                    (decide_open(out, record, unclean, &target), Some(hold))
+                }
+            },
         };
-        // ⚠️ The check HOLDS the link for its own duration
-        // (`SURFACE-2026-11-16-QUALITY-M17WP3-OPEN-CHECK-LEAKS-AN-UNHELD-LINK`). Only an `Ok`
-        // lingers, because only an `Ok` is followed by an open. Every other outcome drops the hold
-        // plainly, so a check that leads nowhere leaves no `ssh -M` behind.
-        let hold = match links.ensure_and_hold(&target) {
-            Ok((_, hold)) => hold,
-            Err(message) => return Ok(OpenCheck::Unreachable { message }),
-        };
-        let out = links.exec(
-            &target,
-            &crate::remote_cmd::test_dir_command(target.path()),
-            super::EXEC_TIMEOUT_MS,
-        );
-        let outcome = folder_check_outcome(out, &target);
-        release_check_hold(hold, &outcome, OPEN_CHECK_GRACE);
-        Ok(outcome)
+        let check = settle_open_decision(&dir, &links, &project_path, decision);
+        if let Some(hold) = hold {
+            release_check_hold(hold, &check, OPEN_CHECK_GRACE);
+        }
+        Ok(check)
     })
     .await
+}
+
+/// M17 WP5 (AC-8.2) — the shared closure of a remote command's REACH, for the one-exec caller
+/// guards. A source guard cannot count real ssh processes (`LinkRegistry::exec` spawns
+/// `/usr/bin/ssh`, and the commands take an `AppHandle`), so it closes the routes BY CLASS
+/// instead of by the evasions found so far (four verify-self rounds found one each):
+/// - every `crate::remote_cmd::…` / `crate::remote_link::…` / `super::…` item the body names is
+///   in `allowed_paths` EXACTLY (so a public helper added later, like `run_preflight`, fails);
+/// - every crate entry point that reaches ssh, and every panic (which skips what follows), is
+///   banned by name, imported or not;
+/// - every `links` occurrence is one of `links_sites` (a helper handed `&links`, an alias, or
+///   `&*links` fails).
+///
+/// Residual, stated: a retry around the ONE allowed exec, or a brand-new ssh spawner under a new
+/// name imported bare, still passes; neither is a shape an ordinary edit produces by accident.
+#[cfg(test)]
+pub(crate) fn assert_remote_reach_is_closed(
+    body: &str,
+    allowed_paths: &[&str],
+    links_sites: &[&str],
+) {
+    let mut paths: Vec<&str> = Vec::new();
+    for prefix in ["crate::remote_cmd::", "crate::remote_link::", "super::"] {
+        for (i, _) in body.match_indices(prefix) {
+            let rest = &body[i..];
+            let end = rest
+                .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':'))
+                .unwrap_or(rest.len());
+            // `crate::remote_link::` is also matched by its own `super::`-free prefix only once.
+            if prefix == "super::" && body[..i].ends_with("::") {
+                continue;
+            }
+            paths.push(rest[..end].trim_end_matches(':'));
+        }
+    }
+    paths.sort_unstable();
+    paths.dedup();
+    let mut allowed = allowed_paths.to_vec();
+    allowed.sort_unstable();
+    assert_eq!(
+        paths, allowed,
+        "the module items this command reaches: {body}"
+    );
+    for banned in [
+        "run_preflight",
+        "SshExec",
+        "RemoteExec",
+        "preflight",
+        "install_remote_hook",
+        "exec_argv",
+        "master_argv",
+        "check_argv",
+        "run_captured",
+        "Transport",
+        "transport",
+        "Command::new",
+        "std::process",
+        ".expect(",
+        ".unwrap()",
+        "panic!",
+        "unreachable!",
+    ] {
+        assert!(
+            !body.contains(banned),
+            "`{banned}` in a remote command: {body}"
+        );
+    }
+    for site in links_sites {
+        assert_eq!(body.matches(site).count(), 1, "`{site}`: {body}");
+    }
+    let expected: usize = links_sites.iter().map(|s| s.matches("links").count()).sum();
+    assert_eq!(
+        body.matches("links").count(),
+        expected,
+        "a use of `links` outside the allowed sites: {body}"
+    );
 }
 
 #[cfg(test)]
@@ -182,6 +476,203 @@ mod tests {
     use super::*;
     use crate::config_store::{add_remote, write_projects, RemoteTarget};
     use tempfile::TempDir;
+
+    /// `src` from `sig` to its top-level `}` (production code only), comments dropped, whitespace
+    /// removed: a `cargo fmt` reflow can neither break nor satisfy a guard over it.
+    fn dense_body(src: &str, sig: &str) -> String {
+        let production = src.split("#[cfg(test)]").next().unwrap_or(src);
+        let start = production
+            .find(sig)
+            .unwrap_or_else(|| panic!("{sig} moved; re-scope this guard"));
+        let body = &production[start..];
+        let end = body.find("\n}\n").expect("terminates");
+        body[..end]
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .flat_map(|l| l.chars().filter(|c| !c.is_whitespace()))
+            .collect()
+    }
+
+    /// Every `links.<method>(` call in a dense body, in order.
+    fn links_calls(body: &str) -> Vec<String> {
+        body.match_indices("links.")
+            // Never the tail of a snake_case name (`remote_links.`). An alphanumeric before it is
+            // allowed: removing whitespace glues keywords on (`match links.` → `matchlinks.`).
+            .filter(|(i, _)| !body[..*i].ends_with('_'))
+            .filter_map(|(i, m)| {
+                let rest = &body[i + m.len()..];
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+                rest[name.len()..].starts_with('(').then_some(name)
+            })
+            .collect()
+    }
+
+    /// M17 WP5 (P2.verify-self.1, AC-3.1/AC-8.2) caller guard over `remote_open_check`'s worker:
+    /// - the remote is asked in ONE exec, and the ONLY `links.` calls are the hold, that exec, and
+    ///   the identifier (an allow-list, so a second remote call under ANY method name fails;
+    ///   counting the text `.exec(` let `links.close_exec(` through);
+    /// - every outcome, the early ones included, reaches `settle_open_decision` (no `return`, no
+    ///   `?`, one settle), and the settled check is what the picker gets.
+    ///
+    /// The exec's content is tested in `remote_cmd` (`the_open_check_reports_…`); the settle's
+    /// writes in `remote_link::tests`.
+    #[test]
+    fn the_open_check_asks_the_remote_once_and_settles_every_outcome() {
+        let body = dense_body(
+            include_str!("commands.rs"),
+            "pub async fn remote_open_check(",
+        );
+        let worker = &body[body
+            .find("on_blocking_worker(")
+            .expect("runs on a blocking worker")..];
+        assert_eq!(
+            links_calls(worker),
+            ["ensure_and_hold", "exec", "identifier"],
+            "the hold, ONE exec, the identifier, nothing else remote: {worker}"
+        );
+        assert_eq!(worker.matches("open_check_command(").count(), 1, "{worker}");
+        assert!(
+            !worker.contains("return"),
+            "no outcome skips the settle: {worker}"
+        );
+        assert!(
+            !worker.contains('?'),
+            "no outcome skips the settle: {worker}"
+        );
+        // The WHOLE command, not just the worker: a registry copy made before the worker is a
+        // use too (P2 re-verify #3, M9).
+        super::assert_remote_reach_is_closed(
+            &body,
+            &[
+                "crate::remote_cmd::open_check_command",
+                "crate::remote_cmd::tmux_server",
+                "crate::remote_cmd::tmux_session",
+                "super::EXEC_TIMEOUT_MS",
+            ],
+            &[
+                "links:State<'_,SharedLinks>",
+                "letlinks=Arc::clone(&links);",
+                "links.ensure_and_hold(",
+                "links.exec(",
+                "links.identifier(",
+                "settle_open_decision(&dir,&links,",
+            ],
+        );
+        assert!(!worker.contains("try_state"), "{worker}");
+        let settle = worker
+            .find("letcheck=settle_open_decision(&dir,&links,&project_path,decision);")
+            .unwrap_or_else(|| panic!("settles the decision: {worker}"));
+        assert_eq!(worker.matches("settle_open_decision(").count(), 1);
+        for early in [
+            "Err(message)=>(OpenDecision::plain(OpenCheck::Invalid{message}),None)",
+            "Err(message)=>(OpenDecision::plain(OpenCheck::Unreachable{message}),None,)",
+            "(decide_open(out,record,unclean,&target),Some(hold))",
+        ] {
+            let at = worker
+                .find(early)
+                .unwrap_or_else(|| panic!("`{early}` feeds the settle: {worker}"));
+            assert!(at < settle);
+        }
+        assert!(
+            worker.ends_with("Ok(check)}).await"),
+            "returns the settled check: {worker}"
+        );
+        for direct in ["set_open_trust(", "set_open_notice(", "record_state("] {
+            assert!(
+                !worker.contains(direct),
+                "`{direct}` belongs to settle_open_decision"
+            );
+        }
+        // And the settle itself touches only the two answers it leaves (no remote call).
+        let settle_body = dense_body(
+            include_str!("commands.rs"),
+            "pub(crate) fn settle_open_decision(",
+        );
+        assert_eq!(
+            links_calls(&settle_body),
+            ["set_open_notice", "set_open_trust"],
+            "{settle_body}"
+        );
+    }
+
+    /// M17 WP5 caller guard: the FIRST thing `folder_trusted` does is answer a remote row through
+    /// `remote_trust` (driven by `remote_link::tests::the_fire_time_trust_read_answers_…`). A
+    /// prefix check, so nothing (an early `return true` for `ssh://` keys, which passed the
+    /// earlier "comes before the local read" form) can run ahead of it.
+    #[test]
+    fn folder_trusted_answers_a_remote_row_through_remote_trust_first() {
+        let body = dense_body(
+            include_str!("../folder_trust/commands.rs"),
+            "pub fn folder_trusted(",
+        );
+        let open = body.find("->bool{").expect("returns bool") + "->bool{".len();
+        assert!(
+            body[open..].starts_with(
+                "letlinks=app.try_state::<crate::remote_link::commands::SharedLinks>();\
+                 ifletSome(answer)=remote_trust(&project_path,links.as_deref().map(|l|l.as_ref())){returnanswer;}"
+            ),
+            "the remote dispatch is the function's first statement: {}",
+            &body[open..]
+        );
+    }
+
+    /// M17 WP5 P4.2 — the dialogs' End: a delivered end records `ended`; a failed one writes
+    /// nothing and says why.
+    #[test]
+    fn ending_the_session_records_ended_only_when_the_end_ran() {
+        use crate::remote_record::{get, record_state};
+        let dir = TempDir::new().unwrap();
+        let key = "ssh://me@mini-host/Users/me/p";
+        assert!(record_state(
+            dir.path(),
+            key,
+            SessionRecordState::EndPending
+        ));
+        let err = settle_end(
+            dir.path(),
+            key,
+            Err(super::super::CloseExecError::LinkNotUp),
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("could not end the Claude Code session"),
+            "{err}"
+        );
+        assert_eq!(
+            get(dir.path(), key).map(|r| r.state),
+            Some(SessionRecordState::EndPending),
+            "a failed end leaves the record as it was"
+        );
+        assert!(settle_end(dir.path(), key, Ok(())).is_ok());
+        assert_eq!(
+            get(dir.path(), key).map(|r| r.state),
+            Some(SessionRecordState::Ended)
+        );
+    }
+
+    /// M17 WP5 P4.2 caller guard: the End runs inside a close mark (a racing respawn waits),
+    /// cancels copy-mode before the end, and settles the record from the end's own result.
+    #[test]
+    fn remote_end_session_marks_the_close_cancels_then_ends_and_settles() {
+        let body = dense_body(
+            include_str!("commands.rs"),
+            "pub async fn remote_end_session(",
+        );
+        let at = |n: &str| body.find(n).unwrap_or_else(|| panic!("`{n}`: {body}"));
+        let hold = at("links.ensure_and_hold(&target)?");
+        let mark = at("let_closing=links.begin_close(&session);");
+        let cancel = at("links.cancel_copy_mode(&target,&session);");
+        let end = at("links.end_session(&target,&session).map(|_|())");
+        let settle = at("settle_end(&dir,&project_path,result)");
+        assert!(
+            hold < mark && mark < cancel && cancel < end && end < settle,
+            "{body}"
+        );
+        assert_eq!(body.matches(".end_session(").count(), 1, "{body}");
+    }
 
     #[test]
     fn target_for_returns_a_valid_row_and_refuses_an_invalid_or_unknown_one() {
@@ -226,26 +717,136 @@ mod tests {
         assert_eq!(OPEN_CHECK_GRACE, Duration::from_secs(20));
     }
 
-    #[test]
-    fn the_folder_check_tells_a_missing_folder_from_an_unreachable_host() {
-        use crate::subprocess::RunError;
-        let t = ValidTarget::new("me@mini-host", "/Users/me/p").unwrap();
-        assert_eq!(folder_check_outcome(Ok("yes\n".into()), &t), OpenCheck::Ok);
-        // rc-file noise before the answer is ignored.
-        assert_eq!(
-            folder_check_outcome(Ok("Welcome!\nyes\n".into()), &t),
-            OpenCheck::Ok
+    fn facts(dir: bool, live: bool, mode: Option<&str>) -> String {
+        let s = crate::remote_cmd::OPEN_SENTINEL;
+        let mut out = format!(
+            "Welcome!\n{s}dir:{}\n{s}live:{}\n",
+            if dir { "yes" } else { "no" },
+            if live { "yes" } else { "no" }
         );
-        match folder_check_outcome(Ok("no\n".into()), &t) {
-            OpenCheck::FolderMissing { message } => {
-                assert!(
-                    message.contains("/Users/me/p no longer exists on me@mini-host"),
-                    "{message}"
-                )
+        if let Some(m) = mode {
+            out.push_str(&format!("{s}mode:{m}\n"));
+        }
+        out
+    }
+
+    #[test]
+    fn a_live_session_is_reconnected_only_when_claudesk_left_it_running() {
+        use SessionRecordState::*;
+        let t = ValidTarget::new("me@mini.example.net", "/Users/me/p").unwrap();
+        let live = || Ok(facts(true, true, Some("autopilot")));
+        assert_eq!(
+            decide_open(live(), Some(Running), false, &t),
+            OpenDecision::plain(OpenCheck::Reconnect {
+                mode: Some("autopilot".into())
+            })
+        );
+        let d = decide_open(live(), Some(EndPending), false, &t);
+        assert!(!d.clear_end_pending && d.notice.is_none(), "{d:?}");
+        match d.check {
+            OpenCheck::AskEndPending { message } => {
+                assert!(message.contains("while mini was unreachable"), "{message}")
             }
             other => panic!("{other:?}"),
         }
-        // An ssh failure is NEVER a missing folder: only `no` may lead to Remove.
+        // A8: a live session whose record says ended, or with no record, is never joined unasked.
+        for record in [Some(Ended), None] {
+            let d = decide_open(live(), record, false, &t);
+            assert!(!d.clear_end_pending && d.notice.is_none(), "{d:?}");
+            match d.check {
+                OpenCheck::AskUnrecorded { message } => {
+                    assert!(message.contains("already running on mini"), "{message}")
+                }
+                other => panic!("{record:?}: {other:?}"),
+            }
+        }
+        // Live beats a missing folder: the session is there to reconnect to.
+        assert!(matches!(
+            decide_open(Ok(facts(false, true, None)), Some(Running), false, &t).check,
+            OpenCheck::Reconnect { mode: None }
+        ));
+    }
+
+    #[test]
+    fn a_dead_session_starts_and_clears_a_stale_end_intent() {
+        use SessionRecordState::*;
+        let t = ValidTarget::new("me@mini-host", "/Users/me/p").unwrap();
+        let dead = || Ok(facts(true, false, None));
+        for record in [Some(Ended), None] {
+            assert_eq!(
+                decide_open(dead(), record, false, &t),
+                OpenDecision::plain(OpenCheck::Start(StartSignals::default())),
+                "{record:?}"
+            );
+        }
+        // AC-2.3: the label said reconnect, but the session had ended: start, and say so.
+        let d = decide_open(dead(), Some(Running), false, &t);
+        assert_eq!(
+            (&d.check, d.clear_end_pending),
+            (&OpenCheck::Start(StartSignals::default()), false)
+        );
+        assert!(d
+            .notice
+            .unwrap()
+            .contains("had ended since Claudesk last saw it"));
+        // A7: the session the end-intent was about has ended anyway: clear it, ask nothing, and
+        // say why the promised question did not come.
+        let d = decide_open(dead(), Some(EndPending), false, &t);
+        assert_eq!(
+            (&d.check, d.clear_end_pending),
+            (&OpenCheck::Start(StartSignals::default()), true)
+        );
+        assert!(d.notice.unwrap().contains("had already ended"));
+        let d = decide_open(Ok(facts(false, false, None)), Some(EndPending), false, &t);
+        assert!(d.clear_end_pending);
+        match d.check {
+            OpenCheck::FolderMissing { message } => assert!(
+                message.contains("/Users/me/p no longer exists on me@mini-host"),
+                "{message}"
+            ),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_dead_session_starts_with_the_remote_resume_signals() {
+        // M17 WP5 Phase 2 (AC-3.3): the remote `.session.md`, the remote trust of the PHYSICAL
+        // path (a stored symlink is trusted through its target), and the local flag as given.
+        let t = ValidTarget::new("me@mini-host", "/Users/me/link").unwrap();
+        let s = crate::remote_cmd::OPEN_SENTINEL;
+        let out = |lines: &str| Ok(format!("{s}dir:yes\n{s}live:no\n{lines}"));
+        let signals = |o, flag| match decide_open(o, None, flag, &t).check {
+            OpenCheck::Start(sig) => sig,
+            other => panic!("{other:?}"),
+        };
+        let trusted_real = format!("{s}real:/Users/me/real\n{s}trusted:/Users/me/real\n");
+        assert_eq!(
+            signals(out(&format!("{trusted_real}{s}session-md:yes\n")), true),
+            StartSignals {
+                unclean_flag: true,
+                session_md: true,
+                trusted: true
+            }
+        );
+        // Trust on the STORED (symlink) path does not count: CC keys trust by the physical path.
+        assert!(
+            !signals(
+                out(&format!(
+                    "{s}real:/Users/me/real\n{s}trusted:/Users/me/link\n"
+                )),
+                false
+            )
+            .trusted
+        );
+        // An ancestor's trust covers it; no physical path falls back to the stored one.
+        assert!(signals(out(&format!("{s}trusted:/Users/me\n")), false).trusted);
+        assert_eq!(signals(out(""), false), StartSignals::default());
+    }
+
+    #[test]
+    fn no_answer_is_unreachable_never_a_missing_folder() {
+        use crate::subprocess::RunError;
+        let t = ValidTarget::new("me@mini-host", "/Users/me/p").unwrap();
         for out in [
             Err(RunError::Failed {
                 code: Some(255),
@@ -253,15 +854,53 @@ mod tests {
             }),
             Err(RunError::TimedOut(10_000)),
             Ok(String::new()),
-            Ok("noise only\n".into()),
+            Ok("dir:no\nlive:no\n".into()),
         ] {
-            assert!(
-                matches!(
-                    folder_check_outcome(out.clone(), &t),
-                    OpenCheck::Unreachable { .. }
-                ),
-                "{out:?}"
-            );
+            let d = decide_open(out.clone(), Some(SessionRecordState::EndPending), false, &t);
+            assert!(matches!(d.check, OpenCheck::Unreachable { .. }), "{out:?}");
+            assert!(!d.clear_end_pending && d.notice.is_none(), "{out:?}");
         }
+    }
+
+    #[test]
+    fn the_wire_kinds_are_kebab_case() {
+        let j = |o: OpenCheck| serde_json::to_value(o).unwrap();
+        let start = j(OpenCheck::Start(StartSignals {
+            unclean_flag: true,
+            session_md: false,
+            trusted: true,
+        }));
+        assert_eq!(start["kind"], "start");
+        assert_eq!(
+            (
+                &start["uncleanFlag"],
+                &start["sessionMd"],
+                &start["trusted"]
+            ),
+            (
+                &serde_json::json!(true),
+                &serde_json::json!(false),
+                &serde_json::json!(true)
+            )
+        );
+        let r = j(OpenCheck::Reconnect {
+            mode: Some("fsd".into()),
+        });
+        assert_eq!(
+            (r["kind"].as_str(), r["mode"].as_str()),
+            (Some("reconnect"), Some("fsd"))
+        );
+        assert_eq!(
+            j(OpenCheck::AskEndPending {
+                message: "m".into()
+            })["kind"],
+            "ask-end-pending"
+        );
+        assert_eq!(
+            j(OpenCheck::AskUnrecorded {
+                message: "m".into()
+            })["kind"],
+            "ask-unrecorded"
+        );
     }
 }

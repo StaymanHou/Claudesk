@@ -23,6 +23,12 @@ pub fn folder_trusted(
     project_path: String,
     pty_session_id: Option<String>,
 ) -> bool {
+    // M17 WP5 Phase 2: a REMOTE row's folder is trusted (or not) by the REMOTE CC, which the open
+    // check read over the link; the local `~/.claude.json` says nothing about it.
+    let links = app.try_state::<crate::remote_link::commands::SharedLinks>();
+    if let Some(answer) = remote_trust(&project_path, links.as_deref().map(|l| l.as_ref())) {
+        return answer;
+    }
     let Ok(home) = app.path().home_dir() else {
         return false;
     };
@@ -36,4 +42,17 @@ pub fn folder_trusted(
         return false;
     };
     super::is_trusted_on_disk(&super::claude_json_path(&home, &target), project)
+}
+
+/// M17 WP5 Phase 2 — the remote half of [`folder_trusted`]: `Some(answer)` for a REMOTE key (the
+/// last open check's answer for it, over the link), `None` for a local path (the local
+/// `~/.claude.json` decides). ⚠️ This answer is what withholds the auto-fired `/session-restore` in
+/// an untrusted remote folder, so every gap reads as untrusted (D4): no link registry, or no check
+/// answer for the key.
+pub(crate) fn remote_trust(
+    project_path: &str,
+    links: Option<&crate::remote_link::LinkRegistry>,
+) -> Option<bool> {
+    crate::config_store::split_remote_key(project_path)?;
+    Some(links.is_some_and(|l| l.open_trust(project_path)))
 }

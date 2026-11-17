@@ -503,6 +503,31 @@ body,
   color: #ffcf8a;
 }
 
+/* M17 WP5 — the Detach control (REMOTE tiles only): out of flow, below the ⏸, revealed with it.
+   Blue, distinct from the ×'s red and the ⏸'s amber: "leave it running on the host". */
+.tile-action--detach {
+  position: absolute;
+  top: calc(200% + 6px);
+  left: 0;
+  visibility: hidden;
+  background-color: rgba(28, 28, 30, 0.92);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  z-index: 3;
+}
+
+.tile-actions:hover .tile-action--detach,
+.tile-actions:focus-within .tile-action--detach,
+.tile-action--detach:focus-visible {
+  visibility: visible;
+  opacity: 0.75;
+}
+
+.tile-action--detach:hover {
+  opacity: 1;
+  background-color: rgba(90, 160, 255, 0.28);
+  color: #9cc7ff;
+}
+
 /* The ⏸ glyph: two bars, drawn rather than using the "⏸" codepoint (which renders
    inconsistently across fonts and can pick up a colour-emoji fallback). Inherits
    currentColor so it tracks the hover/focus states above. */
@@ -861,6 +886,27 @@ body,
 /* M17 WP3 P4.verify-human.2 — a refused injection's "not sent" toast. Anchored below the header
    row like `.drivemode-confirm`, but on the RIGHT so the two never cover each other. Error
    colours match `.picker-toast-error` (no token layer — hex copied). */
+/* M17 WP5 — the app-level toast (a remote close that could not end its session: the workspace is
+   already gone). The workspace toast's look, fixed to the window's top-right. */
+.app-toast {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: min(34rem, calc(100vw - 1.5rem));
+  padding: 0.6rem 0.9rem;
+  border: 1px solid rgba(248, 81, 73, 0.6);
+  border-radius: 6px;
+  background-color: #2b1a1a;
+  color: #ffb4ae;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  font-size: 0.85rem;
+  text-align: left;
+}
+
 .workspace-inject-toast {
   position: absolute;
   top: 100%;

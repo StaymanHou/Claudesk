@@ -91,7 +91,7 @@ import {
 // The Recycle operation: a sibling in the skill row, not a skill button (`recycleButton.ts`).
 import { recycleSession, waitForFreshSessionId } from "./recycleSession";
 import { recycleInjectFailure } from "./injectFailure";
-import { readRemoteHookWarning } from "./remoteHookWarning";
+import { readRemoteOpenToast } from "./remoteHookWarning";
 import { reconnectStripText } from "./reconnectStrip";
 // M15 WP4 — the workflow supervisor's per-workspace host. ⚠️ `fanOut` is deliberately NOT wired
 // here; see `useSupervisor`'s header for why the host must be per-workspace.
@@ -149,6 +149,11 @@ interface WorkspaceProps {
    * only: no guard reads it.
    */
   statusLink?: WireLinkOverlay;
+  /**
+   * M17 WP5 — a notice the app has for this workspace (a failed Detach: the tile stays, so the
+   * operator meets it here). Shown in the workspace toast each time its `seq` changes.
+   */
+  notice?: { text: string; seq: number };
 }
 
 export function Workspace({
@@ -160,6 +165,7 @@ export function Workspace({
   statusDisplayState,
   statusSnippet,
   statusLink,
+  notice,
 }: WorkspaceProps) {
   // M4 WP4b — which half (left CC terminal / right panel) holds keyboard focus, so the
   // CSS can paint a #6ea8ff accent on it. Capture-phase focusin/focusout on this
@@ -175,6 +181,13 @@ export function Workspace({
   // `.drivemode-confirm`, because backgrounded workspaces stay mounted. Dismissed by ×; a later
   // failure replaces it.
   const [injectFailure, setInjectFailure] = useState<string | null>(null);
+  // M17 WP5 — an app notice for this workspace (a failed Detach) joins the same toast, once per
+  // new `seq`. Adjusted during render (React's "a prop changed" pattern), not in an effect.
+  const [noticeSeq, setNoticeSeq] = useState(0);
+  if (notice !== undefined && notice.seq !== noticeSeq) {
+    setNoticeSeq(notice.seq);
+    setInjectFailure(notice.text);
+  }
 
   // ── M12 WP3 Phase 5 — the third arm ──────────────────────────────────────────────
   //
@@ -1282,11 +1295,16 @@ export function Workspace({
             onSessionId?.(workspace.id, sid);
             // M17 WP4 (AC-1.2) — a remote host whose hook could not be registered says so here,
             // in the same toast as a refused injection (its status dot would otherwise stay grey
-            // with no explanation). A local project never asks.
-            void readRemoteHookWarning(workspace.project_path).then((w) => {
+            // with no explanation). M17 WP5 (AC-2.3) — so does an open whose check found
+            // something the picker's label did not predict. A local project never asks.
+            void readRemoteOpenToast(workspace.project_path).then((w) => {
               if (w !== null) setInjectFailure(w);
             });
           }}
+          // M17 WP5 (operator ruling, P2.verify-human.3) — an untrusted REMOTE folder held back the
+          // auto-fired command: say so, in the same toast (a silent non-fire reads as "nothing to
+          // resume").
+          onAutoResumeWithheld={setInjectFailure}
           // M14 WP0 — feed the unsent-input watermark. ⚠️ ONLY the CC pane opts in: the
           // right-panel `TerminalPane` mounts this same component for a login SHELL, which the
           // supervisor never fires into, so a watermark fed from it would suppress CC's chain

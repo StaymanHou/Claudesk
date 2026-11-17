@@ -102,8 +102,13 @@ export type AutoResumeAction = ArgvAction | InjectAction | null;
  * ⚠️ `turn-respawn` is the load-bearing spelling — the Rust variant is `TurnRespawn`, so
  * `turnRespawn` / `turn_respawn` fail serde (pinned both sides by
  * `the_wire_form_of_open_intent_is_kebab_case` and `driveModeIpc.test.ts`).
+ *
+ * ⚠️ **`"reconnect"` is the remote open's own door** (M17 WP5). The picker's open check found the
+ * remote session still running and left by Claudesk, so the open ATTACHES to it (`tmux attach`):
+ * nothing resumes (the conversation never ended) and the unclean flag is not spent. Only
+ * `cc_spawn_remote` acts on it; `actionForIntent` yields no action for it.
  */
-export type OpenIntent = "fire" | "no-fire" | "turn-respawn";
+export type OpenIntent = "fire" | "no-fire" | "turn-respawn" | "reconnect";
 
 /**
  * How long to wait after spawn before injecting, in milliseconds.
@@ -194,7 +199,17 @@ export function requiresInjection(action: AutoResumeAction): boolean {
  * `"resume"` because arm 1 is a spawn argv flag, and a payload naming `/resume` would
  * invite a caller to type it — which opens an interactive picker instead of resuming.
  */
-export type AnnouncedAction = "continue" | "restore" | "restore-manual";
+export type AnnouncedAction =
+  | "continue"
+  | "restore"
+  | "restore-manual"
+  // M17 WP5 — REMOTE rows only, from Claudesk's LOCAL session record (never the remote): the
+  // session was left running (`reconnect`, or `reconnect@<mode>` when it runs under a mode other
+  // than the row's stored one), or was closed while the host was unreachable (`ask-offline`).
+  // Labels, not actions: the click's open check decides (`remoteRow.ts`).
+  | "reconnect"
+  | `reconnect@${string}`
+  | "ask-offline";
 
 /**
  * Whether the backend announced the restore arm for a folder Claude Code has NOT trusted yet

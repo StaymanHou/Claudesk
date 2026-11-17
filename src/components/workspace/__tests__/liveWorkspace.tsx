@@ -59,6 +59,8 @@ interface StubPaneProps {
   onTurnStartRecorded?: (nav: TurnNavView) => void;
   onInputForwarded?: (chunk: string) => void;
   claimTurnOrigin?: () => SupervisorOrigin | null;
+  /** M17 WP5 — what `Workspace` runs when the auto-resume fire withheld a remote command. */
+  onAutoResumeWithheld?: (notice: string) => void;
   openIntent?: OpenIntent;
   spawnIntentRef?: SpawnIntentRef;
 }
@@ -250,6 +252,8 @@ export interface MountOptions {
   detachedPane?: boolean;
   /** M17 WP4 — the workspace's project key (a remote `ssh://` key, say). Defaults to a local path. */
   projectPath?: string;
+  /** M17 WP5 — the app's notice for this workspace (a failed Detach). */
+  notice?: { text: string; seq: number };
 }
 
 let root: Root | null = null;
@@ -301,6 +305,7 @@ export async function mountWorkspace(opts: MountOptions) {
         statusState={opts.statusState ?? "idle"}
         statusDisplayState={opts.statusDisplayState}
         statusLink={opts.statusLink}
+        notice={opts.notice}
       />,
     ),
   );

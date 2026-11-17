@@ -72,7 +72,15 @@ describe("remote rows on the live picker (M17 WP2)", () => {
       projects: [REMOTE],
       announce: { [KEY]: "continue" },
       onOpen,
-      ipc: (cmd) => (cmd === "remote_open_check" ? { kind: "ok" } : undefined),
+      ipc: (cmd) =>
+        cmd === "remote_open_check"
+          ? {
+              kind: "start",
+              uncleanFlag: true,
+              sessionMd: false,
+              trusted: true,
+            }
+          : undefined,
     });
     const row = pickerRow(el, "tank");
     await click(q(row, "picker-recent"));
@@ -89,6 +97,229 @@ describe("remote rows on the live picker (M17 WP2)", () => {
     expect(cmds.indexOf("remote_open_check")).toBeLessThan(
       cmds.indexOf("record_open"),
     );
+  });
+
+  // M17 WP5 (R-2, AC-2) — the label comes from the local record; the click's check decides.
+  it("a row labelled reconnect, whose check finds the session live, opens through the reconnect door", async () => {
+    const onOpen = vi.fn();
+    const { el } = await mountPicker({
+      projects: [REMOTE],
+      announce: { [KEY]: "reconnect" },
+      onOpen,
+      ipc: (cmd) =>
+        cmd === "remote_open_check"
+          ? { kind: "reconnect", mode: "autopilot" }
+          : undefined,
+    });
+    const row = pickerRow(el, "tank");
+    expect(q(row, "picker-recent-announce")?.textContent).toContain(
+      "reconnect",
+    );
+    expect(q(row, "picker-recent-nofire")).toBeNull();
+    await click(q(row, "picker-recent"));
+    expect(onOpen.mock.calls).toEqual([[KEY, null, "reconnect"]]);
+    const cmds = calls.map((c) => c.cmd);
+    expect(cmds.indexOf("remote_open_check")).toBeLessThan(
+      cmds.indexOf("record_open"),
+    );
+  });
+
+  // M17 WP5 Phase 2 (AC-3.3) — a remote START takes its action from the check's signals (read over
+  // the link at click time), never from the picker's map: the row's label comes from the LOCAL
+  // record and cannot know the remote `.session.md`.
+  it.each([
+    {
+      name: "the flag → continue, though the row was labelled reconnect",
+      label: "reconnect",
+      signals: { uncleanFlag: true, sessionMd: true, trusted: true },
+      gateOn: true,
+      action: { kind: "argv", flag: "--continue" },
+    },
+    {
+      name: "remote .session.md, trusted, gate ON → /session-restore, though the row had no label",
+      label: undefined,
+      signals: { uncleanFlag: false, sessionMd: true, trusted: true },
+      gateOn: true,
+      action: { kind: "inject", command: "/session-restore" },
+    },
+    {
+      name: "remote .session.md with the gate OFF → nothing (the restore arm is gated)",
+      label: undefined,
+      signals: { uncleanFlag: false, sessionMd: true, trusted: true },
+      gateOn: false,
+      action: null,
+    },
+    {
+      name: "no signal → nothing, though the row was labelled continue",
+      label: "continue",
+      signals: { uncleanFlag: false, sessionMd: false, trusted: true },
+      gateOn: true,
+      action: null,
+    },
+  ] as const)(
+    "a remote start: $name",
+    async ({ label, signals, gateOn, action }) => {
+      const onOpen = vi.fn();
+      const { el } = await mountPicker({
+        projects: [REMOTE],
+        announce: label === undefined ? {} : { [KEY]: label },
+        onOpen,
+        gateOn,
+        ipc: (cmd) =>
+          cmd === "remote_open_check"
+            ? { kind: "start", ...signals }
+            : undefined,
+      });
+      await click(q(pickerRow(el, "tank"), "picker-recent"));
+      expect(onOpen.mock.calls).toEqual([[KEY, action, "fire"]]);
+    },
+  );
+
+  // An untrusted remote folder: the action is still the inject arm (the fire-time trust read,
+  // answered for a remote key from this same check, is what withholds it), as for a local row.
+  it("a remote start into an untrusted folder carries the inject arm for the fire-time read to withhold", async () => {
+    const onOpen = vi.fn();
+    const { el } = await mountPicker({
+      projects: [REMOTE],
+      onOpen,
+      gateOn: true,
+      ipc: (cmd) =>
+        cmd === "remote_open_check"
+          ? {
+              kind: "start",
+              uncleanFlag: false,
+              sessionMd: true,
+              trusted: false,
+            }
+          : undefined,
+    });
+    await click(q(pickerRow(el, "tank"), "picker-recent"));
+    expect(onOpen.mock.calls).toEqual([
+      [KEY, { kind: "inject", command: "/session-restore" }, "fire"],
+    ]);
+  });
+
+  // M17 WP5 (R-4, AC-5.1/5.2) — the live session Claudesk did not leave running: a dialog, nothing
+  // opened until the operator answers.
+  const askCheck = (kind: string) => ({
+    kind,
+    message: "Its Claude Code session is still running on mini-host.",
+  });
+
+  it.each([
+    ["ask-end-pending", "End it and open"],
+    ["ask-unrecorded", "Reconnect"],
+  ])(
+    "a %s check opens its dialog, with %s as the default, and nothing opens yet",
+    async (kind, primary) => {
+      const onOpen = vi.fn();
+      const { el } = await mountPicker({
+        projects: [REMOTE],
+        onOpen,
+        ipc: (cmd) =>
+          cmd === "remote_open_check" ? askCheck(kind) : undefined,
+      });
+      await click(q(pickerRow(el, "tank"), "picker-recent"));
+      const dialog = q(el, "confirm-dialog");
+      expect(dialog?.textContent).toContain("still running on mini-host");
+      expect(
+        dialog?.querySelector(".confirm-dialog-btn-primary")?.textContent,
+      ).toBe(primary);
+      expect(onOpen).not.toHaveBeenCalled();
+      expect(calls.map((c) => c.cmd)).not.toContain("record_open");
+    },
+  );
+
+  it.each(["ask-end-pending", "ask-unrecorded"])(
+    "%s → Reconnect attaches through the reconnect door",
+    async (kind) => {
+      const onOpen = vi.fn();
+      const { el } = await mountPicker({
+        projects: [REMOTE],
+        onOpen,
+        ipc: (cmd) =>
+          cmd === "remote_open_check" ? askCheck(kind) : undefined,
+      });
+      await click(q(pickerRow(el, "tank"), "picker-recent"));
+      await click(q(el, "confirm-remote-ask-reconnect"));
+      expect(q(el, "confirm-dialog")).toBeNull();
+      expect(onOpen.mock.calls).toEqual([[KEY, null, "reconnect"]]);
+      expect(calls.map((c) => c.cmd)).not.toContain("remote_end_session");
+    },
+  );
+
+  it.each(["ask-end-pending", "ask-unrecorded"])(
+    "%s → End ends the session, then runs the open again, which starts through the same door",
+    async (kind) => {
+      const onOpen = vi.fn();
+      let checks = 0;
+      const { el } = await mountPicker({
+        projects: [REMOTE],
+        onOpen,
+        ipc: (cmd) => {
+          if (cmd !== "remote_open_check") return undefined;
+          checks += 1;
+          // First check: live. After the end: a dead session with the flag set.
+          return checks === 1
+            ? askCheck(kind)
+            : {
+                kind: "start",
+                uncleanFlag: true,
+                sessionMd: false,
+                trusted: true,
+              };
+        },
+      });
+      await click(q(pickerRow(el, "tank"), "picker-recent"));
+      await click(q(el, "confirm-remote-ask-end"));
+      const cmds = calls.map((c) => c.cmd);
+      expect(calls.filter((c) => c.cmd === "remote_end_session")).toEqual([
+        { cmd: "remote_end_session", args: { projectPath: KEY } },
+      ]);
+      // end → the check again → the open.
+      const end = cmds.indexOf("remote_end_session");
+      expect(cmds.indexOf("remote_open_check", end)).toBeGreaterThan(end);
+      expect(onOpen.mock.calls).toEqual([
+        [KEY, { kind: "argv", flag: "--continue" }, "fire"],
+      ]);
+    },
+  );
+
+  it("Cancel opens nothing and ends nothing", async () => {
+    const onOpen = vi.fn();
+    const { el } = await mountPicker({
+      projects: [REMOTE],
+      onOpen,
+      ipc: (cmd) =>
+        cmd === "remote_open_check" ? askCheck("ask-end-pending") : undefined,
+    });
+    await click(q(pickerRow(el, "tank"), "picker-recent"));
+    await click(q(el, "confirm-remote-ask-cancel"));
+    expect(q(el, "confirm-dialog")).toBeNull();
+    expect(onOpen).not.toHaveBeenCalled();
+    const cmds = calls.map((c) => c.cmd);
+    expect(cmds).not.toContain("remote_end_session");
+    expect(cmds).not.toContain("record_open");
+  });
+
+  it("a failed End opens nothing and says why", async () => {
+    const onOpen = vi.fn();
+    const { el } = await mountPicker({
+      projects: [REMOTE],
+      onOpen,
+      ipc: (cmd) => {
+        if (cmd === "remote_open_check") return askCheck("ask-unrecorded");
+        if (cmd === "remote_end_session")
+          throw "could not end the Claude Code session: the link is not up, so nothing was sent";
+        return undefined;
+      },
+    });
+    await click(q(pickerRow(el, "tank"), "picker-recent"));
+    await click(q(el, "confirm-remote-ask-end"));
+    expect(q(el, "picker-toast")?.textContent).toContain(
+      "could not end the Claude Code session",
+    );
+    expect(onOpen).not.toHaveBeenCalled();
   });
 
   it("a missing folder opens nothing and OFFERS Remove; Remove sends the row's key", async () => {
@@ -120,25 +351,37 @@ describe("remote rows on the live picker (M17 WP2)", () => {
     expect(el.querySelectorAll("li.picker-recent-row")).toHaveLength(1);
   });
 
-  it("an unreachable host opens nothing and offers NO Remove", async () => {
+  it("an unreachable host opens nothing, offers Retry (never Remove), and Retry checks again", async () => {
     const onOpen = vi.fn();
+    let checks = 0;
     const { el } = await mountPicker({
       projects: [REMOTE],
       onOpen,
-      ipc: (cmd) =>
-        cmd === "remote_open_check"
+      ipc: (cmd) => {
+        if (cmd !== "remote_open_check") return undefined;
+        checks += 1;
+        return checks === 1
           ? {
               kind: "unreachable",
               message:
                 "could not resolve hostname user@mini-host: is Tailscale running?",
             }
-          : undefined,
+          : {
+              kind: "start",
+              uncleanFlag: false,
+              sessionMd: false,
+              trusted: true,
+            };
+      },
     });
     await click(q(pickerRow(el, "tank"), "picker-recent"));
     expect(q(el, "picker-toast")?.textContent).toContain("Tailscale");
-    expect(q(el, "picker-toast-action")).toBeNull();
+    expect(q(el, "picker-toast-action")?.textContent).toBe("Retry");
     expect(onOpen).not.toHaveBeenCalled();
     expect(calls.map((c) => c.cmd)).not.toContain("record_open");
+    await click(q(el, "picker-toast-action"));
+    expect(checks).toBe(2);
+    expect(onOpen.mock.calls).toEqual([[KEY, null, "fire"]]);
   });
 
   it("positive control: a local row still opens", async () => {

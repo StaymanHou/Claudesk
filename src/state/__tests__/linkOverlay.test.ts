@@ -58,8 +58,5 @@ describe("the link overlay", () => {
 
   it("says so in plain words", () => {
     expect(linkOverlayTitle(LOST)).toBe("Not connected to mini: reconnecting");
-    expect(linkOverlayTitle({ status: "detached", host: "mini" })).toBe(
-      "Detached from mini",
-    );
   });
 });

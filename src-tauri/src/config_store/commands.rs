@@ -192,7 +192,18 @@ pub(crate) fn record_closed_best_effort(app: &AppHandle, paths: Vec<PathBuf>) {
 #[tauri::command]
 pub fn remove_project(app: AppHandle, path: String) -> Result<(), String> {
     let dir = resolve_data_dir(&app)?;
-    remove_project_inner(&dir, Path::new(&path)).map_err(|e| e.to_string())
+    remove_project_and_record(&dir, &path)
+}
+
+/// [`remove_project`]'s body: drop the row, and for a remote row its session record too (M17 WP5),
+/// so a re-added row's live session reads as unknown (the open asks) rather than as one Claudesk
+/// left running.
+fn remove_project_and_record(dir: &Path, path: &str) -> Result<(), String> {
+    remove_project_inner(dir, Path::new(path)).map_err(|e| e.to_string())?;
+    if super::split_remote_key(path).is_some() {
+        crate::remote_record::clear(dir, path);
+    }
+    Ok(())
 }
 
 /// Drop projects whose folder no longer exists on disk, returning the dropped
@@ -580,6 +591,28 @@ pub(crate) fn apply_project_profile(
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn removing_a_remote_row_forgets_its_session_record_and_only_its_own() {
+        // M17 WP5: a re-added row must not inherit "Claudesk left it running".
+        let d = TempDir::new().unwrap();
+        let row = super::super::add_remote(
+            d.path(),
+            super::super::RemoteTarget {
+                host: "me@mini-host".into(),
+                path: "/Users/me/p".into(),
+            },
+            1,
+        )
+        .unwrap();
+        let key = row.path.display().to_string();
+        crate::remote_record::record_running(d.path(), &key, None);
+        crate::remote_record::record_running(d.path(), "ssh://me@mini-host/other", None);
+        remove_project_and_record(d.path(), &key).unwrap();
+        assert_eq!(crate::remote_record::get(d.path(), &key), None);
+        assert!(crate::remote_record::get(d.path(), "ssh://me@mini-host/other").is_some());
+        assert!(super::super::read_projects(d.path()).unwrap().is_empty());
+    }
 
     const CMD: &str = "CLAUDESK_HOOK_SOCK='/d/hook.sock' /usr/bin/perl '/d/claudesk-hook.pl'";
 

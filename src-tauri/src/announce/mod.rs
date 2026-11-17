@@ -125,6 +125,19 @@ pub const ACTION_RESTORE: &str = "restore";
 /// value here; the fire-time read stays the authority.
 pub const ACTION_RESTORE_MANUAL: &str = "restore-manual";
 
+/// M17 WP5 — a REMOTE row whose session Claudesk last left running: a click reconnects (when it
+/// is still live). Read from the LOCAL record (`remote_record`), never over the link: a
+/// prediction that may be stale (prior `a-display-prediction-may-be-stale-when-the-click-decides`;
+/// the open check decides). Ungated: remote status is core.
+///
+/// When the gate is on and the session was spawned under a mode other than the row's stored one,
+/// the value is `reconnect@<mode>`: a reconnect keeps the session's ORIGINAL mode (arch §D), and
+/// the row must say so rather than imply the new mode is live.
+pub const ACTION_RECONNECT: &str = "reconnect";
+/// M17 WP5 — a REMOTE row the operator closed (or quit) while its host was unreachable: its
+/// session may still be running against their intent, and the open will ask (R-4). Ungated.
+pub const ACTION_ASK_OFFLINE: &str = "ask-offline";
+
 /// project path → predicted action. An **absent key means no prediction** (the "neither"
 /// arm), mirroring `session-state.json`'s absent-means-clean convention rather than
 /// inventing a second way to say "nothing".
@@ -167,6 +180,8 @@ fn arm_available(action: &'static str, gate_enabled: bool) -> bool {
         // it serves any Claude Code user.
         ACTION_CONTINUE => true,
         ACTION_RESTORE => gate_enabled,
+        // M17 WP5 — remote-session labels: remote status and reconnect are core, not workflow.
+        ACTION_RECONNECT | ACTION_ASK_OFFLINE => true,
         // A future third arm must make this decision deliberately rather than inherit
         // whichever default a wildcard happened to pick. Gating is the safe direction: it
         // fails toward "no promise about files the user may not have."
@@ -180,6 +195,37 @@ fn arm_available(action: &'static str, gate_enabled: bool) -> bool {
 /// parsing the pointer here would duplicate what `/session-restore` itself does.
 fn has_session_md(project_root: &Path) -> bool {
     project_root.join(SESSION_MD_REL).is_file()
+}
+
+/// M17 WP5 — a remote row's label, from what Claudesk last knew (its LOCAL record) and its unclean
+/// flag; never from the remote (prior `a-display-prediction-may-be-stale-when-the-click-decides`).
+///
+/// - `running` → [`ACTION_RECONNECT`] (with `@<mode>` when the gate is on and the session's spawn
+///   mode differs from the row's stored one).
+/// - `end-pending` → [`ACTION_ASK_OFFLINE`].
+/// - otherwise, a set unclean flag → [`ACTION_CONTINUE`] (a session that ended with the flag kept,
+///   e.g. ⏸ with the link up). The restore arm is never announced: the remote `.session.md` is
+///   not known locally (the click's check decides it).
+fn remote_announcement(
+    record: Option<&crate::remote_record::SessionRecord>,
+    unclean: bool,
+    stored_mode: Option<&str>,
+    gate_enabled: bool,
+) -> Option<String> {
+    use crate::remote_record::SessionRecordState::*;
+    match record.map(|r| r.state) {
+        Some(Running) => {
+            let running = record.and_then(|r| r.drive_mode.as_deref());
+            Some(match running {
+                Some(m) if gate_enabled && Some(m) != stored_mode => {
+                    format!("{ACTION_RECONNECT}@{m}")
+                }
+                _ => ACTION_RECONNECT.to_string(),
+            })
+        }
+        Some(EndPending) => Some(ACTION_ASK_OFFLINE.to_string()),
+        Some(Ended) | None => unclean.then(|| ACTION_CONTINUE.to_string()),
+    }
 }
 
 /// Build the announce map for every known project.
@@ -216,6 +262,8 @@ pub fn announce_actions(data_dir: &Path, gate_enabled: bool) -> AnnounceMap {
     // gate, so Rust's short-circuit evaluation is what skips the stat.
     let flags = session_state::read(data_dir);
     let projects = config_store::read_projects(data_dir).unwrap_or_default();
+    // M17 WP5: the remote rows' local session records, read once (Claudesk's own store).
+    let records = crate::remote_record::read(data_dir);
 
     let mut out = AnnounceMap::new();
     for project in projects {
@@ -225,6 +273,21 @@ pub fn announce_actions(data_dir: &Path, gate_enabled: bool) -> AnnounceMap {
         // session first, then the remote `.session.md`) are WP5/WP7's, read over the host link.
         // No prediction is the safe direction here: a missed announcement costs a click.
         if project.is_remote() {
+            let key = project.path.to_string_lossy().to_string();
+            let unclean = session_state::is_unclean_keyed(&flags, &key);
+            let stored_mode = gate_enabled
+                .then_some(project.default_drive_mode)
+                .flatten()
+                .and_then(|m| serde_json::to_value(m).ok())
+                .and_then(|v| v.as_str().map(str::to_string));
+            if let Some(action) = remote_announcement(
+                records.get(&key),
+                unclean,
+                stored_mode.as_deref(),
+                gate_enabled,
+            ) {
+                out.insert(key, action);
+            }
             continue;
         }
         let path_str = project.path.to_string_lossy().to_string();
@@ -1033,17 +1096,12 @@ mod tests {
         });
     }
 
-    // ── M17 WP2: remote rows announce nothing (yet) ─────────────────────────────────
+    // ── M17 WP5: remote rows are announced from the local session record ────────────────
 
     #[test]
-    fn a_remote_row_announces_nothing_even_with_its_unclean_flag_set() {
+    fn a_remote_row_is_announced_from_its_local_record_and_flag() {
+        use crate::remote_record::{record_running, record_state, SessionRecordState};
         let data = TempDir::new().unwrap();
-        // Positive control: a LOCAL row with its unclean flag set announces `continue`.
-        let local = TempDir::new().unwrap();
-        config_store::add_or_touch(data.path(), local.path().to_path_buf(), 1).unwrap();
-        let local_key = local.path().to_string_lossy().to_string();
-        crate::session_state::set_and_persist(data.path(), &local_key);
-
         let remote = config_store::add_remote(
             data.path(),
             config_store::RemoteTarget {
@@ -1053,14 +1111,41 @@ mod tests {
             2,
         )
         .unwrap();
-        let remote_key = remote.path.to_string_lossy().to_string();
-        crate::session_state::set_and_persist(data.path(), &remote_key);
+        let key = remote.path.to_string_lossy().to_string();
+        let get = |gate: bool| announce_actions(data.path(), gate).get(&key).cloned();
 
-        let map = announce_actions(data.path(), true);
+        // No record, no flag: nothing. ⚠️ No `.session.md` stat either (it is remote).
+        assert_eq!(get(true), None);
+        // No record, flag set: continue (the flag is Claudesk's own store).
+        crate::session_state::set_and_persist(data.path(), &key);
+        assert_eq!(get(true).as_deref(), Some(ACTION_CONTINUE));
+        // Left running: reconnect, which beats the flag.
+        record_running(data.path(), &key, None);
+        assert_eq!(get(true).as_deref(), Some(ACTION_RECONNECT));
+        // ...and says the session keeps its own mode when the row's stored one differs.
+        record_running(data.path(), &key, Some("fsd"));
+        assert_eq!(get(true).as_deref(), Some("reconnect@fsd"));
+        // Gate OFF: there is no drive mode to speak of, but reconnect stays (ungated).
+        assert_eq!(get(false).as_deref(), Some(ACTION_RECONNECT));
+        config_store::set_default_drive_mode(
+            data.path(),
+            &remote.path,
+            Some(config_store::DriveMode::FullAutopilot),
+        )
+        .unwrap();
         assert_eq!(
-            map.get(&local_key).map(String::as_str),
-            Some(ACTION_CONTINUE)
+            get(true).as_deref(),
+            Some(ACTION_RECONNECT),
+            "same mode: no note"
         );
-        assert!(!map.contains_key(&remote_key), "{map:?}");
+        // Closed while offline: the open will ask.
+        record_state(data.path(), &key, SessionRecordState::EndPending);
+        assert_eq!(get(true).as_deref(), Some(ACTION_ASK_OFFLINE));
+        assert_eq!(get(false).as_deref(), Some(ACTION_ASK_OFFLINE));
+        // Ended: back to the flag.
+        record_state(data.path(), &key, SessionRecordState::Ended);
+        assert_eq!(get(true).as_deref(), Some(ACTION_CONTINUE));
+        crate::session_state::clear_and_persist(data.path(), &key);
+        assert_eq!(get(true), None);
     }
 }

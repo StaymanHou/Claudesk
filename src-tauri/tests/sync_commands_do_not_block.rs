@@ -148,6 +148,11 @@ const ASYNC_COMMANDS: &[(&str, &str)] = &[
          `EXEC_TIMEOUT_MS`); the work runs on `spawn_blocking`",
     ),
     (
+        "remote_end_session",
+        "M17 WP5 dialogs: brings up the host link and ends the tmux session over it (up to \
+         `LINK_UP_TIMEOUT` + the end's polls); the work runs on `spawn_blocking`",
+    ),
+    (
         "cc_inject",
         "a remote session waits (one ssh exec, up to `READY_POLLS` x 0.2 s + `EXEC_TIMEOUT_MS`) for \
          the pane's readiness before the write; the work runs on `spawn_blocking`",

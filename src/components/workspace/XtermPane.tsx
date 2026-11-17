@@ -267,6 +267,11 @@ interface XtermPaneProps {
    * stays unaware of the supervisor beyond the origin's type: the parent owns the claim.
    */
   claimTurnOrigin?: () => SupervisorOrigin | null;
+  /**
+   * M17 WP5 — the auto-resume fire's notice when a REMOTE folder's trust withheld the command
+   * (`fireAutoResume` → `onWithheld`). The workspace shows it in its toast.
+   */
+  onAutoResumeWithheld?: (notice: string) => void;
 }
 
 export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
@@ -287,6 +292,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       onTurnStartRecorded,
       onInputForwarded,
       claimTurnOrigin,
+      onAutoResumeWithheld,
     },
     ref,
   ) {
@@ -526,6 +532,12 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     // M14 WP0 — same ref-mirroring reason as `onSessionIdRef` directly above: the `onData`
     // handler is wired ONCE inside the terminal effect, so a prop read directly there would
     // freeze at the identity it had on first mount. Workspace passes an inline arrow.
+    // M17 WP5 — latest-ref, like `onInputForwarded`: the fire reads it when its timer wakes, and a
+    // prop dep would re-run the spawn effect on every parent render.
+    const onAutoResumeWithheldRef = useRef(onAutoResumeWithheld);
+    useEffect(() => {
+      onAutoResumeWithheldRef.current = onAutoResumeWithheld;
+    }, [onAutoResumeWithheld]);
     const onInputForwardedRef = useRef(onInputForwarded);
     useEffect(() => {
       onInputForwardedRef.current = onInputForwarded;
@@ -906,12 +918,17 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
               // operator-settled surfacing is `console.warn` always (inside
               // `injectCommand` / `fireAutoResume`), and the terminal itself is the evidence —
               // the user is at a live prompt. A toast belongs only on a genuine backend
-              // fault, and this pane has no toast setter, so it passes no handler.
+              // fault, so no spawn-failure handler is passed. The ONE exception (M17 WP5,
+              // operator ruling): a REMOTE folder whose trust withheld the command hands its
+              // notice up through `onWithheld`, because its picker row could not warn first.
               void fireAutoResume({
                 action: pendingAction,
                 sessionId,
                 projectPath,
                 isCancelled: () => cancelled,
+                // M17 WP5 — a REMOTE folder's withheld command is said in the workspace toast.
+                onWithheld: (notice) =>
+                  onAutoResumeWithheldRef.current?.(notice),
               });
             }, FIRE_DELAY_MS);
           }

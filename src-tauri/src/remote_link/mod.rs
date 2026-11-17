@@ -782,6 +782,15 @@ pub struct LinkRegistry {
     /// `new -A` would otherwise attach to the session that is being ended.
     closing: Mutex<HashMap<String, usize>>,
     closing_cv: Condvar,
+    /// M17 WP5 (AC-2.3): what an open check found that the picker's label did not predict (the
+    /// label is read from the local record and may be stale), by row key. Taken once by the
+    /// workspace that the open created (`remote_open_notice`), so it is seen where the operator
+    /// lands: the picker is gone by then.
+    open_notices: Mutex<HashMap<String, String>>,
+    /// M17 WP5 Phase 2: whether the remote CC trusts each row's folder, as the last open check
+    /// found it (by row key). The fire-time trust read (`folder_trusted`) answers a remote row from
+    /// here: an `ssh://` key never matches the LOCAL `~/.claude.json`.
+    open_trust: Mutex<HashMap<String, bool>>,
     /// The next [`Link::gen`].
     next_gen: AtomicU64,
     transport: Arc<dyn Transport>,
@@ -811,6 +820,8 @@ impl LinkRegistry {
             links: Mutex::new(HashMap::new()),
             closing: Mutex::new(HashMap::new()),
             closing_cv: Condvar::new(),
+            open_notices: Mutex::new(HashMap::new()),
+            open_trust: Mutex::new(HashMap::new()),
             next_gen: AtomicU64::new(1),
             transport,
             app_data,
@@ -1348,6 +1359,41 @@ impl LinkRegistry {
         );
         let wait_ms = u64::from(crate::remote_cmd::END_POLLS) * 200;
         self.close_exec(target, &cmd, wait_ms + EXEC_TIMEOUT_MS)
+    }
+
+    /// Leave `notice` for the workspace the open of `key` creates (replacing an older one), or
+    /// clear it (`None`).
+    pub fn set_open_notice(&self, key: &str, notice: Option<String>) {
+        if let Ok(mut n) = self.open_notices.lock() {
+            match notice {
+                Some(text) => {
+                    n.insert(key.to_string(), text);
+                }
+                None => {
+                    n.remove(key);
+                }
+            }
+        }
+    }
+
+    /// Record whether the remote trusts `key`'s folder (the open check's answer).
+    pub fn set_open_trust(&self, key: &str, trusted: bool) {
+        if let Ok(mut t) = self.open_trust.lock() {
+            t.insert(key.to_string(), trusted);
+        }
+    }
+
+    /// Whether the last open check found `key`'s folder trusted. No answer is `false` (D4). A
+    /// short lock read: safe on the main thread.
+    pub fn open_trust(&self, key: &str) -> bool {
+        self.open_trust
+            .lock()
+            .is_ok_and(|t| t.get(key).copied().unwrap_or(false))
+    }
+
+    /// Take `key`'s open notice (once). A short lock read: safe on the main thread.
+    pub fn take_open_notice(&self, key: &str) -> Option<String> {
+        self.open_notices.lock().ok()?.remove(key)
     }
 
     /// The identifier this registry deploys under (`~/.claudesk/<identifier>/`).

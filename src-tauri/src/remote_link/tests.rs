@@ -808,6 +808,13 @@ fn a_check_that_ends_without_an_open_leaves_no_link() {
         OpenCheck::Invalid {
             message: "bad row".into(),
         },
+        // M17 WP5: a dialog follows, not an open; the open after it checks again.
+        OpenCheck::AskEndPending {
+            message: "closed offline".into(),
+        },
+        OpenCheck::AskUnrecorded {
+            message: "unknown session".into(),
+        },
     ] {
         let h = harness();
         let (_, hold) = up(&h.reg, &target());
@@ -825,13 +832,23 @@ fn a_check_that_ends_without_an_open_leaves_no_link() {
 #[test]
 fn a_successful_check_lingers_then_stops_when_nothing_opens() {
     use super::commands::{release_check_hold, OpenCheck};
-    let h = harness();
-    let (_, hold) = up(&h.reg, &target());
-    release_check_hold(hold, &OpenCheck::Ok, Duration::from_millis(150));
-    assert_eq!(h.reg.state(HOST), Some(LinkState::Up), "inside the grace");
-    assert_eq!(h.reg.refs(HOST), 0);
-    wait_no_link(&h, Duration::from_secs(2));
-    h.wait_for("Down", 2, |e| e.iter().any(|e| e.state == LinkState::Down));
+    // Both outcomes an open follows (M17 WP5: a reconnect too).
+    for outcome in [
+        OpenCheck::Start(super::commands::StartSignals::default()),
+        OpenCheck::Reconnect { mode: None },
+    ] {
+        let h = harness();
+        let (_, hold) = up(&h.reg, &target());
+        release_check_hold(hold, &outcome, Duration::from_millis(150));
+        assert_eq!(
+            h.reg.state(HOST),
+            Some(LinkState::Up),
+            "{outcome:?}: inside the grace"
+        );
+        assert_eq!(h.reg.refs(HOST), 0);
+        wait_no_link(&h, Duration::from_secs(2));
+        h.wait_for("Down", 2, |e| e.iter().any(|e| e.state == LinkState::Down));
+    }
 }
 
 #[test]
@@ -839,7 +856,11 @@ fn a_successful_check_then_open_reuses_the_link() {
     use super::commands::{release_check_hold, OpenCheck};
     let h = harness();
     let (_, check) = up(&h.reg, &target());
-    release_check_hold(check, &OpenCheck::Ok, Duration::from_millis(150));
+    release_check_hold(
+        check,
+        &OpenCheck::Start(super::commands::StartSignals::default()),
+        Duration::from_millis(150),
+    );
     // The open's spawn, inside the grace.
     let (_, session) = up(&h.reg, &target());
     std::thread::sleep(Duration::from_millis(400));
@@ -1071,7 +1092,7 @@ fn live_link_up() {
 /// The two side-channel execs the remote open/close paths depend on, against a real host:
 /// - `cancel_copy_mode` takes a pane OUT of copy-mode, and is a success when the pane is NOT in a
 ///   mode (tmux's "not in a mode" refusal must not fail the close; arch §E's unprobed case);
-/// - `test_dir_command` answers yes / no over the master.
+/// - the open check (`open_check_command`) answers folder / live / mode over the master.
 ///
 /// State-changing on the remote ONLY: a throwaway `cd-wp3test` session (`sleep`) on the dev tmux
 /// server, killed at the end, plus the link's own `~/.claudesk/com.claudesk.app.dev/` deploy.
@@ -1147,27 +1168,39 @@ fn live_cancel_and_folder_check() {
     reg.cancel_copy_mode(&target, "cd-wp3test").expect("cancel");
     assert_eq!(in_mode(), "0", "the pane is still in copy-mode");
 
-    // The folder check over the master.
-    assert_eq!(
-        reg.exec(
-            &target,
-            &crate::remote_cmd::test_dir_command("/"),
-            EXEC_TIMEOUT_MS
+    // M17 WP5: the open check's ONE exec over the master: the folder, the live session and its
+    // stored mode, against the real tmux (the shapes the unit tests run against a fake).
+    let open = |path: &str| {
+        crate::remote_cmd::parse_open_facts(
+            &reg.exec(
+                &target,
+                &crate::remote_cmd::open_check_command(srv, "cd-wp3test", path, true),
+                EXEC_TIMEOUT_MS,
+            )
+            .unwrap(),
         )
-        .unwrap()
-        .trim(),
-        "yes"
-    );
-    assert_eq!(
-        reg.exec(
+        .expect("an answer")
+    };
+    let facts = open("/");
+    assert!(facts.folder && facts.live, "{facts:?}");
+    assert_eq!(facts.mode, None, "unset option: unknown");
+    sh(&format!(
+        "tmux -L {} set-option -t '=cd-wp3test:' @cd_mode fsd",
+        quote(srv)
+    ))
+    .unwrap();
+    assert_eq!(open("/").mode, Some(Some("fsd".into())));
+    assert!(!open("/nonexistent-claudesk-wp3").folder);
+    let none = crate::remote_cmd::parse_open_facts(
+        &reg.exec(
             &target,
-            &crate::remote_cmd::test_dir_command("/nonexistent-claudesk-wp3"),
-            EXEC_TIMEOUT_MS
+            &crate::remote_cmd::open_check_command(srv, "cd-wp3test-none", "/", false),
+            EXEC_TIMEOUT_MS,
         )
-        .unwrap()
-        .trim(),
-        "no"
-    );
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(!none.live, "exact match: a prefix is not the session");
 }
 
 /// `prepare_inject` against a real host (P4.2): a pane whose app enables bracketed paste at +2 s
@@ -1854,4 +1887,120 @@ fn two_closes_of_one_session_hold_until_both_end() {
     assert!(!h.reg.wait_not_closing("cd-x", Duration::from_millis(100)));
     drop(second);
     assert!(h.reg.wait_not_closing("cd-x", Duration::from_millis(100)));
+}
+
+/// M17 WP5 Phase 2 (P2.verify-self.1 GAP 1) — the FIRE-TIME trust read of a remote row: what
+/// `folder_trusted` answers is the LAST open check's answer for that key, and every gap is
+/// untrusted. ⚠️ This answer withholds the auto-fired `/session-restore` in an untrusted folder.
+#[test]
+fn the_fire_time_trust_read_answers_a_remote_row_from_its_last_open_check() {
+    use super::commands::{settle_open_decision, OpenCheck, OpenDecision, StartSignals};
+    use crate::folder_trust::commands::remote_trust;
+    let h = harness();
+    let data = TempDir::new().unwrap();
+    let key = "ssh://me@mini-host/Users/me/p";
+    let other = "ssh://me@mini-host/Users/me/q";
+    let start = |trusted: bool| OpenDecision {
+        check: OpenCheck::Start(StartSignals {
+            unclean_flag: false,
+            session_md: true,
+            trusted,
+        }),
+        clear_end_pending: false,
+        notice: None,
+    };
+    let settle = |d: OpenDecision| settle_open_decision(data.path(), &h.reg, key, d);
+
+    // A local path is not this read's to answer; a remote one with no registry, or no check yet,
+    // is untrusted.
+    assert_eq!(remote_trust("/Users/me/p", Some(&h.reg)), None);
+    assert_eq!(remote_trust(key, None), Some(false));
+    assert_eq!(remote_trust(key, Some(&h.reg)), Some(false));
+
+    settle(start(true));
+    assert_eq!(remote_trust(key, Some(&h.reg)), Some(true));
+    assert_eq!(remote_trust(other, Some(&h.reg)), Some(false), "per key");
+    assert_eq!(
+        remote_trust(key, None),
+        Some(false),
+        "no registry: untrusted"
+    );
+
+    settle(start(false));
+    assert_eq!(remote_trust(key, Some(&h.reg)), Some(false));
+
+    // EVERY other outcome overwrites an earlier `true`: no stale trust survives a later check.
+    // (`remote_open_check` routes its early returns, Invalid and Unreachable, through the same
+    // settle; its caller guard pins that.) Exhaustive by construction: a new `OpenCheck` variant
+    // fails to compile here until it is listed.
+    let every_other = |c: &OpenCheck| match c {
+        OpenCheck::Start(_) => false,
+        OpenCheck::Reconnect { .. }
+        | OpenCheck::AskEndPending { .. }
+        | OpenCheck::AskUnrecorded { .. }
+        | OpenCheck::FolderMissing { .. }
+        | OpenCheck::Unreachable { .. }
+        | OpenCheck::Invalid { .. } => true,
+    };
+    let m = || "x".to_string();
+    let others = [
+        OpenCheck::Reconnect { mode: None },
+        OpenCheck::AskEndPending { message: m() },
+        OpenCheck::AskUnrecorded { message: m() },
+        OpenCheck::FolderMissing { message: m() },
+        OpenCheck::Unreachable { message: m() },
+        OpenCheck::Invalid { message: m() },
+    ];
+    assert!(others.iter().all(every_other));
+    for check in others {
+        settle(start(true));
+        settle(OpenDecision {
+            check: check.clone(),
+            clear_end_pending: false,
+            notice: None,
+        });
+        assert_eq!(remote_trust(key, Some(&h.reg)), Some(false), "{check:?}");
+    }
+}
+
+/// M17 WP5 — the open check's other local writes, through the same function: a stale end-intent
+/// is cleared only when the decision says so, and the notice is left for the workspace (once).
+#[test]
+fn settling_an_open_decision_clears_a_stale_end_intent_and_leaves_the_notice() {
+    use super::commands::{settle_open_decision, OpenCheck, OpenDecision, StartSignals};
+    use crate::remote_record::{get, record_state, SessionRecordState};
+    let h = harness();
+    let data = TempDir::new().unwrap();
+    let key = "ssh://me@mini-host/Users/me/p";
+    let decision = |clear: bool, notice: Option<&str>| OpenDecision {
+        check: OpenCheck::Start(StartSignals::default()),
+        clear_end_pending: clear,
+        notice: notice.map(str::to_string),
+    };
+    assert!(record_state(
+        data.path(),
+        key,
+        SessionRecordState::EndPending
+    ));
+    let check = settle_open_decision(data.path(), &h.reg, key, decision(false, None));
+    assert_eq!(check, OpenCheck::Start(StartSignals::default()));
+    assert_eq!(
+        get(data.path(), key).map(|r| r.state),
+        Some(SessionRecordState::EndPending),
+        "not cleared unless the decision says so"
+    );
+    assert_eq!(h.reg.take_open_notice(key), None);
+
+    settle_open_decision(
+        data.path(),
+        &h.reg,
+        key,
+        decision(true, Some("it had ended")),
+    );
+    assert_eq!(
+        get(data.path(), key).map(|r| r.state),
+        Some(SessionRecordState::Ended)
+    );
+    assert_eq!(h.reg.take_open_notice(key).as_deref(), Some("it had ended"));
+    assert_eq!(h.reg.take_open_notice(key), None, "taken once");
 }

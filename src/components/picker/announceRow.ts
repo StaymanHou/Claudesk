@@ -65,6 +65,11 @@ export interface RowAffordances {
    * command will NOT be typed for you: CC asks about trust first, and you type the command after.
    */
   manual: boolean;
+  /**
+   * M17 WP5 — the label's own tooltip, for the remote-session labels whose meaning is not "this
+   * command will run". `null`: the row derives its tooltip from the announcement as before.
+   */
+  title: string | null;
 }
 
 /** Nothing announced, no second door, no action. The gate-OFF and no-signal answer. */
@@ -73,7 +78,45 @@ const SILENT: RowAffordances = {
   showNoFireDoor: false,
   action: null,
   manual: false,
+  title: null,
 };
+
+/**
+ * M17 WP5 — a REMOTE row's session label, from Claudesk's LOCAL record of that session (the
+ * backend's `remote_announcement`), or `null` when the value is not one. ⚠️ A PREDICTION from what
+ * Claudesk last knew, which may be stale (operator ruling, WP5 spec Q1; prior
+ * `a-display-prediction-may-be-stale-when-the-click-decides`): the click's open check decides, and
+ * a workspace opened against a stale label says so. So the row carries no action and no `⊘` door:
+ * the click does whatever the check finds.
+ *
+ * Ungated: remote status and reconnect are core, not workflow (`arm_available` agrees).
+ */
+export function remoteSessionLabel(
+  announced: AnnouncedAction | undefined,
+): RowAffordances | null {
+  if (announced === "ask-offline") {
+    return {
+      ...SILENT,
+      announcement: "closed offline",
+      title:
+        "You closed this while its host was unreachable, so its Claude Code session may still be running there. Opening it will ask whether to end it or reconnect.",
+    };
+  }
+  if (announced === "reconnect" || announced?.startsWith("reconnect@")) {
+    const mode = announced.startsWith("reconnect@")
+      ? announced.slice("reconnect@".length)
+      : null;
+    return {
+      ...SILENT,
+      announcement: mode === null ? "reconnect" : `reconnect (still ${mode})`,
+      title:
+        mode === null
+          ? "Claudesk left this project's Claude Code session running. Opening it reconnects to that session (if it has ended since, it starts again and says so)."
+          : `Claudesk left this project's Claude Code session running, in ${mode} mode. Opening it reconnects to that session, which keeps ${mode}: a drive mode changed since applies only when a new session starts.`,
+    };
+  }
+  return null;
+}
 
 /**
  * Whether an action's arm is available given the workflow-features gate.
@@ -132,6 +175,8 @@ export function rowAffordances(
   enabled: WorkflowGateValue,
 ): RowAffordances {
   const announced = announce[projectPath] as AnnouncedAction | undefined;
+  const remote = remoteSessionLabel(announced);
+  if (remote !== null) return remote;
   const action = actionFromAnnounced(announced);
   if (action === null) return SILENT;
   if (!armAvailable(action, enabled)) return SILENT;
@@ -147,6 +192,7 @@ export function rowAffordances(
     showNoFireDoor: !manual,
     action,
     manual,
+    title: null,
   };
 }
 

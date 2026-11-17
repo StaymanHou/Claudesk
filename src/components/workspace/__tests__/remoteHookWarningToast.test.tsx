@@ -92,3 +92,82 @@ describe("the remote hook warning toast", () => {
     expect(uncaught).toEqual([]);
   });
 });
+
+// M17 WP5 (AC-2.3) — an open whose check found something the picker's label did not predict
+// (the label is read from the local record and may be stale) says so in the same toast.
+describe("the remote open notice", () => {
+  const NOTICE =
+    "The Claude Code session on mini-host had ended since Claudesk last saw it, so it was started again.";
+
+  it("a remote workspace shows the open check's notice once its spawn resolves", async () => {
+    const el = await mountWorkspace({
+      gate: false,
+      projectPath: REMOTE,
+      ipcAnswers: { remote_open_notice: NOTICE, remote_hook_warning: null },
+    });
+    expect(toastOf(el)).toBeNull();
+    await spawnResolves();
+    const asked = ipcCalls.filter((c) => c.cmd === "remote_open_notice");
+    expect(asked.map((c) => c.args)).toEqual([{ projectPath: REMOTE }]);
+    expect(toastOf(el)?.textContent).toContain(NOTICE);
+    expect(uncaught).toEqual([]);
+  });
+
+  it("the notice and a hook warning are both shown, the notice first", async () => {
+    const el = await mountWorkspace({
+      gate: false,
+      projectPath: REMOTE,
+      ipcAnswers: { remote_open_notice: NOTICE, remote_hook_warning: WARNING },
+    });
+    await spawnResolves();
+    const text = toastOf(el)?.textContent ?? "";
+    expect(text).toContain(NOTICE);
+    expect(text).toContain(WARNING);
+    expect(text.indexOf(NOTICE)).toBeLessThan(text.indexOf(WARNING));
+  });
+
+  it("a local workspace never asks, and a failed read is not a toast", async () => {
+    const local = await mountWorkspace({
+      gate: false,
+      ipcAnswers: { remote_open_notice: NOTICE },
+    });
+    await spawnResolves();
+    expect(ipcCalls.some((c) => c.cmd === "remote_open_notice")).toBe(false);
+    expect(toastOf(local)).toBeNull();
+    await unmountWorkspace();
+    const el = await mountWorkspace({
+      gate: false,
+      projectPath: REMOTE,
+      ipcRejects: { remote_open_notice: "boom" },
+      ipcAnswers: { remote_hook_warning: null },
+    });
+    await spawnResolves();
+    expect(toastOf(el)).toBeNull();
+    expect(uncaught).toEqual([]);
+  });
+
+  // M17 WP5 (operator ruling, P2.verify-human.3) — the fire's withheld notice reaches the SAME toast.
+  it("the pane's withheld-restore notice shows in the workspace toast", async () => {
+    const el = await mountWorkspace({ gate: false, projectPath: REMOTE });
+    expect(toastOf(el)).toBeNull();
+    const notice =
+      "Claude Code hasn't trusted this folder on mini-host yet, so /session-restore was not typed. Trust the folder, then type /session-restore.";
+    await act(async () => pane.props?.onAutoResumeWithheld?.(notice));
+    await settle();
+    expect(toastOf(el)?.textContent).toContain(notice);
+    expect(uncaught).toEqual([]);
+  });
+
+  // M17 WP5 (Phase 3) — a failed Detach keeps the tile; the app's notice reaches its toast.
+  it("an app notice (a failed Detach) shows in the workspace toast", async () => {
+    const text =
+      "Could not detach: session registry lock poisoned. The workspace is still open.";
+    const el = await mountWorkspace({
+      gate: false,
+      projectPath: REMOTE,
+      notice: { text, seq: 1 },
+    });
+    expect(toastOf(el)?.textContent).toContain(text);
+    expect(uncaught).toEqual([]);
+  });
+});

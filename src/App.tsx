@@ -12,6 +12,12 @@ import { useWorkspaceList } from "./state/useWorkspaceList";
 import type { AutoResumeAction, OpenIntent } from "./state/predictAction";
 // M12 WP2 — clear the unclean-exit flag on a clean close (opt-in per route).
 import { markSessionClean, resolveCloseIntent } from "./state/cleanExit";
+import { detachThenClose } from "./state/detachWorkspace";
+import {
+  closeNotEndedText,
+  REMOTE_CLOSE_NOT_ENDED_EVENT,
+  type RemoteCloseNotEnded,
+} from "./state/remoteCloseNotEnded";
 import { useWorkspaceStatus } from "./state/useWorkspaceStatus";
 import { CenterStage } from "./components/workspace/CenterStage";
 import { Filmstrip } from "./components/workspace/Filmstrip";
@@ -529,6 +535,37 @@ function App() {
     [requestCloseWithIntent],
   );
 
+  // M17 WP5 — per-workspace notices from the app (a failed Detach), shown in that workspace's toast.
+  const [workspaceNotices, setWorkspaceNotices] = useState<
+    Record<string, { text: string; seq: number }>
+  >({});
+
+  // M17 WP5 (AC-4) — Detach a remote workspace: `cc_detach` FIRST (the session leaves the registry
+  // and keeps running on the host), then the UNCLEAN close (flag kept), with no dialog. A failed
+  // detach keeps the tile: closing it would run the unmount `cc_kill`, which ENDS the remote
+  // session (`detachThenClose`).
+  const requestDetach = useCallback(
+    (workspaceId: string) => {
+      const ws = workspaces.find((w) => w.id === workspaceId);
+      void detachThenClose({
+        sessionId: ws?.cc_session_id ?? null,
+        detach: (sessionId) => invoke("cc_detach", { sessionId }),
+        closeUnclean: () => closeWorkspaceUnclean(workspaceId),
+        // The tile stays, so its workspace says why (prior
+        // `a-silent-non-action-must-not-read-as-done`).
+        onError: (message) =>
+          setWorkspaceNotices((m) => ({
+            ...m,
+            [workspaceId]: {
+              text: `Could not detach: ${message}. The workspace is still open.`,
+              seq: (m[workspaceId]?.seq ?? 0) + 1,
+            },
+          })),
+      });
+    },
+    [workspaces, closeWorkspaceUnclean],
+  );
+
   // M12 WP2 — the ⏸ (hover-revealed) close: same guard, same teardown, flag preserved.
   const requestPauseClose = useCallback(
     (workspaceId: string) => requestCloseWithIntent(workspaceId, true),
@@ -595,6 +632,24 @@ function App() {
       } else {
         setPendingQuit({ names });
       }
+    }).then((un) => {
+      if (cancelled) un();
+      else unlisten = un;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  // M17 WP5 (AC-5.3) — a remote close that could not end its session (host unreachable): the
+  // workspace is gone, so the app says so. Registers ONCE.
+  const [appToast, setAppToast] = useState<string | null>(null);
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void listen<RemoteCloseNotEnded>(REMOTE_CLOSE_NOT_ENDED_EVENT, (e) => {
+      setAppToast(closeNotEndedText(e.payload));
     }).then((un) => {
       if (cancelled) un();
       else unlisten = un;
@@ -792,6 +847,20 @@ function App() {
 
   return (
     <div className="app-shell" data-testid="app-shell">
+      {appToast !== null && (
+        <div className="app-toast" role="alert" data-testid="app-toast">
+          <span>{appToast}</span>
+          <button
+            type="button"
+            className="workspace-inject-toast-dismiss"
+            aria-label="Dismiss"
+            title="Dismiss"
+            onClick={() => setAppToast(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
       {/* M10 WP4 — the update-notify banner is an IN-FLOW leading row of the app-shell
           (NOT an absolute overlay), so the scene below it (picker or filmstrip+stage) is
           pushed down and NEVER covered. This removes the operator-flagged misclick hazard
@@ -848,11 +917,13 @@ function App() {
               onOpenDashboard={() => setShowDashboard(true)}
               onClose={requestClose}
               onPauseClose={requestPauseClose}
+              onDetach={requestDetach}
             />
             <CenterStage
               workspaces={workspaces}
               focusedId={focusedId}
               onSessionId={setSessionId}
+              noticeFor={(id) => workspaceNotices[id]}
               statusFor={stateFor}
               displayStatusFor={displayStateFor}
               snippetFor={snippetFor}

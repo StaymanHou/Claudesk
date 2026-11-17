@@ -36,6 +36,10 @@ interface CenterStageProps {
     workspaceId: string,
     probe: (() => number) | null,
   ) => void;
+  /** M17 WP5 — the app's notice for a workspace (a failed Detach), shown in its toast. */
+  noticeFor?: (
+    workspaceId: string,
+  ) => { text: string; seq: number } | undefined;
 }
 
 export function CenterStage({
@@ -47,6 +51,7 @@ export function CenterStage({
   snippetFor,
   linkFor,
   registerDirtyProbe,
+  noticeFor,
 }: CenterStageProps) {
   return (
     <div className="center-stage" data-testid="center-stage">
@@ -61,6 +66,7 @@ export function CenterStage({
           statusDisplayState={displayStatusFor?.(ws.id)}
           statusSnippet={snippetFor?.(ws.id)}
           statusLink={linkFor?.(ws.id)}
+          notice={noticeFor?.(ws.id)}
         />
       ))}
     </div>

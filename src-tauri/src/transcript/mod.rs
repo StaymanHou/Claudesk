@@ -61,7 +61,8 @@ pub fn slug_for(project_path: &Path) -> String {
 
 /// The slug of an ALREADY-PHYSICAL path: every `/` and `.` becomes `-`. [`slug_for`] canonicalizes
 /// on the local disk first; a REMOTE path's physical form comes from the remote
-/// (`remote_cmd::realpath_command`), so the remote transcript check calls this directly (M17 WP4).
+/// (`remote_cmd::spawn_facts_command`), which computes this same slug REMOTELY (M17 WP5 AC-8.2;
+/// tested equal by `remote_cmd`'s `the_remote_slug_is_slug_of_physical_for_the_physical_path`).
 pub fn slug_of_physical(physical: &str) -> String {
     physical
         .chars()

@@ -23,6 +23,11 @@ import {
 } from "react";
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
 import { TileActions } from "./TileActionButton";
+import { REMOTE_KEY_PREFIX } from "../../cc/spawnArgs";
+
+/** Whether a tile is a REMOTE workspace (its key is `ssh://…`): only those offer Detach. */
+const isRemoteKey = (projectPath: string) =>
+  projectPath.startsWith(REMOTE_KEY_PREFIX);
 import type { FilmstripTile } from "./filmstripTiles";
 import { readMirrorFrame, subscribeMirrorFrame } from "./mirrorFrame";
 import { shouldRunMirror } from "./mirrorTicker";
@@ -66,6 +71,8 @@ interface FilmstripProps {
    *  ⚠️ UNIVERSAL since Phase 3.5 — no longer gated. See `TileActionButton`'s
    *  `onPauseClose` doc for why. */
   onPauseClose: (workspaceId: string) => void;
+  /** M17 WP5 — Detach a REMOTE workspace (leave its session running). Offered on remote tiles only. */
+  onDetach?: (workspaceId: string) => void;
 }
 
 /** Px the pointer must travel before a press becomes a drag (vs a click-to-promote). */
@@ -84,6 +91,7 @@ export function Filmstrip({
   onOpenDashboard,
   onClose,
   onPauseClose,
+  onDetach,
 }: FilmstripProps) {
   // ⚠️ NO GATE READ HERE ANY MORE. The ⏸ (pause-close) was gated behind
   // `workflow_features_enabled` until M12 WP3 Phase 3.5 (operator decision 2026-08-05);
@@ -319,6 +327,11 @@ export function Filmstrip({
                 className="filmstrip-pill-actions"
                 onClose={() => onClose(tile.id)}
                 onPauseClose={() => onPauseClose(tile.id)}
+                onDetach={
+                  isRemoteKey(tile.project_path) && onDetach !== undefined
+                    ? () => onDetach(tile.id)
+                    : undefined
+                }
               />
             </button>
           ))
@@ -388,6 +401,11 @@ export function Filmstrip({
                   className="filmstrip-tile-actions"
                   onClose={() => onClose(tile.id)}
                   onPauseClose={() => onPauseClose(tile.id)}
+                  onDetach={
+                    isRemoteKey(tile.project_path) && onDetach !== undefined
+                      ? () => onDetach(tile.id)
+                      : undefined
+                  }
                 />
               </div>
             </button>

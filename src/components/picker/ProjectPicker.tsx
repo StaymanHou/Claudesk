@@ -52,10 +52,14 @@ import { PickerRow } from "./PickerRow";
 import { AddRemoteForm } from "./AddRemoteForm";
 import {
   pathLineFor,
-  remoteOpenOutcome,
+  remoteAskSpec,
+  remoteOpenPlan,
   remoteSearchText,
+  type RemoteAskChoice,
+  type RemoteAskKind,
   type RemoteOpenCheck,
 } from "./remoteRow";
+import { ConfirmModal } from "../workspace/editor/ConfirmModal";
 import { orderPickerRows } from "./pickerOrder";
 
 // A picker toast is either an INFO note (e.g. "removed N stale projects" on mount) or
@@ -207,6 +211,13 @@ export function ProjectPicker({
   // scope-list-is-a-floor rule, earning its keep again.
   // (`SURFACE-2026-08-05-QUALITY-WP3-STALE-WHOLE-FEATURE-GATE-DOCS`.)
   const [announceMap, setAnnounceMap] = useState<AnnounceMap>({});
+  // M17 WP5 (R-4) — the open waiting on dialog A / B, or null.
+  const [pendingAsk, setPendingAsk] = useState<{
+    projectPath: string;
+    intent: OpenIntent;
+    kind: RemoteAskKind;
+    message: string;
+  } | null>(null);
   // F-b — the listed profiles, read ONCE for the whole picker (never per row) and re-read on
   // `profiles-changed` (adopt / remove in Settings), so a removed profile's rows turn "missing"
   // without reopening the picker.
@@ -308,6 +319,43 @@ export function ProjectPicker({
    * promised something and nothing fires) instead of wrong (firing a restore whose pointer
    * is gone).
    */
+  /** M17 WP5 — attach to a live remote session (the reconnect door): stamp recency, open. */
+  async function openReconnect(projectPath: string) {
+    try {
+      await invoke("record_open", { path: projectPath });
+      onOpen(projectPath, null, "reconnect");
+    } catch (e) {
+      setToast({ kind: "error", message: mapIpcError("open project", e) });
+    }
+  }
+
+  /**
+   * M17 WP5 (R-4) — the operator's answer to dialog A / B. End: end the remote session, then run
+   * the open again through the same funnel and door (the check now finds no live session, so the
+   * two-signal rule decides, with the flag as the earlier close left it). Reconnect: attach.
+   * Cancel: nothing opens and nothing changes (the record keeps saying what is true).
+   */
+  async function resolveAsk(choice: RemoteAskChoice) {
+    const ask = pendingAsk;
+    setPendingAsk(null);
+    if (ask === null || choice === "cancel") return;
+    if (choice === "reconnect") {
+      await openReconnect(ask.projectPath);
+      return;
+    }
+    setToast({ kind: "info", message: "Ending the remote session…" });
+    try {
+      await invoke("remote_end_session", { projectPath: ask.projectPath });
+    } catch (e) {
+      setToast({
+        kind: "error",
+        message: mapIpcError("end the remote session", e),
+      });
+      return;
+    }
+    await handleOpenRecent(ask.projectPath, ask.intent);
+  }
+
   async function handleOpenRecent(
     projectPath: string,
     intent: OpenIntent = "fire",
@@ -319,6 +367,12 @@ export function ProjectPicker({
     // `record_open`: the row is re-validated, its host link brought up, and its folder confirmed
     // to still exist. A failure opens nothing (no empty workspace, no recency stamp) and says why;
     // a missing folder also offers Remove, never removing by itself.
+    // M17 WP5 (R-2): the open check found the session still running and left so by Claudesk.
+    let reconnect = false;
+    // M17 WP5 Phase 2 (AC-3.3): a remote START derives its action from the check's signals (read
+    // over the link at click time), never from the picker's map, whose remote entry is a label
+    // from the LOCAL record and cannot know the remote `.session.md`.
+    let announce: AnnounceMap = announceMap;
     if (row?.remote != null) {
       setToast({ kind: "info", message: `Connecting to ${row.remote.host}…` });
       let check: RemoteOpenCheck;
@@ -333,12 +387,12 @@ export function ProjectPicker({
         });
         return;
       }
-      const outcome = remoteOpenOutcome(check);
-      if (outcome !== null) {
+      const plan = remoteOpenPlan(projectPath, check);
+      if (plan.open === null) {
         setToast({
           kind: "error",
-          message: outcome.message,
-          action: outcome.offerRemove
+          message: plan.message,
+          action: plan.offerRemove
             ? {
                 label: "Remove",
                 run: () => {
@@ -346,11 +400,33 @@ export function ProjectPicker({
                   void handleRemove(projectPath);
                 },
               }
-            : undefined,
+            : plan.offerRetry
+              ? {
+                  // M17 WP5 (AC-5.4) — an unreachable host is never a fallback: Retry re-runs
+                  // the same check through the same funnel and door.
+                  label: "Retry",
+                  run: () => {
+                    setToast(null);
+                    void handleOpenRecent(projectPath, intent);
+                  },
+                }
+              : undefined,
         });
         return;
       }
       setToast(null);
+      // M17 WP5 (R-4) — a live session Claudesk did not leave running: ask, open nothing yet.
+      if (plan.open === "ask") {
+        setPendingAsk({
+          projectPath,
+          intent,
+          kind: plan.kind,
+          message: plan.message,
+        });
+        return;
+      }
+      if (plan.open === "reconnect") reconnect = true;
+      else announce = plan.announce;
     }
     // F-b A.6 — a row naming an unlisted profile opens NOTHING. The backend would refuse the
     // spawn anyway; refusing here means no empty workspace is minted for it.
@@ -359,9 +435,15 @@ export function ProjectPicker({
       setToast({ kind: "error", message: refusal });
       return;
     }
+    // M17 WP5 (R-2): ATTACH to the live session, firing nothing. The row's announced action is
+    // not consulted: it predicted from the local record, and the check has decided.
+    if (reconnect) {
+      await openReconnect(projectPath);
+      return;
+    }
     const { action } = rowAffordances(
       projectPath,
-      announceMap,
+      announce,
       isWorkflowApplicable(gateOn, row?.profile ?? null),
     );
     // Stamp recency before handing off so the next list_projects reflects it. A
@@ -501,6 +583,12 @@ export function ProjectPicker({
 
   return (
     <div className="picker" data-testid="picker">
+      {pendingAsk !== null && (
+        <ConfirmModal
+          spec={remoteAskSpec(pendingAsk.kind, pendingAsk.message)}
+          onChoose={(choice) => void resolveAsk(choice)}
+        />
+      )}
       <div className="picker-header">
         <h1>Claudesk</h1>
         {onOpenDashboard && (

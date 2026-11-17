@@ -104,6 +104,55 @@ describe("the link overlay's presentation", () => {
     });
   }
 
+  // M17 WP5 (AC-4.4) — Detach is offered on REMOTE tiles only, in both layouts.
+  for (const collapsed of [true, false]) {
+    it(`offers Detach on the remote tile only (${collapsed ? "collapsed pill" : "expanded tile"})`, () => {
+      const noop = () => {};
+      const d = doc(
+        renderToStaticMarkup(
+          <Filmstrip
+            tiles={[
+              {
+                id: "ws-r",
+                project_path: "ssh://h/p",
+                display_name: "remote",
+                active: false,
+              },
+              {
+                id: "ws-l",
+                project_path: "/p",
+                display_name: "local",
+                active: false,
+              },
+            ]}
+            statusFor={() => "running"}
+            collapsed={collapsed}
+            onToggleCollapsed={noop}
+            onPromote={noop}
+            onReorder={noop}
+            onAddWorkspace={noop}
+            onOpenDashboard={noop}
+            onClose={noop}
+            onPauseClose={noop}
+            onDetach={noop}
+          />,
+        ),
+      );
+      const detach = d.querySelector('[data-testid="filmstrip-detach-ws-r"]');
+      expect(detach).not.toBeNull();
+      expect(detach?.getAttribute("aria-label")).toContain(
+        "leave its Claude Code session running",
+      );
+      expect(
+        d.querySelector('[data-testid="filmstrip-detach-ws-l"]'),
+      ).toBeNull();
+      // Positive control: the local tile has its × and ⏸.
+      expect(
+        d.querySelector('[data-testid="filmstrip-pause-ws-l"]'),
+      ).not.toBeNull();
+    });
+  }
+
   const layouts: PipLayout[] = [
     "minimal",
     "compact",

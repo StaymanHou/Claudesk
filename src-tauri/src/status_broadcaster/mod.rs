@@ -320,10 +320,11 @@ pub struct LinkOverlay {
 #[serde(rename_all = "snake_case")]
 pub enum LinkOverlayStatus {
     /// Not attached, and Claudesk is reconnecting on its own (WP4).
+    ///
+    /// ⚠️ The only status. WP4 reserved a `Detached` arm for a "detached tile"; M17 WP5 ruled
+    /// there is none (operator, spec Q2: "simply detach and quit; the tile is gone"), so it was
+    /// removed (AC-4.5).
     Reconnecting,
-    /// The operator detached the workspace (AC-6.4). Reserved: WP5's Detach (5.3) is its
-    /// producer, and no WP4 path sets it.
-    Detached,
 }
 
 /// One edge of a remote session's terminal, as the link overlay sees it (M17 WP4).
@@ -3064,12 +3065,8 @@ mod tests {
             serde_json::json!({ "status": "reconnecting", "host": "host-a" })
         );
         assert!(serde_json::to_value(&stop).unwrap().get("link").is_none());
-        let detached: LinkOverlayStatus = serde_json::from_str("\"detached\"").unwrap();
-        assert_eq!(
-            detached,
-            LinkOverlayStatus::Detached,
-            "AC-6.4: the reserved arm"
-        );
+        // M17 WP5 (AC-4.5): there is no detached tile, so no `detached` status on the wire.
+        assert!(serde_json::from_str::<LinkOverlayStatus>("\"detached\"").is_err());
     }
 
     /// The sink's body (the emitter seam): each edge goes through the registry, and the update is
