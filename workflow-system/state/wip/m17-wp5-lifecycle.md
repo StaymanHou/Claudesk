@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M17 WP5 — Remote lifecycle: reconnect, detach, the R-4 dialogs, the remote resume checks
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** ship (complete)
 **Created:** 2026-11-16
 **Entry:** spec (complex feature)
 **WBS:** `workflow-system/product/wbs.md` → "### WP5" (M17). Design: `arch/remote-workspaces.md` §E (PLANNED; this spec supersedes three of its rows, see Technical Constraints).
@@ -389,10 +389,10 @@ Problem statement unchanged (2026-11-17, F12 from Phase 2 verify-human): the ope
     — evidence: no new tests needed; every Phase 4 behaviour already has a mutation-proven regression test from build/verify-self: `remote::tests::{a_close_whose_end_ran_records_ended_and_one_that_could_not_records_end_pending, a_close_that_could_not_end_the_session_tells_the_app_once_and_one_that_did_does_not, the_close_not_ended_event_matches_its_ts_mirror}`, `cc_session::tests::a_quit_kills_a_detachable_session_never_detaches_it` (incl. a failing kill), `remote_link::commands::tests::{a_dead_session_starts_and_clears_a_stale_end_intent, ending_the_session_records_ended_only_when_the_end_ran, remote_end_session_marks_the_close_cancels_then_ends_and_settles}`, `remote_link::tests::settling_an_open_decision_clears_a_stale_end_intent_and_leaves_the_notice`, `remoteRow.test.ts` (ask arms, both dialog specs, Retry), and the consuming surfaces `pickerRemoteLive.test.tsx` (dialogs A/B: default, Reconnect, End → end → re-check → open, Cancel, failed End; Retry) and `detachWiring.test.tsx` (the app toast via the real App). Full suite `pnpm verify:auto` EXIT=0 (75s, after the last code change): vitest **310 files / 3948**, cargo lib **1314** passed / 4 ignored, every integration target green.
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** all four phases complete (uncommitted); next `/feature-ship`.
+- **Path:** Feature > review-quality
+- **Active scope:** shipped as `67dec33` (pushed to origin/main). Ship evidence: full suite reused from the last-phase codify run (`Test scope: full — last phase`, `pnpm verify:auto` EXIT=0: vitest 3948, cargo lib 1314); fast checks re-run green (lint 0 errors + the 1 pre-existing warning, format, tsc, check:link, cargo fmt, clippy `-D warnings`); every staged blob grepped for real infrastructure identifiers (0 after redacting 11 in this WIP). Cleanup: the dev scratch remote row removed (dev `projects.json` back to 8 rows, its record dropped), the mini's `/tmp` poller removed; the scratch folder on the mini kept for WP6/WP7 live checks.
 - **Blocked:** none.
-- **Unvisited:** ship → review-quality → finalize
+- **Unvisited:** review-quality → finalize
 - **Open discoveries:** see Discoveries
 
 ## Discoveries
