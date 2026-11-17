@@ -48,6 +48,7 @@ import {
   makeDocLinkClickHandler,
   type DocLinkClickEvent,
 } from "./handleDocLinkClick";
+import { useRemoteDocsPolling, type DocsNotice } from "./remoteDocsCatchUp";
 
 interface DocsPanelProps {
   /** The workspace's project root — the discovery scope, authenticated backend-side. */
@@ -77,6 +78,11 @@ interface DocsPanelProps {
    * experiment on this arm around that race.
    */
   panelFront: boolean;
+  /**
+   * M17 WP7 — the workspace toast. A REMOTE panel announces its catch-up check on
+   * a return (`remoteDocsCatchUp.ts`). Optional so existing callers/tests that don't wire it work.
+   */
+  onNotice?: (n: DocsNotice) => void;
 }
 
 export function DocsPanel({
@@ -84,7 +90,16 @@ export function DocsPanel({
   visible,
   workspaceId,
   panelFront,
+  onNotice,
 }: DocsPanelProps) {
+  // M17 WP7 — a remote workspace is polled only while this panel is on screen; a return asks for
+  // an immediate, announced catch-up. A local workspace: a no-op (its watcher is always on).
+  useRemoteDocsPolling({
+    workspaceId,
+    projectPath,
+    onScreen: visible && panelFront,
+    onNotice,
+  });
   const [docs, setDocs] = useState<DocEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 

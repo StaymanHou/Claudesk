@@ -745,3 +745,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** pending
 - **Pickup shape:** one small `/feature-refactor` pass, or fold into WP7 (which touches the same panel host and backend refusal).
 
+
+## SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD
+- **Source:** feature:verify-self (M17 WP7 Phase 4, live)
+- **Target level:** product:arch
+- **Type:** gap
+- **Summary:** With the workflow gate ON, a remote workspace shows the skill buttons, Session-Start and Recycle, but nothing checks that the companion workflow skills exist on the REMOTE account. The mini's dev account has no `~/.claude/skills/` at all, so `/session-handoff` there is an unknown command: Recycle injects it, nothing writes `.session.md`, and the operation ends in `failed`; the skill buttons inject commands CC does not know.
+- **Context:** The gate is LOCAL (`settings.json` on this Mac) and WP5's open check gates the `/session-restore` arm on it alone. Locally the workflow layer is opt-in because the skills may be absent (M10.9: "no dead affordances"); a remote host is the same question asked again per host, and today it is never asked. Found while preparing the remote Recycle check; verification used project-local STUB skills in the scratch remote folder instead (`~/claudesk-scratch-remote/.claude/skills/`).
+- **Suggested action:** Decide at arch level: probe the remote account for the workflow skills (e.g. in the open check's one exec, or once per link) and treat "gate ON + skills absent on that host" like gate OFF for that workspace (workflow surfaces absent, plain-words note), or document that remote workflow use requires installing the skills on the host. Prior `gate-substrate-dependent-feature-class-behind-default-off-opt-in` applies.
+- **Priority:** medium
+- **Status:** pending

@@ -242,6 +242,7 @@ const RULES: Rule[] = [
       "src/components/workspace/docs/pendingRestore.ts",
       "src/components/workspace/docs/DocMarkdown.tsx",
       "src/components/workspace/docs/DocsPanel.tsx",
+      "src/components/workspace/docs/remoteDocsCatchUp.ts",
       "src/components/workspace/docs/fetchLatch.ts",
     ],
     pattern: /verify-self|verify-human|\bWP\d+ P\d|\bP\d+\.\d+\b/,

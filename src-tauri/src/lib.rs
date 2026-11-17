@@ -49,6 +49,7 @@ mod project_search;
 // mechanics; Phase 3 = the human-state gap machine (focus-fusion + capped-working).
 mod reclassify;
 mod remote_cmd;
+mod remote_fs;
 mod remote_link;
 mod remote_record;
 // M12 WP2: the unclean-exit flag store (`session-state.json`) — one boolean per project
@@ -200,6 +201,11 @@ fn perform_quit_teardown(app: &tauri::AppHandle) {
     // M17 WP3: stop every remote host link. AFTER `kill_all`, whose remote close path still
     // needs the master. Kills each master's process group directly, without waiting on its
     // worker, so an orphaned `ssh -M` never outlives the app.
+    // M17 WP7: drop every remote poll subscription BEFORE the links stop, so no worker starts a
+    // tick against a dying master. Never joins a worker: each exits at its next wake.
+    if let Some(poller) = app.try_state::<remote_fs::poller::RemotePoller>() {
+        poller.unsubscribe_all();
+    }
     if let Some(links) = app.try_state::<remote_link::commands::SharedLinks>() {
         links.stop_all();
     }
@@ -484,6 +490,14 @@ pub fn run() {
             // remote terminal is still useful without live status.
             match remote_link::commands::init(&handle) {
                 Ok(links) => {
+                    // M17 WP7 — the remote docs poller (one worker per host, started by the
+                    // frontend's `remote_poll_start`), over the same links.
+                    match remote_fs::poller::commands::init(&handle, std::sync::Arc::clone(&links)) {
+                        Ok(poller) => {
+                            app.manage(poller);
+                        }
+                        Err(e) => eprintln!("[claudesk] remote poller unavailable: {e}"),
+                    }
                     app.manage(links);
                 }
                 Err(e) => eprintln!("[claudesk] remote links unavailable: {e}"),
@@ -631,6 +645,8 @@ pub fn run() {
             // a second one — the doc set is a strict subset of the project tree.
             docs::commands::docs_list,
             docs::commands::docs_read,
+            // M17 WP7 — routed doc stat (Recycle's `.session.md` baseline, local and remote).
+            docs::commands::docs_stat,
             // WP4: git diff viewer data (Sublime-Merge-style). The backend computes
             // the real git hunks + commit history; the frontend renders styled +/-
             // lines (no @codemirror/merge). (The superseded git_file_base command
@@ -678,6 +694,15 @@ pub fn run() {
             // events the FileTree + editor consumers subscribe to.
             fs_watch::commands::workspace_watch_start,
             fs_watch::commands::workspace_watch_stop,
+            // M17 WP7: the REMOTE twin of the watcher. A remote workspace's docs are polled over
+            // the host's master (one batched exec per host every 5 s) and changes go out as the
+            // same `fs-change` event.
+            remote_fs::poller::commands::remote_poll_start,
+            remote_fs::poller::commands::remote_poll_stop,
+            // P3.verify-human.2: polled only while centre stage + Docs fronted; a return asks for an
+            // immediate catch-up (its answer drives the panel's toast).
+            remote_fs::poller::commands::remote_poll_catch_up,
+            remote_fs::poller::commands::remote_poll_pause,
             // M5 WP5 Phase 2 (rework): the PiP visibility MODE (Off/On/Auto) — the single
             // user-facing control. set persists + applies the side-effect + broadcasts
             // `pip-mode`; get seeds the icon button + View-menu radio on mount. Replaces

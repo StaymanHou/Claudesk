@@ -72,5 +72,36 @@ describe("useWorkspaceStatus × workspace kind", () => {
       calls.filter((c) => c.cmd === cmd).map((c) => c.args.workspaceId);
     expect(of("workspace_register").sort()).toEqual(["ws-local", "ws-remote"]);
     expect(of("workspace_watch_start")).toEqual(["ws-local"]);
+    // M17 WP7 — the remote workspace is polled instead, with its key.
+    expect(of("remote_poll_start")).toEqual(["ws-remote"]);
+    expect(
+      calls.find((c) => c.cmd === "remote_poll_start")?.args.projectPath,
+    ).toBe("ssh://me@mini-host/Users/me/proj");
+  });
+
+  it("stops each workspace's own watcher when it leaves the list", async () => {
+    const calls: { cmd: string; args: Record<string, unknown> }[] = [];
+    mockWindows("main");
+    mockIPC(
+      (cmd, args) => {
+        calls.push({ cmd, args: (args ?? {}) as Record<string, unknown> });
+        return null;
+      },
+      { shouldMockEvents: true },
+    );
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+    const remote = ws("ws-remote", "ssh://me@mini-host/Users/me/proj");
+    const local = ws("ws-local", "/Users/me/proj");
+    await act(async () => root!.render(<Host list={[remote, local]} />));
+    await act(async () => root!.render(<Host list={[]} />));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    const of = (cmd: string) =>
+      calls.filter((c) => c.cmd === cmd).map((c) => c.args.workspaceId);
+    expect(of("remote_poll_stop")).toEqual(["ws-remote"]);
+    expect(of("workspace_watch_stop")).toEqual(["ws-local"]);
   });
 });

@@ -31,7 +31,16 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 64s (2026-11-17, M17 WP6 Phase 1 verify-auto, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Last:** 70s (2026-11-17, M17 WP7 Phase 4 verify-codify (full, last phase), EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 52s (2026-11-17, M17 WP7 Phase 4 verify-auto, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 71s (2026-11-17, M17 WP7 Phase 3 verify-codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 64s (2026-11-17, M17 WP7 Phase 3 verify-auto re-run after the verify-human back-loop, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 64s (2026-11-17, M17 WP7 Phase 3 verify-auto, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 60s (2026-11-17, M17 WP7 Phase 2 verify-codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 64s (2026-11-17, M17 WP7 Phase 2 verify-auto, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 45s (2026-11-17, M17 WP7 Phase 1 verify-codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 58s (2026-11-17, M17 WP7 Phase 1 verify-auto, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 64s (2026-11-17, M17 WP6 Phase 1 verify-auto, EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 72s (2026-11-17, M17 WP5 refactor (the review CRITICAL), EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 75s (2026-11-17, M17 WP5 Phase 4 verify-self/codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 68s (2026-11-17, M17 WP5 Phase 3 verify-self/codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
@@ -46,6 +55,10 @@ real chronology.
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 60s — 2026-11-17 (M17 WP7 P2 verify-codify, full)
+  - 64s — 2026-11-17 (M17 WP7 P2 verify-auto)
+  - 45s — 2026-11-17 (M17 WP7 P1 verify-codify, full)
+  - 58s — 2026-11-17 (M17 WP7 P1 verify-auto)
   - 44s — 2026-11-16 (M17 WP4 P4 verify-codify, full)
   - 49s — 2026-11-16 (M17 WP4 P4 verify-auto, after F9b)
   - 50s — 2026-11-16 (M17 WP4 P4 verify-auto)

@@ -68,6 +68,7 @@ import {
 import { markSessionClean } from "../../state/cleanExit";
 import { INJECT_SETTLE_MS } from "../../state/predictAction";
 import { injectCommand } from "./autoResumeFire";
+import { workspaceSurfaces } from "../../state/workspaceSurfaces";
 
 /** `.session.md`, project-relative. Mirrors Rust's `announce::SESSION_MD_REL`. */
 export const SESSION_MD_REL = "workflow-system/state/.session.md";
@@ -143,7 +144,7 @@ export type RecycleOutcome =
       readonly reason: RecycleFailureReason | RecycleCallerFailure;
     };
 
-/** The file marker `stat_file` returns (mirrors Rust `FileMarker`; snake_case verbatim). */
+/** The file marker `docs_stat` returns (mirrors Rust `FileMarker`; snake_case verbatim). */
 interface FileMarker {
   mtime_ms: number;
   size: number;
@@ -152,13 +153,17 @@ interface FileMarker {
 /**
  * Read `.session.md`'s mtime, or `null` if it does not exist.
  *
+ * Through `docs_stat`, which routes by the project's kind in the backend (M17 WP7): a local
+ * project gets exactly `stat_file`'s answer (`stat_file_core`), a remote one a stat over the host's
+ * master. `stat_file` itself is an editor command and is refused for a remote key.
+ *
  * ⚠️ A missing file and a failed stat are BOTH `null`, and that is the safe direction: `null`
  * means "no baseline", so any subsequent write counts as fresh. The opposite default (treat an
  * unreadable file as infinitely new) would make every Recycle fail.
  */
 async function readSessionMdMtime(projectPath: string): Promise<number | null> {
   try {
-    const marker = await invoke<FileMarker>("stat_file", {
+    const marker = await invoke<FileMarker>("docs_stat", {
       root: projectPath,
       path: SESSION_MD_REL,
     });
@@ -300,6 +305,8 @@ async function awaitCompletion(
   baselineMtimeMs: number | null,
 ): Promise<RecycleState | "aborted"> {
   const { workspaceId, projectPath, onProgress, signal } = inputs;
+  // A remote project has no local watcher (`workspaceSurfaces`): see the `Stop` handler below.
+  const remote = !workspaceSurfaces(projectPath).fsWatch;
   let state = initialRecycleState();
 
   return new Promise<RecycleState | "aborted">((resolve) => {
@@ -382,9 +389,24 @@ async function awaitCompletion(
       // as a second `Stop` and advance the machine early. `is_turn_end` is true on the real `Stop`
       // alone, in both of its states, and on nothing else
       // (`[[derived-state-is-not-a-proxy-for-its-event]]`).
-      if (event.payload.is_turn_end === true) {
+      if (event.payload.is_turn_end !== true) return;
+      if (!remote) {
         feed({ kind: "stop" });
+        return;
       }
+      // M17 WP7 (AC-5) — a REMOTE `.session.md` write has no `notify` event. Its only change
+      // signal is the poller, which runs only while the Docs tab is on screen, and lags up to an
+      // interval when it does. The machine turns a `Stop` that arrives while it still awaits a
+      // fresh write into `failed`, so for a remote project the `Stop` first forces ONE stat and
+      // feeds any write it finds BEFORE the `Stop` (the machine decides whether it is fresh).
+      void (async () => {
+        const mtimeMs = await readSessionMdMtime(projectPath);
+        if (settled) return;
+        if (mtimeMs !== null) {
+          feed({ kind: "session-md-write", mtimeMs, path: SESSION_MD_REL });
+        }
+        feed({ kind: "stop" });
+      })();
     }).then(
       (un) => (settled ? un() : unlisteners.push(un)),
       () => {

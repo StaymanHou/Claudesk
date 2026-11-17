@@ -37,7 +37,6 @@ describe("defaultPanel / reconcilePanel / selectPanel × workspace kind", () => 
     expect(defaultPanel(false, REMOTE)).toBe("prompt");
     expect(defaultPanel(true, REMOTE)).toBe("docs");
     // Local is untouched: Editor with the gate off.
-    expect(defaultPanel(false)).toBe("editor");
     expect(defaultPanel(false, LOCAL)).toBe("editor");
   });
 
@@ -54,5 +53,25 @@ describe("defaultPanel / reconcilePanel / selectPanel × workspace kind", () => 
     expect(selectPanel(null, "diff", false, REMOTE)).toBe("prompt");
     expect(selectPanel("docs", "terminal", true, REMOTE)).toBe("docs");
     expect(selectPanel("prompt", "editor", false, LOCAL)).toBe("editor");
+  });
+});
+
+// M17 WP7 Phase 1 (the WP6 review MINOR) — the kind is a REQUIRED input on the three functions a
+// call site picks a panel with, so a NEW site that forgets it does not compile (fail-closed, like
+// the gate's own `enabled`). ⚠️ This is a TYPE pin: it bites under `tsc --noEmit` (part of
+// `pnpm verify:auto`), where each `@ts-expect-error` becomes "unused" if a default comes back.
+// Vitest does not type-check, and the bodies are never called (a missing kind would fall through
+// `availablePanels`'s default at runtime), so the runtime assertion is only that they exist.
+describe("the workspace kind is required (fail-closed)", () => {
+  it("defaultPanel / selectPanel / reconcilePanel reject a call with no kind", () => {
+    const forgetsTheKind = [
+      // @ts-expect-error — `surfaces` has no default on defaultPanel
+      () => defaultPanel(false),
+      // @ts-expect-error — `surfaces` has no default on selectPanel
+      () => selectPanel("editor", "diff", false),
+      // @ts-expect-error — `surfaces` has no default on reconcilePanel
+      () => reconcilePanel("docs", false),
+    ];
+    expect(forgetsTheKind).toHaveLength(3);
   });
 });

@@ -11,6 +11,17 @@ import type { AutoResumeAction, OpenIntent } from "./predictAction";
 // Pure data + reducer logic only — no React, no IPC. The picker and the real
 // config store / PtyCcSession (WP6/WP7) drive these actions.
 
+/**
+ * A notice the app has for one workspace, shown in that workspace's toast each time `seq` changes
+ * (M17 WP5: a failed Detach; WP6: an absent surface's chord / menu item, `kind: "info"`). The one
+ * spelling of the shape: `App` holds them, `CenterStage` routes them, `Workspace` shows them.
+ */
+export interface WorkspaceNotice {
+  text: string;
+  seq: number;
+  kind?: "error" | "info";
+}
+
 export interface Workspace {
   id: string;
   project_path: string;

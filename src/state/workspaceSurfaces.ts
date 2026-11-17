@@ -38,8 +38,8 @@ export function remoteAuthority(projectPath: string): string | null {
  * absent (render nothing, invoke nothing).
  *
  * Every field is a surface that is ABSENT on a remote workspace. The IN surfaces (the CC pane, the
- * Prompt panel, the skill row, Recycle, Session-Start, the drive-mode cell, the resume announce,
- * Detach/Reconnect) are not listed: nothing about them depends on the kind here.
+ * Prompt panel, the Docs panel, the skill row, Recycle, Session-Start, the drive-mode cell, the
+ * resume announce, Detach/Reconnect) are not listed: nothing about them depends on the kind here.
  */
 export interface WorkspaceSurfaces {
   /** The editor panel (tab, slot, ⌘⇧E), and with it the media viewer, ⌘N, ⌘1–9, ⌘W tab ops. */
@@ -66,13 +66,10 @@ export interface WorkspaceSurfaces {
   readonly supervisor: boolean;
   /** The prev/next turn-marker jump (operator ruling 2026-11-17: absent on remote, permanently). */
   readonly turnJump: boolean;
-  /** The local fs watcher (`workspace_watch_start`); WP7's poller replaces it on remote. */
+  /** The local fs watcher (`workspace_watch_start`). Off → the remote poller (`remote_poll_start`). */
   readonly fsWatch: boolean;
-  /**
-   * Whether the Docs panel can READ the project. Docs is an IN surface, so its tab stays; on a
-   * remote workspace it shows a plain note until WP7.3 routes `docs_*` by target.
-   */
-  readonly docsRead: boolean;
+  // ⚠️ No `docsRead` (removed at M17 WP7): Docs reads either kind, because the backend routes
+  // `docs_list` / `docs_read` / `docs_stat` by target. A flag true for both kinds gates nothing.
 }
 
 const LOCAL: WorkspaceSurfaces = Object.freeze({
@@ -89,7 +86,6 @@ const LOCAL: WorkspaceSurfaces = Object.freeze({
   supervisor: true,
   turnJump: true,
   fsWatch: true,
-  docsRead: true,
 });
 
 const REMOTE: WorkspaceSurfaces = Object.freeze({
@@ -106,7 +102,6 @@ const REMOTE: WorkspaceSurfaces = Object.freeze({
   supervisor: false,
   turnJump: false,
   fsWatch: false,
-  docsRead: false,
 });
 
 /** The surfaces of a LOCAL workspace: everything present. The default wherever none is passed. */

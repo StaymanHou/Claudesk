@@ -51,9 +51,14 @@ fn known_local_roots(projects: Vec<config_store::Project>) -> Vec<PathBuf> {
 /// implementation instead of holding a copy. A second copy of a security boundary is one
 /// that drifts — the same principle the `docs` module already applies to `read_file_core`.
 pub(crate) fn validate_frontend_root(app: &AppHandle, root: &str) -> Result<PathBuf, String> {
-    let data_dir = resolve_data_dir(app)?;
+    validate_root_in(&resolve_data_dir(app)?, root)
+}
+
+/// [`validate_frontend_root`] against an explicit app-data dir: the same check, callable without an
+/// `AppHandle` (M17 WP7: `docs::commands::serve`, so the routed doc commands are testable).
+pub(crate) fn validate_root_in(data_dir: &Path, root: &str) -> Result<PathBuf, String> {
     let known_roots =
-        known_local_roots(config_store::read_projects(&data_dir).map_err(|e| e.to_string())?);
+        known_local_roots(config_store::read_projects(data_dir).map_err(|e| e.to_string())?);
     validate_root(&known_roots, Path::new(root)).map_err(|e| e.to_string())
 }
 

@@ -49,9 +49,6 @@ const REFUSED: &[&str] = &[
     "create_dir",
     "stat_media",
     "open_in_default_app",
-    // docs (WP9: the raw-error symptom; WP7.3 later routes Docs by target)
-    "docs_list",
-    "docs_read",
     // git
     "git_changed_files",
     "git_file_hunks",
@@ -75,6 +72,25 @@ const REFUSED: &[&str] = &[
     "transcript_tail",
     // a LOCAL shell
     "term_spawn",
+];
+
+/// M17 WP7 — commands in a scanned module that are ROUTED by target instead of refused: they take a
+/// root and decide local vs remote themselves (`arch/remote-workspaces.md` §F). Listed so a new
+/// command in the module must still be classified (the set pin below), and pinned NOT to open with
+/// the refusal (that would silently make the routed surface absent again).
+const ROUTED: &[(&str, &str)] = &[
+    (
+        "docs_list",
+        "Docs on a remote workspace: `remote_fs::list_docs` (WP7.3)",
+    ),
+    (
+        "docs_read",
+        "Docs on a remote workspace: `remote_fs::read_doc` (WP7.3)",
+    ),
+    (
+        "docs_stat",
+        "Recycle's `.session.md` baseline: `remote_fs::stat_doc` (WP7.4)",
+    ),
 ];
 
 /// Commands in a refused module that take no root, with the reason.
@@ -136,6 +152,7 @@ fn first_stmt_refuses(f: &syn::ItemFn) -> bool {
 fn every_refused_command_opens_with_the_refusal() {
     let mut found = BTreeSet::new();
     let mut missing = Vec::new();
+    let mut refused_routed = Vec::new();
     let scan = MODULE_FILES
         .iter()
         .flat_map(|rel| commands_in(rel).into_iter().map(move |f| (*rel, f)))
@@ -151,17 +168,26 @@ fn every_refused_command_opens_with_the_refusal() {
         if REFUSED.contains(&name.as_str()) && !first_stmt_refuses(&f) {
             missing.push(format!("{rel}::{name}"));
         }
+        if ROUTED.iter().any(|(r, _)| *r == name) && first_stmt_refuses(&f) {
+            refused_routed.push(format!("{rel}::{name}"));
+        }
     }
+    assert!(
+        refused_routed.is_empty(),
+        "these ROUTED commands open with the refusal, which makes their surface absent on a remote \
+         workspace again: {refused_routed:?}"
+    );
     assert!(
         missing.is_empty(),
         "these local-only commands do not open with `workspace_surfaces::refuse_remote`: \
          {missing:?}. A remote `ssh://` key would reach the local disk / app first."
     );
 
-    // The set pin: what the modules declare == REFUSED ∪ EXEMPT, both ways.
+    // The set pin: what the modules declare == REFUSED ∪ ROUTED ∪ EXEMPT, both ways.
     let declared: BTreeSet<String> = REFUSED
         .iter()
         .map(|s| s.to_string())
+        .chain(ROUTED.iter().map(|(s, _)| s.to_string()))
         .chain(EXEMPT.iter().map(|(s, _)| s.to_string()))
         .collect();
     let unlisted: Vec<_> = found.difference(&declared).collect();
@@ -169,11 +195,12 @@ fn every_refused_command_opens_with_the_refusal() {
     assert!(
         unlisted.is_empty(),
         "new #[tauri::command]s in a local-only module: {unlisted:?}. Add each to REFUSED (and open \
-         it with `refuse_remote`) or to EXEMPT with the reason it takes no root."
+         it with `refuse_remote`), to ROUTED (it dispatches by target itself), or to EXEMPT with the \
+         reason it takes no root."
     );
     assert!(
         stale.is_empty(),
-        "listed commands no longer exist: {stale:?}. Remove them from REFUSED / EXEMPT."
+        "listed commands no longer exist: {stale:?}. Remove them from REFUSED / ROUTED / EXEMPT."
     );
 }
 

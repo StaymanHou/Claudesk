@@ -636,6 +636,115 @@ impl ValidTarget {
     }
 }
 
+// ── M17 WP7 — remote READS (`arch/remote-workspaces.md` §F; `crate::remote_fs`) ──────────────────
+
+/// Prefix of every line the remote-read scripts print, so rc-file noise (`.zshenv`) is never read as
+/// an answer.
+pub const FS_SENTINEL: &str = "CLAUDESK-FS:";
+
+/// The remote doc-set listing, one constant Perl program (no variable data in it). Its arguments are
+/// `N d1..dN r1 r2 …`: N directories relative to each root, then the roots. For every root and
+/// directory it prints, per entry that is a FILE (a regular file, or a symlink to one):
+///
+/// `CLAUDESK-FS:e<TAB>ri<TAB>di<TAB>name<TAB>kind<TAB>size<TAB>mtime_ms`
+///
+/// `kind` is `f` (lstat: a regular file) or `l` (a symlink whose target is a regular file), so the
+/// caller can apply `docs::discover`'s exact rules (a glob matches only `f`; a fixed name matches
+/// either). Directories, sockets and broken links are skipped; so is a name holding a tab or a line
+/// break (it could not be framed, and no curated doc has one). A missing directory prints nothing.
+/// `begin` / `end` lines frame the answer, so an empty listing is told apart from a failed run.
+/// Non-recursive by construction (`readdir` of each named directory only), which is what keeps
+/// `archive/**` out, as locally. Times are `Time::HiRes` (ms), matching local `mtime_ms`.
+pub(crate) const DOC_LIST_PROG: &str = r#"use strict; use warnings; use Time::HiRes qw(stat);
+my $n = shift @ARGV; my @d = splice(@ARGV, 0, $n); my @r = @ARGV;
+print "CLAUDESK-FS:begin\n";
+for my $ri (0 .. $#r) { for my $di (0 .. $#d) {
+  my $p = "$r[$ri]/$d[$di]"; opendir(my $h, $p) or next;
+  for my $e (sort readdir $h) {
+    next if $e eq '.' || $e eq '..' || $e =~ /[\t\r\n]/;
+    my $f = "$p/$e"; my $k;
+    if (-l $f) { next unless -f $f; $k = 'l' } elsif (-f _) { $k = 'f' } else { next }
+    my @s = stat($f) or next;
+    printf "CLAUDESK-FS:e\t%d\t%d\t%s\t%s\t%d\t%d\n", $ri, $di, $e, $k, $s[7], int($s[9] * 1000);
+  }
+  closedir $h;
+} }
+print "CLAUDESK-FS:end\n";"#;
+
+/// The remote single-file read / stat, one constant Perl program. Arguments: `mode root rel max`
+/// with `mode` = `read` or `stat`. ⚠️ CONTAINMENT, parity with local `editor_fs::resolve_in_root`:
+/// both `root` and `root/rel` are resolved with `Cwd::realpath` (which follows every symlink,
+/// leaf included) ON THE REMOTE, and the target must lie strictly under the resolved root. So a
+/// symlink inside the project pointing outside it is refused, as locally. (The caller has already
+/// rejected `..`, absolute and empty paths before building this command: `remote_fs::validate_rel`.)
+///
+/// Prints exactly one status line, `CLAUDESK-FS:<mode>:<status>`:
+/// - `missing` / `outside` / `notfile` / `toolarge:<size>` / `notutf8` / `unreadable`;
+/// - `stat:ok:<size>:<mtime_ms>`;
+/// - `read:ok:<bytes>` FOLLOWED BY the file's raw bytes (validated UTF-8 here, since the local side
+///   receives a lossy string and could not tell).
+pub(crate) const DOC_READ_PROG: &str = r#"use strict; use warnings; use Cwd qw(realpath); use Time::HiRes qw(stat);
+my ($m, $root, $rel, $max) = @ARGV;
+sub out { print "CLAUDESK-FS:$m:$_[0]\n"; exit 0 }
+my $rr = realpath($root); out('missing') unless defined $rr && -d $rr;
+my $t = "$root/$rel"; out('missing') unless -e $t;
+my $p = realpath($t); out('missing') unless defined $p;
+out('outside') unless index($p, "$rr/") == 0;
+out('notfile') unless -f $p;
+my @s = stat($p) or out('unreadable');
+if ($m eq 'stat') { out(sprintf('ok:%d:%d', $s[7], int($s[9] * 1000))) }
+out("toolarge:$s[7]") if $s[7] > $max;
+open(my $h, '<:raw', $p) or out('unreadable');
+my $c = do { local $/; <$h> }; $c = '' unless defined $c; close $h;
+out('toolarge:' . length($c)) if length($c) > $max;
+my $u = $c; out('notutf8') unless utf8::decode($u);
+print "CLAUDESK-FS:read:ok:" . length($c) . "\n"; print $c; exit 0;"#;
+
+/// The doc-set listing command for `roots` (each a remote absolute project path; VARIABLE values)
+/// over the constant `dirs` (relative directories). Runs `perl` under the remote user's ordinary
+/// (non-login) shell: one layer, so every argument is [`quote`]d once. Read-only, exits 0.
+pub fn doc_list_command(dirs: &[&str], roots: &[&str]) -> String {
+    let mut cmd = format!("perl -e {} -- {}", quote(DOC_LIST_PROG), dirs.len());
+    for d in dirs {
+        cmd.push(' ');
+        cmd.push_str(&quote(d));
+    }
+    for r in roots {
+        cmd.push(' ');
+        cmd.push_str(&quote(r));
+    }
+    cmd
+}
+
+/// Whether a remote single-file command reads the bytes or only stats them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DocReadMode {
+    Read,
+    Stat,
+}
+
+impl DocReadMode {
+    fn word(self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Stat => "stat",
+        }
+    }
+}
+
+/// The single-file read / stat command for `rel` (already validated by `remote_fs::validate_rel`)
+/// under `root`, refusing more than `max` bytes. One layer, every argument [`quote`]d once.
+pub fn doc_read_command(mode: DocReadMode, root: &str, rel: &str, max: u64) -> String {
+    format!(
+        "perl -e {} -- {} {} {} {}",
+        quote(DOC_READ_PROG),
+        mode.word(),
+        quote(root),
+        quote(rel),
+        max
+    )
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;

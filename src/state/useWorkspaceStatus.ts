@@ -88,11 +88,13 @@ export function useWorkspaceStatus(
         void invoke("workspace_deregister", { projectPath }).catch((err) => {
           console.error(`workspace_deregister failed for ${projectPath}:`, err);
         });
-        void invoke("workspace_watch_stop", { workspaceId: id }).catch(
-          (err) => {
-            console.error(`workspace_watch_stop failed for ${id}:`, err);
-          },
-        );
+        // M17 WP7 — stop whichever watches it: the local watcher, or the remote poller.
+        const stopCmd = workspaceSurfaces(projectPath).fsWatch
+          ? "workspace_watch_stop"
+          : "remote_poll_stop";
+        void invoke(stopCmd, { workspaceId: id }).catch((err) => {
+          console.error(`${stopCmd} failed for ${id}:`, err);
+        });
       }
     }
 
@@ -109,15 +111,19 @@ export function useWorkspaceStatus(
         }).catch((err) => {
           console.error(`workspace_register failed for ${ws.id}:`, err);
         });
-        // M17 WP6 — no LOCAL watcher for a remote workspace: its key is not a local path (the
-        // backend refuses it), and WP7's poller is what watches a remote one.
-        if (workspaceSurfaces(ws.project_path).fsWatch)
-          void invoke("workspace_watch_start", {
-            projectPath: ws.project_path,
-            workspaceId: ws.id,
-          }).catch((err) => {
-            console.error(`workspace_watch_start failed for ${ws.id}:`, err);
-          });
+        // M17 WP6/WP7 — no LOCAL watcher for a remote workspace: its key is not a local path (the
+        // backend refuses it). The remote poller watches it instead, emitting the same `fs-change`.
+        // This SUBSCRIBES it paused: it is polled only while its Docs panel is on screen
+        // (`remoteDocsCatchUp.ts`), and the backend reads the workflow gate on every tick.
+        const startCmd = workspaceSurfaces(ws.project_path).fsWatch
+          ? "workspace_watch_start"
+          : "remote_poll_start";
+        void invoke(startCmd, {
+          projectPath: ws.project_path,
+          workspaceId: ws.id,
+        }).catch((err) => {
+          console.error(`${startCmd} failed for ${ws.id}:`, err);
+        });
       }
     }
   }, [workspaces]);

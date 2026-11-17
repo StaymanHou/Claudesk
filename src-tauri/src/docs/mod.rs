@@ -88,10 +88,17 @@ pub struct DocEntry {
 }
 
 /// Where the strategic product docs live.
-const PRODUCT_DIR: &str = "workflow-system/product";
+pub(crate) const PRODUCT_DIR: &str = "workflow-system/product";
 
 /// Where the transient workflow state lives.
-const STATE_DIR: &str = "workflow-system/state";
+pub(crate) const STATE_DIR: &str = "workflow-system/state";
+
+/// Where the active WIP items live (`STATE_DIR` + `/wip`; spelled out for the remote listing).
+pub(crate) const WIP_DIR: &str = "workflow-system/state/wip";
+
+/// M17 WP7 — the three directories a doc can live in, in the order [`DocDirs`] holds them. The
+/// remote listing (`remote_fs`) reads exactly these, non-recursively.
+pub(crate) const DOC_DIRS: [&str; 3] = [PRODUCT_DIR, STATE_DIR, WIP_DIR];
 
 /// Single-file product docs, in the order they are declared here. The frontend owns the
 /// final display ordering (`docsOrder.ts`); this list is about WHAT is discoverable.
@@ -139,9 +146,7 @@ pub fn discover(root: &Path) -> Vec<DocEntry> {
     // `*wbs*.md` is a GLOB, not a fixed name: it catches the canonical `wbs.md`, any
     // `shape: temporary-wbs` scratch file, and parked decompositions like
     // `m11-wbs-parked.md`. All are genuine "where is this project?" material.
-    for path in glob_dir(&product_dir, |name| {
-        name.contains("wbs") && name.ends_with(".md")
-    }) {
+    for path in glob_dir(&product_dir, is_wbs_name) {
         push_if_present(&mut out, root, &path, "wbs");
     }
 
@@ -151,11 +156,93 @@ pub fn discover(root: &Path) -> Vec<DocEntry> {
     }
 
     // Active WIP items — the live Work Tree, the most volatile doc of the set.
-    for path in glob_dir(&state_dir.join("wip"), |name| name.ends_with(".md")) {
+    for path in glob_dir(&state_dir.join("wip"), is_wip_name) {
         push_if_present(&mut out, root, &path, "wip");
     }
 
     out
+}
+
+/// The `*wbs*.md` glob of [`PRODUCT_DIR`]. One definition for the local walk and the remote filter.
+pub(crate) fn is_wbs_name(name: &str) -> bool {
+    name.contains("wbs") && name.ends_with(".md")
+}
+
+/// The `wip/*.md` glob. One definition for the local walk and the remote filter.
+pub(crate) fn is_wip_name(name: &str) -> bool {
+    name.ends_with(".md")
+}
+
+/// M17 WP7 — one FILE found in a doc directory by a listing that is not the local filesystem (the
+/// remote `remote_cmd::doc_list_command`). Only files are listed at all: a regular file, or a
+/// symlink whose target is one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListedFile {
+    pub name: String,
+    /// `lstat` says regular file. A glob matches only these, as [`glob_dir`]'s `file_type()` does;
+    /// a fixed name matches a symlink-to-file too, as `push_if_present`'s `is_file()` does.
+    pub regular: bool,
+    pub size: u64,
+    /// Milliseconds since the epoch (of the target, for a symlink), as [`DocEntry::mtime_ms`].
+    pub mtime_ms: f64,
+}
+
+/// The listing of the three [`DOC_DIRS`] for one project.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct DocDirs {
+    pub product: Vec<ListedFile>,
+    pub state: Vec<ListedFile>,
+    pub wip: Vec<ListedFile>,
+}
+
+/// M17 WP7 — [`discover`]'s rules applied to a LISTING instead of the local disk: the same curated
+/// lists ([`PRODUCT_DOCS`], [`STATE_DOCS`]), the same globs ([`is_wbs_name`], [`is_wip_name`]), the
+/// same order and the same dedupe. A remote workspace's Docs panel is fed by this.
+/// ⚠️ It must agree with [`discover`] on every tree: `filter_listing_agrees_with_discover` builds the
+/// listing of a real tree and compares the two, so a rule changed in one place only fails there.
+pub fn filter_listing(dirs: &DocDirs) -> Vec<DocEntry> {
+    let mut out: Vec<DocEntry> = Vec::new();
+    for (file, kind) in PRODUCT_DOCS {
+        if let Some(f) = dirs.product.iter().find(|f| f.name == file) {
+            push_listed(&mut out, PRODUCT_DIR, f, kind);
+        }
+    }
+    for f in globbed(&dirs.product, is_wbs_name) {
+        push_listed(&mut out, PRODUCT_DIR, f, "wbs");
+    }
+    for (file, kind) in STATE_DOCS {
+        if let Some(f) = dirs.state.iter().find(|f| f.name == file) {
+            push_listed(&mut out, STATE_DIR, f, kind);
+        }
+    }
+    for f in globbed(&dirs.wip, is_wip_name) {
+        push_listed(&mut out, WIP_DIR, f, "wip");
+    }
+    out
+}
+
+/// The regular files of a listed directory matching `pred`, sorted by name ([`glob_dir`]'s order).
+fn globbed(files: &[ListedFile], pred: fn(&str) -> bool) -> Vec<&ListedFile> {
+    let mut v: Vec<&ListedFile> = files
+        .iter()
+        .filter(|f| f.regular && pred(&f.name))
+        .collect();
+    v.sort_by(|a, b| a.name.cmp(&b.name));
+    v
+}
+
+/// [`push_if_present`] for a listed file: the same entry shape and the same dedupe.
+fn push_listed(out: &mut Vec<DocEntry>, dir: &str, f: &ListedFile, kind: &str) {
+    let rel_path = format!("{dir}/{}", f.name);
+    if out.iter().any(|e| e.rel_path == rel_path) {
+        return;
+    }
+    out.push(DocEntry {
+        rel_path,
+        kind: kind.to_string(),
+        file_name: f.name.clone(),
+        mtime_ms: f.mtime_ms,
+    });
 }
 
 /// List files directly inside `dir` whose file name satisfies `pred`, sorted by name for
@@ -285,6 +372,97 @@ mod tests {
             .filter(|e| e.kind == "wbs")
             .count();
         assert_eq!(wbs_kinds, 3);
+    }
+
+    /// The listing a remote `doc_list_command` would produce for `root`, built from the local disk
+    /// with the script's own rules (files only; `regular` = lstat regular file; non-recursive).
+    fn listing_of(root: &Path) -> DocDirs {
+        let list = |rel: &str| -> Vec<ListedFile> {
+            let Ok(rd) = std::fs::read_dir(root.join(rel)) else {
+                return Vec::new();
+            };
+            let mut v: Vec<ListedFile> = rd
+                .flatten()
+                .filter_map(|e| {
+                    let lt = e.file_type().ok()?;
+                    let md = std::fs::metadata(e.path()).ok()?;
+                    if !md.is_file() {
+                        return None;
+                    }
+                    Some(ListedFile {
+                        name: e.file_name().to_string_lossy().into_owned(),
+                        regular: lt.is_file(),
+                        size: md.len(),
+                        mtime_ms: md
+                            .modified()
+                            .ok()
+                            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                            .map(|d| d.as_millis() as f64)
+                            .unwrap_or(0.0),
+                    })
+                })
+                .collect();
+            v.sort_by(|a, b| a.name.cmp(&b.name));
+            v
+        };
+        DocDirs {
+            product: list(DOC_DIRS[0]),
+            state: list(DOC_DIRS[1]),
+            wip: list(DOC_DIRS[2]),
+        }
+    }
+
+    /// M17 WP7 — the remote filter and the local walk must agree on every tree. A rich tree: every
+    /// curated single, the wbs glob (canonical, scratch, a directory named like one), archive/**,
+    /// CHANGELOG, a symlinked single (counts) and a symlinked wbs (does not: globs take regular
+    /// files only), wip files, a non-md wip file, the legacy layout.
+    #[test]
+    fn filter_listing_agrees_with_discover() {
+        let dir = TempDir::new().unwrap();
+        let r = dir.path();
+        for f in [
+            "vision.md",
+            "roadmap.md",
+            "research.md",
+            "arch.md",
+            "context.md",
+            "design-priors.md",
+            "transitions.md",
+            "wbs.md",
+            "m11-wbs-parked.md",
+            "wbs-notes.txt",
+        ] {
+            touch(r, &format!("workflow-system/product/{f}"));
+        }
+        std::fs::create_dir_all(r.join("workflow-system/product/dir-wbs.md")).unwrap();
+        touch(r, "workflow-system/product/archive/m10/wbs.md");
+        touch(r, "outside/real-wbs.md");
+        std::os::unix::fs::symlink(
+            r.join("outside/real-wbs.md"),
+            r.join("workflow-system/product/linked-wbs.md"),
+        )
+        .unwrap();
+        for f in ["backlog.md", "backlog-quality-findings.md"] {
+            touch(r, &format!("workflow-system/state/{f}"));
+        }
+        touch(r, "outside/session.md");
+        std::os::unix::fs::symlink(
+            r.join("outside/session.md"),
+            r.join("workflow-system/state/.session.md"),
+        )
+        .unwrap();
+        for f in ["b.md", "a.md", "notes.txt"] {
+            touch(r, &format!("workflow-system/state/wip/{f}"));
+        }
+        touch(r, "CHANGELOG.md");
+        touch(r, "docs/product/vision.md");
+
+        let local = discover(r);
+        assert!(
+            local.len() >= 12,
+            "the tree must exercise the rules: {local:?}"
+        );
+        assert_eq!(filter_listing(&listing_of(r)), local);
     }
 
     #[test]

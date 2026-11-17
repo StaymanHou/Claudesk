@@ -140,6 +140,7 @@ import { FinderIcon } from "../../finder/icons/FinderIcon";
 import { OpenExternalIcon } from "./editor/OpenExternalIcon";
 import { defaultAppTargetFor, openInDefaultApp } from "./editor/mediaIpc";
 import { PipIcon } from "../../pip/icons/PipIcon";
+import type { DocsNotice } from "./docs/remoteDocsCatchUp";
 import {
   absentSurfaceNotice,
   workspaceSurfaces,
@@ -199,6 +200,11 @@ interface RightPanelHostProps {
    */
   onSurfaceUnavailable?: (notice: string) => void;
   /**
+   * M17 WP7 P3.verify-human.2 — the remote Docs panel's catch-up toast (or `null` to clear it),
+   * shown in the workspace toast.
+   */
+  onDocsNotice?: (notice: DocsNotice) => void;
+  /**
    * F-b ruling 4 — the profile this workspace runs under (`useWorkspaceProfile`). A non-default
    * profile has no gated docs panel; `undefined` (not yet known) fails closed.
    * ⚠️ REQUIRED, deliberately: an optional prop would let a caller omit it and silently pick one
@@ -214,6 +220,7 @@ export function RightPanelHost({
   ccSessionId,
   onInjectFailure,
   onSurfaceUnavailable,
+  onDocsNotice,
   collapsed = false,
   registerDirtyProbe,
   terminalPaneRef,
@@ -614,7 +621,14 @@ export function RightPanelHost({
   // DUPLICATION finding: the open/close bodies were previously re-inlined in the keydown
   // branches to dodge non-stable deps, which duplicated the logic across the file).
   const addTerminal = useCallback(() => {
-    setPanel((cur) => selectPanel(cur, "terminal"));
+    setPanel((cur) =>
+      selectPanel(
+        cur,
+        "terminal",
+        workflowFeaturesEnabledRef.current,
+        surfacesRef.current,
+      ),
+    );
     setTerminals((s) => openTerminal(s, workspaceId));
   }, [workspaceId]);
   // Close a terminal (its ✕ / scoped ⌘W). Disallowed for the last one (the reducer + the UI
@@ -643,7 +657,14 @@ export function RightPanelHost({
     // M17 WP6 — no editor on a remote workspace: opening a file there is not a thing.
     if (!surfaces.editor) return;
     setHighlightTarget(target);
-    setPanel((cur) => selectPanel(cur, "editor"));
+    setPanel((cur) =>
+      selectPanel(
+        cur,
+        "editor",
+        workflowFeaturesEnabledRef.current,
+        surfacesRef.current,
+      ),
+    );
     editorSplitRef.current?.openFile(path);
   };
 
@@ -782,7 +803,14 @@ export function RightPanelHost({
     const buffer = formatFindResults(results, query);
     findResultsLineMap.current = buffer.lineMap;
     findResultsShown.current = { buffer, query };
-    setPanel((cur) => selectPanel(cur, "editor"));
+    setPanel((cur) =>
+      selectPanel(
+        cur,
+        "editor",
+        workflowFeaturesEnabledRef.current,
+        surfacesRef.current,
+      ),
+    );
     if (!findResultsAdded.current) {
       editorSplitRef.current?.addSynthetic(
         "find-results",
@@ -946,7 +974,14 @@ export function RightPanelHost({
       // OS "new" binding. Flips to the editor panel so the rail (+ its input) is visible.
       if (isNewFileChord(e)) {
         e.preventDefault();
-        setPanel((cur) => selectPanel(cur, "editor"));
+        setPanel((cur) =>
+          selectPanel(
+            cur,
+            "editor",
+            workflowFeaturesEnabledRef.current,
+            surfacesRef.current,
+          ),
+        );
         fileTreeRef.current?.beginNewFile();
         return;
       }
@@ -1209,7 +1244,7 @@ export function RightPanelHost({
               data-testid="panel-tab-docs"
               onClick={() =>
                 setPanel((cur) =>
-                  selectPanel(cur, "docs", workflowFeaturesEnabled),
+                  selectPanel(cur, "docs", workflowFeaturesEnabled, surfaces),
                 )
               }
               title="Docs (⌘⇧K)"
@@ -1245,7 +1280,16 @@ export function RightPanelHost({
             // depending on a styling detail. Reflects STORED draft presence, so it is
             // correct for a Prompt panel the operator is not currently looking at.
             data-has-draft={hasDraft ? "true" : "false"}
-            onClick={() => setPanel((cur) => selectPanel(cur, "prompt"))}
+            onClick={() =>
+              setPanel((cur) =>
+                selectPanel(
+                  cur,
+                  "prompt",
+                  workflowFeaturesEnabledRef.current,
+                  surfacesRef.current,
+                ),
+              )
+            }
             title="Prompt (⌘⇧O)"
           >
             Prompt
@@ -1260,7 +1304,16 @@ export function RightPanelHost({
               aria-controls={`panel-editor-${workspaceId}`}
               className={`panel-tab${panel === "editor" ? " is-active" : ""}`}
               data-testid="panel-tab-editor"
-              onClick={() => setPanel((cur) => selectPanel(cur, "editor"))}
+              onClick={() =>
+                setPanel((cur) =>
+                  selectPanel(
+                    cur,
+                    "editor",
+                    workflowFeaturesEnabledRef.current,
+                    surfacesRef.current,
+                  ),
+                )
+              }
               title="Editor (⌘⇧E)"
             >
               Editor
@@ -1275,7 +1328,16 @@ export function RightPanelHost({
               aria-controls={`panel-diff-${workspaceId}`}
               className={`panel-tab${panel === "diff" ? " is-active" : ""}`}
               data-testid="panel-tab-diff"
-              onClick={() => setPanel((cur) => selectPanel(cur, "diff"))}
+              onClick={() =>
+                setPanel((cur) =>
+                  selectPanel(
+                    cur,
+                    "diff",
+                    workflowFeaturesEnabledRef.current,
+                    surfacesRef.current,
+                  ),
+                )
+              }
               title="Diff (⌘⇧D)"
             >
               Diff
@@ -1290,7 +1352,16 @@ export function RightPanelHost({
               aria-controls={`panel-terminal-${workspaceId}`}
               className={`panel-tab${panel === "terminal" ? " is-active" : ""}`}
               data-testid="panel-tab-terminal"
-              onClick={() => setPanel((cur) => selectPanel(cur, "terminal"))}
+              onClick={() =>
+                setPanel((cur) =>
+                  selectPanel(
+                    cur,
+                    "terminal",
+                    workflowFeaturesEnabledRef.current,
+                    surfacesRef.current,
+                  ),
+                )
+              }
               title="Terminal (⌘⇧T)"
             >
               Terminal
@@ -1609,28 +1680,17 @@ export function RightPanelHost({
             aria-labelledby={`paneltab-docs-${workspaceId}`}
             style={{ display: panel === "docs" ? "flex" : "none" }}
           >
-            {/* M17 WP6 (+ WP9) — Docs is an IN surface, so its tab stays on a remote workspace, but it
-                cannot READ the remote yet (WP7.3). A plain note instead of `DocsPanel`, so no `docs_list`
-                is invoked and no raw `os error` can reach the operator. */}
-            {surfaces.docsRead ? (
-              <Suspense fallback={null}>
-                <DocsPanel
-                  projectPath={projectPath}
-                  visible={visible}
-                  workspaceId={workspaceId}
-                  panelFront={panel === "docs"}
-                />
-              </Suspense>
-            ) : (
-              <div className="docs-panel" data-testid="docs-panel-remote">
-                <div
-                  className="docs-panel-empty"
-                  data-testid="docs-panel-remote-note"
-                >
-                  Docs aren&apos;t available on a remote workspace yet.
-                </div>
-              </div>
-            )}
+            {/* M17 WP7 — Docs reads the project on either kind: `docs_list` / `docs_read` route by
+                target in the backend (`remote_fs` for a remote workspace), so the panel is the same. */}
+            <Suspense fallback={null}>
+              <DocsPanel
+                projectPath={projectPath}
+                visible={visible}
+                workspaceId={workspaceId}
+                panelFront={panel === "docs"}
+                onNotice={onDocsNotice}
+              />
+            </Suspense>
           </div>
         )}
       </div>

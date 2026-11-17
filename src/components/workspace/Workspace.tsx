@@ -22,8 +22,12 @@
 // panel liveness + the capture-phase hotkey (only the focused workspace's host reacts).
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import type { DocsNotice } from "./docs/remoteDocsCatchUp";
 import { invoke } from "@tauri-apps/api/core";
-import type { Workspace as WorkspaceModel } from "../../state/workspace";
+import type {
+  Workspace as WorkspaceModel,
+  WorkspaceNotice,
+} from "../../state/workspace";
 import { XtermPane, type XtermPaneHandle } from "./XtermPane";
 import { RightPanelHost } from "./RightPanelHost";
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
@@ -154,7 +158,7 @@ interface WorkspaceProps {
    * M17 WP5 — a notice the app has for this workspace (a failed Detach: the tile stays, so the
    * operator meets it here). Shown in the workspace toast each time its `seq` changes.
    */
-  notice?: { text: string; seq: number; kind?: "error" | "info" };
+  notice?: WorkspaceNotice;
 }
 
 export function Workspace({
@@ -189,7 +193,18 @@ export function Workspace({
   const [toast, setToast] = useState<{
     text: string;
     kind: "error" | "info";
+    /** M17 WP7 — clear it after this long (the remote Docs catch-up's success). */
+    autoDismissMs?: number;
   } | null>(null);
+  // M17 WP7 P3.verify-human.2 — a toast that asks to clear itself does, unless something replaced it
+  // first (the effect re-runs on every new toast object, cancelling the old timer).
+  useEffect(() => {
+    if (toast?.autoDismissMs === undefined) return;
+    const t = setTimeout(() => setToast(null), toast.autoDismissMs);
+    return () => clearTimeout(t);
+  }, [toast]);
+  // The remote Docs panel's catch-up toast: "checking…", then the result. `null` clears it.
+  const showDocsNotice = useCallback((n: DocsNotice) => setToast(n), []);
   const setInjectFailure = useCallback(
     (text: string | null) =>
       setToast(text === null ? null : { text, kind: "error" }),
@@ -1406,6 +1421,7 @@ export function Workspace({
         ccSessionId={workspace.cc_session_id}
         onInjectFailure={setInjectFailure}
         onSurfaceUnavailable={showInfoNotice}
+        onDocsNotice={showDocsNotice}
         workspaceProfile={workspaceProfile}
         collapsed={rightCollapsed}
         registerDirtyProbe={registerDirtyProbe}

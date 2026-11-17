@@ -45,7 +45,6 @@ describe("workspaceSurfaces", () => {
         "supervisor",
         "turnJump",
         "fsWatch",
-        "docsRead",
       ].sort(),
     );
   });

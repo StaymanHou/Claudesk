@@ -11,6 +11,12 @@ import {
 } from "./liveWorkspace";
 import { act } from "react";
 import {
+  CATCH_UP_TOAST_MS,
+  CHECKING_TEXT,
+  catchUpNotice,
+  type DocsNotice,
+} from "../docs/remoteDocsCatchUp";
+import {
   promptInjectFailure,
   recycleInjectFailure,
   skillInjectFailure,
@@ -116,5 +122,59 @@ describe("the not-sent toast", () => {
     expect(toastOf(el)?.textContent).toContain(
       recycleInjectFailure("handoff", NOT_READY),
     );
+  });
+});
+
+// M17 WP7 (P3.verify-human.2) — the remote Docs catch-up rides the same toast: "checking…", then the
+// result. A success clears itself after `CATCH_UP_TOAST_MS`; a failure stays; a toast that REPLACES
+// a self-clearing one is not cleared by the old timer.
+describe("the remote Docs catch-up toast", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const report = async (n: DocsNotice) => {
+    const fn = rightPanel.props?.onDocsNotice;
+    expect(fn).toBeTypeOf("function");
+    await act(async () => fn!(n));
+  };
+
+  it("a success shows as info and clears itself after CATCH_UP_TOAST_MS", async () => {
+    const el = await mountWorkspace({ gate: true });
+    vi.useFakeTimers();
+    await report({ text: CHECKING_TEXT, kind: "info" });
+    expect(toastOf(el)?.getAttribute("data-kind")).toBe("info");
+    expect(toastOf(el)?.textContent).toContain(CHECKING_TEXT);
+    await report(catchUpNotice({ kind: "unchanged" }));
+    expect(toastOf(el)?.textContent).toContain(
+      "Remote docs checked: no changes.",
+    );
+    await act(async () => vi.advanceTimersByTime(CATCH_UP_TOAST_MS - 1));
+    expect(toastOf(el)).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(toastOf(el)).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("a failure stays, and the timer of the toast it replaced does not clear it", async () => {
+    const el = await mountWorkspace({ gate: true });
+    vi.useFakeTimers();
+    await report(catchUpNotice({ kind: "changed", paths: ["a"] }));
+    await act(async () => vi.advanceTimersByTime(CATCH_UP_TOAST_MS / 2));
+    await report(catchUpNotice({ kind: "link_down" }));
+    await act(async () => vi.advanceTimersByTime(CATCH_UP_TOAST_MS * 3));
+    expect(toastOf(el)?.getAttribute("data-kind")).toBe("error");
+    expect(toastOf(el)?.textContent).toContain(
+      "the remote host isn't reachable right now.",
+    );
+    vi.useRealTimers();
+  });
+
+  it("null clears the toast", async () => {
+    const el = await mountWorkspace({ gate: true });
+    await report({ text: CHECKING_TEXT, kind: "info" });
+    expect(toastOf(el)).not.toBeNull();
+    await report(null);
+    expect(toastOf(el)).toBeNull();
   });
 });

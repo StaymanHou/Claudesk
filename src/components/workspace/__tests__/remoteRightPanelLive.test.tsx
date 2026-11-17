@@ -5,6 +5,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { RightPanelHost } from "../RightPanelHost";
 import "../../../test-support/cm6JsdomShims";
+import {
+  CATCH_UP_TOAST_MS,
+  CHECKING_TEXT,
+  type DocsNotice,
+} from "../docs/remoteDocsCatchUp";
 
 // M17 WP6 (AC-2, AC-3, AC-7) — the REAL RightPanelHost mounted with a remote key: every OUT surface
 // renders NO DOM and invokes nothing; the Prompt tab (and Docs, gate ON) stay. A local mount beside
@@ -42,8 +47,7 @@ const OUT_COMMANDS = [
   "finder_open",
   "open_in_default_app",
   "term_spawn",
-  "docs_list",
-  "docs_read",
+  // (`docs_list` / `docs_read` left this list at M17 WP7: they route by target now.)
   "workspace_watch_start",
 ];
 
@@ -65,6 +69,8 @@ let host: HTMLDivElement | null = null;
 const calls: string[] = [];
 /** Every notice the host raised through `onSurfaceUnavailable` (AC-4). */
 const notices: string[] = [];
+/** M17 WP7 — every Docs catch-up toast the host raised through `onDocsNotice`. */
+const docsNotices: DocsNotice[] = [];
 
 async function settle(ms = 30) {
   await act(async () => {
@@ -72,10 +78,11 @@ async function settle(ms = 30) {
   });
 }
 
-async function mount(projectPath: string, gateOn: boolean) {
+async function mount(projectPath: string, gateOn: boolean, visible = true) {
   gate.enabled = gateOn;
   calls.length = 0;
   notices.length = 0;
+  docsNotices.length = 0;
   mockWindows("main");
   mockIPC(
     (cmd) => {
@@ -89,6 +96,8 @@ async function mount(projectPath: string, gateOn: boolean) {
           return {};
         case "docs_list":
           return [];
+        case "remote_poll_catch_up":
+          return { kind: "unchanged" };
         case "git_changed_files":
         case "git_recent_commits":
           return [];
@@ -106,10 +115,11 @@ async function mount(projectPath: string, gateOn: boolean) {
       <RightPanelHost
         workspaceId="ws-wp6"
         projectPath={projectPath}
-        visible={true}
+        visible={visible}
         workspaceProfile={null}
         collapsed={false}
         onSurfaceUnavailable={(n) => notices.push(n)}
+        onDocsNotice={(n) => docsNotices.push(n)}
       />,
     ),
   );
@@ -185,14 +195,21 @@ describe("a remote workspace's right half", () => {
     expect(row!.querySelector('[data-testid="pip-toggle"]')).not.toBeNull();
   });
 
-  it("opens on Docs with the gate ON, showing the plain note and invoking no docs_list", async () => {
+  // M17 WP7 — the WP6 placeholder note is gone: `docs_list` routes by target in the backend, so
+  // the remote workspace mounts the real DocsPanel and lists through it (gate ON only).
+  it("opens on Docs with the gate ON and lists through the real DocsPanel (docs_list invoked)", async () => {
     const el = await mount(REMOTE, true);
     expect(byId(el, "panel-tab-docs")?.getAttribute("aria-selected")).toBe(
       "true",
     );
-    expect(byId(el, "docs-panel-remote-note")?.textContent?.trim()).toBe(
-      "Docs aren't available on a remote workspace yet.",
-    );
+    expect(byId(el, "docs-panel-remote-note")).toBeNull();
+    expect(byId(el, "docs-panel")).not.toBeNull();
+    expect(calls).toContain("docs_list");
+  });
+
+  it("with the gate OFF a remote workspace reads no docs (no Docs tab, no docs_list)", async () => {
+    const el = await mount(REMOTE, false);
+    expect(byId(el, "panel-tab-docs")).toBeNull();
     expect(byId(el, "docs-panel")).toBeNull();
     expect(calls).not.toContain("docs_list");
   });
@@ -220,6 +237,56 @@ describe("a remote workspace's right half", () => {
   });
 });
 
+// M17 WP7 (P3.verify-human.2) — the consuming surface of the remote poller's on-screen rule: the
+// REAL RightPanelHost + DocsPanel. A remote workspace is polled only while it is centre stage AND
+// Docs is the fronted tab; a return is an announced catch-up, the opening show is silent.
+describe("a remote workspace's Docs polling follows what is on screen", () => {
+  const clickTab = async (el: Element, id: string) => {
+    await act(async () => {
+      (byId(el, id) as HTMLElement).click();
+    });
+    await settle();
+  };
+  const polls = () => calls.filter((c) => c.startsWith("remote_poll_"));
+
+  it("catches up silently on the opening show, pauses on Prompt, announces the return to Docs", async () => {
+    const el = await mount(REMOTE, true);
+    expect(polls()).toEqual(["remote_poll_catch_up"]);
+    expect(docsNotices).toEqual([]);
+
+    await clickTab(el, "panel-tab-prompt");
+    expect(polls()).toEqual(["remote_poll_catch_up", "remote_poll_pause"]);
+
+    await clickTab(el, "panel-tab-docs");
+    expect(polls()).toEqual([
+      "remote_poll_catch_up",
+      "remote_poll_pause",
+      "remote_poll_catch_up",
+    ]);
+    expect(docsNotices).toEqual([
+      { text: CHECKING_TEXT, kind: "info" },
+      {
+        text: "Remote docs checked: no changes.",
+        kind: "info",
+        autoDismissMs: CATCH_UP_TOAST_MS,
+      },
+    ]);
+  });
+
+  it("a workspace that is not centre stage is never polled, even with Docs fronted", async () => {
+    await mount(REMOTE, true, false);
+    expect(polls()).toEqual(["remote_poll_pause"]);
+  });
+
+  it("a LOCAL workspace never touches the remote poller (positive control)", async () => {
+    const el = await mount(LOCAL, true);
+    await clickTab(el, "panel-tab-prompt");
+    await clickTab(el, "panel-tab-docs");
+    expect(polls()).toEqual([]);
+    expect(docsNotices).toEqual([]);
+  });
+});
+
 describe("positive control: a LOCAL workspace's right half is unchanged", () => {
   it("renders every OUT surface the remote one hides", async () => {
     const el = await mount(LOCAL, false);
@@ -238,6 +305,24 @@ describe("positive control: a LOCAL workspace's right half is unchanged", () => 
     await chord("p", false);
     await chord("f", true);
     expect(byId(el, "project-search")).not.toBeNull();
+  });
+
+  // M17 WP7 Phase 1 — every tab click routes through `selectPanel`, which now REQUIRES the kind
+  // (fail-closed). Clicking each tab on a LOCAL workspace must still front exactly that tab.
+  it("each tab click fronts exactly that tab (the selectPanel call sites, live)", async () => {
+    const el = await mount(LOCAL, false);
+    for (const tab of ["diff", "terminal", "prompt", "editor"]) {
+      await act(async () =>
+        (byId(el, `panel-tab-${tab}`) as HTMLElement).click(),
+      );
+      await settle();
+      const selected = [
+        ...el.querySelectorAll(
+          '[data-testid^="panel-tab-"][aria-selected="true"]',
+        ),
+      ].map((t) => t.getAttribute("data-testid"));
+      expect(selected, tab).toEqual([`panel-tab-${tab}`]);
+    }
   });
 });
 

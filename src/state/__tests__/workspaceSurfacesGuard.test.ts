@@ -15,11 +15,14 @@ import { join, relative } from "node:path";
 //   1. The FLOOR: every production file whose executable code names an OUT command or mounts /
 //      launches an OUT surface must be listed in `SITES`, and every listed file must still do so.
 //      A new reach fails here until someone records how it is gated.
-//   2. The PINS: for each gate site, the nearest funnel flag before the mount / call must be the
-//      flag for that surface. Removing a gate, or moving the mount out from under it, fails here.
+//   2. The PINS: for each gate site, the nearest funnel flag PRECEDING the mount / call (within
+//      `max` chars) must be the flag for that surface. Removing a gate or re-flagging it fails
+//      here. ⚠️ It checks PROXIMITY, not containment: a mount moved just past a closed
+//      `{surfaces.x && (…)}` block still passes. Containment is the DOM tests' job (above).
 //
 // ⚠️ The subject list was seeded from a repo-wide scan (2026-11-17) of comment-stripped code for
-// the 26 refused commands (Rust `tests/remote_refusal_is_first.rs` REFUSED) plus the OUT
+// the refused commands (Rust `tests/remote_refusal_is_first.rs` REFUSED; 26, then 24 once M17 WP7
+// routed `docs_list` / `docs_read` by target) plus the OUT
 // components and launch helpers. It is a FLOOR: the scan below IS that grep, re-run every time.
 
 const SRC = join(__dirname, "..", "..");
@@ -34,8 +37,6 @@ const OUT_COMMANDS = [
   "create_dir",
   "stat_media",
   "open_in_default_app",
-  "docs_list",
-  "docs_read",
   "git_changed_files",
   "git_file_hunks",
   "git_recent_commits",
@@ -55,7 +56,7 @@ const OUT_COMMANDS = [
 ];
 
 const MOUNT =
-  /<(EditorSplit|DiffPanel|TerminalPane|FileTree|FileFinder|ProjectSearch|DocsPanel|MediaView)\b|\b(openSublime|openSublimeMerge|openFinder|openInDefaultApp)\s*\(/g;
+  /<(EditorSplit|DiffPanel|TerminalPane|FileTree|FileFinder|ProjectSearch|MediaView)\b|\b(openSublime|openSublimeMerge|openFinder|openInDefaultApp)\s*\(/g;
 const COMMAND = new RegExp(`["'\`](${OUT_COMMANDS.join("|")})["'\`]`, "g");
 
 /** Strip comments; keep `"ssh://…"`-style strings intact (a `//` right after a quote or colon). */
@@ -107,8 +108,6 @@ const SITES: Record<string, string> = {
     "gate — workspace_watch_start behind .fsWatch (pin)",
   "components/workspace/diff/DiffPanel.tsx":
     "behind <DiffPanel (surfaces.diff)",
-  "components/workspace/docs/DocsPanel.tsx":
-    "behind <DocsPanel (surfaces.docsRead)",
   "components/workspace/editor/EditorSplit.tsx":
     "behind <EditorSplit (surfaces.editor)",
   "components/workspace/editor/PaneTabs.tsx":
@@ -133,8 +132,6 @@ const SITES: Record<string, string> = {
     "helpers called only from pinned gate sites (App, RightPanelHost)",
   "state/supervisor/useSupervisor.ts":
     "behind Workspace's `enabled: workflowFeaturesEnabled && surfaces.supervisor` (pin: Workspace)",
-  "components/workspace/recycleSession.ts":
-    "exempt — Recycle is an IN surface owned by WP7.4; its stat_file read swallows errors (returns null) and the backend refusal makes it plain words",
 };
 
 /** A gate pin: in `file`, the nearest `surfaces.<flag>` / `s.<flag>` before `token` is `flag`. */
@@ -167,11 +164,6 @@ const PINS: Pin[] = [
     file: "components/workspace/RightPanelHost.tsx",
     token: "<TerminalPane",
     flag: "terminal",
-  },
-  {
-    file: "components/workspace/RightPanelHost.tsx",
-    token: "<DocsPanel",
-    flag: "docsRead",
   },
   {
     file: "components/workspace/RightPanelHost.tsx",
@@ -250,7 +242,7 @@ const PINS: Pin[] = [
   {
     file: "components/workspace/RightPanelHost.tsx",
     token:
-      'setHighlightTarget(target); setPanel((cur) => selectPanel(cur, "editor"));',
+      'setHighlightTarget(target); setPanel((cur) => selectPanel( cur, "editor",',
     flag: "editor",
     max: 120,
   },
@@ -328,7 +320,7 @@ describe("workspaceSurfacesGuard — the floor", () => {
     );
     const block = rust.slice(
       rust.indexOf("const REFUSED"),
-      rust.indexOf("const EXEMPT"),
+      rust.indexOf("const ROUTED"),
     );
     const refused = [...block.matchAll(/"([a-z_]+)",/g)]
       .map((m) => m[1])

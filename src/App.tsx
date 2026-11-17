@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { useWorkspaceList } from "./state/useWorkspaceList";
+import type { WorkspaceNotice } from "./state/workspace";
 import type { AutoResumeAction, OpenIntent } from "./state/predictAction";
 // M12 WP2 — clear the unclean-exit flag on a clean close (opt-in per route).
 import { markSessionClean, resolveCloseIntent } from "./state/cleanExit";
@@ -542,7 +543,7 @@ function App() {
 
   // M17 WP5 — per-workspace notices from the app (a failed Detach), shown in that workspace's toast.
   const [workspaceNotices, setWorkspaceNotices] = useState<
-    Record<string, { text: string; seq: number; kind?: "error" | "info" }>
+    Record<string, WorkspaceNotice>
   >({});
 
   // M17 WP5 (AC-4) — Detach a remote workspace: `cc_detach` FIRST (the session leaves the registry

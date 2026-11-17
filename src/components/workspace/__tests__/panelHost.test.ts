@@ -2,11 +2,26 @@ import { describe, expect, it } from "vitest";
 import {
   AVAILABLE_PANELS,
   availablePanels,
-  defaultPanel,
+  defaultPanel as defaultPanelFor,
   panelForChord,
-  reconcilePanel,
-  selectPanel,
+  reconcilePanel as reconcilePanelFor,
+  selectPanel as selectPanelFor,
+  type RightPanel,
 } from "../panelHost";
+import { LOCAL_SURFACES } from "../../../state/workspaceSurfaces";
+
+// M17 WP7 — the three panel functions take the workspace kind as a REQUIRED input (fail-closed;
+// the WP6 review MINOR). Every case in this file is about a LOCAL workspace, so these wrappers
+// supply it explicitly; the remote kind has its own file (`panelHostSurfaces.test.ts`).
+const selectPanel = (
+  current: RightPanel | null,
+  target: RightPanel,
+  enabled: boolean = false,
+) => selectPanelFor(current, target, enabled, LOCAL_SURFACES);
+const reconcilePanel = (current: RightPanel, enabled: boolean) =>
+  reconcilePanelFor(current, enabled, LOCAL_SURFACES);
+const defaultPanel = (enabled: boolean) =>
+  defaultPanelFor(enabled, LOCAL_SURFACES);
 
 describe("selectPanel (direct-select, not cycling)", () => {
   it("selects the editor directly", () => {

@@ -12,7 +12,7 @@ use serde::Serialize;
 /// The path is returned rather than kept backend-side so the caller can say *which* WIP file the
 /// boundary decision was based on — with several items open, "a recycle fired" is not
 /// diagnosable without knowing which feature's phases were read.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct WipRead {
     /// Absolute path of the file read, or `None` when the project has no WIP file.
     pub path: Option<String>,
@@ -32,15 +32,9 @@ pub struct WipRead {
 #[tauri::command]
 pub fn wip_read(project_path: String) -> WipRead {
     if crate::workspace_surfaces::refuse_remote(&project_path).is_err() {
-        return WipRead {
-            path: None,
-            text: String::new(),
-        };
+        return WipRead::default();
     }
-    let empty = WipRead {
-        path: None,
-        text: String::new(),
-    };
+    let empty = WipRead::default();
     let dir = super::wip_dir_for(std::path::Path::new(&project_path));
     let Some(target) = super::list_wip_files(&dir).into_iter().next() else {
         return empty;

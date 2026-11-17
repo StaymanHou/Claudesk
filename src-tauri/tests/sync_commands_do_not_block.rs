@@ -143,6 +143,26 @@ const ASYNC_COMMANDS: &[(&str, &str)] = &[
         "waits on `claude -p` up to `timeout_ms`; the work runs on `spawn_blocking`",
     ),
     (
+        "docs_list",
+        "M17 WP7: routed by target; a remote list is one exec over the host's master (up to \
+         `remote_fs::LIST_TIMEOUT_MS`). Both branches run on `spawn_blocking` (`on_blocking_worker`)",
+    ),
+    (
+        "docs_read",
+        "M17 WP7: routed by target; a remote read moves up to `REMOTE_READ_MAX_BYTES` over the \
+         master (up to `remote_fs::READ_TIMEOUT_MS`). Both branches run on `spawn_blocking`",
+    ),
+    (
+        "docs_stat",
+        "M17 WP7: routed by target (Recycle's baseline); a remote stat is one exec over the master \
+         (up to `remote_fs::LIST_TIMEOUT_MS`). Both branches run on `spawn_blocking`",
+    ),
+    (
+        "remote_poll_catch_up",
+        "M17 WP7 P3.verify-human.2: waits for the host poll worker's next tick (the worker runs the \
+         exec, not this command), bounded by `CATCH_UP_TIMEOUT`; the wait runs on `spawn_blocking`",
+    ),
+    (
         "remote_open_check",
         "brings up the host link and runs a `test -d` over it (up to `LINK_UP_TIMEOUT` + \
          `EXEC_TIMEOUT_MS`); the work runs on `spawn_blocking`",

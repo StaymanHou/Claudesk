@@ -8,7 +8,10 @@
 // the map-over-all + `visible` toggle was N-ready from the start.
 
 import { Workspace } from "./Workspace";
-import type { Workspace as WorkspaceModel } from "../../state/workspace";
+import type {
+  Workspace as WorkspaceModel,
+  WorkspaceNotice,
+} from "../../state/workspace";
 import type {
   WireLinkOverlay,
   WireWorkspaceState,
@@ -37,9 +40,7 @@ interface CenterStageProps {
     probe: (() => number) | null,
   ) => void;
   /** M17 WP5 — the app's notice for a workspace (a failed Detach), shown in its toast. */
-  noticeFor?: (
-    workspaceId: string,
-  ) => { text: string; seq: number; kind?: "error" | "info" } | undefined;
+  noticeFor?: (workspaceId: string) => WorkspaceNotice | undefined;
 }
 
 export function CenterStage({

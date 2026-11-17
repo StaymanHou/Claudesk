@@ -1,7 +1,7 @@
 ---
 stage: design-priors
 state: active
-updated: 2026-11-16
+updated: 2026-11-17
 ---
 
 # Design Priors — Claudesk
@@ -354,3 +354,20 @@ There is a second, sharper reason for the destructive half specifically: a user 
 **Why (⚠️ INFERRED; approved as proposed by the operator 2026-11-16, why not yet sharpened; directional + overridable):** labels are glanced at constantly, while the click is rare and already pays for the real check. Making every glance pay that check (a picker that opens an ssh link to label one row) costs attention and resources on every open for a slightly fresher guess (`claudesk-philosophy`). The M12 auto-resume announcement set the precedent: *"the announcement is a prediction, never the input to the action"*.
 
 **Origin:** M17 WP5 spec, 2026-11-16. Asked when a remote picker row should say "Reconnect" vs. "resume" (knowing needs a connection), the operator ruled: *"Just assume it by a locally stored state from last time it was disconnected knowing that the state might be outdated."* Related: [[a-silent-non-action-must-not-read-as-done]] (the click's toast when the label was stale is that prior applied), [[chooser-leads-with-what-you-can-act-on]].
+
+## background-work-only-for-what-is-on-screen
+
+**Axis:** freshness of a hidden view vs. the cost of keeping it fresh (when live-refresh work runs)
+
+**Lean:** A surface's live-refresh work (polling, re-reading, re-listing) runs **only while that surface is actually in front of the operator**: its workspace is centre stage AND the surface is the active tab. It **catches up when the operator returns** (one immediate refresh against the last known state), rather than keeping a hidden or background view fresh.
+
+**Decision rule:** before giving a view a background refresh loop, ask **"does anyone see the result while it is hidden?"**
+- **No** → pause the work while hidden; keep the last known state; refresh once, immediately, on return (and tell the operator it happened, see the corollary).
+- **Yes** (a status surface the operator glances at from elsewhere: the filmstrip dots, the menu bar, the PiP) → this prior does not apply; those surfaces ARE on screen.
+- A **correctness** dependency on the signal (Recycle's `.session.md` marker) must not ride the paused loop: give it its own on-demand read.
+
+**Corollary (operator, same session):** the first refresh after a return is announced. A small toast says the check started, then gives its result (what changed, or that it failed). Only that first catch-up is announced; the steady refreshes after it are silent.
+
+**Why (⚠️ INFERRED; approved as proposed by the operator 2026-11-17, why not yet sharpened; directional + overridable):** freshness only has value at the moment you look. Work done for a view nobody is watching costs something real (a remote exec every few seconds, an ssh session out of the host's `MaxSessions` budget, battery) and buys nothing that a catch-up on return does not. Consistent with `claudesk-philosophy` (attention and resources are spent where the operator is).
+
+**Origin:** M17 WP7 Phase 3 verify-human (2026-11-17). The spec had assumed the remote docs poller runs whenever a remote workspace is open (so a hidden Docs panel stays current and Recycle gets its signal). The operator rejected it: *"no need to poll unless the workspace and the particular Docs tab is active"*, then added the announced catch-up: *"a small toast indicating that an immediate poll has initiated and come back with the result too whether it's successful or failed. only the very first update after switching needs this"*. Related: [[a-display-prediction-may-be-stale-when-the-click-decides]] (the same "don't pay for freshness nobody is reading" thesis, applied to labels), [[a-silent-non-action-must-not-read-as-done]] (why the catch-up announces its failure too).

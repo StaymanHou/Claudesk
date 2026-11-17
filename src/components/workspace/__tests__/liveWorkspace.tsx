@@ -32,6 +32,7 @@ import {
 import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { TurnNavState } from "../turnMarkers";
+import type { DocsNotice } from "../docs/remoteDocsCatchUp";
 import type { TurnNavView } from "../XtermPane";
 import type { SupervisorOrigin } from "../../../state/supervisor/turnOrigin";
 import type { Workspace as WorkspaceModel } from "../../../state/workspace";
@@ -176,6 +177,8 @@ interface RightPanelStubProps {
   onInjectFailure?: (toast: string) => void;
   /** M17 WP6 — the workspace's notice for a chord on an absent surface. */
   onSurfaceUnavailable?: (notice: string) => void;
+  /** M17 WP7 — the remote Docs panel's catch-up toast (`null` clears it). */
+  onDocsNotice?: (notice: DocsNotice) => void;
 }
 
 function RightPanelHostStub(props: RightPanelStubProps) {

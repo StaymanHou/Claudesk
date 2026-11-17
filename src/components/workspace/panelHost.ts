@@ -127,7 +127,7 @@ const AVAILABLE_PANELS_WITH_WORKFLOW: readonly RightPanel[] = [
  */
 export function defaultPanel(
   enabled: WorkflowGateValue,
-  surfaces: WorkspaceSurfaces = LOCAL_SURFACES,
+  surfaces: WorkspaceSurfaces,
 ): RightPanel {
   if (enabled) return "docs";
   // M17 WP6 — a workspace with no editor (remote) opens on Prompt, its only ungated panel.
@@ -191,8 +191,8 @@ function panelPresent(panel: RightPanel, surfaces: WorkspaceSurfaces): boolean {
 export function selectPanel(
   current: RightPanel | null,
   target: RightPanel,
-  enabled: WorkflowGateValue = false,
-  surfaces: WorkspaceSurfaces = LOCAL_SURFACES,
+  enabled: WorkflowGateValue,
+  surfaces: WorkspaceSurfaces,
 ): RightPanel {
   if (!availablePanels(enabled, surfaces).includes(target)) {
     // `current` may be `null` — the "user has not chosen a panel yet" state introduced in
@@ -221,7 +221,7 @@ export function selectPanel(
 export function reconcilePanel(
   current: RightPanel,
   enabled: WorkflowGateValue,
-  surfaces: WorkspaceSurfaces = LOCAL_SURFACES,
+  surfaces: WorkspaceSurfaces,
 ): RightPanel {
   return availablePanels(enabled, surfaces).includes(current)
     ? current

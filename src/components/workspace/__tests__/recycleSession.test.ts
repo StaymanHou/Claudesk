@@ -129,9 +129,9 @@ beforeEach(() => {
     });
   });
 
-  // `stat_file` — the baseline read and each post-event read. Default: file absent.
+  // `docs_stat` — the baseline read and each post-event read. Default: file absent.
   invokeMock.mockImplementation((cmd: string) => {
-    if (cmd === "stat_file") return Promise.reject(new Error("ENOENT"));
+    if (cmd === "docs_stat") return Promise.reject(new Error("ENOENT"));
     return Promise.resolve();
   });
 
@@ -151,12 +151,12 @@ afterEach(() => {
 
 describe("the success path — the full ordered sequence", () => {
   it("performs handoff → markClean → relaunch → restore, IN THAT ORDER", async () => {
-    // `stat_file`: absent at baseline (no `.session.md`), then present after the write.
+    // `docs_stat`: absent at baseline (no `.session.md`), then present after the write.
     invokeMock.mockImplementationOnce(() =>
       Promise.reject(new Error("ENOENT")),
     );
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === "stat_file")
+      if (cmd === "docs_stat")
         return Promise.resolve({ mtime_ms: 5_000, size: 800 });
       return Promise.resolve();
     });
@@ -190,7 +190,7 @@ describe("the success path — the full ordered sequence", () => {
       Promise.reject(new Error("ENOENT")),
     );
     invokeMock.mockImplementation((cmd: string) =>
-      cmd === "stat_file"
+      cmd === "docs_stat"
         ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
         : Promise.resolve(),
     );
@@ -235,7 +235,7 @@ describe("the success path — the full ordered sequence", () => {
       Promise.reject(new Error("ENOENT")),
     );
     invokeMock.mockImplementation((cmd: string) =>
-      cmd === "stat_file"
+      cmd === "docs_stat"
         ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
         : Promise.resolve(),
     );
@@ -269,7 +269,7 @@ describe("the success path — the full ordered sequence", () => {
     // back NEWER than it, making the real write look stale and failing every Recycle.
     const order: string[] = [];
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === "stat_file") {
+      if (cmd === "docs_stat") {
         order.push("stat");
         return Promise.resolve({ mtime_ms: 1_000, size: 10 });
       }
@@ -307,7 +307,7 @@ describe("⚠️ the FAILURE arms — nothing is torn down", () => {
       Promise.resolve({ mtime_ms: 9_000, size: 800 }),
     );
     invokeMock.mockImplementation((cmd: string) =>
-      cmd === "stat_file"
+      cmd === "docs_stat"
         ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
         : Promise.resolve(),
     );
@@ -348,7 +348,7 @@ describe("⚠️ the FAILURE arms — nothing is torn down", () => {
       Promise.reject(new Error("ENOENT")),
     );
     invokeMock.mockImplementation((cmd: string) =>
-      cmd === "stat_file"
+      cmd === "docs_stat"
         ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
         : Promise.resolve(),
     );
@@ -399,7 +399,7 @@ describe("⚠️ WP7 — abort across unmount", () => {
       Promise.reject(new Error("ENOENT")),
     );
     invokeMock.mockImplementation((cmd: string) =>
-      cmd === "stat_file"
+      cmd === "docs_stat"
         ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
         : Promise.resolve(),
     );
@@ -563,7 +563,7 @@ describe("⚠️ WP7 — abort across unmount", () => {
 describe("signal filtering and subscription hygiene", () => {
   it("ignores fs-change events for OTHER workspaces", async () => {
     invokeMock.mockImplementation((cmd: string) =>
-      cmd === "stat_file"
+      cmd === "docs_stat"
         ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
         : Promise.resolve(),
     );
@@ -749,7 +749,7 @@ describe("P2.7 — the auto-resume latch stays closed across a recycle", () => {
       Promise.reject(new Error("ENOENT")),
     );
     invokeMock.mockImplementation((cmd: string) =>
-      cmd === "stat_file"
+      cmd === "docs_stat"
         ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
         : Promise.resolve(),
     );
@@ -871,7 +871,7 @@ describe("⚠️ the two caller-failure reasons stay DISTINGUISHABLE", () => {
       Promise.reject(new Error("ENOENT")),
     );
     invokeMock.mockImplementation((cmd: string) =>
-      cmd === "stat_file"
+      cmd === "docs_stat"
         ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
         : Promise.resolve(),
     );
@@ -1165,7 +1165,7 @@ describe("⚠️ M17 WP3 P4.6 — a REFUSED injection is reported, never silent"
       Promise.reject(new Error("ENOENT")),
     );
     invokeMock.mockImplementation((cmd: string) =>
-      cmd === "stat_file"
+      cmd === "docs_stat"
         ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
         : Promise.resolve(),
     );
@@ -1191,7 +1191,7 @@ describe("⚠️ M17 WP3 P4.6 — a REFUSED injection is reported, never silent"
       Promise.reject(new Error("ENOENT")),
     );
     invokeMock.mockImplementation((cmd: string) =>
-      cmd === "stat_file"
+      cmd === "docs_stat"
         ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
         : Promise.resolve(),
     );
@@ -1205,5 +1205,56 @@ describe("⚠️ M17 WP3 P4.6 — a REFUSED injection is reported, never silent"
     emitStop();
     expect(await promise).toEqual({ ok: true });
     expect(reported).toEqual([]);
+  });
+});
+
+// M17 WP7 (AC-5) — a REMOTE project's `.session.md` write has no `notify` event, and the poller
+// only runs while the Docs tab is on screen. So on a remote key a `Stop` forces ONE `docs_stat`
+// first and feeds any write it finds BEFORE the `Stop`; the local path feeds the `Stop` directly.
+describe("a REMOTE project: a Stop forces one re-stat before it is fed", () => {
+  const REMOTE = "ssh://me@mini-host/Users/me/proj";
+  const statCalls = () =>
+    invokeMock.mock.calls.filter((c) => c[0] === "docs_stat");
+
+  /** `docs_stat` answers `baseline` first (the baseline read), then `after` for every later stat. */
+  function stats(baseline: number, after: number) {
+    let n = 0;
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd !== "docs_stat") return Promise.resolve();
+      n += 1;
+      return Promise.resolve({ mtime_ms: n === 1 ? baseline : after, size: 1 });
+    });
+  }
+
+  it("a fresh write found by the re-stat at Stop completes the Recycle (no poll event needed)", async () => {
+    stats(1_000, 5_000);
+    const promise = recycleSession(baseInputs({ projectPath: REMOTE }));
+    await tick();
+    emitStop(); // the write landed, but no fs-change ever arrived
+    const outcome = await promise;
+    expect(outcome).toEqual({ ok: true });
+    expect(statCalls().length).toBe(2); // the baseline, then the forced re-stat
+    expect(statCalls()[1][1]).toEqual({ root: REMOTE, path: SESSION_MD_REL });
+    expect(effects).toContain(`inject:${RESTORE_COMMAND}`);
+  });
+
+  it("a re-stat that finds only the baseline mtime still fails the Recycle, as today", async () => {
+    stats(1_000, 1_000);
+    const promise = recycleSession(baseInputs({ projectPath: REMOTE }));
+    await tick();
+    emitStop();
+    const outcome = await promise;
+    expect(outcome.ok).toBe(false);
+    expect(effects).not.toContain("relaunch");
+  });
+
+  it("a LOCAL project feeds the Stop directly: no re-stat (positive control)", async () => {
+    stats(1_000, 5_000);
+    const promise = recycleSession(baseInputs());
+    await tick();
+    emitStop();
+    const outcome = await promise;
+    expect(outcome.ok).toBe(false); // no write was ever reported, so the Stop alone fails it
+    expect(statCalls().length).toBe(1); // the baseline only
   });
 });

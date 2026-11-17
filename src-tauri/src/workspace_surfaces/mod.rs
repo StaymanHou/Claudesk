@@ -15,8 +15,10 @@
 //! in the refused modules must start with a call to [`refuse_remote`], or be listed there as exempt
 //! with a reason (`workspace_watch_stop` takes no root).
 //!
-//! The error crosses the IPC boundary as a `String`, like every other error in these modules, so
-//! the "type" the frontend can match on is the exact text [`REMOTE_REFUSAL`].
+//! The error crosses the IPC boundary as a `String`, like every other error in these modules
+//! (`From<RemoteRefused> for String`; there is no per-module enum variant). [`REMOTE_REFUSAL`] is
+//! **display text** for whatever surfaces the error: the frontend gates before invoking and never
+//! matches on it, so nothing in `src/` depends on the exact wording.
 
 use crate::config_store::is_remote_key;
 
@@ -24,7 +26,7 @@ use crate::config_store::is_remote_key;
 pub const REMOTE_REFUSAL: &str = "Not available on a remote workspace.";
 
 /// A local-only command was handed a remote workspace's `ssh://` key. Its Display IS
-/// [`REMOTE_REFUSAL`] (one source for the text the frontend matches on).
+/// [`REMOTE_REFUSAL`] (one source for the displayed text).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("{}", REMOTE_REFUSAL)]
 pub struct RemoteRefused;

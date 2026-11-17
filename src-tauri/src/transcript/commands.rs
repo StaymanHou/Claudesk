@@ -19,7 +19,7 @@ use crate::config_store::profiles::ConfigTarget;
 /// The path is returned rather than kept backend-side because the caller uses it to key
 /// "have I already fired for this turn?" — and a caller that cannot name the file it read
 /// cannot tell two sessions in one project apart, which is the collapse Phase 1 set out to fix.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct TranscriptTail {
     /// Absolute path of the file read, or `None` when no transcript exists yet.
     pub path: Option<String>,
@@ -91,15 +91,9 @@ pub fn transcript_tail(
     pty_session_id: Option<String>,
 ) -> TranscriptTail {
     if crate::workspace_surfaces::refuse_remote(&project_path).is_err() {
-        return TranscriptTail {
-            path: None,
-            lines: Vec::new(),
-        };
+        return TranscriptTail::default();
     }
-    let empty = TranscriptTail {
-        path: None,
-        lines: Vec::new(),
-    };
+    let empty = TranscriptTail::default();
     let Some(home) = home_dir(&app) else {
         return empty;
     };

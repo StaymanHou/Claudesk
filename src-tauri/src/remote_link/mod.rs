@@ -1197,6 +1197,20 @@ impl LinkRegistry {
         )
         .map_err(CloseExecError::Run)
     }
+
+    /// M17 WP7 — a READ over the master (`crate::remote_fs`: the Docs panel, Recycle's baseline, the
+    /// poller). The close path's shape, deliberately: Up-only and master-only, so a read while the
+    /// link is down costs nothing and NEVER connects directly ([`NO_DIRECT_FALLBACK`]; a poll every
+    /// few seconds through [`Self::exec`] would turn a drop into a direct ssh each tick).
+    /// ⚠️ Blocks up to `timeout_ms` while the link is Up.
+    pub fn master_exec(
+        &self,
+        target: &ValidTarget,
+        remote_command: &str,
+        timeout_ms: u64,
+    ) -> Result<String, CloseExecError> {
+        self.close_exec(target, remote_command, timeout_ms)
+    }
 }
 
 /// `ssh`'s answer to "connect without the master": a proxy that exits at once. ssh only runs a
