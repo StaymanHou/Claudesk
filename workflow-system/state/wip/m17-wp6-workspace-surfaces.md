@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M17 WP6 — OUT rows absent: the `workspaceSurfaces` funnel (+ WP9 folded in)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** ship (complete) — shipped `991307e`
 **Created:** 2026-11-17
 **Entry:** spec (complex feature)
 **WBS:** `workflow-system/product/wbs.md` → "### WP6" (M17), with "### WP9" (no raw local-fs errors on a remote workspace) folded in. Design: `arch/remote-workspaces.md` §G (PLANNED).
@@ -346,9 +346,14 @@ Problem statement unchanged (2026-11-17, F12 from P3.verify-human.2): the operat
     — no new tests: every Phase 3 behavior (chord notices, menu launchers, the toast kind incl. decision B, the guard's floor + 24 pins) is pinned by a test that FAILS when it breaks (mutation-proven: 30 gate sites + 3 toast-kind mutants + 2 runner mutants + the floor probe).
     — live cleanup (remote-verify hygiene): the remote scratch workspace closed through the UI (`filmstrip-close-*`, no dialog); the scratch row removed via the picker × ; dev `projects.json` row set == the pre-WP6 backup (8 rows); dev app stopped (TaskStop) after the close; `ssh -M` masters 0; mini `tmux -L claudesk-dev ls` → "no server running".
 
+## Ship
+- **Commit:** `991307e` feat(m17-wp6): OUT rows absent on a remote workspace (workspaceSurfaces funnel)
+- **Full suite:** reused the last-phase codify run (`Test scope: full — last phase`, `pnpm verify:auto` EXIT=0: vitest 4022 passed, cargo lib 1327 passed); only WIP/backlog docs changed since. Lint / format:check / cargo fmt --check re-run at ship: all EXIT=0.
+- **Leak check (public repo):** remote account references in this WIP redacted to `<user>@<mini-host>` / `~/claudesk-scratch-remote` before staging.
+
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship
+- **Path:** Feature > review-quality
+- **Active scope:** review-quality against `991307e`
 - **Live state:** clean (dev app stopped, scratch row removed, no ssh master, no remote tmux server)
 - **Blocked:** none
 - **Unvisited:** none after Phase 3
