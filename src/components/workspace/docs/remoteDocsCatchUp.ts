@@ -128,16 +128,32 @@ export function useRemoteDocsPolling({
     }
     const announce = answeredRef.current;
     if (announce) noticeRef.current?.({ text: CHECKING_TEXT, kind: "info" });
+    // The WP7 review MAJOR: a catch-up whose panel went off screen before it answered is STALE. It
+    // announces nothing (a late result, or the "no longer watched" its dropped waiter now gets
+    // from `pause`, would land on a panel no longer in front), and its "checking…" goes with it.
+    let cancelled = false;
+    let settled = false;
     invoke<CatchUp>("remote_poll_catch_up", { workspaceId, projectPath }).then(
       (r) => {
+        settled = true;
+        // A late success still counts: the backend recorded the baseline.
         answeredRef.current = true;
-        if (announce) noticeRef.current?.(catchUpNotice(r));
+        if (announce && !cancelled) noticeRef.current?.(catchUpNotice(r));
       },
       (err) => {
+        settled = true;
+        if (cancelled) return;
         answeredRef.current = true;
         if (announce) noticeRef.current?.(catchUpErrorNotice(err));
         else console.error(`remote_poll_catch_up failed for ${workspaceId}:`, err);
       },
     );
+    return () => {
+      cancelled = true;
+      // Only a still-pending "checking…" goes: an answer already shown stays (a failure stays until
+      // dismissed). `null` clears only a docs-owned toast (`Workspace.showDocsNotice`), so this
+      // never takes down a notice something else raised meanwhile.
+      if (announce && !settled) noticeRef.current?.(null);
+    };
   }, [remote, onScreen, workspaceId, projectPath]);
 }

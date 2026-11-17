@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   catchUpNotice,
   CATCH_UP_TOAST_MS,
@@ -79,7 +81,7 @@ async function settle() {
   });
 }
 
-function harness(answer: () => CatchUp | Error) {
+function harness(answer: () => CatchUp | Error | Promise<CatchUp>) {
   const calls: { cmd: string; args: Record<string, unknown> }[] = [];
   const notices: DocsNotice[] = [];
   mockWindows("main");
@@ -88,7 +90,7 @@ function harness(answer: () => CatchUp | Error) {
     if (cmd === "remote_poll_catch_up") {
       const a = answer();
       if (a instanceof Error) throw a;
-      return a;
+      return a; // a Promise is awaited by mockIPC: the test settles it when it chooses
     }
     return null;
   });
@@ -108,6 +110,24 @@ function harness(answer: () => CatchUp | Error) {
   const cmds = () => calls.map((c) => c.cmd);
   return { calls, notices, render, cmds };
 }
+
+// The WP7 review MINOR: AC-4's "same words everywhere" was tied to Rust's `remote_fs::LINK_DOWN`
+// only by a comment. Read the Rust constant and hold the frontend's sentence to it (its first
+// letter lowercased, since it follows "Couldn't check the remote docs: ").
+describe("the link-down words match the backend's", () => {
+  it("catchUpNotice(link_down) quotes remote_fs::LINK_DOWN", () => {
+    const rust = readFileSync(
+      resolve(__dirname, "../../../../src-tauri/src/remote_fs/mod.rs"),
+      "utf8",
+    );
+    const m = rust.match(/^pub const LINK_DOWN: &str = "([^"]+)";$/m);
+    expect(m, "remote_fs::LINK_DOWN not found").not.toBeNull();
+    const words = m![1];
+    expect(catchUpNotice({ kind: "link_down" })?.text).toBe(
+      `Couldn't check the remote docs: ${words[0].toLowerCase()}${words.slice(1)}`,
+    );
+  });
+});
 
 describe("useRemoteDocsPolling", () => {
   it("catches up silently on the first show, pauses when hidden, announces the return", async () => {
@@ -182,5 +202,69 @@ describe("useRemoteDocsPolling", () => {
     await settle();
     expect(h.cmds()).toEqual([]);
     expect(h.notices).toEqual([]);
+  });
+
+  // The WP7 review MAJOR: a catch-up whose panel left the screen before it answered is stale.
+  describe("a return that leaves again before its answer", () => {
+    function deferred() {
+      let resolve!: (r: CatchUp) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<CatchUp>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    async function returnedThenLeft() {
+      let next: CatchUp | Promise<CatchUp> = { kind: "baseline" };
+      const h = harness(() => next);
+      await h.render(REMOTE, true); // the opening baseline (answered)
+      await settle();
+      await h.render(REMOTE, false);
+      const pending = deferred();
+      next = pending.promise;
+      await h.render(REMOTE, true); // the return: "checking…"
+      await settle();
+      expect(h.notices).toEqual([{ text: CHECKING_TEXT, kind: "info" }]);
+      await h.render(REMOTE, false); // …left before the answer
+      await settle();
+      return { h, pending };
+    }
+
+    it("clears its own checking toast and announces no late success", async () => {
+      const { h, pending } = await returnedThenLeft();
+      expect(h.cmds().at(-1)).toBe("remote_poll_pause");
+      expect(h.notices).toEqual([{ text: CHECKING_TEXT, kind: "info" }, null]);
+      await act(async () => pending.resolve({ kind: "changed", paths: ["a"] }));
+      await settle();
+      expect(h.notices).toEqual([{ text: CHECKING_TEXT, kind: "info" }, null]);
+    });
+
+    it("announces and logs nothing for the dropped waiter's error", async () => {
+      const err = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { h, pending } = await returnedThenLeft();
+      await act(async () =>
+        pending.reject("the workspace is no longer watched"),
+      );
+      await settle();
+      expect(h.notices).toEqual([{ text: CHECKING_TEXT, kind: "info" }, null]);
+      expect(err).not.toHaveBeenCalled();
+      err.mockRestore();
+    });
+
+    it("an answer that already landed is not cleared by leaving (a failure stays)", async () => {
+      let next: CatchUp = { kind: "baseline" };
+      const h = harness(() => next);
+      await h.render(REMOTE, true);
+      await settle();
+      await h.render(REMOTE, false);
+      next = { kind: "link_down" };
+      await h.render(REMOTE, true);
+      await settle();
+      await h.render(REMOTE, false);
+      await settle();
+      expect(h.notices.at(-1)?.kind).toBe("error"); // no trailing null
+    });
   });
 });

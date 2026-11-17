@@ -198,14 +198,14 @@ fn perform_quit_teardown(app: &tauri::AppHandle) {
             );
         }
     }
-    // M17 WP3: stop every remote host link. AFTER `kill_all`, whose remote close path still
-    // needs the master. Kills each master's process group directly, without waiting on its
-    // worker, so an orphaned `ssh -M` never outlives the app.
     // M17 WP7: drop every remote poll subscription BEFORE the links stop, so no worker starts a
     // tick against a dying master. Never joins a worker: each exits at its next wake.
     if let Some(poller) = app.try_state::<remote_fs::poller::RemotePoller>() {
         poller.unsubscribe_all();
     }
+    // M17 WP3: stop every remote host link. AFTER `kill_all`, whose remote close path still
+    // needs the master. Kills each master's process group directly, without waiting on its
+    // worker, so an orphaned `ssh -M` never outlives the app.
     if let Some(links) = app.try_state::<remote_link::commands::SharedLinks>() {
         links.stop_all();
     }

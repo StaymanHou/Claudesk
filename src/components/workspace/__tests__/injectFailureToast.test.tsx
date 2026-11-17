@@ -177,4 +177,52 @@ describe("the remote Docs catch-up toast", () => {
     await report(null);
     expect(toastOf(el)).toBeNull();
   });
+  // The WP7 review MAJOR: the toast slot is shared, so a docs notice owns only what it raised.
+  describe("shares the slot without clobbering it", () => {
+    async function withInjectError() {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const el = await mountWorkspace({
+        gate: true,
+        ipcRejects: { cc_inject: NOT_READY },
+      });
+      await click(
+        el.querySelector('[data-testid="workspace-skill-session-restore"]'),
+      );
+      await settle();
+      expect(toastOf(el)?.textContent).toContain(
+        skillInjectFailure("/session-restore", NOT_READY),
+      );
+      return el;
+    }
+
+    it("a standing inject-failure error survives a docs 'checking…' and its result", async () => {
+      const el = await withInjectError();
+      await report({ text: CHECKING_TEXT, kind: "info" });
+      await report(catchUpNotice({ kind: "link_down" }));
+      expect(toastOf(el)?.textContent).toContain(
+        skillInjectFailure("/session-restore", NOT_READY),
+      );
+    });
+
+    it("a docs null does not clear another source's toast", async () => {
+      const el = await withInjectError();
+      await report(null);
+      expect(toastOf(el)?.textContent).toContain(
+        skillInjectFailure("/session-restore", NOT_READY),
+      );
+    });
+
+    it("a docs notice may replace a transient info notice, and its null clears its own", async () => {
+      const el = await mountWorkspace({ gate: true });
+      const info = rightPanel.props?.onSurfaceUnavailable;
+      expect(info).toBeTypeOf("function");
+      // The info notice from elsewhere (an absent-surface chord) is not an error: replaceable.
+      await act(async () => info!("Sublime Text isn't available"));
+      expect(toastOf(el)?.getAttribute("data-kind")).toBe("info");
+      await report({ text: CHECKING_TEXT, kind: "info" });
+      expect(toastOf(el)?.textContent).toContain(CHECKING_TEXT);
+      await report(null);
+      expect(toastOf(el)).toBeNull();
+    });
+  });
 });

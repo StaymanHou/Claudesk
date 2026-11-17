@@ -18,6 +18,11 @@
 - **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP6-NOTICE-SHAPE-INLINED-THREE-TIMES — one exported `WorkspaceNotice` type replaces the three inline copies.
 - **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP6-REFUSAL-DOC-IMPLIES-FRONTEND-CONTRACT — the `workspace_surfaces` module doc no longer implies a frontend text contract.
 - **Milestone:** WP7: Remote reads: Docs panel, poller, Recycle
+- **Task closed:** M17 WP7's review MAJORs are fixed: leaving a remote Docs panel before its catch-up answers no longer raises a false "took too long" toast (`pause` drops the waiting catch-up and the panel ignores a stale answer), and the Docs catch-up toast no longer overwrites or clears another notice such as a refused-injection error.
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-CATCH-UP-WAITER-OUTLIVES-PAUSE — `RemotePoller::pause` drops the workspace's waiters and `useRemoteDocsPolling` cancels a catch-up whose panel left the screen.
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-DOCS-NOTICE-CLOBBERS-THE-SHARED-TOAST — the workspace toast carries its owner, so a docs notice replaces only a docs or info toast and its `null` clears only its own.
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-QUIT-TEARDOWN-COMMENT-ORDER — the WP3 comment now sits directly above `links.stop_all()`.
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-LINK-DOWN-WORDS-HAND-COPIED — a test reads Rust's `remote_fs::LINK_DOWN` and holds the frontend's link-down sentence to it.
 
 ## 2026-11-16
 

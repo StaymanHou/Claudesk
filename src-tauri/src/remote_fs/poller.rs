@@ -315,6 +315,12 @@ impl RemotePoller {
 
     /// Pause `workspace_id` (it left centre stage, or its Docs tab was un-fronted): it is left out of
     /// every tick from now on and keeps its snapshot. Absent id = no-op. Never blocks.
+    ///
+    /// ⚠️ DROPS the workspace's waiting catch-ups (their receivers disconnect at once). A paused
+    /// workspace is in no tick, so nothing would ever answer them: a return followed by leaving
+    /// again before the worker copied its active subs left a waiter that ran out its
+    /// `CATCH_UP_TIMEOUT` into a false "took too long" toast (the WP7 review MAJOR). A tick already
+    /// running with this workspace in it still writes its snapshot back; only the answer is gone.
     pub fn pause(&self, workspace_id: &str) {
         if let Ok(mut hosts) = self.hosts.lock() {
             for state in hosts.by_host.values_mut() {
@@ -325,6 +331,7 @@ impl RemotePoller {
                 {
                     s.active = false;
                 }
+                state.waiters.remove(workspace_id);
             }
         }
     }

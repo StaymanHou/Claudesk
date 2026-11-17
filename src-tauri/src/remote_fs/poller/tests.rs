@@ -628,3 +628,62 @@ fn a_subscribe_after_a_catch_up_keeps_the_active_subscription_and_its_waiter() {
     p.unsubscribe_all();
     wait_until("the worker exits", || p.live_workers() == 0);
 }
+
+/// An exec that holds every call until the test releases it (and says when one has started), so
+/// the test can act while a tick is in flight.
+struct Held {
+    reply: String,
+    started: Mutex<mpsc::Sender<()>>,
+    release: Mutex<mpsc::Receiver<()>>,
+}
+
+impl RemoteExec for Held {
+    fn run(&self, _t: &ValidTarget, _cmd: &str, _ms: u64) -> Result<String, ExecFailure> {
+        let _ = self.started.lock().unwrap().send(());
+        let _ = self
+            .release
+            .lock()
+            .unwrap()
+            .recv_timeout(Duration::from_secs(5));
+        Ok(self.reply.clone())
+    }
+}
+
+#[test]
+fn a_pause_drops_the_workspaces_waiting_catch_up_instead_of_leaving_it_to_time_out() {
+    // The WP7 review MAJOR: a return then a leave before the worker copies its active subs left a
+    // waiter no tick would answer (a paused workspace is in none). Here w2's exec holds the worker,
+    // so w1's catch-up CANNOT be answered before the pause: the outcome is deterministic.
+    let (started_tx, started) = mpsc::channel();
+    let (release, release_rx) = mpsc::channel();
+    let exec = Arc::new(Held {
+        reply: listing(&[]),
+        started: Mutex::new(started_tx),
+        release: Mutex::new(release_rx),
+    });
+    let p = RemotePoller::new(
+        Env::new(true, true),
+        exec,
+        Arc::new(|_| {}),
+        Duration::from_secs(600),
+    );
+    let w2 = p.catch_up("w2", target("/r/two"));
+    started
+        .recv_timeout(Duration::from_secs(5))
+        .expect("w2's tick started");
+
+    let w1 = p.catch_up("w1", target("/r/one")); // the return…
+    p.pause("w1"); // …and the leave, before any tick could include w1
+    assert_eq!(
+        w1.recv_timeout(Duration::from_millis(500)),
+        Err(mpsc::RecvTimeoutError::Disconnected),
+        "the paused workspace's catch-up must end at once, not wait out its timeout"
+    );
+
+    // Positive control: the workspace that stayed on screen is still answered.
+    release.send(()).unwrap();
+    assert_eq!(answer(w2), CatchUp::Baseline);
+    p.unsubscribe_all();
+    drop(release);
+    wait_until("the worker exits", || p.live_workers() == 0);
+}

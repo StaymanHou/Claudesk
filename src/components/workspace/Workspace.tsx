@@ -195,6 +195,8 @@ export function Workspace({
     kind: "error" | "info";
     /** M17 WP7 — clear it after this long (the remote Docs catch-up's success). */
     autoDismissMs?: number;
+    /** Who raised it: `"docs"` for the remote Docs catch-up (see `showDocsNotice`). */
+    source?: "docs";
   } | null>(null);
   // M17 WP7 P3.verify-human.2 — a toast that asks to clear itself does, unless something replaced it
   // first (the effect re-runs on every new toast object, cancelling the old timer).
@@ -203,8 +205,20 @@ export function Workspace({
     const t = setTimeout(() => setToast(null), toast.autoDismissMs);
     return () => clearTimeout(t);
   }, [toast]);
-  // The remote Docs panel's catch-up toast: "checking…", then the result. `null` clears it.
-  const showDocsNotice = useCallback((n: DocsNotice) => setToast(n), []);
+  // The remote Docs panel's catch-up toast: "checking…", then the result. The slot is SHARED, so a
+  // docs notice only owns what it raised (the WP7 review MAJOR): it never replaces another
+  // source's standing error (a refused injection stays until dismissed), and `null` clears only a
+  // docs toast. An info notice from elsewhere is transient and may be replaced.
+  const showDocsNotice = useCallback(
+    (n: DocsNotice) =>
+      setToast((prev) => {
+        if (n === null) return prev?.source === "docs" ? null : prev;
+        if (prev !== null && prev.source !== "docs" && prev.kind === "error")
+          return prev;
+        return { ...n, source: "docs" };
+      }),
+    [],
+  );
   const setInjectFailure = useCallback(
     (text: string | null) =>
       setToast(text === null ? null : { text, kind: "error" }),
