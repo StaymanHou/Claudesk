@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-16  # M17 /product-arch: PLANNED design; §A/§C/§H carry WP2 as-built notes, §B/§E WP3's, §D WP4's. Resync at M17's /product-finalize.
+updated: 2026-11-17  # M17 /product-arch: PLANNED design; §A/§C/§H carry WP2 as-built notes, §B/§E WP3's, §D WP4's, §E WP5's lifecycle table. Resync at M17's /product-finalize.
 ---
 
 # Remote workspaces (M17)
@@ -360,12 +360,12 @@ remote. Code, UI copy and tests use these two words for these two cases only.
 | ⏸ "Close, resume later" (`onPauseClose`, link up) | explicit | the same cancel-then-`kill()` (`/exit` → CC and tmux end), but the unclean flag is **left set**, as it is locally, so the next open **resumes** with `--continue` on the remote | R-1 |
 | Recycle | explicit | the existing flow: handoff → composite marker (remote poll + `Stop` hook) → cancel-then-`kill()` → respawn → `/session-restore`; every injection in it (the handoff command, `/session-restore`) also goes through the cancel-before-inject funnel | R-1 |
 | Claudesk crash, link lost, host unreachable | passive | the local ssh dies; tmux and CC keep running; the link retries with backoff and reconnects every workspace on that host | R-2 |
-| Detach button | deliberate | `detach()`; the tile stays open in a **Detached** state with a Reconnect button; the unclean flag is left untouched | R-3 |
-| Reconnect button / reopen from the picker | — | `tmux has-session` over the master: **live → attach (beats both resume signals)**; dead → the two-signal rule, with its file checks done remotely (§F) | R-2 |
-| Close a **detached** workspace | unclear | dialog: "End the remote session" / "Leave it running" | R-4 |
-| Quit or close **while the link is down** | unclear at the next open | `/exit` can't be delivered. Record an *end-intent* for that key. At the next open, a live session plus an end-intent → dialog: "You closed this while disconnected — end it, or reconnect?" | R-4 |
-| Host unreachable at open | unclear | dialog: Retry / Cancel. Never silently fall back to anything | R-4 |
-| A live `cd-*` session with no Claudesk record (e.g. after its row was removed) | unclear | dialog at open: Reconnect / End it and start fresh | R-4 |
+| Detach (⇥ on the remote tile) | deliberate | **as built (WP5):** `cc_detach` → `RemoteCcSession::detach` hangs up the local `ssh` WITHOUT `/exit` (no copy-mode cancel, no end, no record write), then the tile closes (unclean: the flag stays). No Detached tile (operator ruling); the record stays `running`, so the next open labels **Reconnect** and attaches. Works with the link down | R-3 |
+| Reopen from the picker | — | **as built (WP5):** ONE open-check exec over the master (folder, live, its `@cd_mode`, physical path, gated remote `.session.md`, the remote CC's trusted keys) + Claudesk's LOCAL session record (`remote_record`: running / ended / end-pending) decide: live + `running` → **attach** (beats both resume signals; registers the session's original mode); live + `end-pending` → dialog A; live + no/ended record → dialog B; dead → the two-signal rule from the remote signals (an untrusted folder withholds `/session-restore` with a workspace toast) | R-2 |
+| ~~Close a detached workspace~~ | — | **dropped at WP5:** there is no detached tile | — |
+| Quit or close **while the link is down** | unclear at the next open | **as built (WP5):** the end can't be delivered → the record goes `end-pending` (writes serialized: the quit's parallel kills must not lose one) and a close tells the app (`remote-close-not-ended` → app toast). At the next open, live + `end-pending` → **dialog A** (End it and open [default] / Reconnect / Cancel); dead → the stale intent is cleared and the open resumes without asking | R-4 |
+| Host unreachable at open | unclear | **as built (WP5):** a toast in plain words with **Retry** (re-runs the same check and door); never Remove, never a fallback | R-4 |
+| A live `cd-*` session with no Claudesk record (e.g. after its row was removed) | unclear | **dialog B** at open: Reconnect [default] / End it and start fresh / Cancel (End = `remote_end_session`, then the normal open decision) | R-4 |
 
 - ⚠️ **Every Claudesk-originated injection on a remote workspace goes through ONE funnel that runs
   `send-keys -X cancel` first**: skill buttons, the Prompt panel, auto-resume's `/session-restore`,

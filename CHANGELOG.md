@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-17
+
+- **Feature shipped:** M17 WP5 makes a remote workspace's open decide what its tmux session needs: it reconnects to a session Claudesk left running, resumes a dead one through the two-signal rule using the remote's own `.session.md` and folder trust, asks with a dialog when the session's state is unclear (closed while the host was unreachable, or never recorded), adds a Detach that leaves a session running, and offers Retry when the host is unreachable.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM — the reconnect loop, exit latch, overlay edges and close order are now driven by tests through the injected `RemotePorts` / `RemoteTerminal` seam, and the source guards they replaced are gone.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-CC-SESSION-MODULE-SIZE — the remote session moved to `cc_session/remote.rs` with its own `remote/tests.rs`.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP4-OVERLAY-KEY-DERIVED-TWICE — the overlay sink now uses the caller's row key carried in `RemoteSpawn.project_path`.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP4-TWO-SEQUENTIAL-SPAWN-EXECS — the spawn's realpath, transcript and reconnect-mode reads are one remote exec (`spawn_facts_command`).
+- **Milestone:** WP5: Lifecycle: reconnect, detach, the R-4 dialogs, and the resume rule's remote checks
+
 ## 2026-11-16
 
 - **Feature shipped:** M17 WP2 lets a picker row be a project whose Claude Code session runs on another Mac over SSH. The row is keyed `ssh://user@host/path`, exempt from the launch-time prune, and added only after an async ssh preflight checks the key, tmux/claude/perl, the folder and CC's token login. Every remote command string is built by the new `remote_cmd` quoting module.

@@ -10,7 +10,7 @@ reported green while checking nothing**, found by mutation rather than by review
 is always the same shape and it is the dangerous one: *false reassurance*. A missing guard is
 visible. A guard that passes for the wrong reason reads as coverage.
 
-⚠️ **Entries 1–10 are source-text guards; entry 11 is a BEHAVIORAL assertion** (an ordered
+⚠️ **Entries 1–10 (and 12–20) are source-text guards; entry 11 is a BEHAVIORAL assertion** (an ordered
 effect-log) that failed the same way for a different reason — the step that was wrong could not
 appear in what the assertion asserted over. It lives here because the discipline is identical and a
 reader looking for "how did a green suite miss this?" should find both in one place.
@@ -497,6 +497,38 @@ because it is erased at runtime too. Details and its blind spots: [`verify-auto-
 **The general form: ask which layer actually raises the error you are guarding against.** A test
 environment that re-implements a runtime mechanism (module linking, here) can be more lenient than
 the runtime, and a guard that relies on the failure *propagating* inherits that leniency.
+
+## 20. A per-function guard cannot hold a property of the CALL GRAPH
+
+**Found at M17 WP5 Phase 2 (2026-11-17): five fresh verify-self rounds, five survivors.** The property
+was "an open asks the remote host at most once per step". Each round's guard pinned one function's
+body, and each next round found one new route past it: a guard counting the text `.exec(` let
+`links.close_exec(` through; an allow-list of `links.<method>(` calls let a helper handed `&links`
+through; banning that let the existing public `run_preflight(&SshExec, …)` through; and when both
+commands were closed, a second exec added DOWNSTREAM (in `SessionRegistry::spawn`, where the registry
+travels on inside `RemoteSpawn`) passed. The property belongs to the call graph, and a source guard
+sees one function at a time.
+
+**What converged: close the reach BY CLASS, not by evasion** (`remote_link::commands::
+assert_remote_reach_is_closed`, plus the downstream scan in `cc_session`'s
+`a_remote_close_ends_its_session_and_a_respawn_waits_for_it`):
+- every `crate::<module>::…` / `super::…` item the body names must EQUAL an allow-list, so a public
+  helper added later fails without being named;
+- every crate entry point that reaches the resource (here: anything that spawns `/usr/bin/ssh`) is
+  banned by name, imported or not, and so is every panic that could skip a required step;
+- every use of the resource handle (`links`) must be an allowed site, including `&links`, an alias
+  and `&*links`, over the WHOLE function (not just a worker closure);
+- the functions the handle is PASSED to are scanned too.
+
+State the residual in the helper's doc (here: a retry around the one allowed exec, or a brand-new
+spawner under a new name) and stop. **Escalate after the second survivor, not the fifth:** the operator
+accepted the class-closed guard for a latency property and backlogged the real fix, a behavioural
+count (an injectable binary path + `AppHandle`-free command workers;
+`SURFACE-2026-11-17-REMOTE-EXEC-COUNT-NEEDS-A-BEHAVIOURAL-HARNESS`).
+
+**The test, before writing a per-function guard:** *does the property hold for ONE function, or for
+every path a value flows through?* If the second, either count behaviourally or close by class from
+the start.
 
 ## Comment budget — what belongs at the code, and what does not
 

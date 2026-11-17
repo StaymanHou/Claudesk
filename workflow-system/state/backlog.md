@@ -636,21 +636,20 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m17-wp3-remote-terminal (2026-11-16)
 
-- **Pointer:** **1 MAJOR + 7 MINOR** remain from the review of `7f96ce3` (WP4 resolved the two link-lifecycle MAJORs and the unused `remote_link_ensure`; the reconnect seam is partial).
-  - ⚠️ **MAJOR (partial):** the reconnect loop has no behavioural test seam. WP4 injected one for the link-edge emits only; the fake PTY spawner and the other emits remain.
+- **Pointer:** **6 MINOR** remain from the review of `7f96ce3` (WP4 resolved the two link-lifecycle MAJORs and the unused `remote_link_ensure`; WP5 resolved the reconnect-seam MAJOR and the `cc_session` module split, 2026-11-17, CHANGELOG).
   - MINORs:
     - a stale `master_pid` after reap;
     - the remote dispatch sits inside the PTY constructor;
     - the remote host is stored twice;
     - the blocking guard's name heuristic shapes production code;
     - the inject refusal comes back as a callback, not a value;
-    - WIP labels appear in production comments;
-    - `cc_session/mod.rs` is large (~5,000 lines).
+    - WIP labels appear in production comments (WP5 added more; see the item's update).
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp3-remote-terminal — 2026-11-16`.
-- **Priority:** medium (the MAJOR); low (the MINORs)
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** the reconnect seam belongs with WP5 (it extends that machinery); the rest is one cleanup task.
+- **Pickup shape:** one cleanup task.
+
 ## SURFACE-2026-11-16-REMOTE-WORKSPACE-SHOWS-LOCAL-ONLY-PANELS
 - **Source:** feature:verify-self (M17 WP4 Phase 4, live on the mini)
 - **Target level:** product:wbs
@@ -673,19 +672,17 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m17-wp4-status-over-the-link (2026-11-16)
 
-- **Pointer:** **6 MINOR** open from the review of the WP4 ship commit (`feat(m17-wp4): remote status over the link`). The MAJOR (the link-down quit freeze) was resolved 2026-11-16 (CHANGELOG).
+- **Pointer:** **4 MINOR** open from the review of the WP4 ship commit (`feat(m17-wp4): remote status over the link`). The MAJOR (the link-down quit freeze) was resolved 2026-11-16; WP5 resolved the overlay-key and two-spawn-execs MINORs (2026-11-17, CHANGELOG).
   - MINORs:
-    - the overlay key is derived twice;
     - the realpath alias is never cleared;
-    - the hook warning shares the inject toast;
+    - the hook warning shares the inject toast (WP5 added three more writers; see the item's update);
     - a stale-overlay emit race;
-    - two sequential spawn execs;
     - a brittle source pin plus stale docs.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp4-status-over-the-link — 2026-11-16`.
 - **Priority:** low
 - **Status:** pending
-- **Pickup shape:** the alias/key/emit-race MINORs are one status-path cleanup; the rest fold into WP5's reconnect-seam work.
+- **Pickup shape:** the alias/emit-race MINORs are one status-path cleanup; the toast item pairs with WP9.
 
 ## Code-quality findings — m17-wp5-lifecycle (2026-11-17)
 

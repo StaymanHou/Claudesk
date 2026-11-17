@@ -152,15 +152,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit `7f96ce3`, window `7f96ce3^..7f96ce3`; drive_mode=autopilot. 0 CRITICAL, 3 MAJOR, 8 MINOR, all auto-backlogged.)*
 
-## SURFACE-2026-11-16-QUALITY-M17WP3-RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM
-- **Severity:** MAJOR
-- **Location:** src-tauri/src/cc_session/mod.rs: `RemoteShared`, `reconnect`, `on_inner_exit`
-- **Finding (rewritten 2026-11-16 at WP4 finalize — partially resolved):** the link-edge emits added in WP4 now go through an injected `LinkEdgeSink` (`apply_link_edge`, test-driven). What remains: `RemoteShared` still hard-wires `AppHandle` for its OTHER emits, so the feature's most intricate concurrency (the `reconnect` loop's under-lock cancel, the 5-spawn-failure cap, the `attached_at` write, `on_inner_exit`'s take-then-reap) is guarded by four `include_str!` source guards plus live runs, not driven by a test.
-- **Why it matters:** The repo's own lessons (`extract-for-import-when-a-raw-guard-cant-express-the-property`) say a regex encodes only the shapes it knows; `remote_link` solved the same problem with an injected `Sink`.
-- **Suggested action:** Route the remaining emits (`emit_exit`, `emit_notice`) through an injected seam, add a fake PTY spawner, drive the reconnect loop for real (incl. WP4's `confirm_attached` timing), and retire most of the source guards. Natural home: WP5, which extends this machinery.
-- **Priority:** medium
-- **Status:** pending
-
 ## SURFACE-2026-11-16-QUALITY-M17WP3-STALE-MASTER-PID-AFTER-REAP
 - **Severity:** MINOR
 - **Location:** src-tauri/src/remote_link/mod.rs: `run_worker` (`master_pid`)
@@ -216,25 +207,8 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Status:** pending
 - **Update 2026-11-17 (M17 WP5 review):** WP5 added ~23 more comment lines citing WIP node labels (`P4.verify-self.1`, `P2 re-verify #4, survivor 1`, `F9b`, `P4.2`) across `cc_session/mod.rs` tests, `remote.rs`, `remote_link/commands.rs`.
 
-## SURFACE-2026-11-16-QUALITY-M17WP3-CC-SESSION-MODULE-SIZE
-- **Severity:** MINOR
-- **Location:** src-tauri/src/cc_session/mod.rs
-- **Finding:** ~4,850 lines; ~450 are new remote-session lifecycle code (classifier, back-off, reconnect, `RemoteCcSession`), while `remote_link` is split `{mod,commands,tests}.rs`.
-- **Why it matters:** Reviewability of the reconnect machinery on its own.
-- **Suggested action:** Split to `cc_session/remote.rs` (with the source guards re-anchored).
-- **Priority:** low
-- **Status:** pending
-
 # m17-wp4-status-over-the-link — 2026-11-16
 
-
-## SURFACE-2026-11-16-QUALITY-M17WP4-OVERLAY-KEY-DERIVED-TWICE
-- **Source:** feature-review-quality (M17 WP4, MINOR)
-- **Location:** src-tauri/src/cc_session/mod.rs: `RemoteCcSession::spawn` (`link_edge_sink` key)
-- **Finding:** The overlay sink rebuilds the row key as `remote_key(target.host(), target.path())`, while `cc_spawn_remote` keys the alias and the close-wait on the caller's `project_path`. A mismatch would make `set_link_overlay` return None, with no overlay and no error.
-- **Suggested action:** carry `project_path` in `RemoteSpawn` and use it for the sink.
-- **Priority:** low
-- **Status:** pending
 
 ## SURFACE-2026-11-16-QUALITY-M17WP4-REALPATH-ALIAS-NEVER-CLEARED
 - **Source:** feature-review-quality (M17 WP4, MINOR)
@@ -258,14 +232,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Location:** src-tauri/src/status_broadcaster: `drain_step` (stamp under the lock) vs the drain's emit after release; `apply_link_edge(Attached)`
 - **Finding:** A hook update stamped with the overlay can be emitted after `Attached` has already emitted Unknown, leaving a stale dimmed tile until the next hook event.
 - **Suggested action:** emit under a per-workspace sequence (drop an update older than the last emitted), or re-stamp at emit time.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-16-QUALITY-M17WP4-TWO-SEQUENTIAL-SPAWN-EXECS
-- **Source:** feature-review-quality (M17 WP4, MINOR)
-- **Location:** src-tauri/src/cc_session/commands.rs: `cc_spawn_remote` (`realpath_command`, then `has_transcript_command`)
-- **Finding:** Two extra sequential ssh round trips per remote spawn.
-- **Suggested action:** one exec that prints both sentinel lines (the slug transform stays in Rust: return the physical path, then test the transcript dir in a second line computed remotely from it, or accept one exec + one local slug).
 - **Priority:** low
 - **Status:** pending
 

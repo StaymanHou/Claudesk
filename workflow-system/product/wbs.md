@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-16  # M17 WP4 shipped (status over the link); WP5 5.2 transcript check pulled into WP4
+updated: 2026-11-17  # M17 WP5 shipped (remote lifecycle); WP9 added (no raw local-fs errors on remote rows)
 cycle: milestone-17-remote-workspaces
 ---
 
@@ -114,18 +114,18 @@ only if the build disproves one.
 
 **WP4 → WP5 rationale:** the lifecycle dialogs and the reconnect path need a truthful status first, so a reconnected workspace's state reads correctly.
 
-### WP5: Lifecycle: reconnect, detach, the R-4 dialogs, and the resume rule's remote checks
+### WP5: Lifecycle: reconnect, detach, the R-4 dialogs, and the resume rule's remote checks ✅ SHIPPED 2026-11-17 (commit 67dec33; review CRITICAL fix f7535b4)
 **Milestone:** M17
 **Dependencies:** WP3, WP4
 **Size:** M, **~2 days**
 **Description:** R-2–R-4 as specified in arch §E's table, plus the remote versions of the three file checks the two-signal rule decides on. That avoids research Risk 4, a **silent `--continue` drop**.
 **Tasks:**
-- [ ] 5.1 On open: `tmux has-session` over the master. **Live → attach, ahead of both signals.** The picker announces it ("Reconnect").
-- [ ] 5.2 Dead → the two-signal rule with **remote** `has_session_md`, `transcript::has_any_transcript` (remote slug from the remote realpath) and `folder_trusted`. Each is one dispatch inside the deciding function, not at its callers. ⚠️ **The transcript check SHIPPED in WP4** (operator decision at WP4 P3 build, 2026-11-16). Apply-now could not keep the conversation without it: `cc_spawn_remote` asks over the link (`remote_cmd::has_transcript_command`, physical-path slug) and `RemoteSpawn::has_transcript` answers the `--continue` guard. Remaining here: `has_session_md` and `folder_trusted`.
-- [ ] 5.3 `CcSession::detach()` (local default: `Unsupported`), the Detach / Reconnect control in the remote workspace's header, and the Detached tile state. The unclean flag is untouched.
-- [ ] 5.4 The R-4 dialogs: closing a detached workspace; a quit or close while the link is down (recorded end-intent, then a dialog at the next open); host unreachable at open; an unrecorded live `cd-*` session.
-- [ ] 5.5 The unclean-flag interplay is tested: a passive drop leaves it set; if the remote session then dies, reopening resolves to `--continue`.
-- [ ] 5.6 Auto-resume's `/session-restore` fires `INJECT_SETTLE_MS` (1500 ms) after `cc_ready`; remote cold CC-ready is ~1.3 s, about 1.15× margin. Re-measure with the real inner command, then raise the remote delay or fire on WP3's readiness signal (arch §E).
+- [x] 5.1 On open: `tmux has-session` over the master. **Live → attach, ahead of both signals.** The picker announces it ("Reconnect").
+- [x] 5.2 Dead → the two-signal rule with **remote** `has_session_md`, `transcript::has_any_transcript` (remote slug from the remote realpath) and `folder_trusted`. Each is one dispatch inside the deciding function, not at its callers. ⚠️ **The transcript check SHIPPED in WP4** (operator decision at WP4 P3 build, 2026-11-16). Apply-now could not keep the conversation without it: `cc_spawn_remote` asks over the link (`remote_cmd::has_transcript_command`, physical-path slug) and `RemoteSpawn::has_transcript` answers the `--continue` guard. Remaining here: `has_session_md` and `folder_trusted`.
+- [x] 5.3 `CcSession::detach()` (local default: `Unsupported`), the Detach / Reconnect control in the remote workspace's header, and the Detached tile state. The unclean flag is untouched. ⚠️ **As built (operator ruling, WP5 spec Q2): no Detached tile.** Detach is a third control on the remote TILE (⇥, beside × and ⏸) that closes the tile and leaves the session running; Reconnect is reopening from the picker. `LinkOverlayStatus::Detached` was removed.
+- [x] 5.4 The R-4 dialogs: closing a detached workspace; a quit or close while the link is down (recorded end-intent, then a dialog at the next open); host unreachable at open; an unrecorded live `cd-*` session. ⚠️ **As built:** no "close a detached workspace" dialog (no detached tile); a link-down close records `end-pending` + an app toast, then dialog A at the next open; an unreachable host is a toast with **Retry** (not a dialog); an unrecorded live session is dialog B.
+- [x] 5.5 The unclean-flag interplay is tested: a passive drop leaves it set; if the remote session then dies, reopening resolves to `--continue`.
+- [x] 5.6 Auto-resume's `/session-restore` fires `INJECT_SETTLE_MS` (1500 ms) after `cc_ready`; remote cold CC-ready is ~1.3 s, about 1.15× margin. Re-measure with the real inner command, then raise the remote delay or fire on WP3's readiness signal (arch §E).
 
 ### WP6: OUT rows absent: the `workspaceSurfaces` funnel
 **Milestone:** M17

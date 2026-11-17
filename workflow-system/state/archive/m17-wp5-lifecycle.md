@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M17 WP5 — Remote lifecycle: reconnect, detach, the R-4 dialogs, the remote resume checks
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-11-17 (shipped `67dec33`; review CRITICAL fixed `f7535b4`)
 **Created:** 2026-11-16
 **Entry:** spec (complex feature)
 **WBS:** `workflow-system/product/wbs.md` → "### WP5" (M17). Design: `arch/remote-workspaces.md` §E (PLANNED; this spec supersedes three of its rows, see Technical Constraints).
@@ -432,6 +432,20 @@ A well-structured WP that advances the remote-session architecture and resolves 
 
 #### If you disagree
 Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:**
+  - The remote account matters as much as the remote host. Moving the mini's dev user to the personal account (mid-WP, operator request) surfaced two first-run facts the admin account had hidden: `claude` lived only on the INTERACTIVE PATH (`.zshrc`; `zsh -lc` misses it), and CC's one-time Bypass Permissions warning defaults to "No, exit", which an auto-fired command's `\r` answers (backlogged high; WP1 had already flagged it as "WP5 input").
+  - "One remote exec per step" is a whole-call-graph property; five fresh verify-self rounds each found one new route past per-function source guards. Closing it BY CLASS (an allow-list of module items + banned ssh entry points + every registry use) converged; a behavioural exec-count harness is the real fix (backlogged).
+  - tmux 3.8's option commands refuse a bare `=name` target (`-q` hides it): use `=name:` (found live in Phase 1).
+- **Assumptions that held:** the one-exec open check extended cleanly to `.session.md` + remote trust; returning SIGNALS from Rust (not a resolved arm) kept the two-signal precedence in one place; the existing `ConfirmModal` carried both R-4 dialogs; the default 1500 ms settle stays sound on a remote pane (6/6 landed, readiness arrives ~1.2 s before it).
+- **Assumptions that were wrong:**
+  - "A lost record write costs a label, never a wrong action, because the open check decides" (the `remote_record` doc): the quit's parallel `kill_all` could lose an `end-pending`, turning dialog A into a silent reconnect. Caught by the code-quality review (CRITICAL), fixed with a serialized write.
+  - AC-8.2's "the open's remote checks are ONE exec": respawns reach the spawn without an open check, so an open is two execs (was four); accepted by the operator.
+  - A remote untrusted folder could rely on "the existing manual hint": that hint is a picker label from LOCAL state, so a remote row had none; the operator asked for a workspace toast.
+- **Approach delta:** Detach closes the tile (no Detached tile, spec ruling), so Phase 3 needed a no-`/exit` hang-up (`hang_up_steps`) rather than a tile state; Phase 4 added an APP-level toast (the workspace is gone when a close cannot end its session); the Docs-tab raw-error finding became WBS WP9; the readiness-only settle and the exec-count harness went to the backlog.
+
+**Feature complete:** M17 WP5 (remote lifecycle) has shipped. Opening a remote workspace now reconnects to a session Claudesk left running, resumes a dead one from the remote's own signals, and asks (dialog A or B) whenever the session's state is unclear; Detach leaves a session running on purpose. Seen live on the mini's scratch folder in the dev build; the installed-build check is WP8's. Requester = operator — closure notice for self-record.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary> -->

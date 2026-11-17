@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-11-14  # vision revisit done; M17 remote workspaces added
+updated: 2026-11-17  # M17 WP5 shipped: R-3 as built (Detach closes the tile; reconnect = reopen)
 ---
 
 # Roadmap
@@ -135,6 +135,9 @@ as a local one, and it survives the network or the remote going away (vision Met
   `--continue`, else `.session.md` → `/session-restore`, else nothing).
 - **R-3: a deliberate Detach / Reconnect control** on remote workspaces leaves the session running
   on purpose and reconnects later.
+  ⚠️ **As built (M17 WP5, operator ruling 2026-11-16):** Detach is a control on the remote TILE that
+  closes it and leaves the session running ("simply detach and quit; the tile is gone"); there is no
+  Detached tile, and Reconnect is reopening the row from the picker.
 - **R-4: when the state is genuinely unclear, show a dialog** so the operator chooses deliberately.
   Don't guess.
 
@@ -151,7 +154,7 @@ as a local one, and it survives the network or the remote going away (vision Met
 - The remote hook installs automatically, keeping the dev/prod identifier split; remote events stay
   out of the local time analytics.
 - F-b profiles stay local-only.
-- The Detach / Reconnect control lives in the remote workspace's header.
+- The Detach / Reconnect control lives in the remote workspace's header. ⚠️ Superseded at WP5: Detach is a tile control; Reconnect is reopening (see R-3).
 - WPs are ordered core-first (terminal, status, reconnect, OUT rows hidden), so a partial release
   *could* be cut; full parity remains the exit criterion.
 
