@@ -350,3 +350,38 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** reword to "display text; the frontend never relies on it today" (or note WP7 as the expected consumer).
 - **Priority:** low
 - **Status:** pending
+
+# m17-wp7-remote-reads — 2026-11-17
+
+## SURFACE-2026-11-17-QUALITY-CATCH-UP-WAITER-OUTLIVES-PAUSE
+- **Source:** feature-review-quality (M17 WP7, MAJOR)
+- **Type:** bug
+- **Summary:** `RemotePoller::pause` flips `active` but leaves the workspace's catch-up `waiters`, and `useRemoteDocsPolling`'s effect has no cleanup or staleness check. A return to Docs followed by leaving again before the worker copies its active subs (likely while an earlier tick's exec runs, up to 10 s) leaves a waiter no tick answers; after `CATCH_UP_TIMEOUT` (22 s) a false "Couldn't check the remote docs: the check took too long" error toast appears on a panel no longer in front. A late success also still announces.
+- **Suggested action:** `pause` drops (or answers) the workspace's waiters; the effect sets a `cancelled` flag in its cleanup and skips the notice when cancelled. Test: catch-up, pause before the tick, then assert no timeout notice.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-DOCS-NOTICE-CLOBBERS-THE-SHARED-TOAST
+- **Source:** feature-review-quality (M17 WP7, MAJOR)
+- **Type:** bug
+- **Summary:** `Workspace.showDocsNotice` writes the one shared `toast` slot: the catch-up's "Checking…" replaces any toast already up (e.g. an inject-failure error meant to stay until dismissed), and a `null` notice clears whatever is showing, though `DocsNotice` documents "`null` to clear the one this panel put up".
+- **Suggested action:** Track the toast's owner (a source tag on the toast state) and let a docs notice replace/clear only a docs-owned or info toast, never a standing error.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-QUIT-TEARDOWN-COMMENT-ORDER
+- **Source:** feature-review-quality (M17 WP7, MINOR)
+- **Type:** tech-debt
+- **Summary:** In `perform_quit_teardown`, the WP7 poller block sits between the WP3 comment ("stop every remote host link…") and the `links.stop_all()` it describes, so the comment reads as if it describes `unsubscribe_all`.
+- **Suggested action:** Move the WP3 comment down to sit directly above `links.stop_all()`.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-LINK-DOWN-WORDS-HAND-COPIED
+- **Source:** feature-review-quality (M17 WP7, MINOR)
+- **Type:** tech-debt
+- **Summary:** `remoteDocsCatchUp.ts`'s `LINK_DOWN_TEXT` is a lowercased hand copy of Rust's `remote_fs::LINK_DOWN`, tied only by a comment; AC-4's "same words everywhere" can drift without anything failing.
+- **Suggested action:** Pin it: a test that reads `remote_fs/mod.rs`'s `LINK_DOWN` constant (node:fs) and asserts the frontend copy matches it case-insensitively, or have the backend send the words in the `link_down` answer.
+- **Priority:** low
+- **Status:** pending
+

@@ -4,7 +4,8 @@
 //!
 //! ## Shape
 //! - **One worker thread per host**, alive while ≥1 workspace on that host is subscribed. It ticks
-//!   every [`REMOTE_POLL_INTERVAL`], and at once when a workspace asks for a catch-up.
+//!   every [`REMOTE_POLL_INTERVAL`], and at once when a workspace asks for a catch-up (it waits
+//!   before its first tick: a subscription is born paused).
 //! - **Only ACTIVE subscriptions are polled** (P3.verify-human.2, design prior
 //!   `background-work-only-for-what-is-on-screen`): a workspace is active while it is centre stage
 //!   AND its Docs tab is fronted. A paused subscription is left out of the exec and keeps its last
@@ -255,13 +256,22 @@ impl RemotePoller {
         self.live.load(Ordering::SeqCst)
     }
 
-    /// Subscribe `workspace_id`, PAUSED (replacing any earlier subscription of it), starting the
-    /// host's worker if it has none. Nothing is polled until a [`Self::catch_up`] activates it.
-    /// Never blocks.
+    /// Subscribe `workspace_id`, PAUSED, starting the host's worker if it has none. Nothing is polled
+    /// until a [`Self::catch_up`] activates it. Never blocks.
+    ///
+    /// ⚠️ IDEMPOTENT for the same (workspace, target): an existing subscription is KEPT, with its
+    /// `active` flag, snapshot and waiters. React runs the Docs panel's effect (`catch_up`) before
+    /// the app's (`remote_poll_start`), and the two commands race (one async, one on the main
+    /// thread), so `start` can land AFTER the catch-up already subscribed and activated the
+    /// workspace. Replacing it would drop the waiter and leave the on-screen panel paused (the WP7
+    /// review CRITICAL). Only a different target for the same id replaces the old subscription.
     pub fn subscribe(&self, workspace_id: &str, target: ValidTarget) {
         let Ok(mut hosts) = self.hosts.lock() else {
             return;
         };
+        if is_subscribed(&hosts, workspace_id, &target) {
+            return;
+        }
         remove_sub(&mut hosts, workspace_id);
         self.insert_sub(hosts, workspace_id, target);
     }
@@ -276,12 +286,7 @@ impl RemotePoller {
         let Ok(mut hosts) = self.hosts.lock() else {
             return rx;
         };
-        let subscribed = hosts.by_host.values().any(|st| {
-            st.subs
-                .iter()
-                .any(|s| s.workspace_id == workspace_id && s.target == target)
-        });
-        if !subscribed {
+        if !is_subscribed(&hosts, workspace_id, &target) {
             remove_sub(&mut hosts, workspace_id);
             self.insert_sub(hosts, workspace_id, target);
             let Ok(h) = self.hosts.lock() else {
@@ -395,6 +400,15 @@ impl RemotePoller {
     }
 }
 
+/// Whether `workspace_id` is already subscribed with exactly this `target`.
+fn is_subscribed(hosts: &Hosts, workspace_id: &str, target: &ValidTarget) -> bool {
+    hosts.by_host.values().any(|st| {
+        st.subs
+            .iter()
+            .any(|s| s.workspace_id == workspace_id && &s.target == target)
+    })
+}
+
 /// Remove `workspace_id` from whichever host holds it, dropping the host (and so its worker's wake
 /// sender) when it was the last.
 fn remove_sub(hosts: &mut Hosts, workspace_id: &str) {
@@ -424,10 +438,20 @@ struct Worker {
 }
 
 impl Worker {
-    /// Tick at once, then on every interval or wake, until the host's sender is dropped (its last
-    /// subscription left, or the quit). A tick with no active subscription runs no exec.
+    /// Tick on every interval or wake, until the host's sender is dropped (its last subscription
+    /// left, or the quit). A tick with no active subscription runs no exec.
+    ///
+    /// ⚠️ WAITS FIRST. A subscription is born paused, so a tick at spawn has nothing to poll, and the
+    /// catch-up that activates it sends its own wake: ticking at spawn as well made that first
+    /// activation tick TWICE, and the second tick could absorb a change the next catch-up was meant
+    /// to report (seen as a flaky `a_catch_up_is_answered_now…` at the WP7 review refactor).
     fn run(&self, wake: mpsc::Receiver<()>) {
         loop {
+            match wake.recv_timeout(self.interval) {
+                Ok(()) => while wake.try_recv().is_ok() {},
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => return,
+            }
             let Some(mut subs) = self.active_subs() else {
                 return;
             };
@@ -436,11 +460,6 @@ impl Worker {
                     (self.emit)(c)
                 });
                 self.write_back(subs, outcomes);
-            }
-            match wake.recv_timeout(self.interval) {
-                Ok(()) => while wake.try_recv().is_ok() {},
-                Err(RecvTimeoutError::Timeout) => {}
-                Err(RecvTimeoutError::Disconnected) => return,
             }
         }
     }

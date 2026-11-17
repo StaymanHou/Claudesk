@@ -587,3 +587,44 @@ fn gate_off_workers_run_no_exec() {
     p.unsubscribe_all();
     wait_until("the worker exits", || p.live_workers() == 0);
 }
+
+/// The WP7 review CRITICAL: the Docs panel's catch-up can land BEFORE `remote_poll_start` (React runs
+/// the child's effect first, and the two commands race). The late `subscribe` must keep the active
+/// subscription and its waiter, not replace it with a paused one.
+#[test]
+fn a_subscribe_after_a_catch_up_keeps_the_active_subscription_and_its_waiter() {
+    let exec = Scripted::answering(listing(&[(0, 0, "vision.md", 1, 1)]));
+    // A paused gate holds the first tick off, so the waiter is still pending when `subscribe` lands.
+    let env = Env::new(false, true);
+    let (p, _got) = poller(
+        Arc::clone(&env),
+        Arc::clone(&exec),
+        Duration::from_millis(20),
+    );
+    let rx = p.catch_up("w1", target("/r/one"));
+    p.subscribe("w1", target("/r/one")); // remote_poll_start, late
+    env.gate.store(true, Ordering::SeqCst);
+    // The first tick after the gate opens may answer the waiter with the gate-off result if it ran
+    // before the store; either way the waiter must be ANSWERED (not disconnected), and polling must
+    // carry on because the subscription is still active.
+    match rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(_) => {}
+        Err(e) => panic!("the catch-up waiter was dropped by the late subscribe: {e:?}"),
+    }
+    wait_until("polling continues: the sub is still active", || {
+        exec.count() >= 2
+    });
+
+    // A different target for the same id still replaces it (paused again: no more execs).
+    p.subscribe("w1", target("/r/other"));
+    std::thread::sleep(Duration::from_millis(60));
+    let after = exec.count();
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(
+        exec.count(),
+        after,
+        "a re-targeted subscription starts paused"
+    );
+    p.unsubscribe_all();
+    wait_until("the worker exits", || p.live_workers() == 0);
+}

@@ -441,11 +441,45 @@ blocks on ssh. Each new guard form is mutation-proven individually.
 - **Left in place for the WP7 close (finalize):** the scratch remote row in the dev `projects.json` and the dev gate ON; the mini scratch folder's test docs, stub skills (`.claude/skills/`) and `.session.md` (Recycle wrote it); WP5's `.session.md.wp7-aside`.
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality against `4b0a532`
+- **Path:** Feature > finalize
+- **Active scope:** finalize (the review CRITICAL fixed at refactor)
 - **Blocked:** none
-- **Unvisited:** review-quality → finalize
+- **Unvisited:** finalize
 - **Open discoveries:** SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD (backlog, product:arch)
+
+## Code-Quality Review — m17-wp7-remote-reads
+
+Reviewed: `4b0a532` (fresh-context `code-quality-reviewer`, 2026-11-17). **1 CRITICAL** (→ `/feature-refactor`, F40), **2 MAJOR** + **2 MINOR** (auto-backlogged per drive_mode=autopilot → `backlog-quality-findings.md` `# m17-wp7-remote-reads — 2026-11-17`).
+
+### Strengths
+- Routing happens in one place: `docs::commands::serve` picks local or remote once, by the root's kind, with an injected `RemoteExec`. Both arms are testable without an `AppHandle`, and `DocsPanel` / `recycleSession` keep their shape. The refusal pin gained a `ROUTED` class with a negative check.
+- Path containment is checked twice (`validate_rel` locally before any command string, `realpath` on the remote). Parity with the local walk is pinned by `filter_listing_agrees_with_discover`, and the real Perl scripts run under `LocalShell`.
+- Reads go only over the master (`master_exec`: Up-only, master-only), and `classify_exec_error` reports a dead master or a timeout as link-down.
+- The poller's locking is sound at its core: no lock across an exec, a generation check on write-back, detached workers, and the quit drops subscriptions before `stop_all`. `poll_tick` is a pure, tested function.
+- The 5 WP6 MINORs are paid down cleanly.
+
+### Issues
+**CRITICAL**
+- **[FIXED at refactor, see below]** [src-tauri/src/remote_fs/poller.rs, `RemotePoller::subscribe`] `subscribe` always does `remove_sub` and re-inserts a fresh, PAUSED sub, which undoes the race `catch_up` claims to handle ("the panel can front before `remote_poll_start` lands"). React runs child effects before parent effects, so `DocsPanel`'s `remote_poll_catch_up` can go out before `useWorkspaceStatus`'s `remote_poll_start` (once the lazy chunk is cached and Docs is the default panel). If the catch-up lands first, `subscribe` drops the active sub and its waiter: the catch-up answers "the workspace is no longer watched" (logged only), and the sub stays paused while Docs is on screen, so the open panel gets no live updates until the operator leaves and returns. No test covers catch-up-then-subscribe. Fix: make `subscribe` a no-op when the same (id, target) is already subscribed.
+
+**MAJOR**
+- [src/components/workspace/docs/remoteDocsCatchUp.ts, the polling effect; poller.rs `pause`] No cleanup / staleness check on the effect, and `pause` flips `active` but leaves `waiters`. A return-then-leave before the worker copies its active subs (likely while an earlier tick's exec runs, up to 10 s) leaves a waiter no tick answers; after `CATCH_UP_TIMEOUT` (22 s) a false "Couldn't check the remote docs: the check took too long" toast appears on a panel no longer in front. A late success also still announces. Fix: `pause` drops or answers the waiters; the effect uses a `cancelled` flag.
+- [src/components/workspace/Workspace.tsx, `showDocsNotice`] It writes the one shared `toast` slot: "Checking…" replaces any toast already up (e.g. an inject-failure error meant to stay), and a `null` notice clears whatever is showing, though `DocsNotice` documents "`null` to clear the one this panel put up". Fix: track the toast's owner, or only clear a toast this panel set.
+
+**MINOR**
+- [src-tauri/src/lib.rs, `perform_quit_teardown`] The WP7 poller block sits between the WP3 comment ("stop every remote host link…") and the `links.stop_all()` it describes, so that comment now reads as if it describes `unsubscribe_all`.
+- [src/components/workspace/docs/remoteDocsCatchUp.ts, `LINK_DOWN_TEXT`] A lowercased hand copy of Rust's `remote_fs::LINK_DOWN`, tied only by a comment; the "same words everywhere" promise (AC-4) can drift silently.
+
+### Assessment
+The backend is well built: a narrow read-only path, every remote string through `remote_cmd::quote`, containment checked locally and remotely, nothing connecting outside the master, and tests that run the real scripts. The weak point is where the subscription lifecycle meets frontend effect order: `subscribe` replaces where it should be idempotent, and `pause` leaves waiters behind, giving one silent loss of polling and one false error toast, neither covered because the tests drive the registry from one thread in a fixed order. The CRITICAL fix is small: keep an existing matching subscription, and add a catch-up-then-subscribe test.
+
+### Refactor (F40), 2026-11-17
+- `subscribe` is IDEMPOTENT for the same (workspace, target): an existing subscription keeps its `active` flag, snapshot and waiters; only a different target replaces it. `catch_up` shares the check (`is_subscribed`). New test `a_subscribe_after_a_catch_up_keeps_the_active_subscription_and_its_waiter` (catch-up first, then the late `subscribe`: the waiter is ANSWERED and polling continues; a re-target starts paused). Mutant (the idempotency early-return removed) → FAILED 3/3; restored, shasum match.
+- Found while fixing: the worker ticked at spawn AND on the catch-up's wake, so a first activation ticked twice, and the second tick could absorb a change the next catch-up was meant to report (`a_catch_up_is_answered_now…` failed once, passed 5/5 alone: a timing flake with one identified cause). `Worker::run` now WAITS before each tick (a sub is born paused, so the spawn tick had nothing to do). Poller tests 17/17 across 15 consecutive runs.
+- `pnpm verify:auto` → EXIT=0 in 75s (vitest 4038; cargo 1412 passed, 0 failed).
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Discoveries
 [SHORTCUT-2026-11-17] P2.verify-self (outcome 3, P2.1) — the remote-read command strings were only prefix/suffix-checked (stat not at all); extended P2.1's test with `the_command_strings_are_pinned_whole` (assert_eq, all three modes); re-verified by a fresh runner subagent with two mutants (both caught), 14/14 after restore.
