@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M17 WP7 — Remote reads: Docs panel, poller, Recycle
 
 **Workflow:** feature
-**State:** ship (complete) — `4b0a532`
+**State:** Completed 2026-11-17 — shipped `4b0a532`, review CRITICAL fixed `5eede6a`
 **Created:** 2026-11-17
 **Entry:** spec (complex feature)
 **WBS:** `workflow-system/product/wbs.md` → "### WP7" (tasks 7.1–7.5). **Design:** `arch/remote-workspaces.md` §F (PLANNED), §G as-built (WP6), §B (the link), §E (lifecycle).
@@ -441,11 +441,17 @@ blocks on ssh. Each new guard form is mutation-proven individually.
 - **Left in place for the WP7 close (finalize):** the scratch remote row in the dev `projects.json` and the dev gate ON; the mini scratch folder's test docs, stub skills (`.claude/skills/`) and `.session.md` (Recycle wrote it); WP5's `.session.md.wp7-aside`.
 
 ## Current Node
-- **Path:** Feature > finalize
-- **Active scope:** finalize (the review CRITICAL fixed at refactor)
+- **Path:** Feature > finalize (complete) → archived
+- **Active scope:** none (WP7 closed 2026-11-17)
 - **Blocked:** none
-- **Unvisited:** finalize
-- **Open discoveries:** SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD (backlog, product:arch)
+- **Unvisited:** none (session: reflect next)
+- **Open discoveries:** SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD (backlog, product:arch); 2 MAJOR + 2 MINOR quality findings (backlog)
+
+## Retrospect
+- **What changed in our understanding:** "Live reload for a remote folder" is a question of WHEN to spend remote work, not only HOW. The spec assumed the poller should run whenever a remote workspace is open, so a hidden Docs panel and Recycle both got their signal; the operator ruled that polling should run only while the Docs tab is actually on screen, with an announced catch-up on return (prior `background-work-only-for-what-is-on-screen`). That also meant Recycle could not lean on the poller at all, which the planned forced re-stat on `Stop` already covered.
+- **Assumptions that held:** one batched exec per host per tick; the master-only exec shape (a link drop never turned into a direct ssh); the single `serve` dispatch kept `DocsPanel` and `recycleSession` unchanged in shape; the Perl scripts behaved identically under the local `perl` and on the mini, so `LocalShell` tests were representative; the 7.5 injection surfaces needed no code change.
+- **Assumptions that were wrong:** (1) polling-while-open (reversed at verify-human). (2) That the remote host would have the workflow skills: the mini's dev account has none, so remote Recycle and skill buttons inject unknown commands there (backlog SURFACE; verified with scratch-only stubs). (3) That a sequential, single-thread registry test was enough: the review found that React's child-before-parent effect order makes the panel's catch-up race `remote_poll_start`, and `subscribe` replaced the active subscription (CRITICAL, fixed). (4) That the old Recycle tests would pass unedited: they mock the IPC command by name.
+- **Approach delta:** Phase 3 gained an active flag, `remote_poll_catch_up` / `remote_poll_pause`, per-workspace `CatchUp` outcomes, the toast and an auto-dismiss on the workspace toast (the verify-human back-loop). The worker now waits before each tick (found while fixing the CRITICAL). Discovery kept local `discover` unchanged and shared its rules with a listing-side twin instead of splitting it. The remote read cap is 3 MiB, not the local 64 MiB.
 
 ## Code-Quality Review — m17-wp7-remote-reads
 

@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-17  # M17 WP6 shipped (workspaceSurfaces funnel, 991307e); WP9 folded into it
+updated: 2026-11-17  # M17 WP7 shipped (remote reads, active-only poller, remote Recycle; 4b0a532, review fix 5eede6a)
 cycle: milestone-17-remote-workspaces
 ---
 
@@ -140,17 +140,17 @@ only if the build disproves one.
 
 **⭐ Partial-release point after WP6:** remote terminal, live status, reconnect, Detach / Reconnect, OUT rows absent. This is cut only if the tank checkpoint asks for an interim; the milestone's exit is still full parity.
 
-### WP7: Remote reads: Docs panel, poller, Recycle
+### WP7: Remote reads: Docs panel, poller, Recycle ✅ SHIPPED 2026-11-17 (commit 4b0a532; review fix 5eede6a)
 **Milestone:** M17
 **Dependencies:** WP3 (master execs), WP5 (it reuses 5.2's remote check helpers)
 **Size:** M, **~2.5 days**
 **Description:** arch §F. The IN rows that read files work on a remote workspace.
 **Tasks:**
-- [ ] 7.1 `remote_fs` (async, read-only): `stat`, `read`, `exists`, `list_dir`, with path containment under `RemoteTarget.path` (rejects `..` and absolute escapes **before** quoting).
-- [ ] 7.2 A 1.5 s poller over the docs set, `.session.md` and the WIP dir, emitting the **same `fs-change` shape**. Polling stops when the workspace closes or detaches, and nothing long-running is started on the host.
-- [ ] 7.3 Docs panel on a remote workspace: `docs::discover` / `docs_read` routed by target, with live reload through the poller (gated as locally).
-- [ ] 7.4 Recycle on a remote workspace: the mtime baseline plus the `fs-change` wait over the poller, then the composite marker. An end-to-end Recycle on the mini.
-- [ ] 7.5 Skill buttons, Session-Start and the Prompt panel confirmed on a remote workspace, **through WP3's cancel-before-inject funnel** (a scrolled-up pane swallows a raw PTY injection; WP1). Confirm each, including while scrolled up.
+- [x] 7.1 `remote_fs` (async, read-only): `stat`, `read`, `exists`, `list_dir`, with path containment under `RemoteTarget.path` (rejects `..` and absolute escapes **before** quoting).
+- [x] 7.2 (as built: a **5 s** poller, **active only** while the workspace is centre stage with Docs fronted, an announced catch-up on return; arch §F as-built) A 1.5 s poller over the docs set, `.session.md` and the WIP dir, emitting the **same `fs-change` shape**. Polling stops when the workspace closes or detaches, and nothing long-running is started on the host.
+- [x] 7.3 Docs panel on a remote workspace: `docs::discover` / `docs_read` routed by target, with live reload through the poller (gated as locally).
+- [x] 7.4 Recycle on a remote workspace: the mtime baseline plus the `fs-change` wait over the poller, then the composite marker. An end-to-end Recycle on the mini.
+- [x] 7.5 Skill buttons, Session-Start and the Prompt panel confirmed on a remote workspace, **through WP3's cancel-before-inject funnel** (a scrolled-up pane swallows a raw PTY injection; WP1). Confirm each, including while scrolled up.
 
 ### WP8: Installed-build acceptance against the mini
 **Milestone:** M17

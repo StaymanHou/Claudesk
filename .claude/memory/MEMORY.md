@@ -57,6 +57,7 @@
 - [No real keystrokes](agent-cannot-send-real-keystrokes-to-dev-app.md) — Synthetic keydowns skip native defaults; ⌘R-type checks go to the operator.
 - [Drive the native menu](drive-native-menu-via-event-emit.md) — Emit `menu` via `plugin:event|emit` from the webview; it reaches App's real listener.
 - [Read DOM a frame later](react-state-read-needs-a-deferred-frame.md) — Else you see the PREVIOUS render (a false FAIL).
+- [Same-tick editor input](bridge-same-tick-editor-input-sends-stale-draft.md) — Set Prompt text and ⌘↵ in separate calls, else a stale draft sends nothing.
 - [xterm DOM fakes blank](xterm-dom-reads-fake-a-blank-pane.md) — `.xterm-rows` reads empty; `innerText` returns a stylesheet.
 - [read_logs console empty](read-logs-console-captures-nothing.md) — Captures nothing for this app; empty is a false green.
 - [Agent-launched dev app](agent-launched-app-cannot-verify-continue.md) — Needs the Claude-marker `env -u` strip; send text, then a separate `\r`.
@@ -71,7 +72,7 @@
 - [notarytool when locked](notarytool-credential-unreadable-while-screen-locked.md) — "No Keychain password item" while locked; unlock, don't re-store.
 - [Trash via Finder](verify-trash-via-finder-not-ls.md) — `~/.Trash` is TCC-blocked; read-only Finder osascript query.
 - [Mini account](mini-remote-user-is-stayman.md) — Which account to use (never root-ops), token location, `zsh -l` PATH. Gitignored: names real accounts.
-- [Remote verify hygiene](remote-verify-hygiene.md) — Real commands only in a scratch remote folder; check open remote workspaces before stopping the app; rebuilds and App.tsx edits are hard stops.
+- [Remote verify hygiene](remote-verify-hygiene.md) — Real commands only in a scratch remote folder; check open remote workspaces before stopping the app; rebuilds and App.tsx edits are hard stops; the mini has no workflow skills (stub them in the scratch folder).
 - [Trust dialog exits](cc-trust-dialog-defaults-to-exit.md) — Defaults to "No, exit"; read the pane, answer ↓ then \r.
 - [Drive the real hook](drive-status-channel-with-real-hook-script.md) — Pipe a payload into the working-tree hook script at the dev socket.
 - [WKWebView perf](wp4-macos-perf-measurement.md) — How to measure CPU, RAM and frame time on macOS.
@@ -79,7 +80,7 @@
 ## MCP tauri bridge (caveat chain)
 
 - [Bridge not in subagents](mcp-bridge-tools-not-exposed-to-subagents.md) — `mcp__tauri__*` reaches the orchestrator only.
-- [el.click() fallback](mcp-bridge-interact-click-needs-el-click-fallback.md) — If `webview_interact{click}` fails; switch tiles via ⌘⇧N.
+- [el.click() fallback](mcp-bridge-interact-click-needs-el-click-fallback.md) — If `webview_interact{click}` fails; switch tiles via a pointerdown+pointerup pair on the tile.
 - [Native geometry](mcp-bridge-manage-window-reads-native-geometry.md) — `manage_window{info}` returns native frames.
 - [Hold a status via fiber](mcp-bridge-seed-held-workspace-status-via-fiber.md) — Dispatch `setStatusMap`, not `ipc_emit_event`.
 - [HMR stamped URL](vite-hmr-stamped-url-is-a-separate-module-instance.md) — A bridge import must use `<path>?t=<ts>`.

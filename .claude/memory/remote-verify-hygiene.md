@@ -49,3 +49,15 @@ Edits to child components (`RightPanelHost.tsx`, `Workspace.tsx`) hot-swap witho
 - **How to apply:** close remote workspaces (or use only the scratch row) before editing `App.tsx` or
   running App.tsx mutants; after any App.tsx save, reload the webview and reopen before trusting a live read.
   Backlog: `SURFACE-2026-11-17-APP-TSX-FAST-REFRESH-CLOSES-REMOTE-WORKSPACES`.
+
+**5. The mini's dev account has NO workflow skills** (found 2026-11-17, M17 WP7 Phase 4: `~/.claude/skills` absent).
+A real `/session-handoff`, `/session-restore`, `/session-start` or skill-button command there is an unknown command,
+so Recycle ends `failed` and skill buttons do nothing useful (product gap: backlog
+`SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD`).
+- **How to apply:** to drive workflow commands in a remote check, write project-local STUB skills inside the scratch
+  remote folder only (`~/claudesk-scratch-remote/.claude/skills/<name>/SKILL.md`, frontmatter `name:` +
+  `description:`; e.g. `session-handoff` writes `workflow-system/state/.session.md`, the others just reply a word),
+  then CLOSE AND REOPEN the remote workspace: CC loads project skills when it starts, so a session started before the
+  stubs existed does not see them. Remove `.claude/` from the scratch folder afterwards. Never install skills into the
+  account's `~/.claude/` for a check. Keep remote turns tiny (that account showed 92% of its weekly limit used).
+

@@ -735,17 +735,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** pending
 
-## Code-quality findings — m17-wp6-workspace-surfaces (2026-11-17)
-
-- **Pointer:** **5 MINOR** open from the review of the WP6 ship commit (`991307e`); no CRITICAL, no MAJOR.
-  - MINORs: the panel functions' fail-open `LOCAL_SURFACES` default (6 call sites rely on the reconcile backstop); the guard header over-claims containment; a duplicated empty withhold value in `wip_read` / `transcript_tail`; the notice shape inlined in 3 files; the refusal module doc implies a frontend text contract.
-
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp6-workspace-surfaces — 2026-11-17`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** one small `/feature-refactor` pass, or fold into WP7 (which touches the same panel host and backend refusal).
-
-
 ## SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD
 - **Source:** feature:verify-self (M17 WP7 Phase 4, live)
 - **Target level:** product:arch

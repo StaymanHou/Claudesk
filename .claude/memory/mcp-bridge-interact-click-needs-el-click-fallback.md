@@ -1,6 +1,6 @@
 ---
 name: mcp-bridge-interact-click-needs-el-click-fallback
-description: mcp__tauri__webview_interact{click} can fail with "window.__MCP__.resolveRef is undefined" when the bridge's ref helper isn't loaded on the page — fall back to a plain el.click() inside webview_execute_js, which drives every control type EXCEPT pointer-driven ones (a filmstrip tile: switch workspaces with a ⌘⇧N keydown on document.activeElement). Also: read the real Tauri command names from lib.rs's invoke handler instead of guessing.
+description: mcp__tauri__webview_interact{click} can fail with "window.__MCP__.resolveRef is undefined" when the bridge's ref helper isn't loaded on the page — fall back to a plain el.click() inside webview_execute_js, which drives every control type EXCEPT pointer-driven ones (a filmstrip tile: switch workspaces with a pointerdown+pointerup pair on the tile, or a ⌘⇧N keydown on document.activeElement). Also: read the real Tauri command names from lib.rs's invoke handler instead of guessing.
 metadata:
   type: reference
 ---
@@ -49,6 +49,20 @@ fine and changes nothing. To switch the centre-stage workspace from the bridge, 
 
 A keydown dispatched on `window` alone did NOT switch. Confirm the switch with
 `.filmstrip-tile--active`, never a screenshot, because a screenshot can lag a frame.
+
+**Also works, verified 2026-11-17 (M17 WP7): a pointer-down/up pair ON the tile.** The strip promotes on
+pointer-up, so dispatch both events on `filmstrip-tile-<id>` itself at its centre:
+
+```js
+(() => { const t = document.querySelector('[data-testid="filmstrip-tile-ws-1"]'); const r = t.getBoundingClientRect();
+  const o = {bubbles:true, cancelable:true, clientX:r.x+r.width/2, clientY:r.y+r.height/2,
+             pointerId:1, button:0, buttons:1, pointerType:'mouse', isPrimary:true};
+  t.dispatchEvent(new PointerEvent('pointerdown', o)); t.dispatchEvent(new PointerEvent('pointerup', {...o, buttons:0})); })()
+```
+
+That session `el.click()` on the tile AND on `filmstrip-tile-body-<id>` did nothing (as above), and a ⌘⇧1 keydown
+dispatched on `window` + `document` (NOT on `document.activeElement`, so the chord recipe above was not tested)
+did not switch either. The pointer pair switched on the first try, twice.
 
 **Second, cheaper lesson from the same session: don't guess Tauri command names.** Two plausible guesses (`workflow_substrate_status`, `get_workflow_invite`) were both wrong and each cost a round-trip; the real names were `workflow_substrate_installed` and `workflow_get_invite`. `grep` the `invoke_handler` list in `src-tauri/src/lib.rs` first — it is the authoritative registry, and a wrong name returns a generic `Command <x> not found` that looks like a backend problem rather than a typo.
 

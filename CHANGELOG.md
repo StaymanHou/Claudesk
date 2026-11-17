@@ -11,6 +11,13 @@
 - **Feature shipped:** M17 WP6 hides every local-only surface on a remote workspace through one `workspaceSurfaces` funnel: the right half becomes Docs + Prompt (Docs with a plain "not available yet" note), the editor, diff, terminal, file tree, finder, search, launchers, supervisor and turn jump are absent, chords and menu items for them show one neutral notice, and 26 backend commands refuse an `ssh://` key in plain words.
 - **Backlog resolved:** SURFACE-2026-11-16-REMOTE-WORKSPACE-SHOWS-LOCAL-ONLY-PANELS — a remote workspace no longer shows the Editor/Diff/Terminal tabs, and its Docs panel shows a plain note instead of a raw `os error`.
 - **Milestone:** WP6: OUT rows absent: the `workspaceSurfaces` funnel (with WP9, No raw local-fs errors on a remote workspace, folded in)
+- **Feature shipped:** M17 WP7 makes a remote workspace's Docs panel list and render the remote project's workflow docs over the host's master, keeps it current with a poller that runs only while that Docs tab is on screen (announcing its catch-up check on return), and makes Recycle complete on a remote workspace by re-reading `.session.md` when Claude Code stops.
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP6-PANEL-FUNCS-FAIL-OPEN-LOCAL-DEFAULT — `defaultPanel` / `selectPanel` / `reconcilePanel` now require `surfaces`; only `availablePanels` keeps a default.
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP6-GUARD-HEADER-OVERCLAIMS-CONTAINMENT — the `workspaceSurfacesGuard` header now says it pins proximity and names the DOM tests as the containment check.
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP6-DUPLICATED-EMPTY-WITHHOLD-VALUE — `WipRead` / `TranscriptTail` derive `Default` and each command has one withhold value.
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP6-NOTICE-SHAPE-INLINED-THREE-TIMES — one exported `WorkspaceNotice` type replaces the three inline copies.
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP6-REFUSAL-DOC-IMPLIES-FRONTEND-CONTRACT — the `workspace_surfaces` module doc no longer implies a frontend text contract.
+- **Milestone:** WP7: Remote reads: Docs panel, poller, Recycle
 
 ## 2026-11-16
 
