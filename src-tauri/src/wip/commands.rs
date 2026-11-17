@@ -31,6 +31,12 @@ pub struct WipRead {
 /// WITHHOLDING — "no WIP" correctly produces no recycle.
 #[tauri::command]
 pub fn wip_read(project_path: String) -> WipRead {
+    if crate::workspace_surfaces::refuse_remote(&project_path).is_err() {
+        return WipRead {
+            path: None,
+            text: String::new(),
+        };
+    }
     let empty = WipRead {
         path: None,
         text: String::new(),

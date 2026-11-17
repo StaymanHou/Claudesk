@@ -174,6 +174,8 @@ interface RightPanelStubProps {
   workspaceProfile?: string | null;
   /** M17 WP3 P4.verify-human.2 — the workspace's "not sent" toast setter, for the Prompt panel. */
   onInjectFailure?: (toast: string) => void;
+  /** M17 WP6 — the workspace's notice for a chord on an absent surface. */
+  onSurfaceUnavailable?: (notice: string) => void;
 }
 
 function RightPanelHostStub(props: RightPanelStubProps) {

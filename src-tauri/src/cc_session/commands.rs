@@ -252,6 +252,7 @@ pub fn term_spawn(
     registry: State<'_, Registry>,
     project_path: String,
 ) -> Result<String, String> {
+    crate::workspace_surfaces::refuse_remote(&project_path)?;
     let mut reg = registry
         .lock()
         .map_err(|_| "session registry lock poisoned".to_string())?;

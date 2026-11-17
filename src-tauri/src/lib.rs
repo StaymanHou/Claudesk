@@ -123,6 +123,8 @@ mod window_state;
 // all TypeScript-side per ruling R-4, next to the `resolvePolicy` funnel. Do not grow a
 // "does a later phase exist?" answer here.
 mod wip;
+// M17 WP6: the backend refusal behind the frontend `workspaceSurfaces` funnel.
+mod workspace_surfaces;
 
 /// The main window's label. `tauri.conf.json` declares its one window without a `label`, so
 /// Tauri assigns the framework default `"main"`. Every Rust site that addresses or scopes to the

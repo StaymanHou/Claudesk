@@ -23,11 +23,8 @@ import {
 } from "react";
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
 import { TileActions } from "./TileActionButton";
-import { REMOTE_KEY_PREFIX } from "../../cc/spawnArgs";
-
-/** Whether a tile is a REMOTE workspace (its key is `ssh://…`): only those offer Detach. */
-const isRemoteKey = (projectPath: string) =>
-  projectPath.startsWith(REMOTE_KEY_PREFIX);
+// Only a REMOTE workspace (its key is `ssh://…`) offers Detach.
+import { isRemoteKey } from "../../state/workspaceSurfaces";
 import type { FilmstripTile } from "./filmstripTiles";
 import { readMirrorFrame, subscribeMirrorFrame } from "./mirrorFrame";
 import { shouldRunMirror } from "./mirrorTicker";

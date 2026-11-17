@@ -12,6 +12,7 @@
 // that held a prop across the relaunch and was synchronised against the React scheduler.)
 
 import type { OpenIntent } from "../state/predictAction";
+import { isRemoteKey } from "../state/workspaceSurfaces";
 
 /** A one-shot intent for the next `cc_spawn`; `null` = use the pane's own `openIntent`. */
 export interface SpawnIntentRef {
@@ -36,9 +37,6 @@ export function takeSpawnArgs(
   return { projectPath, intent: taken ?? openIntent };
 }
 
-/** The scheme every remote identity key starts with (Rust `config_store::REMOTE_KEY_PREFIX`). */
-export const REMOTE_KEY_PREFIX = "ssh://";
-
 /**
  * M17 WP3 — the IPC command a pane actually invokes. A CC pane (`cc_spawn`) whose project key is a
  * REMOTE key spawns through `cc_spawn_remote`, which brings the host link up and runs `ssh -tt`
@@ -50,8 +48,7 @@ export function spawnCommandFor(
   spawnCommand: string,
   projectPath: string,
 ): string {
-  return spawnCommand === "cc_spawn" &&
-    projectPath.startsWith(REMOTE_KEY_PREFIX)
+  return spawnCommand === "cc_spawn" && isRemoteKey(projectPath)
     ? "cc_spawn_remote"
     : spawnCommand;
 }

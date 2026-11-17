@@ -23,6 +23,7 @@ use super::{
 /// not a directory, invalid regex) come back as a `String` the overlay shows inline.
 #[tauri::command]
 pub fn project_search(root: String, query: SearchQuery) -> Result<Vec<FileMatches>, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     search_core(Path::new(&root), &query).map_err(|e| e.to_string())
 }
 
@@ -42,6 +43,7 @@ pub fn project_replace(
     replacement: String,
     scope: Option<ReplaceScope>,
 ) -> Result<ReplaceSummary, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     let scope = scope.unwrap_or(ReplaceScope::All);
     replace_in_scope(Path::new(&root), &query, &replacement, &scope).map_err(|e| e.to_string())
 }

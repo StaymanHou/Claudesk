@@ -71,6 +71,11 @@ import { useUpdater } from "./updater/useUpdater";
 import { UpdaterStatusRow } from "./updater/UpdaterStatusRow";
 import { UpdateNotifyBanner } from "./updater/UpdateNotifyBanner";
 import { updateConfirmSpec } from "./updater/updateFlowState";
+import {
+  absentSurfaceNotice,
+  launcherSurfaceFor,
+  workspaceSurfaces,
+} from "./state/workspaceSurfaces";
 
 // M9 WP6a — the GLOBAL time-analytics dashboard is a top-level view, mounted ONCE,
 // overlaying the center stage (the PickerOverlay pattern). LAZY: its chunk (the
@@ -537,7 +542,7 @@ function App() {
 
   // M17 WP5 — per-workspace notices from the app (a failed Detach), shown in that workspace's toast.
   const [workspaceNotices, setWorkspaceNotices] = useState<
-    Record<string, { text: string; seq: number }>
+    Record<string, { text: string; seq: number; kind?: "error" | "info" }>
   >({});
 
   // M17 WP5 (AC-4) — Detach a remote workspace: `cc_detach` FIRST (the session leaves the registry
@@ -599,9 +604,12 @@ function App() {
   // (latest-ref pattern, as in RightPanelHost) — re-subscribing on every focus change
   // would be churn and could drop an in-flight menu event.
   const focusedPathRef = useRef<string | null>(null);
+  // M17 WP6 — the focused workspace's ID too, so a launcher it does not have can tell it so.
+  const focusedIdRef = useRef<string | null>(null);
   useEffect(() => {
     const focused = workspaces.find((w) => w.id === focusedId);
     focusedPathRef.current = focused ? focused.project_path : null;
+    focusedIdRef.current = focused ? focused.id : null;
   }, [workspaces, focusedId]);
 
   // M10.5-WP2 — latest-ref computing the busy workspace names, so the once-registered
@@ -760,6 +768,23 @@ function App() {
       // The three launchers act on the focused workspace; no-op when none is open.
       const path = focusedPathRef.current;
       if (!path) return;
+      // M17 WP6 (AC-4) — the native menu is app-global, so its launcher items exist even when the
+      // focused workspace (a remote one) has no such surface. Consult the funnel; an absent
+      // launcher invokes NOTHING and says so in that workspace's toast.
+      const launcher = launcherSurfaceFor(action.callback);
+      if (launcher !== null && !workspaceSurfaces(path)[launcher]) {
+        const id = focusedIdRef.current;
+        if (id !== null)
+          setWorkspaceNotices((m) => ({
+            ...m,
+            [id]: {
+              text: absentSurfaceNotice(launcher),
+              seq: (m[id]?.seq ?? 0) + 1,
+              kind: "info",
+            },
+          }));
+        return;
+      }
       if (action.callback === "openSublimeText") void openSublime(path);
       else if (action.callback === "openSublimeMerge")
         void openSublimeMerge(path);

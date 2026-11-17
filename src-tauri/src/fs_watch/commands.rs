@@ -119,6 +119,7 @@ pub fn workspace_watch_start(
     project_path: String,
     workspace_id: String,
 ) -> Result<(), String> {
+    crate::workspace_surfaces::refuse_remote(&project_path)?;
     let root = PathBuf::from(&project_path);
     if !root.is_dir() {
         return Err(FsWatchError::BadRoot {

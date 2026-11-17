@@ -926,6 +926,15 @@ body,
   text-align: left;
 }
 
+/* M17 WP6 (P3.verify-human.2, operator decision B) — an INFORMATIONAL notice (a surface a remote
+   workspace does not have) is not a failure, so it takes the picker's neutral info-toast look
+   (`.picker-toast`), not the red error look above. */
+.workspace-inject-toast.is-info {
+  border-color: rgba(160, 160, 160, 0.3);
+  background-color: #1f1f1f;
+  color: inherit;
+}
+
 .workspace-inject-toast-dismiss {
   flex: none;
   border: none;

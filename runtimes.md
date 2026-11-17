@@ -31,7 +31,8 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 72s (2026-11-17, M17 WP5 refactor (the review CRITICAL), EXIT=0; incremental, timeout kept at the cold-run value)
+- **Last:** 64s (2026-11-17, M17 WP6 Phase 1 verify-auto, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 72s (2026-11-17, M17 WP5 refactor (the review CRITICAL), EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 75s (2026-11-17, M17 WP5 Phase 4 verify-self/codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 68s (2026-11-17, M17 WP5 Phase 3 verify-self/codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 69s (2026-11-17, M17 WP5 Phase 3 build, EXIT=0; incremental, timeout kept at the cold-run value)

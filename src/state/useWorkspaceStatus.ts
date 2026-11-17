@@ -38,6 +38,7 @@ import {
   type WorkspaceStatusUpdate,
 } from "./workspaceStatus";
 import type { Workspace } from "./workspace";
+import { workspaceSurfaces } from "./workspaceSurfaces";
 
 export interface WorkspaceStatusApi {
   /** The live state for a workspace id — Unknown until its first hook event. */
@@ -108,12 +109,15 @@ export function useWorkspaceStatus(
         }).catch((err) => {
           console.error(`workspace_register failed for ${ws.id}:`, err);
         });
-        void invoke("workspace_watch_start", {
-          projectPath: ws.project_path,
-          workspaceId: ws.id,
-        }).catch((err) => {
-          console.error(`workspace_watch_start failed for ${ws.id}:`, err);
-        });
+        // M17 WP6 — no LOCAL watcher for a remote workspace: its key is not a local path (the
+        // backend refuses it), and WP7's poller is what watches a remote one.
+        if (workspaceSurfaces(ws.project_path).fsWatch)
+          void invoke("workspace_watch_start", {
+            projectPath: ws.project_path,
+            workspaceId: ws.id,
+          }).catch((err) => {
+            console.error(`workspace_watch_start failed for ${ws.id}:`, err);
+          });
       }
     }
   }, [workspaces]);

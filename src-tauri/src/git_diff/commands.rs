@@ -18,6 +18,7 @@ use super::{
 /// "not a git repository" error as a `String`.
 #[tauri::command]
 pub fn git_changed_files(root: String) -> Result<Vec<ChangedFile>, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     changed_files_core(Path::new(&root)).map_err(|e| e.to_string())
 }
 
@@ -26,6 +27,7 @@ pub fn git_changed_files(root: String) -> Result<Vec<ChangedFile>, String> {
 /// `binary: true` marker). Errors come back as a `String`.
 #[tauri::command]
 pub fn git_file_hunks(root: String, path: String, staged: bool) -> Result<FileDiff, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     file_hunks_core(Path::new(&root), &path, staged).map_err(|e| e.to_string())
 }
 
@@ -37,6 +39,7 @@ pub fn git_recent_commits(
     offset: usize,
     limit: usize,
 ) -> Result<Vec<CommitSummary>, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     recent_commits_core(Path::new(&root), offset, limit).map_err(|e| e.to_string())
 }
 
@@ -44,5 +47,6 @@ pub fn git_recent_commits(
 /// An unknown SHA returns the "commit not found" error as a `String`.
 #[tauri::command]
 pub fn git_commit_diff(root: String, sha: String) -> Result<Vec<FileDiff>, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     commit_diff_core(Path::new(&root), &sha).map_err(|e| e.to_string())
 }

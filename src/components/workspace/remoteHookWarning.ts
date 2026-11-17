@@ -8,7 +8,7 @@
 // install of the connect the spawn rode has finished.
 
 import { invoke } from "@tauri-apps/api/core";
-import { REMOTE_KEY_PREFIX } from "../../cc/spawnArgs";
+import { isRemoteKey } from "../../state/workspaceSurfaces";
 
 /**
  * The plain-words install failure for the host of `projectPath`, or `null` when the install
@@ -17,7 +17,7 @@ import { REMOTE_KEY_PREFIX } from "../../cc/spawnArgs";
 export async function readRemoteHookWarning(
   projectPath: string,
 ): Promise<string | null> {
-  if (!projectPath.startsWith(REMOTE_KEY_PREFIX)) return null;
+  if (!isRemoteKey(projectPath)) return null;
   try {
     return (
       (await invoke<string | null>("remote_hook_warning", { projectPath })) ??
@@ -38,7 +38,7 @@ export async function readRemoteHookWarning(
 export async function readRemoteOpenNotice(
   projectPath: string,
 ): Promise<string | null> {
-  if (!projectPath.startsWith(REMOTE_KEY_PREFIX)) return null;
+  if (!isRemoteKey(projectPath)) return null;
   try {
     return (
       (await invoke<string | null>("remote_open_notice", { projectPath })) ??

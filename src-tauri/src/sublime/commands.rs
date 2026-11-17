@@ -28,6 +28,7 @@
 /// (gated; the tool identity only) so WP3 can resolve the blur-but-working case.
 #[tauri::command]
 pub fn sublime_open(app: tauri::AppHandle, project_path: String) -> Result<(), String> {
+    crate::workspace_surfaces::refuse_remote(&project_path)?;
     super::launch(&project_path).map_err(|e| e.to_string())?;
     crate::time_store::commands::record_external_launch(
         &app,
@@ -45,6 +46,7 @@ pub fn sublime_open(app: tauri::AppHandle, project_path: String) -> Result<(), S
 /// viewer covers *viewing*, but staging/blame/history/blob-at-rev live here.
 #[tauri::command]
 pub fn smerge_open(app: tauri::AppHandle, project_path: String) -> Result<(), String> {
+    crate::workspace_surfaces::refuse_remote(&project_path)?;
     super::launch_merge(&project_path).map_err(|e| e.to_string())?;
     crate::time_store::commands::record_external_launch(
         &app,

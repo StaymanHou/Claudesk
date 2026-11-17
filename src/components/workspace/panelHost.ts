@@ -27,6 +27,10 @@
 // All app-level chords use the WP1-proven capture-phase document listener.
 
 import type { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
+import {
+  LOCAL_SURFACES,
+  type WorkspaceSurfaces,
+} from "../../state/workspaceSurfaces";
 
 /** The gate's value, typed as exactly what the seam hook returns.
  *
@@ -121,8 +125,13 @@ const AVAILABLE_PANELS_WITH_WORKFLOW: readonly RightPanel[] = [
  * opening panel are separate decisions here and each is its own literal; the M11 WP3
  * operator decision that put Docs first changed BOTH explicitly, in two places.
  */
-export function defaultPanel(enabled: WorkflowGateValue): RightPanel {
-  return enabled ? "docs" : "editor";
+export function defaultPanel(
+  enabled: WorkflowGateValue,
+  surfaces: WorkspaceSurfaces = LOCAL_SURFACES,
+): RightPanel {
+  if (enabled) return "docs";
+  // M17 WP6 — a workspace with no editor (remote) opens on Prompt, its only ungated panel.
+  return surfaces.editor ? "editor" : "prompt";
 }
 
 /**
@@ -143,8 +152,30 @@ export function defaultPanel(enabled: WorkflowGateValue): RightPanel {
  */
 export function availablePanels(
   enabled: WorkflowGateValue,
+  surfaces: WorkspaceSurfaces = LOCAL_SURFACES,
 ): readonly RightPanel[] {
-  return enabled ? AVAILABLE_PANELS_WITH_WORKFLOW : AVAILABLE_PANELS;
+  const gated = enabled ? AVAILABLE_PANELS_WITH_WORKFLOW : AVAILABLE_PANELS;
+  // M17 WP6 — the workspace-KIND filter, applied AFTER (and independent of) the gate. A local
+  // workspace returns the gate's literal array unchanged, so the OFF-invariant guard's
+  // `availablePanels(false)` is still exactly `AVAILABLE_PANELS`. A remote one drops the panels
+  // that read the local disk or spawn a local shell (`arch/remote-workspaces.md` §G).
+  if (surfaces.editor && surfaces.diff && surfaces.terminal) return gated;
+  return gated.filter((p) => panelPresent(p, surfaces));
+}
+
+/** Whether `panel` exists for a workspace of this kind (the gate is a separate question). */
+function panelPresent(panel: RightPanel, surfaces: WorkspaceSurfaces): boolean {
+  switch (panel) {
+    case "editor":
+      return surfaces.editor;
+    case "diff":
+      return surfaces.diff;
+    case "terminal":
+      return surfaces.terminal;
+    case "prompt":
+    case "docs":
+      return true;
+  }
 }
 
 /**
@@ -161,13 +192,14 @@ export function selectPanel(
   current: RightPanel | null,
   target: RightPanel,
   enabled: WorkflowGateValue = false,
+  surfaces: WorkspaceSurfaces = LOCAL_SURFACES,
 ): RightPanel {
-  if (!availablePanels(enabled).includes(target)) {
+  if (!availablePanels(enabled, surfaces).includes(target)) {
     // `current` may be `null` — the "user has not chosen a panel yet" state introduced in
     // WP3 so the default can follow the async gate. A rejected target must not write
     // `null` back into state (that would silently re-open the default to a later gate
     // flip), so an unchosen panel resolves to the gate's default here.
-    return current ?? defaultPanel(enabled);
+    return current ?? defaultPanel(enabled, surfaces);
   }
   return target;
 }
@@ -189,10 +221,11 @@ export function selectPanel(
 export function reconcilePanel(
   current: RightPanel,
   enabled: WorkflowGateValue,
+  surfaces: WorkspaceSurfaces = LOCAL_SURFACES,
 ): RightPanel {
-  return availablePanels(enabled).includes(current)
+  return availablePanels(enabled, surfaces).includes(current)
     ? current
-    : defaultPanel(enabled);
+    : defaultPanel(enabled, surfaces);
 }
 
 // WP11 — `railVisibleForPanel` (a pure "rail visible for this panel?" predicate)

@@ -90,6 +90,12 @@ pub fn transcript_tail(
     session_id: Option<String>,
     pty_session_id: Option<String>,
 ) -> TranscriptTail {
+    if crate::workspace_surfaces::refuse_remote(&project_path).is_err() {
+        return TranscriptTail {
+            path: None,
+            lines: Vec::new(),
+        };
+    }
     let empty = TranscriptTail {
         path: None,
         lines: Vec::new(),

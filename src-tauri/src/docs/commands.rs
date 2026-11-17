@@ -44,6 +44,7 @@ use crate::editor_fs::{commands::validate_frontend_root, read_file_core};
 /// returns an empty list — neither is an error. Only an unknown/hostile `root` fails.
 #[tauri::command]
 pub fn docs_list(app: AppHandle, root: String) -> Result<Vec<DocEntry>, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     let root = validate_frontend_root(&app, &root)?;
     Ok(discover(&root))
 }
@@ -55,6 +56,7 @@ pub fn docs_list(app: AppHandle, root: String) -> Result<Vec<DocEntry>, String> 
 /// file, or non-UTF-8 content each come back as a `String` error for the UI to surface.
 #[tauri::command]
 pub fn docs_read(app: AppHandle, root: String, path: String) -> Result<String, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     let root = validate_frontend_root(&app, &root)?;
     read_file_core(&root, Path::new(&path)).map_err(|e| e.to_string())
 }

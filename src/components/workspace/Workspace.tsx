@@ -99,6 +99,7 @@ import { useSupervisor } from "../../state/supervisor/useSupervisor";
 import { UnsentInputWatermark } from "../../state/supervisor/unsentInput";
 import { SupervisorHeaderControl } from "./SupervisorHeaderControl";
 import { supervisorTurnBadge } from "../../cc/workspaceSupervisor";
+import { workspaceSurfaces } from "../../state/workspaceSurfaces";
 import {
   getProjectSupervisorEnabled,
   setProjectSupervisorEnabled,
@@ -153,7 +154,7 @@ interface WorkspaceProps {
    * M17 WP5 — a notice the app has for this workspace (a failed Detach: the tile stays, so the
    * operator meets it here). Shown in the workspace toast each time its `seq` changes.
    */
-  notice?: { text: string; seq: number };
+  notice?: { text: string; seq: number; kind?: "error" | "info" };
 }
 
 export function Workspace({
@@ -180,13 +181,32 @@ export function Workspace({
   // text is the backend's own reason (`injectFailure.ts`). Scoped to THIS workspace, like
   // `.drivemode-confirm`, because backgrounded workspaces stay mounted. Dismissed by ×; a later
   // failure replaces it.
-  const [injectFailure, setInjectFailure] = useState<string | null>(null);
+  //
+  // M17 WP6 (P3.verify-human.2, operator decision B) — the toast also carries INFORMATIONAL
+  // notices (a chord / menu item for a surface a remote workspace does not have). Nothing failed
+  // there, so it renders in a neutral style (`is-info`, the picker's info-toast look) and as a
+  // `status`, not an `alert`; failures keep the red alert. A later notice of either kind replaces it.
+  const [toast, setToast] = useState<{
+    text: string;
+    kind: "error" | "info";
+  } | null>(null);
+  const setInjectFailure = useCallback(
+    (text: string | null) =>
+      setToast(text === null ? null : { text, kind: "error" }),
+    [],
+  );
+  const showInfoNotice = useCallback(
+    (text: string) => setToast({ text, kind: "info" }),
+    [],
+  );
   // M17 WP5 — an app notice for this workspace (a failed Detach) joins the same toast, once per
   // new `seq`. Adjusted during render (React's "a prop changed" pattern), not in an effect.
   const [noticeSeq, setNoticeSeq] = useState(0);
   if (notice !== undefined && notice.seq !== noticeSeq) {
     setNoticeSeq(notice.seq);
-    setInjectFailure(notice.text);
+    // M17 WP6 — an absent-launcher notice from the native menu is informational; a failed Detach
+    // (no `kind`) stays an error.
+    setToast({ text: notice.text, kind: notice.kind ?? "error" });
   }
 
   // ── M12 WP3 Phase 5 — the third arm ──────────────────────────────────────────────
@@ -200,6 +220,10 @@ export function Workspace({
     workspace.project_path,
     workspace.cc_session_id,
   );
+  // M17 WP6 — the workspace-KIND funnel (`state/workspaceSurfaces.ts`), BESIDE the gate below and
+  // never inside it. On a remote workspace the supervisor (it reads the local WIP + transcript) and
+  // the turn-marker jump (it reads xterm's buffer, empty under tmux) are absent.
+  const surfaces = workspaceSurfaces(workspace.project_path);
   const workflowEnabled = isWorkflowApplicable(
     useWorkflowFeaturesEnabled(),
     workspaceProfile,
@@ -344,14 +368,16 @@ export function Workspace({
     // `supervisorToggleIpc.ts`. ⚠️ The failure arm sets `true`, NOT `null`: a failed read must
     // not leave the toggle looking unloaded forever, and the ruled default is ON. The helper
     // already degrades to `true`, so this `.catch` is the belt to its braces.
-    void getProjectSupervisorEnabled(workspace.project_path)
-      .then((on) => {
-        if (!cancelled) setSupervisorEnabled(on);
-      })
-      .catch((e) => {
-        console.warn("supervisor toggle: read failed, defaulting to ON", e);
-        if (!cancelled) setSupervisorEnabled(true);
-      });
+    // M17 WP6 — no supervisor on a remote workspace, so nothing to read for it.
+    if (surfaces.supervisor)
+      void getProjectSupervisorEnabled(workspace.project_path)
+        .then((on) => {
+          if (!cancelled) setSupervisorEnabled(on);
+        })
+        .catch((e) => {
+          console.warn("supervisor toggle: read failed, defaulting to ON", e);
+          if (!cancelled) setSupervisorEnabled(true);
+        });
     // ⚠️ NO `setState` on the no-session branch — the effect only FETCHES, and declines to
     // when there is nothing to fetch. `sessionLive` already collapses that case at the
     // derivation above (a dead session cannot be stale), so clearing state here would be a
@@ -376,6 +402,7 @@ export function Workspace({
     workspace.project_path,
     workspace.cc_session_id,
     setStoredDriveMode,
+    surfaces.supervisor,
   ]);
 
   // ── M13.5 WP4 P3.3–P3.5 — the selector ───────────────────────────────────────────
@@ -656,7 +683,9 @@ export function Workspace({
     hasUnsentInput: () => unsentInputRef.current?.unsentInput === true,
     // ⚠️ The M10.9 gate. With it OFF the app must be byte-identical to one that never had the
     // workflow features, so supervision is off entirely rather than merely quiet.
-    enabled: workflowFeaturesEnabled,
+    // M17 WP6 — AND the workspace kind: the supervisor is absent on a remote workspace. The gate
+    // value itself is untouched; the kind is a second, independent condition.
+    enabled: workflowFeaturesEnabled && surfaces.supervisor,
     storedModeRef: storedDriveModeRef,
     // ⚠️ M14 WP0 — the third per-turn condition. A REF, not a value: see the host's doc.
     supervisorEnabledRef,
@@ -923,15 +952,17 @@ export function Workspace({
             ↻ {nextOpen}
           </span>
         )}
-        <SupervisorHeaderControl
-          projectPath={workspace.project_path}
-          displayName={workspace.display_name}
-          workflowEnabled={workflowEnabled}
-          visible={visible}
-          enabled={supervisorEnabled ?? true}
-          unsentInput={unsentInput}
-          onToggle={toggleSupervisor}
-        />
+        {surfaces.supervisor && (
+          <SupervisorHeaderControl
+            projectPath={workspace.project_path}
+            displayName={workspace.display_name}
+            workflowEnabled={workflowEnabled}
+            visible={visible}
+            enabled={supervisorEnabled ?? true}
+            unsentInput={unsentInput}
+            onToggle={toggleSupervisor}
+          />
+        )}
         {/* M13.5 WP4 P2 — the drive-mode readout. ⚠️ GATED: `workspaceDriveModeReadout` returns
             null when the gate is off, so with workflow features disabled this element does not
             exist in the DOM at all — not hidden, not disabled, not an empty reserved slot
@@ -1046,13 +1077,14 @@ export function Workspace({
               )}
             </span>
           ))}
-        {injectFailure !== null && (
+        {toast !== null && (
           <div
-            className="workspace-inject-toast"
-            role="alert"
+            className={`workspace-inject-toast${toast.kind === "info" ? " is-info" : ""}`}
+            role={toast.kind === "info" ? "status" : "alert"}
             data-testid="workspace-inject-toast"
+            data-kind={toast.kind}
           >
-            <span>{injectFailure}</span>
+            <span>{toast.text}</span>
             <button
               type="button"
               className="workspace-inject-toast-dismiss"
@@ -1152,67 +1184,75 @@ export function Workspace({
               prev and next are INVERSES, so both get a control of the same kind. A single
               backward-only button that dead-ends cannot support the actual task, which is
               SCANNING — stepping back and forward to re-locate a spot. */}
-          <button
-            type="button"
-            className="workspace-turn-nav-btn"
-            data-testid="workspace-turn-prev"
-            disabled={!turnNav.canPrev}
-            aria-label={`Go to the previous turn start in ${workspace.display_name}`}
-            title="Previous turn start"
-            onClick={() => {
-              // The pane owns the position; this re-reads the nav state from the pane right
-              // after the step rather than re-deriving it here (the two could then disagree —
-              // AC-5).
-              ccPaneRef.current?.stepTurn("prev");
-              const next = ccPaneRef.current?.turnNavState();
-              if (next) setTurnNav(next);
-            }}
-          >
-            ↑
-          </button>
-          {/* AC-5 — the position readout. EMPTY at zero turns: two disabled arrows are
-              self-explanatory, and "0/0" is noise. ⚠️ The node is mounted UNCONDITIONALLY and only
-              its text is gated: a live region that mounts together with its first value is never
-              announced, so a conditional mount left the first turn silent (paydown WP8, I6). */}
-          <span
-            className="workspace-turn-nav-readout"
-            data-testid="workspace-turn-readout"
-            aria-live="polite"
-            title={
-              turnNav.total > 0
-                ? `Turn ${turnNav.ordinal} of ${turnNav.total}` +
-                  (turnSupervisorMark ? ` — ${turnSupervisorMark.title}` : "")
-                : undefined
-            }
-          >
-            {/* Turn attribution — the `⚙` comes from the GATED supervisor readout, never from
-                `turnNav.origin` directly: this readout is ungated terminal chrome, so reading the
-                origin here would show the mark with workflow features OFF. */}
-            {turnNav.total > 0 && turnSupervisorMark && (
-              <span
-                className="workspace-turn-origin"
-                data-testid="workspace-turn-origin"
+          {/* M17 WP6 — absent on a remote workspace, PERMANENTLY (operator ruling 2026-11-17): the
+              jump reads xterm's buffer, which stays empty under tmux (arch §I). */}
+          {surfaces.turnJump && (
+            <>
+              <button
+                type="button"
+                className="workspace-turn-nav-btn"
+                data-testid="workspace-turn-prev"
+                disabled={!turnNav.canPrev}
+                aria-label={`Go to the previous turn start in ${workspace.display_name}`}
+                title="Previous turn start"
+                onClick={() => {
+                  // The pane owns the position; this re-reads the nav state from the pane right
+                  // after the step rather than re-deriving it here (the two could then disagree —
+                  // AC-5).
+                  ccPaneRef.current?.stepTurn("prev");
+                  const next = ccPaneRef.current?.turnNavState();
+                  if (next) setTurnNav(next);
+                }}
               >
-                {turnSupervisorMark.text}{" "}
+                ↑
+              </button>
+              {/* AC-5 — the position readout. EMPTY at zero turns: two disabled arrows are
+                  self-explanatory, and "0/0" is noise. ⚠️ The node is mounted UNCONDITIONALLY and only
+                  its text is gated: a live region that mounts together with its first value is never
+                  announced, so a conditional mount left the first turn silent (paydown WP8, I6). */}
+              <span
+                className="workspace-turn-nav-readout"
+                data-testid="workspace-turn-readout"
+                aria-live="polite"
+                title={
+                  turnNav.total > 0
+                    ? `Turn ${turnNav.ordinal} of ${turnNav.total}` +
+                      (turnSupervisorMark
+                        ? ` — ${turnSupervisorMark.title}`
+                        : "")
+                    : undefined
+                }
+              >
+                {/* Turn attribution — the `⚙` comes from the GATED supervisor readout, never from
+                    `turnNav.origin` directly: this readout is ungated terminal chrome, so reading the
+                    origin here would show the mark with workflow features OFF. */}
+                {turnNav.total > 0 && turnSupervisorMark && (
+                  <span
+                    className="workspace-turn-origin"
+                    data-testid="workspace-turn-origin"
+                  >
+                    {turnSupervisorMark.text}{" "}
+                  </span>
+                )}
+                {turnNav.total > 0 ? `${turnNav.ordinal}/${turnNav.total}` : ""}
               </span>
-            )}
-            {turnNav.total > 0 ? `${turnNav.ordinal}/${turnNav.total}` : ""}
-          </span>
-          <button
-            type="button"
-            className="workspace-turn-nav-btn"
-            data-testid="workspace-turn-next"
-            disabled={!turnNav.canNext}
-            aria-label={`Go to the next turn start in ${workspace.display_name}`}
-            title="Next turn start"
-            onClick={() => {
-              ccPaneRef.current?.stepTurn("next");
-              const next = ccPaneRef.current?.turnNavState();
-              if (next) setTurnNav(next);
-            }}
-          >
-            ↓
-          </button>
+              <button
+                type="button"
+                className="workspace-turn-nav-btn"
+                data-testid="workspace-turn-next"
+                disabled={!turnNav.canNext}
+                aria-label={`Go to the next turn start in ${workspace.display_name}`}
+                title="Next turn start"
+                onClick={() => {
+                  ccPaneRef.current?.stepTurn("next");
+                  const next = ccPaneRef.current?.turnNavState();
+                  if (next) setTurnNav(next);
+                }}
+              >
+                ↓
+              </button>
+            </>
+          )}
           <button
             type="button"
             className={`split-collapse-btn${leftCollapsed ? " is-active" : ""}`}
@@ -1365,6 +1405,7 @@ export function Workspace({
            value tracks it. */
         ccSessionId={workspace.cc_session_id}
         onInjectFailure={setInjectFailure}
+        onSurfaceUnavailable={showInfoNotice}
         workspaceProfile={workspaceProfile}
         collapsed={rightCollapsed}
         registerDirtyProbe={registerDirtyProbe}

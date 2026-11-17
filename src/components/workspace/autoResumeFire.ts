@@ -51,7 +51,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { encodeBase64 } from "../../cc/bridge";
-import { REMOTE_KEY_PREFIX } from "../../cc/spawnArgs";
+import { remoteAuthority } from "../../state/workspaceSurfaces";
 import { shortHost } from "../picker/remoteRow";
 import {
   INJECT_SETTLE_MS,
@@ -158,8 +158,8 @@ export function withheldNotice(
   projectPath: string,
   command: string,
 ): string | null {
-  if (!projectPath.startsWith(REMOTE_KEY_PREFIX)) return null;
-  const authority = projectPath.slice(REMOTE_KEY_PREFIX.length).split("/")[0];
+  const authority = remoteAuthority(projectPath);
+  if (authority === null) return null;
   return `Claude Code hasn't trusted this folder on ${shortHost(authority)} yet, so ${command} was not typed. Trust the folder, then type ${command}.`;
 }
 

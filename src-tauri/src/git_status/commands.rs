@@ -17,5 +17,6 @@ use super::{status_map_core, GitFileStatus};
 /// an empty map (not an error). Other libgit2 failures come back as a `String`.
 #[tauri::command]
 pub fn git_file_statuses(root: String) -> Result<HashMap<String, GitFileStatus>, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     status_map_core(Path::new(&root)).map_err(|e| e.to_string())
 }

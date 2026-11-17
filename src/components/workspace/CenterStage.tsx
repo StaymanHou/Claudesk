@@ -39,7 +39,7 @@ interface CenterStageProps {
   /** M17 WP5 — the app's notice for a workspace (a failed Detach), shown in its toast. */
   noticeFor?: (
     workspaceId: string,
-  ) => { text: string; seq: number } | undefined;
+  ) => { text: string; seq: number; kind?: "error" | "info" } | undefined;
 }
 
 export function CenterStage({

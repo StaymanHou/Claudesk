@@ -143,6 +143,8 @@ describe("Detach through the real App (M17 WP5 Phase 3)", () => {
     expect(toast?.textContent).toContain(
       "Could not detach: session registry lock poisoned.",
     );
+    // M17 WP6 — the notice channel now carries a kind; a failed Detach stays an error.
+    expect(toast?.getAttribute("data-kind")).toBe("error");
     expect(calls.map((c) => c.cmd)).not.toContain("cc_kill");
   });
 

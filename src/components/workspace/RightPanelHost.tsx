@@ -140,6 +140,11 @@ import { FinderIcon } from "../../finder/icons/FinderIcon";
 import { OpenExternalIcon } from "./editor/OpenExternalIcon";
 import { defaultAppTargetFor, openInDefaultApp } from "./editor/mediaIpc";
 import { PipIcon } from "../../pip/icons/PipIcon";
+import {
+  absentSurfaceNotice,
+  workspaceSurfaces,
+  type AnnouncedSurface,
+} from "../../state/workspaceSurfaces";
 
 interface RightPanelHostProps {
   /** The workspace id — keys the WP9 second-terminal session (one shell per workspace). */
@@ -189,6 +194,11 @@ interface RightPanelHostProps {
    */
   onInjectFailure?: (toast: string) => void;
   /**
+   * M17 WP6 (AC-4) — a chord (or a menu item that arrives as one) for a surface this workspace
+   * does not have: the workspace shows this plain-words notice in its toast.
+   */
+  onSurfaceUnavailable?: (notice: string) => void;
+  /**
    * F-b ruling 4 — the profile this workspace runs under (`useWorkspaceProfile`). A non-default
    * profile has no gated docs panel; `undefined` (not yet known) fails closed.
    * ⚠️ REQUIRED, deliberately: an optional prop would let a caller omit it and silently pick one
@@ -203,6 +213,7 @@ export function RightPanelHost({
   visible,
   ccSessionId,
   onInjectFailure,
+  onSurfaceUnavailable,
   collapsed = false,
   registerDirtyProbe,
   terminalPaneRef,
@@ -358,6 +369,9 @@ export function RightPanelHost({
   // the rail reflects on-disk reality without a manual collapse/expand.
   const [fsTreeRefreshKey, setFsTreeRefreshKey] = useState(0);
   useEffect(() => {
+    // M17 WP6 — no local watcher runs for a remote workspace (`useWorkspaceStatus` skips
+    // `workspace_watch_start`), and its tree/editor are absent, so there is nothing to refresh.
+    if (!workspaceSurfaces(projectPath).fsWatch) return;
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     // The `cancelled`-flag guard is the StrictMode async-listen lesson: the effect's
@@ -394,7 +408,7 @@ export function RightPanelHost({
       cancelled = true;
       unlisten?.();
     };
-  }, [workspaceId]);
+  }, [workspaceId, projectPath]);
 
   // WP11 Part C — the user-adjustable file-tree rail width (drag handle below).
   // Seeded from localStorage (default 299, the Part-A CSS value); applied as an
@@ -486,6 +500,22 @@ export function RightPanelHost({
     workflowFeaturesEnabledRef.current = workflowFeaturesEnabled;
   }, [workflowFeaturesEnabled]);
 
+  // M17 WP6 — THE workspace-kind funnel (`state/workspaceSurfaces.ts`). A remote workspace has no
+  // editor, diff, second terminal, file tree, finder, search, launchers or local fs watcher: each
+  // site below consults this and renders / does NOTHING when its surface is absent. It sits BESIDE
+  // the gate above, never inside it (no gate read flows through it). Mirrored into a ref for the
+  // capture-phase keydown listener, like the gate.
+  const surfaces = workspaceSurfaces(projectPath);
+  const surfacesRef = useRef(surfaces);
+  useEffect(() => {
+    surfacesRef.current = surfaces;
+  }, [surfaces]);
+  // The notice callback, latest-ref'd for the same once-registered listener.
+  const onSurfaceUnavailableRef = useRef(onSurfaceUnavailable);
+  useEffect(() => {
+    onSurfaceUnavailableRef.current = onSurfaceUnavailable;
+  }, [onSurfaceUnavailable]);
+
   // M11 WP2 (decision D3) — reconcile a panel that is ALREADY front against the gate.
   //
   // `selectPanel` guards transitions INTO a panel; it never re-examines the current one.
@@ -510,8 +540,9 @@ export function RightPanelHost({
   // default is recomputed when the gate seed lands, so a workspace opened before the seed
   // resolves still lands on Docs rather than being stuck on a default chosen too early.
   const panel = reconcilePanel(
-    storedPanel ?? defaultPanel(workflowFeaturesEnabled),
+    storedPanel ?? defaultPanel(workflowFeaturesEnabled, surfaces),
     workflowFeaturesEnabled,
+    surfaces,
   );
   // M16 WP2 — what the tab-row "Open in default app" button acts on (null = disabled).
   const defaultAppTarget = defaultAppTargetFor(panel, activePath);
@@ -609,6 +640,8 @@ export function RightPanelHost({
   // file activates its existing tab (no duplicate) — this also realizes the deferred
   // SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT (each tab is its own file).
   const openFile = (path: string, target: HighlightTarget | null = null) => {
+    // M17 WP6 — no editor on a remote workspace: opening a file there is not a thing.
+    if (!surfaces.editor) return;
     setHighlightTarget(target);
     setPanel((cur) => selectPanel(cur, "editor"));
     editorSplitRef.current?.openFile(path);
@@ -885,6 +918,19 @@ export function RightPanelHost({
   useEffect(() => {
     if (!visible) return;
     const onKeyDown = (e: KeyboardEvent) => {
+      // M17 WP6 — a chord for an ABSENT surface is CONSUMED and answered with one plain-words
+      // notice (AC-4): a key that silently did nothing would read as broken. Read from refs so a
+      // listener registered once sees the current kind.
+      const s = surfacesRef.current;
+      const unavailable = (surface: AnnouncedSurface) => {
+        e.preventDefault();
+        onSurfaceUnavailableRef.current?.(absentSurfaceNotice(surface));
+      };
+      if (!s.finder && isFinderChord(e)) return unavailable("finder");
+      if (!s.projectSearch && isSearchChord(e))
+        return unavailable("projectSearch");
+      if (!s.fileTree && isNewFileChord(e)) return unavailable("fileTree");
+      if (!s.terminal && newTerminalChord(e)) return unavailable("terminal");
       if (isFinderChord(e)) {
         e.preventDefault();
         setFinderOpen((open) => !open); // toggle: re-press closes
@@ -938,10 +984,11 @@ export function RightPanelHost({
       }
       // WP12 — ⌘1..⌘9 activates the Nth open-file tab (n past the end → last tab).
       // Bare ⌘+digit, disjoint from every ⌘⇧ chord and the bare-⌘P finder.
+      // ⌘1..9 with no editor: consumed and inert, exactly what it does on an editor with no tabs.
       const tabN = tabSwitchIndex(e);
       if (tabN !== null) {
         e.preventDefault();
-        editorSplitRef.current?.activateIndex(tabN);
+        if (s.editor) editorSplitRef.current?.activateIndex(tabN);
         return;
       }
       // M6 WP11 — SCOPED ⌘W: when a RIGHT-PANEL TERMINAL holds focus, ⌘W closes THAT
@@ -954,6 +1001,7 @@ export function RightPanelHost({
       // ACTIVE terminal is correct: only the active terminal is visible/focusable, so the
       // focused terminal IS terminals.activeId.
       if (
+        s.terminal &&
         shouldCloseTerminalOnChord({
           isCloseChord: isCloseTabChord(e),
           terminalFocused:
@@ -975,10 +1023,12 @@ export function RightPanelHost({
       // no tab is open — Sublime parity). Suppressed while the finder/search overlay is
       // open so ⌘W doesn't silently close a tab hidden behind it (cf. the wp6 overlay
       // shadowing MINOR). preventDefault pre-empts the OS "close window" ⌘W.
+      // ⌘W with no editor: consumed and inert, as on an editor with no tabs (never let it fall
+      // through to a window close).
       if (isCloseTabChord(e)) {
         if (overlayOpenRef.current) return;
         e.preventDefault();
-        editorSplitRef.current?.closeActiveTab();
+        if (s.editor) editorSplitRef.current?.closeActiveTab();
         return;
       }
       // ⌘⇧E/⌘⇧D/⌘⇧T (+ ⌘⇧K Docs, M11 — GATED) panel-select. Deliberately NOT gated on
@@ -993,9 +1043,14 @@ export function RightPanelHost({
       // the key, which the M10.9 seam contract forbids by name.
       const target = panelForChord(e, workflowFeaturesEnabledRef.current);
       if (target === null) return;
+      if (
+        (target === "editor" || target === "diff" || target === "terminal") &&
+        !s[target]
+      )
+        return unavailable(target);
       e.preventDefault();
       setPanel((cur) =>
-        selectPanel(cur, target, workflowFeaturesEnabledRef.current),
+        selectPanel(cur, target, workflowFeaturesEnabledRef.current, s),
       );
     };
     document.addEventListener("keydown", onKeyDown, true); // capture phase
@@ -1196,45 +1251,51 @@ export function RightPanelHost({
             Prompt
           </button>
 
-          <button
-            type="button"
-            role="tab"
-            id={`paneltab-editor-${workspaceId}`}
-            aria-selected={panel === "editor"}
-            aria-controls={`panel-editor-${workspaceId}`}
-            className={`panel-tab${panel === "editor" ? " is-active" : ""}`}
-            data-testid="panel-tab-editor"
-            onClick={() => setPanel((cur) => selectPanel(cur, "editor"))}
-            title="Editor (⌘⇧E)"
-          >
-            Editor
-          </button>
-          <button
-            type="button"
-            role="tab"
-            id={`paneltab-diff-${workspaceId}`}
-            aria-selected={panel === "diff"}
-            aria-controls={`panel-diff-${workspaceId}`}
-            className={`panel-tab${panel === "diff" ? " is-active" : ""}`}
-            data-testid="panel-tab-diff"
-            onClick={() => setPanel((cur) => selectPanel(cur, "diff"))}
-            title="Diff (⌘⇧D)"
-          >
-            Diff
-          </button>
-          <button
-            type="button"
-            role="tab"
-            id={`paneltab-terminal-${workspaceId}`}
-            aria-selected={panel === "terminal"}
-            aria-controls={`panel-terminal-${workspaceId}`}
-            className={`panel-tab${panel === "terminal" ? " is-active" : ""}`}
-            data-testid="panel-tab-terminal"
-            onClick={() => setPanel((cur) => selectPanel(cur, "terminal"))}
-            title="Terminal (⌘⇧T)"
-          >
-            Terminal
-          </button>
+          {surfaces.editor && (
+            <button
+              type="button"
+              role="tab"
+              id={`paneltab-editor-${workspaceId}`}
+              aria-selected={panel === "editor"}
+              aria-controls={`panel-editor-${workspaceId}`}
+              className={`panel-tab${panel === "editor" ? " is-active" : ""}`}
+              data-testid="panel-tab-editor"
+              onClick={() => setPanel((cur) => selectPanel(cur, "editor"))}
+              title="Editor (⌘⇧E)"
+            >
+              Editor
+            </button>
+          )}
+          {surfaces.diff && (
+            <button
+              type="button"
+              role="tab"
+              id={`paneltab-diff-${workspaceId}`}
+              aria-selected={panel === "diff"}
+              aria-controls={`panel-diff-${workspaceId}`}
+              className={`panel-tab${panel === "diff" ? " is-active" : ""}`}
+              data-testid="panel-tab-diff"
+              onClick={() => setPanel((cur) => selectPanel(cur, "diff"))}
+              title="Diff (⌘⇧D)"
+            >
+              Diff
+            </button>
+          )}
+          {surfaces.terminal && (
+            <button
+              type="button"
+              role="tab"
+              id={`paneltab-terminal-${workspaceId}`}
+              aria-selected={panel === "terminal"}
+              aria-controls={`panel-terminal-${workspaceId}`}
+              className={`panel-tab${panel === "terminal" ? " is-active" : ""}`}
+              data-testid="panel-tab-terminal"
+              onClick={() => setPanel((cur) => selectPanel(cur, "terminal"))}
+              title="Terminal (⌘⇧T)"
+            >
+              Terminal
+            </button>
+          )}
 
           {/* WP8 — external-app launchers, right-aligned past a divider so they
                 read as ACTIONS distinct from the selectable Editor/Diff tabs.
@@ -1244,58 +1305,66 @@ export function RightPanelHost({
                 projectPath (always the focused tab — a backgrounded host is
                 display:none and unclickable). */}
           <span className="panel-launch-group" aria-hidden="true" />
-          <button
-            type="button"
-            className="panel-launch"
-            data-testid="sublime-open"
-            onClick={() => void openSublime(projectPath)}
-            aria-label="Open in Sublime Text"
-            title="Open in Sublime Text"
-          >
-            <SublimeTextIcon />
-          </button>
-          <button
-            type="button"
-            className="panel-launch"
-            data-testid="smerge-open"
-            onClick={() => void openSublimeMerge(projectPath)}
-            aria-label="Open in Sublime Merge"
-            title="Open in Sublime Merge"
-          >
-            <SublimeMergeIcon />
-          </button>
-          <button
-            type="button"
-            className="panel-launch"
-            data-testid="finder-open"
-            onClick={() => void openFinder(projectPath)}
-            aria-label="Reveal in Finder"
-            title="Reveal in Finder"
-          >
-            <FinderIcon />
-          </button>
+          {surfaces.sublimeText && (
+            <button
+              type="button"
+              className="panel-launch"
+              data-testid="sublime-open"
+              onClick={() => void openSublime(projectPath)}
+              aria-label="Open in Sublime Text"
+              title="Open in Sublime Text"
+            >
+              <SublimeTextIcon />
+            </button>
+          )}
+          {surfaces.sublimeMerge && (
+            <button
+              type="button"
+              className="panel-launch"
+              data-testid="smerge-open"
+              onClick={() => void openSublimeMerge(projectPath)}
+              aria-label="Open in Sublime Merge"
+              title="Open in Sublime Merge"
+            >
+              <SublimeMergeIcon />
+            </button>
+          )}
+          {surfaces.finderReveal && (
+            <button
+              type="button"
+              className="panel-launch"
+              data-testid="finder-open"
+              onClick={() => void openFinder(projectPath)}
+              aria-label="Reveal in Finder"
+              title="Reveal in Finder"
+            >
+              <FinderIcon />
+            </button>
+          )}
           {/* M16 WP2 (R-4b) — open the ACTIVE editor file tab in its default macOS app. Works
                 for any file, not just media; the media info card points here. Disabled (not
                 hidden, so the cluster does not shift) when the Editor surface is not showing
                 or its focused pane has no file tab. */}
-          <button
-            type="button"
-            className="panel-launch"
-            data-testid="open-default-app"
-            disabled={defaultAppTarget === null}
-            onClick={() => {
-              if (defaultAppTarget !== null)
-                void openInDefaultApp(projectPath, defaultAppTarget);
-            }}
-            aria-label="Open in default app"
-            title={
-              defaultAppTarget !== null
-                ? "Open in default app"
-                : "Open in default app (open a file in the editor first)"
-            }
-          >
-            <OpenExternalIcon />
-          </button>
+          {surfaces.defaultApp && (
+            <button
+              type="button"
+              className="panel-launch"
+              data-testid="open-default-app"
+              disabled={defaultAppTarget === null}
+              onClick={() => {
+                if (defaultAppTarget !== null)
+                  void openInDefaultApp(projectPath, defaultAppTarget);
+              }}
+              aria-label="Open in default app"
+              title={
+                defaultAppTarget !== null
+                  ? "Open in default app"
+                  : "Open in default app (open a file in the editor first)"
+              }
+            >
+              <OpenExternalIcon />
+            </button>
+          )}
           {/* M5 WP5 (rework) — the tri-state PiP MODE control. Cycles Off→On→Auto→Off; the
                 label shows the current mode so the state is legible (the dead-end fix: the
                 regime is explicit, not inferred). Off = hidden; On = shown + pinned; Auto =
@@ -1336,50 +1405,54 @@ export function RightPanelHost({
               (left) + the EditorSplit. The rail lives HERE (not as a panel-column
               peer) so it is structurally editor-only — Diff + Terminal slots below
               have no rail and get full width. */}
-        <div
-          className="right-panel-slot right-panel-slot--editor"
-          id={`panel-editor-${workspaceId}`}
-          role="tabpanel"
-          aria-labelledby={`paneltab-editor-${workspaceId}`}
-          style={{ display: panel === "editor" ? "flex" : "none" }}
-        >
-          {fileTreeRail}
-          <EditorSplit
-            ref={editorSplitRef}
-            projectPath={projectPath}
-            active={visible && panel === "editor"}
-            highlightTarget={highlightTarget}
-            onActivePathChange={setActivePath}
-            // WP11 — a save changes the file's git status; bump the key so the
-            // FileTree re-fetches its status map and refreshes the row indicators.
-            onSaved={() => setGitStatusRefreshKey((k) => k + 1)}
-          />
-        </div>
+        {surfaces.editor && (
+          <div
+            className="right-panel-slot right-panel-slot--editor"
+            id={`panel-editor-${workspaceId}`}
+            role="tabpanel"
+            aria-labelledby={`paneltab-editor-${workspaceId}`}
+            style={{ display: panel === "editor" ? "flex" : "none" }}
+          >
+            {fileTreeRail}
+            <EditorSplit
+              ref={editorSplitRef}
+              projectPath={projectPath}
+              active={visible && panel === "editor"}
+              highlightTarget={highlightTarget}
+              onActivePathChange={setActivePath}
+              // WP11 — a save changes the file's git status; bump the key so the
+              // FileTree re-fetches its status map and refreshes the row indicators.
+              onSaved={() => setGitStatusRefreshKey((k) => k + 1)}
+            />
+          </div>
+        )}
 
         {/* Diff panel — kept mounted; the selected-file diff survives the switch.
               `active` is gated on BOTH workspace visibility AND the diff panel being
               front so a backgrounded panel doesn't auto-refresh its file list. */}
-        <div
-          className="right-panel-slot"
-          id={`panel-diff-${workspaceId}`}
-          role="tabpanel"
-          aria-labelledby={`paneltab-diff-${workspaceId}`}
-          style={{ display: panel === "diff" ? "flex" : "none" }}
-        >
-          <Suspense
-            fallback={
-              <div className="diff-loading" data-testid="diff-loading" />
-            }
+        {surfaces.diff && (
+          <div
+            className="right-panel-slot"
+            id={`panel-diff-${workspaceId}`}
+            role="tabpanel"
+            aria-labelledby={`paneltab-diff-${workspaceId}`}
+            style={{ display: panel === "diff" ? "flex" : "none" }}
           >
-            <DiffPanel
-              projectPath={projectPath}
-              active={visible && panel === "diff"}
-              // "Open" always opens the live working-tree file (by design — see
-              // DiffPanel onOpenInEditor doc). Same seam as the finder + tree.
-              onOpenInEditor={openFile}
-            />
-          </Suspense>
-        </div>
+            <Suspense
+              fallback={
+                <div className="diff-loading" data-testid="diff-loading" />
+              }
+            >
+              <DiffPanel
+                projectPath={projectPath}
+                active={visible && panel === "diff"}
+                // "Open" always opens the live working-tree file (by design — see
+                // DiffPanel onOpenInEditor doc). Same seam as the finder + tree.
+                onOpenInEditor={openFile}
+              />
+            </Suspense>
+          </div>
+        )}
 
         {/* F-a WP3 — the PROMPT panel: a Claudesk-owned prose buffer for composing a
               prompt before it reaches CC. UNCONDITIONALLY MOUNTED and display-toggled
@@ -1416,108 +1489,110 @@ export function RightPanelHost({
               terminals, panels, and center-stage. Closing a tab unmounts its pane →
               XtermPane reaps the PTY. The slot is always mounted (the SURFACE-2026-06-20
               guard: selectPanel can return "terminal", so the slot must never be blank). */}
-        <div
-          className="right-panel-slot right-panel-slot--terminal"
-          id={`panel-terminal-${workspaceId}`}
-          role="tabpanel"
-          aria-labelledby={`paneltab-terminal-${workspaceId}`}
-          style={{ display: panel === "terminal" ? "flex" : "none" }}
-        >
-          {/* Sub-tab row — always shown (plan decision 3): even one terminal gets a
-                one-tab row so the ＋ has a stable home. Mirrors the panel-tab idiom. */}
+        {surfaces.terminal && (
           <div
-            className="term-tab-row"
-            role="tablist"
-            aria-label="terminals"
-            data-testid="term-tab-row"
+            className="right-panel-slot right-panel-slot--terminal"
+            id={`panel-terminal-${workspaceId}`}
+            role="tabpanel"
+            aria-labelledby={`paneltab-terminal-${workspaceId}`}
+            style={{ display: panel === "terminal" ? "flex" : "none" }}
           >
-            {terminals.entries.map((t, i) => (
-              <div
-                key={t.id}
-                role="tab"
-                id={`termtab-${t.id}`}
-                aria-selected={t.id === terminals.activeId}
-                aria-controls={`termpane-${t.id}`}
-                className={`term-tab${t.id === terminals.activeId ? " is-active" : ""}`}
-                data-testid={`term-tab-${t.id}`}
-                onClick={() => switchTerminalTo(t.id)}
-                title={`Terminal ${i + 1}`}
-              >
-                <span className="term-tab-label">{`●${i + 1}`}</span>
-                {/* No ✕ on the sole tab — closing the last terminal is disallowed
-                      (the panel always keeps ≥1 shell). */}
-                {!isLastTerminal(terminals) && (
-                  <button
-                    type="button"
-                    className="term-tab-close"
-                    data-testid={`term-tab-close-${t.id}`}
-                    aria-label={`Close terminal ${i + 1}`}
-                    title={`Close terminal ${i + 1}`}
-                    onClick={(e) => {
-                      e.stopPropagation(); // don't also switch to the tab we're closing
-                      closeTerminalById(t.id);
-                    }}
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            ))}
-            <button
-              type="button"
-              className="term-tab-add"
-              data-testid="term-tab-add"
-              aria-label="New terminal (⌘T)"
-              title={
-                canOpenTerminal(terminals)
-                  ? "New terminal (⌘T)"
-                  : `Maximum ${MAX_TERMINALS} terminals`
-              }
-              disabled={!canOpenTerminal(terminals)}
-              onClick={addTerminal}
+            {/* Sub-tab row — always shown (plan decision 3): even one terminal gets a
+                  one-tab row so the ＋ has a stable home. Mirrors the panel-tab idiom. */}
+            <div
+              className="term-tab-row"
+              role="tablist"
+              aria-label="terminals"
+              data-testid="term-tab-row"
             >
-              ＋
-            </button>
-          </div>
-          {/* The terminal panes — one per entry, all MOUNTED, only the active one shown.
-                M6 WP11 Phase 3 — the forwarded terminalPaneRef binds to the ACTIVE
-                terminal's pane (the others get `undefined`). This IS the zoom-follows-
-                focused mechanism: only the active terminal is visible + focusable (the
-                rest are display:none), so the focused terminal is ALWAYS the active one,
-                and the WP10 zoom router (Workspace.applyTerminalZoom → termPaneRef.current)
-                therefore always zooms the focused terminal. Switching the active tab
-                re-binds this object ref to the new active pane during commit, so a later
-                zoom chord lands on it. (A separate per-terminal handle registry — the
-                Phase-3 plan's decision 5 — would be redundant: the active-ref already
-                resolves "which of N is focused" for free. Simpler, less bug surface.) */}
-          <div className="term-panes">
-            {terminals.entries.map((t) => (
-              <div
-                key={t.id}
-                className="term-pane-slot"
-                id={`termpane-${t.id}`}
-                role="tabpanel"
-                aria-labelledby={`termtab-${t.id}`}
-                style={{
-                  display: t.id === terminals.activeId ? "flex" : "none",
-                }}
+              {terminals.entries.map((t, i) => (
+                <div
+                  key={t.id}
+                  role="tab"
+                  id={`termtab-${t.id}`}
+                  aria-selected={t.id === terminals.activeId}
+                  aria-controls={`termpane-${t.id}`}
+                  className={`term-tab${t.id === terminals.activeId ? " is-active" : ""}`}
+                  data-testid={`term-tab-${t.id}`}
+                  onClick={() => switchTerminalTo(t.id)}
+                  title={`Terminal ${i + 1}`}
+                >
+                  <span className="term-tab-label">{`●${i + 1}`}</span>
+                  {/* No ✕ on the sole tab — closing the last terminal is disallowed
+                        (the panel always keeps ≥1 shell). */}
+                  {!isLastTerminal(terminals) && (
+                    <button
+                      type="button"
+                      className="term-tab-close"
+                      data-testid={`term-tab-close-${t.id}`}
+                      aria-label={`Close terminal ${i + 1}`}
+                      title={`Close terminal ${i + 1}`}
+                      onClick={(e) => {
+                        e.stopPropagation(); // don't also switch to the tab we're closing
+                        closeTerminalById(t.id);
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                className="term-tab-add"
+                data-testid="term-tab-add"
+                aria-label="New terminal (⌘T)"
+                title={
+                  canOpenTerminal(terminals)
+                    ? "New terminal (⌘T)"
+                    : `Maximum ${MAX_TERMINALS} terminals`
+                }
+                disabled={!canOpenTerminal(terminals)}
+                onClick={addTerminal}
               >
-                <TerminalPane
-                  ref={
-                    t.id === terminals.activeId ? terminalPaneRef : undefined
-                  }
-                  sessionId={t.id}
-                  projectPath={projectPath}
-                  active={
-                    visible &&
-                    panel === "terminal" &&
-                    t.id === terminals.activeId
-                  }
-                />
-              </div>
-            ))}
+                ＋
+              </button>
+            </div>
+            {/* The terminal panes — one per entry, all MOUNTED, only the active one shown.
+                  M6 WP11 Phase 3 — the forwarded terminalPaneRef binds to the ACTIVE
+                  terminal's pane (the others get `undefined`). This IS the zoom-follows-
+                  focused mechanism: only the active terminal is visible + focusable (the
+                  rest are display:none), so the focused terminal is ALWAYS the active one,
+                  and the WP10 zoom router (Workspace.applyTerminalZoom → termPaneRef.current)
+                  therefore always zooms the focused terminal. Switching the active tab
+                  re-binds this object ref to the new active pane during commit, so a later
+                  zoom chord lands on it. (A separate per-terminal handle registry — the
+                  Phase-3 plan's decision 5 — would be redundant: the active-ref already
+                  resolves "which of N is focused" for free. Simpler, less bug surface.) */}
+            <div className="term-panes">
+              {terminals.entries.map((t) => (
+                <div
+                  key={t.id}
+                  className="term-pane-slot"
+                  id={`termpane-${t.id}`}
+                  role="tabpanel"
+                  aria-labelledby={`termtab-${t.id}`}
+                  style={{
+                    display: t.id === terminals.activeId ? "flex" : "none",
+                  }}
+                >
+                  <TerminalPane
+                    ref={
+                      t.id === terminals.activeId ? terminalPaneRef : undefined
+                    }
+                    sessionId={t.id}
+                    projectPath={projectPath}
+                    active={
+                      visible &&
+                      panel === "terminal" &&
+                      t.id === terminals.activeId
+                    }
+                  />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* M11 WP2 — the DOCS slot. GATED: the whole slot is absent while the gate is
               off, so there is no empty tabpanel and no mounted component behind it.
@@ -1534,14 +1609,28 @@ export function RightPanelHost({
             aria-labelledby={`paneltab-docs-${workspaceId}`}
             style={{ display: panel === "docs" ? "flex" : "none" }}
           >
-            <Suspense fallback={null}>
-              <DocsPanel
-                projectPath={projectPath}
-                visible={visible}
-                workspaceId={workspaceId}
-                panelFront={panel === "docs"}
-              />
-            </Suspense>
+            {/* M17 WP6 (+ WP9) — Docs is an IN surface, so its tab stays on a remote workspace, but it
+                cannot READ the remote yet (WP7.3). A plain note instead of `DocsPanel`, so no `docs_list`
+                is invoked and no raw `os error` can reach the operator. */}
+            {surfaces.docsRead ? (
+              <Suspense fallback={null}>
+                <DocsPanel
+                  projectPath={projectPath}
+                  visible={visible}
+                  workspaceId={workspaceId}
+                  panelFront={panel === "docs"}
+                />
+              </Suspense>
+            ) : (
+              <div className="docs-panel" data-testid="docs-panel-remote">
+                <div
+                  className="docs-panel-empty"
+                  data-testid="docs-panel-remote-note"
+                >
+                  Docs aren&apos;t available on a remote workspace yet.
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1549,7 +1638,7 @@ export function RightPanelHost({
       {/* WP6 — Cmd+P fuzzy file finder overlay. Only the focused workspace mounts
           it (gated on `visible` via the chord listener + this render guard).
           Selecting a file opens it into the editor (active-pane via openFile). */}
-      {visible && finderOpen && (
+      {visible && surfaces.finder && finderOpen && (
         <FileFinder
           projectPath={projectPath}
           onOpen={openFile}
@@ -1562,7 +1651,7 @@ export function RightPanelHost({
           ⌘⇧F restores it; the RESULTS render into the persistent "Find Results" editor
           tab (handleSearchResults), NOT this overlay — so the operator clicks through
           matches in the tab and the overlay stays a thin query box. */}
-      {visible && searchOpen && (
+      {visible && surfaces.projectSearch && searchOpen && (
         <Suspense fallback={null}>
           <ProjectSearch
             projectPath={projectPath}
@@ -1588,21 +1677,25 @@ export function RightPanelHost({
 
       {/* WP7 Phase 3 — Replace-All confirm (blast-radius counts). Reuses the shared
           ConfirmModal; only mounts while the query overlay is open + a search has run. */}
-      {visible && searchOpen && replaceConfirmOpen && lastCounts && (
-        <ConfirmModal
-          spec={replaceAllSpec(
-            lastCounts.matches,
-            lastCounts.files,
-            replacement,
-          )}
-          onChoose={onReplaceConfirm}
-        />
-      )}
+      {visible &&
+        surfaces.projectSearch &&
+        searchOpen &&
+        replaceConfirmOpen &&
+        lastCounts && (
+          <ConfirmModal
+            spec={replaceAllSpec(
+              lastCounts.matches,
+              lastCounts.files,
+              replacement,
+            )}
+            onChoose={onReplaceConfirm}
+          />
+        )}
 
       {/* QoL-WP5 — delete-file confirm (danger). Only the focused workspace mounts it;
           resolving (delete/cancel) clears pendingDelete. The basename is shown so the
           operator knows exactly which file. */}
-      {visible && pendingDelete && (
+      {visible && surfaces.fileTree && pendingDelete && (
         <ConfirmModal
           spec={deleteFileSpec(labelForPath(pendingDelete))}
           onChoose={onDeleteConfirm}
@@ -1612,7 +1705,7 @@ export function RightPanelHost({
       {/* QoL-WP5b — delete-FOLDER confirm (danger, stronger than single-file). Shows the
           folder basename + descendant count + "moved to Trash (recoverable)". Only the
           focused workspace mounts it; resolving (delete/cancel) clears pendingDeleteFolder. */}
-      {visible && pendingDeleteFolder && (
+      {visible && surfaces.fileTree && pendingDeleteFolder && (
         <ConfirmModal
           spec={deleteFolderSpec(
             labelForPath(pendingDeleteFolder.path),

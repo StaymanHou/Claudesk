@@ -62,6 +62,7 @@ pub(crate) fn validate_frontend_root(app: &AppHandle, root: &str) -> Result<Path
 /// for the UI to surface — never swallowed.
 #[tauri::command]
 pub fn read_file(app: AppHandle, root: String, path: String) -> Result<String, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     let root = validate_frontend_root(&app, &root)?;
     read_file_core(&root, Path::new(&path)).map_err(|e| e.to_string())
 }
@@ -75,6 +76,7 @@ pub fn write_file(
     path: String,
     contents: String,
 ) -> Result<(), String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     let root = validate_frontend_root(&app, &root)?;
     write_file_core(&root, Path::new(&path), &contents).map_err(|e| e.to_string())
 }
@@ -87,6 +89,7 @@ pub fn write_file(
 /// camelCase these).
 #[tauri::command]
 pub fn stat_file(app: AppHandle, root: String, path: String) -> Result<FileMarker, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     let root = validate_frontend_root(&app, &root)?;
     stat_file_core(&root, Path::new(&path)).map_err(|e| e.to_string())
 }
@@ -98,6 +101,7 @@ pub fn stat_file(app: AppHandle, root: String, path: String) -> Result<FileMarke
 /// its own — it is `write_file` with empty contents.
 #[tauri::command]
 pub fn delete_file(app: AppHandle, root: String, path: String) -> Result<(), String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     let root = validate_frontend_root(&app, &root)?;
     delete_file_core(&root, Path::new(&path)).map_err(|e| e.to_string())
 }
@@ -116,6 +120,7 @@ pub fn delete_file(app: AppHandle, root: String, path: String) -> Result<(), Str
 /// entry is what keeps this async.
 #[tauri::command]
 pub async fn trash_path(app: AppHandle, root: String, path: String) -> Result<(), String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     crate::blocking::on_blocking_worker("the trash move", move || {
         let root = validate_frontend_root(&app, &root)?;
         trash_path_core(&root, Path::new(&path)).map_err(|e| e.to_string())
@@ -130,6 +135,7 @@ pub async fn trash_path(app: AppHandle, root: String, path: String) -> Result<()
 /// is surfaced in the UI, never swallowed.
 #[tauri::command]
 pub fn create_dir(app: AppHandle, root: String, path: String) -> Result<(), String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     let root = validate_frontend_root(&app, &root)?;
     create_dir_core(&root, Path::new(&path)).map_err(|e| e.to_string())
 }
@@ -145,6 +151,7 @@ pub fn create_dir(app: AppHandle, root: String, path: String) -> Result<(), Stri
 /// read and write, so that adds no reach (spec assumption A-5).
 #[tauri::command]
 pub fn stat_media(app: AppHandle, root: String, path: String) -> Result<MediaStat, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     use tauri::Manager;
 
     let root = validate_frontend_root(&app, &root)?;
@@ -163,6 +170,7 @@ pub fn stat_media(app: AppHandle, root: String, path: String) -> Result<MediaSta
 /// waits (the `sync_commands_do_not_block` rule).
 #[tauri::command]
 pub fn open_in_default_app(app: AppHandle, root: String, path: String) -> Result<(), String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     let root = validate_frontend_root(&app, &root)?;
     let target = default_app_target_core(&root, Path::new(&path)).map_err(|e| e.to_string())?;
     let (program, args) = open_command(&target);

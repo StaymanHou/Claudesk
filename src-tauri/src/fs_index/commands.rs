@@ -18,6 +18,7 @@ use super::{walk_index_core, walk_tree_core, TreeEntry};
 /// as a `String` so the finder surfaces them instead of showing nothing.
 #[tauri::command]
 pub fn fs_index(root: String) -> Result<Vec<String>, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     walk_index_core(Path::new(&root)).map_err(|e| e.to_string())
 }
 
@@ -27,5 +28,6 @@ pub fn fs_index(root: String) -> Result<Vec<String>, String> {
 /// `String` so the tree surfaces them inline instead of showing an empty rail.
 #[tauri::command]
 pub fn fs_tree(root: String) -> Result<Vec<TreeEntry>, String> {
+    crate::workspace_surfaces::refuse_remote(&root)?;
     walk_tree_core(Path::new(&root)).map_err(|e| e.to_string())
 }

@@ -734,3 +734,14 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** Probe ≥10 cold remote opens with the settle at 0 (readiness only) through `cc_inject`; if all land, drop the settle for remote panes only.
 - **Priority:** low
 - **Status:** pending
+
+## SURFACE-2026-11-17-APP-TSX-FAST-REFRESH-CLOSES-REMOTE-WORKSPACES
+- **Source:** feature:build (M17 WP6 Phase 3 verify-self)
+- **Target level:** product:arch
+- **Type:** gap
+- **Summary:** Editing `src/App.tsx` while `pnpm tauri:dev` runs makes React Fast Refresh reset App's workspace list, so every open workspace unmounts and closes through the normal path, which ENDS a remote session (R-1).
+- **Context:** Hit twice in one phase (an App.tsx edit, then App.tsx mutants). The close was clean (no orphaned ssh master or tmux session), but a live remote check silently lost its workspace and needed a reopen; a real (non-scratch) remote session would be ended by a dev edit.
+- **Suggested action:** Add to the remote-verify hygiene memory: close remote workspaces (or use a scratch row) before editing `App.tsx` or running App.tsx mutants. Optionally move App's workspace state into a module that Fast Refresh preserves.
+- **Priority:** low
+- **Status:** pending
+

@@ -12,6 +12,7 @@
 /// (the WP6 picker lesson).
 #[tauri::command]
 pub fn finder_open(app: tauri::AppHandle, project_path: String) -> Result<(), String> {
+    crate::workspace_surfaces::refuse_remote(&project_path)?;
     super::launch(&project_path).map_err(|e| e.to_string())?;
     // M9 WP2.5: mark the Claudesk-initiated Finder launch (gated, tool identity only).
     crate::time_store::commands::record_external_launch(
