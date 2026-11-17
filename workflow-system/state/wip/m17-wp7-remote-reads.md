@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M17 WP7 — Remote reads: Docs panel, poller, Recycle
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** ship (complete) — `4b0a532`
 **Created:** 2026-11-17
 **Entry:** spec (complex feature)
 **WBS:** `workflow-system/product/wbs.md` → "### WP7" (tasks 7.1–7.5). **Design:** `arch/remote-workspaces.md` §F (PLANNED), §G as-built (WP6), §B (the link), §E (lifecycle).
@@ -434,11 +434,17 @@ blocks on ssh. Each new guard form is mutation-proven individually.
     — evidence: already covered, not duplicated: the remote/local `Stop` handling (`recycleSession.test.ts`, 3 tests, mutation-proven at verify-self), the routed `docs_stat` remote arm (`serve_routes_by_the_root_kind…`), the remote stat script (`the_stat_script_matches_the_local_marker`). Consuming surface: Recycle (`recycleSession`, driven through its real `awaitCompletion` with the IPC/event edges mocked), plus the two live remote Recycles at verify-self.
     — evidence: `pnpm verify:auto` → EXIT=0 in 70s (vitest 318 files / 4038 tests; cargo 1411 passed, 0 failed; clippy, fmt, lint 0 errors)
 
+## Ship
+- **Commit:** `4b0a532` feat(m17-wp7): remote reads — Docs panel, active-only poller, remote Recycle (pushed to `origin/main` with `5cb2930` and `61d1b29`, the staged inbox archive committed on its own).
+- **Full suite:** reused the last-phase codify run (`Test scope: full — last phase`, EXIT=0: vitest 4038, cargo 1411); only WIP prose changed after it. Fast checks re-run at ship: lint 0 errors, format, tsc, `cargo fmt --check` clean.
+- **Public-repo scan:** every staged blob and the whole outgoing diff grepped for the mini's hostname, tailnet and admin account: none (one `tail0000` placeholder in a test).
+- **Left in place for the WP7 close (finalize):** the scratch remote row in the dev `projects.json` and the dev gate ON; the mini scratch folder's test docs, stub skills (`.claude/skills/`) and `.session.md` (Recycle wrote it); WP5's `.session.md.wp7-aside`.
+
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship (all four phases complete)
+- **Path:** Feature > review-quality
+- **Active scope:** review-quality against `4b0a532`
 - **Blocked:** none
-- **Unvisited:** ship
+- **Unvisited:** review-quality → finalize
 - **Open discoveries:** SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD (backlog, product:arch)
 
 ## Discoveries
