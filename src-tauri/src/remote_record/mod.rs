@@ -106,14 +106,27 @@ pub fn clear(data_dir: &Path, key: &str) -> bool {
     update(data_dir, key, |_| None)
 }
 
-/// Read → transform `key`'s entry → write. Best-effort: `false` when the write failed (callers log
-/// and continue; a lost write costs a less accurate label or one extra question, never a wrong
-/// action, because the open check decides).
+/// Serializes every [`update`] in this process (M17 WP5 review CRITICAL). The store is one file
+/// rewritten whole, so two unserialized writers each read the same map and the last rename wins,
+/// dropping the other's change; and both would share [`RECORD_TMP_FILE`], so one could rename the
+/// other's half-written file into place. The quit hits exactly this: `SessionRegistry::kill_all`
+/// kills every session on its own thread, and with the link down each remote kill writes
+/// `end-pending` at once. A lost `end-pending` makes the next open silently RECONNECT instead of
+/// asking (dialog A). Only this process writes the file (dev and prod use separate app-data dirs).
+static WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Read → transform `key`'s entry → write, under [`WRITE_LOCK`] for the whole sequence.
+/// Best-effort: `false` when the write failed (callers log and continue). ⚠️ A lost write is not
+/// harmless in general: a lost `end-pending` turns the next open's question into a silent
+/// reconnect, which is why the sequence is serialized.
 fn update(
     data_dir: &Path,
     key: &str,
     f: impl FnOnce(Option<SessionRecord>) -> Option<SessionRecord>,
 ) -> bool {
+    // A poisoned lock (a writer panicked mid-update) still serializes; the file it may have left
+    // is read as best-effort like any other.
+    let _guard = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut map = read(data_dir);
     if let Some(r) = f(map.remove(key)) {
         map.insert(key.to_string(), r);
@@ -180,6 +193,40 @@ mod tests {
         // ...and the next write replaces it.
         assert!(record_running(d.path(), KEY, None));
         assert!(get(d.path(), KEY).is_some());
+    }
+
+    /// M17 WP5 review CRITICAL: concurrent writers (the quit's parallel `kill_all`) must not lose
+    /// each other's records. Many threads, each writing its OWN keys into one store, at once:
+    /// every key must survive with its last state. Unserialized, a whole-file read-modify-write
+    /// drops some of them (and the shared temp file can tear).
+    #[test]
+    fn concurrent_writers_never_lose_each_others_records() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().to_path_buf();
+        let (threads, per) = (8, 25);
+        let start = std::sync::Arc::new(std::sync::Barrier::new(threads));
+        let handles: Vec<_> = (0..threads)
+            .map(|t| {
+                let path = path.clone();
+                let start = std::sync::Arc::clone(&start);
+                std::thread::spawn(move || {
+                    start.wait();
+                    for i in 0..per {
+                        let key = format!("ssh://u@h/p{t}-{i}");
+                        assert!(record_running(&path, &key, None));
+                        assert!(record_state(&path, &key, SessionRecordState::EndPending));
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+        let map = read(&path);
+        assert_eq!(map.len(), threads * per, "no record lost");
+        assert!(map
+            .values()
+            .all(|r| r.state == SessionRecordState::EndPending));
     }
 
     #[test]

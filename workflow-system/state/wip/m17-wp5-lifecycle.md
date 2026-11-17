@@ -389,11 +389,49 @@ Problem statement unchanged (2026-11-17, F12 from Phase 2 verify-human): the ope
     — evidence: no new tests needed; every Phase 4 behaviour already has a mutation-proven regression test from build/verify-self: `remote::tests::{a_close_whose_end_ran_records_ended_and_one_that_could_not_records_end_pending, a_close_that_could_not_end_the_session_tells_the_app_once_and_one_that_did_does_not, the_close_not_ended_event_matches_its_ts_mirror}`, `cc_session::tests::a_quit_kills_a_detachable_session_never_detaches_it` (incl. a failing kill), `remote_link::commands::tests::{a_dead_session_starts_and_clears_a_stale_end_intent, ending_the_session_records_ended_only_when_the_end_ran, remote_end_session_marks_the_close_cancels_then_ends_and_settles}`, `remote_link::tests::settling_an_open_decision_clears_a_stale_end_intent_and_leaves_the_notice`, `remoteRow.test.ts` (ask arms, both dialog specs, Retry), and the consuming surfaces `pickerRemoteLive.test.tsx` (dialogs A/B: default, Reconnect, End → end → re-check → open, Cancel, failed End; Retry) and `detachWiring.test.tsx` (the app toast via the real App). Full suite `pnpm verify:auto` EXIT=0 (75s, after the last code change): vitest **310 files / 3948**, cargo lib **1314** passed / 4 ignored, every integration target green.
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** shipped as `67dec33` (pushed to origin/main). Ship evidence: full suite reused from the last-phase codify run (`Test scope: full — last phase`, `pnpm verify:auto` EXIT=0: vitest 3948, cargo lib 1314); fast checks re-run green (lint 0 errors + the 1 pre-existing warning, format, tsc, check:link, cargo fmt, clippy `-D warnings`); every staged blob grepped for real infrastructure identifiers (0 after redacting 11 in this WIP). Cleanup: the dev scratch remote row removed (dev `projects.json` back to 8 rows, its record dropped), the mini's `/tmp` poller removed; the scratch folder on the mini kept for WP6/WP7 live checks.
+- **Path:** Feature > finalize
+- **Active scope:** the review's CRITICAL fixed in refactor (`remote_record` serialized, mutation-proven); MAJOR + MINORs backlogged. Next `/feature-finalize`.
 - **Blocked:** none.
-- **Unvisited:** review-quality → finalize
+- **Unvisited:** finalize (delete-on-resolve WP3 `…RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM`, WP3 `…CC-SESSION-MODULE-SIZE`, WP4 `…OVERLAY-KEY-DERIVED-TWICE`, WP4 `…TWO-SEQUENTIAL-SPAWN-EXECS`, with CHANGELOG lines)
 - **Open discoveries:** see Discoveries
+
+## Code-Quality Review
+
+### Code-Quality Review — m17-wp5-lifecycle
+
+(Reviewed the ship commit `67dec33`, 2026-11-17, by a fresh `code-quality-reviewer`.)
+
+#### Strengths
+- The `RemotePorts` / `RemoteTerminal` seam (`cc_session/remote.rs`) properly resolves the WP3 MAJOR `…RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM`: the reconnect loop, exit latch, overlay edges and close order are driven by a recording fake, the `include_str!` guards they replaced are gone, and `RemoteShared` no longer holds an `AppHandle`.
+- The open decision is decomposed into small pure functions (`decide_open`, `settle_open_decision`, `settle_end`, `startAnnounced`, `remoteOpenPlan`) with consistent safe-side defaults; the two-signal precedence keeps ONE home in `predictAction` (Rust returns signals, not a resolved arm).
+- The tmux command builders are careful: a start never attaches, the `=name` / `=name:` exact targets document the tmux 3.8 trap found live, exit codes 3/4 are classified rather than inferred, and only trusted keys cross the link.
+- Detach is fail-safe: `take_detachable` never removes a local session; `detachThenClose` detaches FIRST and keeps the tile when the detach fails.
+- Closes three prior findings: the WP3 module split, WP4 `…OVERLAY-KEY-DERIVED-TWICE`, WP4 `…TWO-SEQUENTIAL-SPAWN-EXECS`.
+
+#### Issues
+**CRITICAL**
+- [src-tauri/src/remote_record/mod.rs `update`/`write`] Lost-update race between concurrent record writers: whole-file read-modify-write with no lock and one shared temp name. `SessionRegistry::kill_all` (the quit) runs each session's `kill()` on its own thread; with the link down every remote kill writes `EndPending` at once, so with ≥2 remote workspaces one row can be reverted to `running` and the next open silently reconnects (no dialog A, and no close-time toast on a quit): the exact silent non-action AC-5 prevents. The shared temp can also rename a half-written file in, which reads as an empty map. `session_state` documents this hazard; `config_store` pins it. — Fix: a process-wide lock around `update` + a concurrent-writers test. → **refactor (F40)**.
+  - ✅ **FIXED in refactor (2026-11-17):** `remote_record::WRITE_LOCK` (a process-wide `Mutex`) serializes `update`'s whole read-modify-write, which also makes the shared temp name safe; the doc comment's "never a wrong action" claim corrected. Test `concurrent_writers_never_lose_each_others_records` (8 threads × 25 keys, behind a barrier): with the lock removed it FAILED 3/3 runs (writers collided on the temp file); restored. Gate `pnpm verify:auto` EXIT=0 (72s): vitest 3948, cargo lib 1315.
+
+**MAJOR**
+- [cc_session/mod.rs `running_drive_mode` / `record_remote_spawn`; cc_session/remote.rs `RemoteSpawn`; remote_cmd/mod.rs `OpenFacts` / `SpawnFacts`] The reconnect's drive mode is `Option<Option<String>>` (`Option<&Option<Option<String>>>` at two sites) with four positional meanings, and `RemoteSpawn.attach: bool` duplicates `running_mode.is_some()`, kept in step by hand in `cc_spawn_remote`. Same shape as WP3 `…REMOTE-HOST-STORED-TWICE`. An enum (`SessionMode { Unknown, None, Mode(DriveMode) }` + `RemoteOpen { Start, Attach(SessionMode) }`) would self-describe; the exact-text caller guards pin today's spelling. → auto-backlogged (Mode 3).
+
+**MINOR** (auto-backlogged, Mode 3)
+- [announce/mod.rs, above the remote branch] A stale "a REMOTE row announces nothing yet" comment directly above the code that now announces remote rows.
+- [cc_session/mod.rs `take_detachable` / `take`; ProjectPicker.tsx `openReconnect` / `resolveAsk` / `handleOpenRecent`] Two doc blocks displaced onto the wrong function by insertion; the orphaned `handleOpenRecent` JSDoc states the "BOTH doors funnel through here" invariant that `openReconnect` (its own `record_open`) now breaks for the dialogs' Reconnect.
+- [Workspace.tsx `setInjectFailure`] The workspace toast slot now carries five sources, last writer wins (a start notice can be overwritten ~1.5 s later by the withheld notice). → appended to WP4 `…HOOK-WARNING-SHARES-INJECT-TOAST`.
+- [state/remoteCloseNotEnded.ts `closeNotEndedText`] Always says "it isn't reachable", but `close_not_ended` also fires when the end ran (link up) and failed; and the toast names only the host, not the project.
+- [state/detachWorkspace.ts] "already gone" is a substring match on Rust's `CcError::UnknownSession` Display text (`no such session`) with no shared constant or wire test.
+- [remote_cmd/mod.rs `DRIVE_MODES`] A second hand-kept copy of the closed drive-mode set `config_store::DriveMode` defines.
+- [cc_session/remote.rs `SessionExists` arm] The comment says the record is untouched, but `record_remote_spawn` already wrote `running` when the local ssh started; the sibling race (tmux's own `duplicate session`) records `Ended` and asks via dialog B.
+- [remote_link/commands.rs `dense_body`; cc_session/mod.rs `fn_at` + an inline copy] Three "dense production body" helpers with different cut rules (one cut wrong during this WP).
+- [several] ~23 new comment lines cite WIP node labels (`P4.verify-self.1`, `F9b`, …). → appended to WP3 `…WIP-LABELS-IN-PRODUCTION-COMMENTS`.
+
+#### Assessment
+A well-structured WP that advances the remote-session architecture and resolves three outstanding review findings; the behavioural seam, the pure decision functions, the fail-safe defaults and the detach ordering are the right foundation for WP6/WP7. The one defect is in the new local store: `remote_record` copies the whole-file read-modify-write pattern this repo already documents as a lost-update hazard, and the quit's parallel `kill_all` hits it, producing the silent reconnect this WP exists to prevent; fix it before WP6 adds writers. Readability debt concentrates in the nested-Option drive-mode encoding plus the redundant `attach` flag. At finalize, delete (as resolved, with CHANGELOG lines) WP3 `…RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM`, WP3 `…CC-SESSION-MODULE-SIZE`, WP4 `…OVERLAY-KEY-DERIVED-TWICE`, WP4 `…TWO-SEQUENTIAL-SPAWN-EXECS`.
+
+#### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary> -->

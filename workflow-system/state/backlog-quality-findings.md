@@ -214,6 +214,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** Reword to the decision content; consider widening the `singleAuthority` absent-rule to these modules.
 - **Priority:** low
 - **Status:** pending
+- **Update 2026-11-17 (M17 WP5 review):** WP5 added ~23 more comment lines citing WIP node labels (`P4.verify-self.1`, `P2 re-verify #4, survivor 1`, `F9b`, `P4.2`) across `cc_session/mod.rs` tests, `remote.rs`, `remote_link/commands.rs`.
 
 ## SURFACE-2026-11-16-QUALITY-M17WP3-CC-SESSION-MODULE-SIZE
 - **Severity:** MINOR
@@ -250,6 +251,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** a separate notice slot (or a "shown once per link connect" latch) for the warning.
 - **Priority:** low
 - **Status:** pending
+- **Update 2026-11-17 (M17 WP5 review):** WP5 added three more writers to the same slot (the open notice, the withheld-restore notice, a failed-Detach notice): five sources, last writer wins (a start notice can be overwritten ~1.5 s later by the withheld notice). Worse, not new.
 
 ## SURFACE-2026-11-16-QUALITY-M17WP4-STALE-OVERLAY-EMIT-RACE
 - **Source:** feature-review-quality (M17 WP4, MINOR)
@@ -274,3 +276,70 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** narrow the pin to "Ended is inside the latch", fix the two docs. The behavioural seam itself stays with `…M17WP3-RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM`.
 - **Priority:** low
 - **Status:** pending
+
+# m17-wp5-lifecycle — 2026-11-17
+
+## SURFACE-2026-11-17-QUALITY-M17WP5-RECONNECT-MODE-NESTED-OPTIONS
+- **Source:** feature-review-quality (M17 WP5, MAJOR)
+- **Location:** `cc_session/mod.rs` (`running_drive_mode`, `record_remote_spawn`), `cc_session/remote.rs` (`RemoteSpawn.{attach, running_mode}`), `remote_cmd/mod.rs` (`OpenFacts.mode`, `SpawnFacts.mode`)
+- **Finding:** The reconnect's drive mode is `Option<Option<String>>` (and `Option<&Option<Option<String>>>` at two sites) with four positional meanings (start / reconnect-unknown / reconnect-spawned-with-none / reconnect-under-X), and `RemoteSpawn.attach: bool` duplicates `running_mode.is_some()`, kept in step by hand in `cc_spawn_remote`. Same shape as WP3 `…REMOTE-HOST-STORED-TWICE`; the semantics are load-bearing (A9) and a verify-self mutant on them survived (B6).
+- **Suggested action:** `enum SessionMode { Unknown, None, Mode(DriveMode) }` + `enum RemoteOpen { Start, Attach(SessionMode) }`; re-spell the exact-text caller guards that pin today's shape in the same change.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-M17WP5-STALE-ANNOUNCE-REMOTE-COMMENT
+- **Source:** feature-review-quality (M17 WP5, MINOR)
+- **Location:** `src-tauri/src/announce/mod.rs` (the remote branch of the announce batch)
+- **Finding:** The comment "⚠️ M17 WP2 — a REMOTE row announces nothing yet … No prediction is the safe direction here" sits directly above the WP5 code that does announce remote rows.
+- **Suggested action:** rewrite the comment to the as-built rule (remote rows announce from the local record; a prediction the click re-decides).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-M17WP5-DISPLACED-DOC-BLOCKS-AND-FUNNEL-INVARIANT
+- **Source:** feature-review-quality (M17 WP5, MINOR)
+- **Location:** `src-tauri/src/cc_session/mod.rs` (`take_detachable` inserted between `take`'s doc and `take`); `src/components/picker/ProjectPicker.tsx` (`openReconnect` / `resolveAsk` inserted between `handleOpenRecent`'s JSDoc and the function)
+- **Finding:** Both doc blocks now attach to the wrong function. The orphaned `handleOpenRecent` JSDoc states "BOTH doors funnel through here", which `openReconnect` (its own `record_open` + error toast, reached by the dialogs' Reconnect without the funnel) now breaks.
+- **Suggested action:** move both docs back; route the dialogs' Reconnect through the funnel (e.g. a `reconnect` door) or amend the invariant to name the reconnect door explicitly.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-M17WP5-CLOSE-NOT-ENDED-TOAST-CAUSE-AND-PROJECT
+- **Source:** feature-review-quality (M17 WP5, MINOR)
+- **Location:** `src/state/remoteCloseNotEnded.ts` (`closeNotEndedText`)
+- **Finding:** Always says "it isn't reachable", though `RemotePorts::close_not_ended` also fires when the end ran (link up) and failed; and the text names only the host, not the project (two such toasts for rows on one host read the same and overwrite).
+- **Suggested action:** carry the reason (not delivered vs failed) and the project name in the payload; word the toast from them.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-M17WP5-UNKNOWN-SESSION-TEXT-COUPLING
+- **Source:** feature-review-quality (M17 WP5, MINOR)
+- **Location:** `src/state/detachWorkspace.ts` (`NO_SUCH_SESSION`)
+- **Finding:** "Already gone → safe to close" is a substring match on Rust's `CcError::UnknownSession` Display text, with no shared constant or wire test; rewording the Rust error turns a benign case into a kept tile + error toast.
+- **Suggested action:** a typed error code on the wire, or a Rust↔TS mirror test like `the_close_not_ended_event_matches_its_ts_mirror`.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-M17WP5-DRIVE-MODES-SECOND-COPY
+- **Source:** feature-review-quality (M17 WP5, MINOR)
+- **Location:** `src-tauri/src/remote_cmd/mod.rs` (`DRIVE_MODES`)
+- **Finding:** A second hand-kept copy of the closed drive-mode set `config_store::DriveMode` already defines; drift would make a valid mode read as "unknown" on a reconnect.
+- **Suggested action:** derive from `DriveMode` (or test the two sets equal).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-M17WP5-SESSION-EXISTS-RECORD-COMMENT
+- **Source:** feature-review-quality (M17 WP5, MINOR)
+- **Location:** `src-tauri/src/cc_session/remote.rs` (`InnerExit::SessionExists` arm); `remote_cmd/mod.rs` (`tmux_new_command`)
+- **Finding:** The arm's comment says "the live session (and its record) are untouched", but `record_remote_spawn` already wrote `running` when the local ssh started, so the next open silently reconnects to a session Claudesk did not start; the sibling race (tmux's own `duplicate session`, exit 1) records `Ended` and asks via dialog B. Narrow window.
+- **Suggested action:** correct the comment (or, if A8 should cover it, record `Ended` on `SessionExists` too so the next open asks).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-17-QUALITY-M17WP5-DENSE-BODY-HELPERS-TRIPLICATED
+- **Source:** feature-review-quality (M17 WP5, MINOR)
+- **Location:** `src-tauri/src/remote_link/commands.rs` (`dense_body`), `src-tauri/src/cc_session/mod.rs` (`fn_at` + an inline copy)
+- **Finding:** Three "dense production body" helpers with different cut rules (`#[cfg(test)]` vs `#[cfg(test)]\nmod tests` vs `mod tests`; `\n}\n` vs `\n    }\n`); one cut at the wrong place during this WP and failed on the clean tree.
+- **Suggested action:** one shared test helper with one cut rule, tested once.
+- **Priority:** low
+- **Status:** pending
+

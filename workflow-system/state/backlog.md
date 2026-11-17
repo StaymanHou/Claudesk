@@ -687,6 +687,17 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** pending
 - **Pickup shape:** the alias/key/emit-race MINORs are one status-path cleanup; the rest fold into WP5's reconnect-seam work.
 
+## Code-quality findings — m17-wp5-lifecycle (2026-11-17)
+
+- **Pointer:** **1 MAJOR + 7 MINOR** open from the review of the WP5 ship commit (`67dec33`); 2 more MINORs were appended to existing WP3/WP4 items (the shared workspace toast; WIP labels in comments). The review's CRITICAL (the `remote_record` lost-update race) goes to `/feature-refactor` before finalize.
+  - MAJOR: the reconnect drive mode as nested `Option`s + a redundant `attach` flag.
+  - MINORs: a stale announce comment; displaced doc blocks + the funnel invariant; the close-not-ended toast's cause/project; the "no such session" text coupling; a second `DRIVE_MODES` copy; the `SessionExists` record comment; three dense-body helpers.
+
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp5-lifecycle — 2026-11-17`.
+- **Priority:** medium (the MAJOR), low (the rest)
+- **Status:** pending
+- **Pickup shape:** the MAJOR + the `DRIVE_MODES` copy + the `SessionExists` comment are one reconnect-mode cleanup; the doc/comment MINORs are a docs pass; the toast/coupling MINORs fold into WP9 or the WP4 toast item.
+
 ## SURFACE-2026-11-17-REMOTE-CLAUDE-ONLY-ON-INTERACTIVE-PATH
 - **Source:** feature:build (M17 WP5 Phase 2)
 - **Target level:** product:arch
