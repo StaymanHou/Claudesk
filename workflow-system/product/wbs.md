@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-17  # M17 WP7 shipped (remote reads, active-only poller, remote Recycle; 4b0a532, review fix 5eede6a)
+updated: 2026-11-17  # M17 WP8 accepted on installed v0.9.0 — all WPs shipped
 cycle: milestone-17-remote-workspaces
 ---
 
@@ -152,17 +152,23 @@ only if the build disproves one.
 - [x] 7.4 Recycle on a remote workspace: the mtime baseline plus the `fs-change` wait over the poller, then the composite marker. An end-to-end Recycle on the mini.
 - [x] 7.5 Skill buttons, Session-Start and the Prompt panel confirmed on a remote workspace, **through WP3's cancel-before-inject funnel** (a scrolled-up pane swallows a raw PTY injection; WP1). Confirm each, including while scrolled up.
 
-### WP8: Installed-build acceptance against the mini
+### WP8: Installed-build acceptance against the mini ✅ SHIPPED 2026-11-17 (release v0.9.0 `14f0237`; acceptance record `b293cb6`, `72f4ce3`)
 **Milestone:** M17
 **Dependencies:** WP1–WP7
 **Size:** S, **~1 day + a `/release`**
 **Description:** the exit criteria, on an installed `.app` (dev ≠ installed: GUI PATH, so `ssh` and the agent socket must work from a Finder launch).
 **Tasks:**
-- [ ] 8.1 `/release`, then install on the main box. ⚠️ **Never propose `brew upgrade` to verify a release** (it kills every running Claudesk).
-- [ ] 8.2 Row by row with the operator, each **IN** row on a live remote workspace (`tank-sim-lite-demo` once its repo is on the mini, or a scratch dir there): terminal; dots on all three surfaces including attention; Docs; Prompt; drive-mode line; auto-resume (reconnect, `--continue`, `/session-restore`); skill, Session-Start and Recycle buttons; thumbnails.
-- [ ] 8.3 Each **OUT** row is absent, with no errors in the log.
-- [ ] 8.4 Resilience: a network drop (Tailscale off/on) reconnects to the same session. Close and quit end it (R-1), and Detach / Reconnect works (R-3).
-- [ ] 8.5 No system extension on the main box. Nothing left running on the mini beyond CC, tmux and the master link. Dev and prod against the same mini don't cross.
+- [x] 8.1 `/release`, then install on the main box. ⚠️ **Never propose `brew upgrade` to verify a release** (it kills every running Claudesk).
+- [x] 8.2 Row by row with the operator, each **IN** row on a live remote workspace (`tank-sim-lite-demo` once its repo is on the mini, or a scratch dir there): terminal; dots on all three surfaces including attention; Docs; Prompt; drive-mode line; auto-resume (reconnect, `--continue`, `/session-restore`); skill, Session-Start and Recycle buttons; thumbnails.
+- [x] 8.3 Each **OUT** row is absent, with no errors in the log.
+- [x] 8.4 Resilience: a network drop (Tailscale off/on) reconnects to the same session. Close and quit end it (R-1), and Detach / Reconnect works (R-3).
+- [x] 8.5 No system extension on the main box. Nothing left running on the mini beyond CC, tmux and the master link. Dev and prod against the same mini don't cross.
+- **As accepted (2026-11-17, installed v0.9.0 against the mini, archive `m17-wp8-installed-acceptance.md`):**
+  - Verified on the installed build: the add-row flow; the open (one ssh master, one tmux session); hooks merged on the host (prod + dev side by side, the bypass key kept); terminal; dots on all three surfaces incl. blue + purple; Docs; Prompt; the drive-mode line; thumbnails; the `/session-restore`, reconnect and killed-uncleanly `--continue` doors; OUT rows + chords; Detach / Reconnect; close ends the session; no system extension; nothing left on the mini.
+  - **Waived by the operator** on the installed build (dev-build basis WP3–WP5): the network drop, the app quit, and the live dev + prod concurrent run.
+  - **Accepted failure:** remote Recycle runs the handoff and `/exit` but never respawns CC (`SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC`, medium; workaround: don't Recycle a remote session).
+  - Found: the mini's personal account had no workflow skills → **Milestone 18** (remote workflow substrate); the account was set up by hand for tank's checkpoint.
+
 
 ### WP9: No raw local-fs errors on a remote workspace ✅ FOLDED INTO WP6, SHIPPED 2026-11-17 (commit 991307e)
 **Milestone:** M17

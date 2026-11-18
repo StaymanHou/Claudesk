@@ -24,6 +24,8 @@
 - **Backlog resolved:** SURFACE-2026-11-17-QUALITY-QUIT-TEARDOWN-COMMENT-ORDER — the WP3 comment now sits directly above `links.stop_all()`.
 - **Backlog resolved:** SURFACE-2026-11-17-QUALITY-LINK-DOWN-WORDS-HAND-COPIED — a test reads Rust's `remote_fs::LINK_DOWN` and holds the frontend's link-down sentence to it.
 - **Backlog resolved:** SURFACE-2026-11-08-QUOTA-AUTO-RESUME-FIRED-IS-AN-UNCLASSIFIED-NOTIFICATION-TYPE — a stale duplicate: `quota_auto_resume_fired` has been in `INFORMATIONAL_NOTIFICATION_TYPES` since `4de4e70` (2026-11-06), with its classification test.
+- **Feature shipped:** M17 WP8 released v0.9.0 and accepted it on the installed build against the remote Mac mini: every M17 IN and OUT row was checked live except remote Recycle, which never respawns Claude Code (backlogged as a known, non-blocking failure), and the operator waived the network-drop, app-quit and concurrent dev+prod checks on the strength of dev-build testing.
+- **Milestone:** WP8: Installed-build acceptance against the mini
 
 ## 2026-11-16
 

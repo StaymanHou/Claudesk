@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M17 WP8 — Installed-build acceptance against the mini
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-11-17
 **Created:** 2026-11-17
 
 ## Problem Statement
@@ -191,8 +191,8 @@ SURFACE (or an in-place fix under the verify shortcut's gates), not scope creep.
     - evidence: `pnpm verify:auto` EXIT=0, 42 s; vitest 4045 passed; cargo lib 1362 passed, 0 failed.
 
 ## Current Node
-- **Path:** Feature > refactor (F40)
-- **Active scope:** refactor complete → finalize
+- **Path:** Feature > finalize (complete)
+- **Active scope:** none — archived
 - **Blocked:** none (v0.9.0 installed by the operator 2026-11-17, running since 20:45:49)
 - **Unvisited:** none beyond Phase 3
 - **Open discoveries:** none
@@ -238,3 +238,11 @@ Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` arc
 ## Ship
 - Full suite: reused the last-phase codify run (`Test scope: full — last phase`, `pnpm verify:auto` EXIT=0, 42 s); only docs changed since. eslint + prettier --check re-run at ship: exit 0.
 - WP8 shipped no product code: its shippable was the v0.9.0 release (`14f0237`, tag `v0.9.0`, published at P1.2). The ship commit carries the acceptance record (this WIP, backlog, runtimes).
+
+## Retrospect
+- **What changed in our understanding:** An installed-build acceptance surfaced three things no dev check had: (1) the personal mini account had no workflow skills (M17 had assumed tank's 11-13 note, written for the admin account), which became M18; (2) remote Recycle never respawns CC (WP7's stub-skill check covered only the `.session.md` detection half); (3) a picker label for a remote row predicts from the LOCAL record, so after a crash it still says "reconnect", and the open check plus its toast is what corrects it (designed, but now seen live).
+- **Assumptions that held:** The release pipeline as `/release` describes it (staple → re-tar → re-sign) gave byte-identical, notarized, correctly signed downloads first time. Every M17 IN row except Recycle worked on the installed build. Detach / Reconnect / close held exactly as R-1/R-3 rule.
+- **Assumptions that were wrong:** That the release would run unattended. It hit an Apple Developer agreement 403, then the locked-screen keychain read, then outdated Command Line Tools blocking `brew audit`; all three were operator-side or environmental. That stub skills would be needed: the operator chose a real install instead. That the pre-push identifier grep was complete: it missed the dev account's name (the review CRITICAL, redacted in `72f4ce3`).
+- **Approach delta:** The operator waived three installed-build checks (drop, quit, live dev+prod) on the strength of dev-build testing, and ruled the Recycle failure non-blocking. The stub-skill step was replaced by a manual mccc install on the mini. Verify-self ran as read-only re-derivations from persisted evidence, since the live events were operator-driven and over by the time it ran.
+
+**Feature complete:** M17 WP8 has shipped: v0.9.0 is released and accepted on the installed build against the mini, with one known failure (remote Recycle) and three operator waivers recorded. Requester = operator — closure notice for self-record.
