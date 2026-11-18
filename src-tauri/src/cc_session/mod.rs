@@ -1618,6 +1618,10 @@ impl CcSession for PtyCcSession {
 /// the shell sessions, which have no drive mode at all — to answer a question that is not theirs.
 struct RegisteredSession {
     session: Box<dyn CcSession>,
+    /// M18 WP2 — what this session's spawn told CC about permissions, for the bypass-warning
+    /// read ([`crate::bypass_prompt`]). Recorded from the argv the spawn actually built, so the
+    /// fire-time read never re-derives it from a setting that may have changed since.
+    permission: SpawnPermission,
     /// The EFFECTIVE drive mode this session spawned under — post-gate, so `None` means it
     /// received no `CLAUDESK_DRIVE_MODE` at all. See [`ResolvedCcSpawnEnv::drive_mode`].
     ///
@@ -1632,6 +1636,33 @@ struct RegisteredSession {
     remote_host: Option<String>,
     /// M17 WP3 P4.3 — what `cc_inject` needs to prepare a REMOTE pane (`None` locally).
     remote: Option<RemoteExit>,
+}
+
+/// M18 WP2 — the permission posture a session STARTED CC with, which decides whether CC can open
+/// on its "Bypass Permissions mode" warning (probe table: `crate::bypass_prompt`'s module docs).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpawnPermission {
+    /// CC started with `--permission-mode <mode>`.
+    Flag(CcPermissionMode),
+    /// CC started with NO `--permission-mode` (a listed profile, F-b): the profile's own
+    /// `settings.json` `permissions.defaultMode` governs.
+    Unflagged,
+    /// No CC process started here: a remote reattach (the session was already running), or a
+    /// login shell. No startup dialog is possible.
+    NoStart,
+}
+
+/// M18 WP2 — the [`SpawnPermission`] a CC spawn records: what [`spawn_permission_mode`] chose for
+/// the argv, or [`SpawnPermission::NoStart`] for a remote reattach (which runs no `claude`).
+fn recorded_spawn_permission(
+    argv_mode: Option<CcPermissionMode>,
+    reattach: bool,
+) -> SpawnPermission {
+    match (reattach, argv_mode) {
+        (true, _) => SpawnPermission::NoStart,
+        (false, Some(mode)) => SpawnPermission::Flag(mode),
+        (false, None) => SpawnPermission::Unflagged,
+    }
 }
 
 /// Owns the live sessions. Registered as `State<Mutex<SessionRegistry>>` in `lib.rs`;
@@ -1666,6 +1697,7 @@ impl SessionRegistry {
             id.clone(),
             RegisteredSession {
                 session: make(id.clone()),
+                permission: SpawnPermission::NoStart,
                 drive_mode: None,
                 profile: None,
                 remote_host: None,
@@ -1692,6 +1724,7 @@ impl SessionRegistry {
             id.clone(),
             RegisteredSession {
                 session: make(id),
+                permission: SpawnPermission::NoStart,
                 drive_mode: None,
                 profile: None,
                 remote_host: Some(host.to_string()),
@@ -1886,11 +1919,13 @@ impl SessionRegistry {
         });
 
         let id = self.mint_id();
+        let argv_mode = spawn_permission_mode(mode, profile.as_ref().map(|p| p.dir.as_path()));
+        let permission = recorded_spawn_permission(argv_mode, attached_mode.is_some());
         let spawned = PtyCcSession::spawn(
             app,
             id.clone(),
             project_path,
-            spawn_permission_mode(mode, profile.as_ref().map(|p| p.dir.as_path())),
+            argv_mode,
             model.as_deref(),
             resume,
             &cc_env,
@@ -1939,6 +1974,7 @@ impl SessionRegistry {
             id.clone(),
             RegisteredSession {
                 session,
+                permission,
                 drive_mode: spawned_drive_mode,
                 profile: profile.map(|p| p.name),
                 remote_host,
@@ -1959,6 +1995,8 @@ impl SessionRegistry {
             id.clone(),
             RegisteredSession {
                 session: Box::new(session),
+                // A login shell starts no CC, so it can show no CC startup dialog.
+                permission: SpawnPermission::NoStart,
                 // ⚠️ Structurally `None`, not merely unset: the login shell must never receive
                 // `CLAUDESK_DRIVE_MODE` (`shell_spawn_env` enforces the boundary), so there is
                 // no mode for a shell session to be running under.
@@ -2045,6 +2083,14 @@ impl SessionRegistry {
         self.sessions
             .get(id)
             .map(|entry| entry.drive_mode)
+            .ok_or_else(|| CcError::UnknownSession(id.to_string()))
+    }
+
+    /// M18 WP2 — the permission posture session `id` started CC with ([`SpawnPermission`]).
+    pub fn spawn_permission(&self, id: &str) -> Result<SpawnPermission, CcError> {
+        self.sessions
+            .get(id)
+            .map(|entry| entry.permission)
             .ok_or_else(|| CcError::UnknownSession(id.to_string()))
     }
 
@@ -2974,11 +3020,55 @@ mod tests {
         let env_call = &env_call[..env_call.find(");").unwrap()];
         assert!(env_call.contains("profile.as_ref()"), "{env_call}");
         assert!(code.contains("profile: profile.map(|p| p.name),"));
+        // M18 WP2: ONE binding of the profile-aware mode feeds BOTH the argv and the recorded
+        // `SpawnPermission`, so the bypass-warning read sees exactly what CC was started with.
+        assert!(
+            code.contains(
+                "let argv_mode = spawn_permission_mode(mode, profile.as_ref().map(|p| p.dir.as_path()));"
+            ),
+            "the spawn must bind the profile-aware permission mode once"
+        );
+        assert!(
+            code.contains(
+                "let permission = recorded_spawn_permission(argv_mode, attached_mode.is_some());"
+            ),
+            "the recorded permission must come from the same argv mode"
+        );
         let call = &code[at("PtyCcSession::spawn(")..];
         let call = &call[..call.find(");").unwrap()];
         assert!(
-            call.contains("spawn_permission_mode(mode, profile.as_ref().map(|p| p.dir.as_path()))"),
+            call.lines().any(|l| l.trim() == "argv_mode,"),
             "the spawn must pass the profile-aware permission mode: {call}"
+        );
+        assert!(
+            code.contains("                permission,\n"),
+            "the registered session must record the spawn's permission"
+        );
+    }
+
+    #[test]
+    fn recorded_spawn_permission_follows_the_argv_and_a_reattach_starts_nothing() {
+        use CcPermissionMode::*;
+        assert_eq!(
+            recorded_spawn_permission(Some(BypassPermissions), false),
+            SpawnPermission::Flag(BypassPermissions)
+        );
+        assert_eq!(
+            recorded_spawn_permission(Some(Default), false),
+            SpawnPermission::Flag(Default)
+        );
+        assert_eq!(
+            recorded_spawn_permission(None, false),
+            SpawnPermission::Unflagged
+        );
+        // A reattach runs no `claude`, whatever the setting says.
+        assert_eq!(
+            recorded_spawn_permission(Some(BypassPermissions), true),
+            SpawnPermission::NoStart
+        );
+        assert_eq!(
+            recorded_spawn_permission(None, true),
+            SpawnPermission::NoStart
         );
     }
 
@@ -4855,6 +4945,7 @@ mod tests {
                 unclean_flag: true,
                 session_md: false,
                 trusted: false,
+                bypass_accepted: false,
             })
         );
         assert_eq!(

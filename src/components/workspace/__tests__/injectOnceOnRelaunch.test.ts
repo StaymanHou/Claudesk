@@ -58,7 +58,12 @@ describe("shouldScheduleFire vs shouldInject — two DIFFERENT questions", () =>
   // can express "this pane already fired".
   it("shouldInject STILL approves on a relaunch run — proving it cannot carry consume-once", () => {
     expect(
-      shouldInject({ action: injectAction, cancelled: false, trusted: true }),
+      shouldInject({
+        action: injectAction,
+        cancelled: false,
+        trusted: true,
+        bypassCleared: true,
+      }),
     ).toBe(true);
   });
 

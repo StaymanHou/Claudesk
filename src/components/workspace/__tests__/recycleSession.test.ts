@@ -9,6 +9,7 @@ const invokeMock = vi.fn();
 const listenMock = vi.fn();
 const injectCommandMock = vi.fn();
 const markSessionCleanMock = vi.fn();
+const readBypassMock = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (cmd: string, args?: unknown) => invokeMock(cmd, args),
@@ -18,6 +19,8 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 vi.mock("../autoResumeFire", () => ({
   injectCommand: (...args: unknown[]) => injectCommandMock(...args),
+  // M18 WP2 — the production default of `RecycleInputs.readBypass`.
+  readBypassCleared: (...args: unknown[]) => readBypassMock(...args),
 }));
 vi.mock("../../../state/cleanExit", () => ({
   markSessionClean: (...args: unknown[]) => markSessionCleanMock(...args),
@@ -28,10 +31,12 @@ import {
   recycleSession,
   RESTORE_COMMAND,
   RESTORE_SETTLE_MS,
+  RESTORE_WITHHELD_FOR_BYPASS,
   SESSION_MD_REL,
   waitForFreshSessionId,
   type RecycleInputs,
 } from "../recycleSession";
+import { recycleInjectFailure } from "../injectFailure";
 import { FS_CHANGE_EVENT } from "../../../state/fsChange";
 import { WORKSPACE_STATUS_EVENT } from "../../../state/workspaceStatus";
 
@@ -143,6 +148,8 @@ beforeEach(() => {
   markSessionCleanMock.mockImplementation((_p: string, route: string) => {
     effects.push(`markClean:${route}`);
   });
+  // M18 WP2: the bypass warning is clear unless a test says otherwise.
+  readBypassMock.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -1256,5 +1263,91 @@ describe("a REMOTE project: a Stop forces one re-stat before it is fed", () => {
     const outcome = await promise;
     expect(outcome.ok).toBe(false); // no write was ever reported, so the Stop alone fails it
     expect(statCalls().length).toBe(1); // the baseline only
+  });
+});
+
+// M18 WP2 — the fresh session may open on CC's bypass-permissions warning (default "No, exit"),
+// so Recycle reads it AFTER the settle and withholds `/session-restore` when it is not clear.
+describe("the restore waits for CC's bypass-permissions warning (M18 WP2)", () => {
+  function driveToRestore(over: Partial<RecycleInputs> = {}) {
+    invokeMock.mockImplementationOnce(() =>
+      Promise.reject(new Error("ENOENT")),
+    );
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "docs_stat"
+        ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
+        : Promise.resolve(),
+    );
+    const failures: Array<[string, string]> = [];
+    const promise = recycleSession(
+      baseInputs({
+        onInjectFailure: (step, reason) => failures.push([step, reason]),
+        ...over,
+      }),
+    );
+    return { promise, failures };
+  }
+
+  async function finish(promise: Promise<unknown>) {
+    await tick();
+    emitSessionMdWrite();
+    await tick();
+    emitStop();
+    return promise;
+  }
+
+  it("withholds /session-restore and reports it when the warning is not accepted", async () => {
+    readBypassMock.mockResolvedValue(false);
+    const { promise, failures } = driveToRestore();
+    const outcome = await finish(promise);
+    expect(outcome).toEqual({ ok: false, reason: "restore-not-injected" });
+    expect(effects).not.toContain(`inject:${RESTORE_COMMAND}`);
+    expect(failures).toEqual([["restore", RESTORE_WITHHELD_FOR_BYPASS]]);
+    // The handoff and the respawn still ran: only the restore is held back.
+    expect(effects).toEqual([
+      `inject:${HANDOFF_COMMAND}`,
+      "markClean:recycle-session",
+      "relaunch",
+      "awaitFreshSessionId",
+      "settle",
+    ]);
+  });
+
+  it("reads the FRESH session, after the settle, through the real default seam", async () => {
+    readBypassMock.mockImplementation(async () => {
+      effects.push("readBypass");
+      return true;
+    });
+    const { promise } = driveToRestore();
+    expect(await finish(promise)).toEqual({ ok: true });
+    expect(readBypassMock).toHaveBeenCalledWith(PROJECT, NEW_SID);
+    expect(effects.slice(-3)).toEqual([
+      "settle",
+      "readBypass",
+      `inject:${RESTORE_COMMAND}`,
+    ]);
+  });
+
+  it("an injected readBypass seam replaces the default", async () => {
+    const seen: Array<[string, string]> = [];
+    const { promise } = driveToRestore({
+      readBypass: async (p, sid) => {
+        seen.push([p, sid]);
+        return false;
+      },
+    });
+    expect(await finish(promise)).toEqual({
+      ok: false,
+      reason: "restore-not-injected",
+    });
+    expect(seen).toEqual([[PROJECT, NEW_SID]]);
+    expect(readBypassMock).not.toHaveBeenCalled();
+  });
+
+  it("the reported reason renders as a restore-by-hand toast naming the fix", () => {
+    const toast = recycleInjectFailure("restore", RESTORE_WITHHELD_FOR_BYPASS);
+    expect(toast).toContain("Recycled, but /session-restore was not sent");
+    expect(toast).toContain('pick "Yes, I accept" first');
+    expect(toast).toContain("Run /session-restore yourself.");
   });
 });

@@ -18,13 +18,16 @@ HOME=/tmp/<scratch>/fake-home \
 RUSTUP_HOME=/Users/<you>/.rustup \
 CARGO_HOME=/Users/<you>/.cargo \
 PATH="/Users/<you>/.cargo/bin:$PATH" \
+COREPACK_HOME=/Users/<you>/.cache/node/corepack \
 pnpm tauri:dev
 ```
 
-⚠️ **The three overrides after `HOME` are mandatory, not optional.** Overriding `HOME` alone
+⚠️ **The overrides after `HOME` are mandatory, not optional.** Overriding `HOME` alone
 relocates `~/.rustup`, and the build dies with *"rustup could not choose a version of cargo to run"*
 **before the app ever launches**. That failure looks like a toolchain problem and is really a
-sandboxing side effect.
+sandboxing side effect. ⚠️ **`COREPACK_HOME` too** (found M18 WP2, 2026-11-18): without it pnpm's
+corepack shim looks for its cache under the fake home, starts a download there, and dies with
+*"Cannot find module …/fake-home/.cache/node/corepack/…/pnpm.cjs"*.
 
 ## Why this works, and is safe
 
@@ -37,11 +40,15 @@ commands layer, no ambient `home_dir()`. This is the same discipline
 `SURFACE-2026-07-28-MCCC-INSTALL-FEATURE-NEEDS-SANDBOXED-DEV-AND-VERIFY` mandates for its own
 reasons.
 
-## Two things to know before using it
+## Things to know before using it
 
 1. **The app's own data dir and `projects.json` relocate too**, so the picker looks empty and recents
    are gone. Expected, harmless — a throwaway profile.
-2. **Stage the fake home to the arm you want to see, and re-stage between runs.** After a successful
+2. **Keep the fake home's path SHORT if the check needs the status channel.** The hook socket lives
+   under the app data dir, which moves into the fake home. A deep path (the session scratchpad) is
+   over the AF_UNIX limit (~104 bytes): the log says *"hook-socket listener failed to start: could
+   not bind hook socket"*, the app runs on, and no status events arrive (M18 WP2, 2026-11-18).
+3. **Stage the fake home to the arm you want to see, and re-stage between runs.** After a successful
    install it reads `managed`, so the `absent` affordance disappears until you `rm -rf` the fake
    `.claude/` **and** `.claudesk/`. The provenance record is what keeps it `managed`, and
    `uninstall.sh` deliberately leaves that record behind.

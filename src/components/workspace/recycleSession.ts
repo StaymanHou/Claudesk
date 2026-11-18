@@ -67,7 +67,7 @@ import {
 } from "../../state/workspaceStatus";
 import { markSessionClean } from "../../state/cleanExit";
 import { INJECT_SETTLE_MS } from "../../state/predictAction";
-import { injectCommand } from "./autoResumeFire";
+import { injectCommand, readBypassCleared } from "./autoResumeFire";
 import { workspaceSurfaces } from "../../state/workspaceSurfaces";
 
 /** `.session.md`, project-relative. Mirrors Rust's `announce::SESSION_MD_REL`. */
@@ -255,6 +255,17 @@ export interface RecycleInputs {
    * lands before M15, not after.
    */
   readonly signal?: AbortSignal;
+  /**
+   * M18 WP2 — whether the FRESH session can NOT open on CC's bypass-permissions warning.
+   * Defaults to the real read (`readBypassCleared`); injectable for tests. A Recycle respawn
+   * reads the permission setting again, so an operator who switched to Bypass Permissions since
+   * the last spawn meets the warning here, and the `\r` of `/session-restore` would answer it
+   * "No, exit".
+   */
+  readonly readBypass?: (
+    projectPath: string,
+    ptySessionId: string,
+  ) => Promise<boolean>;
 }
 
 /**
@@ -558,6 +569,18 @@ export async function recycleSession(
   // ⚠️ M17 WP3 — a REFUSED restore is `restore-not-injected`, the reason that already means
   // "recycled, now restore by hand", and it is reported (`onInjectFailure`). Before M17 WP3 this
   // returned `ok: true` — a recycle that never restored, reported as complete.
+  // ⚠️ M18 WP2 — the fresh session may be sitting on CC's bypass-permissions warning, whose default
+  // is "No, exit". Read AFTER the settle (the fire-time rule), and a withheld restore takes the
+  // same reported path as a refused one: "recycled, now restore by hand".
+  const bypassCleared = await (inputs.readBypass ?? readBypassCleared)(
+    projectPath,
+    freshSessionId,
+  );
+  if (inputs.signal?.aborted) return { ok: false, reason: "aborted" };
+  if (!bypassCleared) {
+    inputs.onInjectFailure?.("restore", RESTORE_WITHHELD_FOR_BYPASS);
+    return { ok: false, reason: "restore-not-injected" };
+  }
   const restore = await injectRefusal(freshSessionId, RESTORE_COMMAND);
   if (restore !== null) {
     inputs.onInjectFailure?.("restore", restore);
@@ -588,6 +611,14 @@ async function injectRefusal(
   );
   return refusal.reason;
 }
+
+/**
+ * M18 WP2 — the reason Recycle reports when the fresh session's bypass-permissions warning withheld
+ * `/session-restore` (rendered by `recycleInjectFailure` as "Recycled, but /session-restore was not
+ * sent: <this>. Run /session-restore yourself.").
+ */
+export const RESTORE_WITHHELD_FOR_BYPASS =
+  'Claude Code is showing its Bypass Permissions warning, whose default "No, exit" would close it (pick "Yes, I accept" first)';
 
 /**
  * How long to wait for the respawn to publish a new session id.

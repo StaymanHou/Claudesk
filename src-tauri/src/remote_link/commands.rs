@@ -113,6 +113,10 @@ pub struct StartSignals {
     pub session_md: bool,
     /// The remote CC has trusted the folder (its physical path or an ancestor).
     pub trusted: bool,
+    /// M18 WP2: the remote account has accepted CC's bypass-permissions warning. A fire-time input
+    /// (`bypass_dialog_cleared`), not a resume signal, so it is not sent to the picker.
+    #[serde(skip)]
+    pub bypass_accepted: bool,
 }
 
 /// The open decision (M17 WP5, AC-3), from the open check's exec and the LOCAL record. Pure, so
@@ -205,6 +209,7 @@ pub(crate) fn decide_open(
                 &trusted_keys,
                 std::path::Path::new(physical),
             ),
+            bypass_accepted: facts.bypass_accepted,
         }),
         clear_end_pending: clear,
         notice,
@@ -252,6 +257,10 @@ pub(crate) fn settle_open_decision(
     links.set_open_trust(
         key,
         matches!(&decision.check, OpenCheck::Start(signals) if signals.trusted),
+    );
+    links.set_open_bypass(
+        key,
+        matches!(&decision.check, OpenCheck::Start(signals) if signals.bypass_accepted),
     );
     decision.check
 }
@@ -580,7 +589,12 @@ mod tests {
             worker.ends_with("Ok(check)}).await"),
             "returns the settled check: {worker}"
         );
-        for direct in ["set_open_trust(", "set_open_notice(", "record_state("] {
+        for direct in [
+            "set_open_trust(",
+            "set_open_bypass(",
+            "set_open_notice(",
+            "record_state(",
+        ] {
             assert!(
                 !worker.contains(direct),
                 "`{direct}` belongs to settle_open_decision"
@@ -593,7 +607,7 @@ mod tests {
         );
         assert_eq!(
             links_calls(&settle_body),
-            ["set_open_notice", "set_open_trust"],
+            ["set_open_notice", "set_open_trust", "set_open_bypass"],
             "{settle_body}"
         );
     }
@@ -825,9 +839,12 @@ mod tests {
             StartSignals {
                 unclean_flag: true,
                 session_md: true,
-                trusted: true
+                trusted: true,
+                bypass_accepted: false,
             }
         );
+        // M18 WP2: the remote account's bypass acceptance rides the start (and only its line).
+        assert!(signals(out(&format!("{s}bypass-accepted:yes\n")), false).bypass_accepted);
         // Trust on the STORED (symlink) path does not count: CC keys trust by the physical path.
         assert!(
             !signals(
@@ -869,8 +886,11 @@ mod tests {
             unclean_flag: true,
             session_md: false,
             trusted: true,
+            bypass_accepted: true,
         }));
         assert_eq!(start["kind"], "start");
+        // M18 WP2: a fire-time input, not a resume signal: never sent to the picker.
+        assert!(start.get("bypassAccepted").is_none(), "{start}");
         assert_eq!(
             (
                 &start["uncleanFlag"],

@@ -232,6 +232,10 @@ Measured in a real Claudesk xterm.js pane (the second terminal, same `XtermPane`
   hook-install merge writes that same file and must preserve this key** (and `theme`). The folder-trust
   dialog still appears once per untrusted folder (`~` is untrusted on the mini). §H preflight / WP5
   must say so in plain words, or answer it as part of adding the project.
+  ✅ **M18 WP2 as-built (2026-11-18):** on an account that has NOT accepted it, the auto-resume and Recycle
+  withhold `/session-restore` instead of answering the warning "No, exit". The open check reads the remote
+  `~/.claude/settings.json` key (`remote_cmd::BYPASS_ACCEPTED`), and the workspace toast says so with the fix
+  (`session-resumption.md` → "The inject arm withholds…").
 - **Scrollback: no candidate gives full local parity.** §I has the measured trade-off. The **chosen**
   config is C + RGB (`mouse on`, alt-screen) with a mandatory `send-keys -X cancel` before every
   Claudesk injection. E is retired (operator, 2026-11-14).
@@ -364,7 +368,7 @@ remote. Code, UI copy and tests use these two words for these two cases only.
 |  |  | ✅ **FIXED (M18 WP1, 2026-11-18).** The WP8 failure was a RECONNECT-door workspace: `open_intent` lives as long as the workspace, the relaunch re-sent `reconnect`, and `cc_spawn_remote` turned that into `tmux attach` to the session Recycle's own `/exit` had just ended, so no CC started (the prod status log showed ws-4 registered with no `SessionStart`, i.e. a reattach). **Rule:** the door is spent by the pane's first committed spawn (`XtermPane`'s `doorUsedRef`, never cleared by a relaunch). Every later spawn sends `relaunchIntent(door)` (`reconnect` → `fire`), so Recycle's respawn and the Relaunch / Retry button get a plain `new -A`. ⚠️ The backend rule `Reconnect → attach, never new -A` is unchanged and correct. Pinned by `remoteRelaunchIntentLive.test.tsx` (the real pane) + `spawnArgs.test.ts`. |  |
 | Claudesk crash, link lost, host unreachable | passive | the local ssh dies; tmux and CC keep running; the link retries with backoff and reconnects every workspace on that host | R-2 |
 | Detach (⇥ on the remote tile) | deliberate | **as built (WP5):** `cc_detach` → `RemoteCcSession::detach` hangs up the local `ssh` WITHOUT `/exit` (no copy-mode cancel, no end, no record write), then the tile closes (unclean: the flag stays). No Detached tile (operator ruling); the record stays `running`, so the next open labels **Reconnect** and attaches. Works with the link down | R-3 |
-| Reopen from the picker | — | **as built (WP5):** ONE open-check exec over the master (folder, live, its `@cd_mode`, physical path, gated remote `.session.md`, the remote CC's trusted keys) + Claudesk's LOCAL session record (`remote_record`: running / ended / end-pending) decide: live + `running` → **attach** (beats both resume signals; registers the session's original mode); live + `end-pending` → dialog A; live + no/ended record → dialog B; dead → the two-signal rule from the remote signals (an untrusted folder withholds `/session-restore` with a workspace toast) | R-2 |
+| Reopen from the picker | — | **as built (WP5):** ONE open-check exec over the master (folder, live, its `@cd_mode`, physical path, gated remote `.session.md`, the remote CC's trusted keys) + Claudesk's LOCAL session record (`remote_record`: running / ended / end-pending) decide: live + `running` → **attach** (beats both resume signals; registers the session's original mode); live + `end-pending` → dialog A; live + no/ended record → dialog B; dead → the two-signal rule from the remote signals (an untrusted folder, or since M18 WP2 a bypass-mode spawn on an account that never accepted CC's bypass warning, withholds `/session-restore` with a workspace toast) | R-2 |
 |  |  | ⚠️ **The picker label is a LOCAL prediction** (seen live at WP8): listing the picker does not probe the host, so a remote row's label comes from `remote_record`. After a crash while detached it still reads **↻ reconnect**; the open check then decides (`--continue`) and says so in the AC-2.3 toast. That toast uses the error style though nothing failed (`SURFACE-2026-11-17-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE`). |  |
 | ~~Close a detached workspace~~ | — | **dropped at WP5:** there is no detached tile | — |
 | Quit or close **while the link is down** | unclear at the next open | **as built (WP5):** the end can't be delivered → the record goes `end-pending` (writes serialized: the quit's parallel kills must not lose one) and a close tells the app (`remote-close-not-ended` → app toast). At the next open, live + `end-pending` → **dialog A** (End it and open [default] / Reconnect / Cancel); dead → the stale intent is cleared and the open resumes without asking | R-4 |
@@ -432,6 +436,7 @@ remote. Code, UI copy and tests use these two words for these two cases only.
     **silently drop `--continue`**. The remote transcript slug follows the same rule against the
     *remote* realpath, resolved with a remote `cd -P && pwd`.
   - `folder_trusted` (the remote `~/.claude.json`)
+  - `bypass_dialog_cleared` (the remote `~/.claude/settings.json`; M18 WP2, read in the same open-check exec)
   - `docs::discover` / `docs_read`
   - Recycle's mtime baseline
 
@@ -518,6 +523,10 @@ remote. Code, UI copy and tests use these two words for these two cases only.
   - The host is validated against an allow-list before any spawn.
   - The checks run inside the async `add_remote_project`, so the UI cannot skip them.
   - The hook deploy/register step is WP4's and is not in this preflight.
+  - ✅ **M18 WP2 (2026-11-18): `claude` only in `~/.local/bin`.** Both the preflight and the deployed `cc-launch`
+    prepend `$HOME/.local/bin` to PATH when `command -v claude` fails (`remote_cmd::CLAUDE_PATH_FALLBACK`). The usual
+    cause is a PATH line that lives only in `~/.zshrc`, which `zsh -lc` never reads. If `claude` is in neither place, the
+    `tools` check says so and names the `~/.zprofile` fix.
 - Hosts are ordinary `ssh` destinations, so the operator's `~/.ssh/config`, agent and Tailscale
   MagicDNS all apply. ⚠️ **A stopped Tailscale on the main box presents as "could not resolve hostname"**
   (hit during research). The preflight and the link's `Lost` state say so in plain words.

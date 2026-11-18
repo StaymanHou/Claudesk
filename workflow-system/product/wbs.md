@@ -83,6 +83,32 @@ told to avoid ("don't Recycle a remote session").
 **WP2 → WP3 rationale:** the substrate track needs fresh host accounts to install into, and those accounts are exactly what WP2
 hardens. Landing WP2 first means every install WP5–WP7 verifies opens onto a CC that can't quit on the bypass dialog.
 
+### WP2.5: Remote panes copy to the Mac's clipboard (added 2026-11-18, operator, while dogfooding tank)
+**Description:** In a remote pane, a drag-select does not reach this Mac's clipboard. Today tmux's `set -g mouse on` (the deployed
+`tmux.conf`, config C, ratified at M17 WP1 for wheel scrollback) turns the drag into a tmux copy-mode selection. On mouse-up the
+default `MouseDragEnd1Pane` → `copy-pipe-and-cancel` puts the text in tmux's buffer **on the mini** and clears the highlight. The
+xterm.js selection never sees the drag. Verified 2026-11-18 on tank's pane: `alternate_on=0 mouse_any_flag=0` (CC is inline and is not
+the cause), `mouse=1`. Local panes are unaffected (no tmux).
+**Requirement (operator):** select text inside a remote session and copy it to THIS Mac's clipboard. ⚠️ Keep `mouse on`: with
+`mouse off` the wheel stops scrolling remote history (the M17 WP1 probe ruled that config out).
+**Milestone:** M18
+**Dependencies:** none (remote-only, independent of the substrate track)
+**Size:** S
+**Tasks:**
+- [ ] 2.5.1 Probe on the scratch remote row (CC 2.1.327, tmux 3.x): does `set -g set-clipboard on` plus a `terminal-features` `clipboard` entry for
+  the pane's outer `TERM` make tmux emit OSC 52 to the client on a copy? Capture the raw bytes Claudesk's PTY receives.
+- [ ] 2.5.2 `tmux.conf` (constant, redeployed on every connect): `set-clipboard on`, the clipboard feature, and drag-end rebound to
+  `copy-pipe-no-clear` so the highlight stays.
+- [ ] 2.5.3 Frontend: an xterm.js OSC 52 handler (`term.parser.registerOscHandler(52, …)`) that writes the decoded text to the
+  macOS clipboard. ⚠️ Write only, never answer an OSC 52 READ query: a remote program must not be able to read this Mac's clipboard.
+- [ ] 2.5.4 Optional escape hatch: `macOptionClickForcesSelection`, so Option+drag gives a native xterm selection, as on a local pane.
+- [ ] 2.5.5 Live check on the scratch remote row: drag-select → `pbpaste` on this Mac holds the text, the highlight stays, and the wheel
+  still scrolls history. Plus an injected command while scrolled up still lands (cancel-before-inject unchanged).
+- [ ] 2.5.6 Update `arch/remote-workspaces.md` §I (the scrollback/copy-mode section) to as-built.
+
+**WP2.5 → WP3 rationale:** tank is in daily remote use, so this pays off now. It touches only the deployed tmux.conf and the
+terminal pane, nothing the substrate track builds on.
+
 ### WP3: Probe — remote substrate behaviour on the mini
 **Type:** probe
 **Milestone:** M18 (before WP4–WP7)
@@ -206,11 +232,12 @@ Each entry shows the state (Absent / Managed / Developer), the short HEAD, and d
 ```
 WP1 (Recycle) ───────────────┐
 WP2 (fresh-account) ─────────┤
+WP2.5 (remote copy) ─────────┤
 WP3 (probe) → WP4 → WP5 → WP6 → WP7 ─┴→ WP8 (release + acceptance)
 ```
 
 - **Critical path:** WP3 → WP4 → WP5 → WP6 → WP7 → WP8.
-- **Parallel track:** WP1 and WP2 run in parallel with WP3, or ahead of it. A release can be cut after WP1 + WP2 alone if the tank
+- **Parallel track:** WP1, WP2 and WP2.5 (added 2026-11-18) run in parallel with WP3, or ahead of it. Order chosen by the operator: WP2 → WP2.5 → WP3. A release can be cut after WP1 + WP2 alone if the tank
   workspace needs remote Recycle sooner. That is the operator's call. Nothing in WP3–WP7 depends on it.
 
 ## Exit criteria (M18)

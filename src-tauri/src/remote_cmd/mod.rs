@@ -72,6 +72,21 @@ pub fn login_shell(script: &str) -> String {
 /// host resolves and accepts the key. The `$HOME` expands remotely (it is a constant).
 pub const PRINT_HOME: &str = "printf '%s' \"$HOME\"";
 
+/// M18 WP2 — constant fragment (no variable value): when `claude` is not on the login shell's
+/// PATH, look in `$HOME/.local/bin`, where Claude Code's native installer puts it.
+///
+/// ⚠️ Why it is needed: Claudesk runs every remote command under `zsh -lc`, a NON-interactive login
+/// shell, which reads `~/.zprofile` but not `~/.zshrc`. An account set up interactively often adds
+/// `~/.local/bin` to PATH only in `~/.zshrc`, so `claude` is invisible to the preflight and to
+/// `cc-launch` (`SURFACE-2026-11-17-REMOTE-CLAUDE-ONLY-ON-INTERACTIVE-PATH`; hit on the mini's
+/// fresh account 2026-11-17). Claudesk never edits a dotfile: when this fallback misses too, the
+/// preflight names the `~/.zprofile` fix (`preflight::parse_check_lines`).
+///
+/// Shared by the preflight ([`preflight_script`], ahead of its tools loop and [`AUTH_CHECK`]) and the
+/// deployed launcher (`remote_link::cc_launcher`, ahead of `exec claude`).
+pub const CLAUDE_PATH_FALLBACK: &str =
+    "command -v claude >/dev/null 2>&1 || PATH=\"$HOME/.local/bin:$PATH\"";
+
 /// Constant fragment: the auth check (arch §H). With the token exported, `claude auth status`
 /// must say `loggedIn: true`. ⚠️ The token's `$(cat …)` expands ON THE REMOTE; nothing but
 /// `ok:auth` / `fail:auth` comes back, so the token never leaves the host.
@@ -86,6 +101,7 @@ claude auth status --json 2>/dev/null | grep -q '\"loggedIn\": *true' \
 pub fn preflight_script(path: &str) -> String {
     format!(
         "p={path}\n\
+{CLAUDE_PATH_FALLBACK}\n\
 for t in tmux claude perl; do command -v \"$t\" >/dev/null 2>&1 || {{ echo \"fail:tools:$t\"; exit 0; }}; done\n\
 echo ok:tools\n\
 [ -d \"$p\" ] || {{ echo fail:path; exit 0; }}\n\
@@ -494,7 +510,7 @@ pub fn open_check_command(
 if tmux -L {srv} has-session -t {exact} 2>/dev/null; then echo '{S}live:yes'; \
 m=$(tmux -L {srv} show-options -qv -t {pane} {opt} 2>/dev/null); printf '%s%s\\n' '{S}mode:' \"$m\"; \
 else echo '{S}live:no'; fi\n\
-r=$(cd -P -- {p} 2>/dev/null && pwd -P); printf '%s%s\\n' '{S}real:' \"$r\"{session_md}\n{TRUSTED_KEYS}",
+r=$(cd -P -- {p} 2>/dev/null && pwd -P); printf '%s%s\\n' '{S}real:' \"$r\"{session_md}\n{TRUSTED_KEYS}\n{BYPASS_ACCEPTED}",
         S = OPEN_SENTINEL,
         p = quote(path),
         srv = quote(server),
@@ -517,6 +533,19 @@ for my $k (sort keys %{$j->{projects}}) { my $v = $j->{projects}{$k}; \
 next unless ref $v eq q(HASH) && JSON::PP::is_bool($v->{hasTrustDialogAccepted}) && $v->{hasTrustDialogAccepted}; \
 next if $k =~ /\\n/; print qq(CLAUDESK-OPEN:trusted:$k\\n) }' 2>/dev/null";
 
+/// M18 WP2 — constant fragment (no variable value): print `CLAUDESK-OPEN:bypass-accepted:yes` when
+/// the remote account's `~/.claude/settings.json` has `skipDangerousModePermissionPrompt` as a
+/// JSON `true`, i.e. CC will not open a bypass-mode session on its "Bypass Permissions mode"
+/// warning (`crate::bypass_prompt`'s probe facts). ⚠️ `~/.claude/settings.json`, INSIDE
+/// `~/.claude/`: not the trust record's `~/.claude.json`. Only the one line crosses the link,
+/// never the file. Any failure (no file, bad JSON, `false`, the string `"true"`, no JSON::PP)
+/// prints nothing: not accepted, the safe side (D4).
+const BYPASS_ACCEPTED: &str =
+    "perl -MJSON::PP -e 'open(my $h, q(<), qq($ENV{HOME}/.claude/settings.json)) or exit 0; \
+local $/; my $j = eval { JSON::PP->new->decode(<$h>) }; \
+exit 0 unless ref $j eq q(HASH); my $v = $j->{skipDangerousModePermissionPrompt}; \
+print qq(CLAUDESK-OPEN:bypass-accepted:yes\\n) if JSON::PP::is_bool($v) && $v' 2>/dev/null";
+
 /// What the open check found on the remote.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenFacts {
@@ -533,6 +562,9 @@ pub struct OpenFacts {
     pub session_md: bool,
     /// Every folder the remote `~/.claude.json` records as trusted.
     pub trusted_keys: Vec<String>,
+    /// M18 WP2: the remote account has accepted CC's bypass-permissions warning
+    /// ([`BYPASS_ACCEPTED`]). `false` when no line came back (D4).
+    pub bypass_accepted: bool,
 }
 
 /// [`open_check_command`]'s answer, or `None` when the folder or liveness line is missing (no
@@ -544,6 +576,7 @@ pub fn parse_open_facts(out: &str) -> Option<OpenFacts> {
     let mut real = None;
     let mut session_md = false;
     let mut trusted_keys = Vec::new();
+    let mut bypass_accepted = false;
     for line in out.lines() {
         let Some(rest) = line.trim_end_matches('\r').strip_prefix(OPEN_SENTINEL) else {
             continue;
@@ -554,6 +587,7 @@ pub fn parse_open_facts(out: &str) -> Option<OpenFacts> {
             "live:yes" => live = Some(true),
             "live:no" => live = Some(false),
             "session-md:yes" => session_md = true,
+            "bypass-accepted:yes" => bypass_accepted = true,
             _ => {
                 if let Some(v) = rest.strip_prefix("mode:") {
                     mode = parse_mode_value(v);
@@ -573,6 +607,7 @@ pub fn parse_open_facts(out: &str) -> Option<OpenFacts> {
         real,
         session_md,
         trusted_keys,
+        bypass_accepted,
     })
 }
 
@@ -912,6 +947,58 @@ pub(crate) mod tests {
             String::from_utf8_lossy(&out.stdout),
             "ok:tools\nfail:path\n"
         );
+    }
+
+    /// M18 WP2 — the real preflight script in real zsh, with `claude` only at `$HOME/.local/bin` and
+    /// NOT on PATH: the tools check passes (and so does the auth check's `claude`, which runs later
+    /// in the same script). With `claude` in neither place, the tools check fails on `claude`.
+    /// (`tmux` and `perl` are swapped for `sh` and `cat`: this machine need not have tmux.)
+    #[test]
+    fn the_preflight_finds_claude_in_local_bin_when_the_login_path_lacks_it() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = tempfile::TempDir::new().unwrap();
+        let proj = home.path().join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        let local_bin = home.path().join(".local/bin");
+        std::fs::create_dir_all(&local_bin).unwrap();
+        let fake = local_bin.join("claude");
+        // A fake `claude` that answers the auth check as logged in.
+        std::fs::write(&fake, "#!/bin/sh\nprintf '{\"loggedIn\": true}'\n").unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::create_dir_all(home.path().join(".claudesk")).unwrap();
+        std::fs::write(home.path().join(".claudesk/cc-oauth-token"), "tok").unwrap();
+        let run = || {
+            let script = preflight_script(&proj.to_string_lossy())
+                .replace("tmux claude perl", "sh claude cat");
+            let out = Command::new("/bin/zsh")
+                .arg("-c")
+                .arg(&script)
+                .env("HOME", home.path())
+                .env("PATH", "/usr/bin:/bin")
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout).into_owned()
+        };
+        assert_eq!(run(), "ok:tools\nok:path\nok:token\nok:auth\n");
+        std::fs::remove_file(&fake).unwrap();
+        assert_eq!(run(), "fail:tools:claude\n");
+    }
+
+    /// The fallback is one constant fragment, used ahead of the FIRST `claude` in each script.
+    #[test]
+    fn the_path_fallback_precedes_every_claude_use() {
+        assert!(!CLAUDE_PATH_FALLBACK.contains('{'), "no variable value");
+        let pre = preflight_script("/p");
+        let at = pre
+            .find(CLAUDE_PATH_FALLBACK)
+            .expect("preflight has the fallback");
+        assert!(at < pre.find("for t in").unwrap());
+        assert!(at < pre.find("claude auth status").unwrap());
+        let launcher = crate::remote_link::cc_launcher();
+        let at = launcher
+            .find(CLAUDE_PATH_FALLBACK)
+            .expect("cc-launch has the fallback");
+        assert!(at < launcher.find("exec claude").unwrap());
     }
 
     #[test]
@@ -1376,6 +1463,73 @@ pub(crate) mod tests {
         assert!(facts(link.to_str().unwrap(), true).trusted_keys.is_empty());
     }
 
+    /// M18 WP2: the same exec says whether the remote account accepted CC's bypass warning, from
+    /// `~/.claude/settings.json` (INSIDE `~/.claude/`), and only a JSON `true` counts (probe fact 2).
+    #[test]
+    fn the_open_check_reports_the_bypass_acceptance_from_settings_json() {
+        let home = tempfile::TempDir::new().unwrap();
+        let root = home.path().canonicalize().unwrap();
+        let proj = root.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::create_dir_all(root.join(".claude")).unwrap();
+        let accepted = |settings: Option<&str>| {
+            let file = root.join(".claude/settings.json");
+            match settings {
+                Some(text) => std::fs::write(&file, text).unwrap(),
+                None => {
+                    let _ = std::fs::remove_file(&file);
+                }
+            }
+            parse_open_facts(&run_with_fake_tmux_home(
+                &open_check_command("claudesk-dev", "cd-1", proj.to_str().unwrap(), false),
+                false,
+                None,
+                &root,
+            ))
+            .unwrap()
+            .bypass_accepted
+        };
+        assert!(accepted(Some(
+            r#"{"theme": "dark", "skipDangerousModePermissionPrompt": true}"#
+        )));
+        for text in [
+            r#"{"skipDangerousModePermissionPrompt": false}"#,
+            r#"{"skipDangerousModePermissionPrompt": "true"}"#,
+            r#"{"skipDangerousModePermissionPrompt": 1}"#,
+            r#"{"theme": "dark"}"#,
+            "{not json",
+            "[true]",
+        ] {
+            assert!(!accepted(Some(text)), "{text}");
+        }
+        assert!(!accepted(None), "no settings.json");
+        // The trust record's file is NOT where the key lives.
+        std::fs::write(
+            root.join(".claude.json"),
+            r#"{"skipDangerousModePermissionPrompt": true}"#,
+        )
+        .unwrap();
+        assert!(!accepted(None), "the key in ~/.claude.json does not count");
+    }
+
+    #[test]
+    fn open_facts_read_the_bypass_line_only_with_the_sentinel() {
+        let s = OPEN_SENTINEL;
+        let base = format!("{s}dir:yes\n{s}live:no\n");
+        assert!(!parse_open_facts(&base).unwrap().bypass_accepted);
+        assert!(
+            parse_open_facts(&format!("{base}{s}bypass-accepted:yes\n"))
+                .unwrap()
+                .bypass_accepted
+        );
+        assert!(
+            !parse_open_facts(&format!("{base}bypass-accepted:yes\n"))
+                .unwrap()
+                .bypass_accepted,
+            "rc noise without the sentinel"
+        );
+    }
+
     #[test]
     fn the_open_check_treats_a_hostile_path_as_data() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -1418,6 +1572,7 @@ pub(crate) mod tests {
                 real: None,
                 session_md: false,
                 trusted_keys: vec![],
+                bypass_accepted: false,
             })
         );
         // `dir:yes` / `live:yes` printed by rc noise without the sentinel does not count.

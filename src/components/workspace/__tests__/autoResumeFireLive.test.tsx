@@ -87,6 +87,8 @@ afterEach(async () => {
 /** Mount the real pane, let it spawn, then run past the fire delay. */
 async function openAndWaitPastFire(opts: {
   trusted: unknown;
+  /** M18 WP2 — the `bypass_dialog_cleared` answer (default: clear). */
+  bypass?: unknown;
   action: AutoResumeAction;
   projectPath?: string;
   onAutoResumeWithheld?: (notice: string) => void;
@@ -95,6 +97,7 @@ async function openAndWaitPastFire(opts: {
   bootIpc((cmd) => {
     if (cmd === "cc_spawn" || cmd === "cc_spawn_remote") return SESSION;
     if (cmd === "folder_trusted") return opts.trusted;
+    if (cmd === "bypass_dialog_cleared") return opts.bypass ?? true;
     return null;
   });
   const { XtermPane } = await import("../XtermPane");
@@ -144,6 +147,68 @@ describe("the auto-resume fire on the real XtermPane", () => {
     expect(cmds.indexOf("folder_trusted")).toBeLessThan(
       cmds.indexOf("cc_inject"),
     );
+    // M18 WP2: the bypass read is about the same project and session, between trust and inject.
+    const bypassRead = ipcCalls.find((c) => c.cmd === "bypass_dialog_cleared");
+    expect(bypassRead?.args).toEqual({
+      projectPath: PROJECT,
+      ptySessionId: SESSION,
+    });
+    expect(cmds.indexOf("folder_trusted")).toBeLessThan(
+      cmds.indexOf("bypass_dialog_cleared"),
+    );
+    expect(cmds.indexOf("bypass_dialog_cleared")).toBeLessThan(
+      cmds.indexOf("cc_inject"),
+    );
+  });
+
+  // M18 WP2 codify — the same on a REMOTE row, through the real pane: nothing typed, and the notice
+  // names the short host (the remote answer comes from the open check; here the IPC stands in).
+  it("a REMOTE bypass warning not yet accepted: no cc_inject, and a notice naming the host", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const onWithheld = vi.fn();
+    const cmds = await openAndWaitPastFire({
+      trusted: true,
+      bypass: false,
+      action: RESTORE,
+      projectPath: "ssh://me@mini-host.tail0000.ts.net/Users/me/p",
+      onAutoResumeWithheld: onWithheld,
+    });
+    expect(cmds).toContain("cc_spawn_remote");
+    const read = ipcCalls.find((c) => c.cmd === "bypass_dialog_cleared");
+    expect(read?.args).toEqual({
+      projectPath: "ssh://me@mini-host.tail0000.ts.net/Users/me/p",
+      ptySessionId: SESSION,
+    });
+    expect(cmds).not.toContain("cc_inject");
+    expect(onWithheld).toHaveBeenCalledTimes(1);
+    const notice = String(onWithheld.mock.calls[0][0]);
+    expect(notice).toContain("hasn't been accepted on mini-host yet");
+    expect(notice).toContain(
+      'Pick "Yes, I accept", then type /session-restore',
+    );
+    warn.mockRestore();
+    expect(uncaught).toEqual([]);
+  });
+
+  // M18 WP2 — a trusted folder whose CC would open on the bypass-permissions warning: nothing is
+  // typed, and the LOCAL workspace is told (D-2: no picker row predicted it).
+  it("a bypass warning not yet accepted: no cc_inject, and a LOCAL notice", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const onWithheld = vi.fn();
+    const cmds = await openAndWaitPastFire({
+      trusted: true,
+      bypass: false,
+      action: RESTORE,
+      onAutoResumeWithheld: onWithheld,
+    });
+    expect(cmds).toContain("bypass_dialog_cleared");
+    expect(cmds).not.toContain("cc_inject");
+    expect(onWithheld).toHaveBeenCalledTimes(1);
+    expect(String(onWithheld.mock.calls[0][0])).toContain(
+      'Pick "Yes, I accept", then type /session-restore',
+    );
+    warn.mockRestore();
+    expect(uncaught).toEqual([]);
   });
 
   it("an UNTRUSTED folder reaches no cc_inject at all — the reported defect", async () => {

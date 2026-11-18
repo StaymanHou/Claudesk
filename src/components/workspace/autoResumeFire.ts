@@ -48,6 +48,13 @@
 // trusted (ruling R1; any doubt withholds, D4). The record's location and the ANCESTOR-WALK
 // rule CC applies were probed live and are documented in `src-tauri/src/folder_trust/mod.rs`.
 // The `--continue` arm is spawn argv and is not gated here.
+//
+// ⚠️ M18 WP2 — THE SAME FOR CC'S BYPASS-PERMISSIONS WARNING. A bypass-mode spawn on an account (or
+// profile) that never accepted it opens on "WARNING: … Bypass Permissions mode … ❯ No, exit", and
+// the `\r` exits CC the same way. So the fire also reads `bypass_dialog_cleared` (the session's own
+// spawn permission + the config's `skipDangerousModePermissionPrompt`), and withholds unless it is
+// clear. Probed live at CC 2.1.327: `src-tauri/src/bypass_prompt/mod.rs`. Nothing in the picker
+// predicts this one, so its withhold is said in the workspace toast for local AND remote rows.
 
 import { invoke } from "@tauri-apps/api/core";
 import { encodeBase64 } from "../../cc/bridge";
@@ -71,6 +78,11 @@ export interface FireInputs {
    * default D4).
    */
   trusted: boolean;
+  /**
+   * M18 WP2 — whether this session can NOT open on CC's bypass-permissions warning, read at fire
+   * time ({@link readBypassCleared}). `false` whenever that is in doubt (D4).
+   */
+  bypassCleared: boolean;
 }
 
 /**
@@ -94,6 +106,10 @@ export function shouldInject(inputs: FireInputs): boolean {
   // (`SURFACE-2026-11-03-AUTO-RESUME-FIRES-INTO-THE-FOLDER-TRUST-PROMPT`). Ruling R1: do not
   // fire; the picker still names the command and the operator types it after trusting.
   if (!inputs.trusted) return false;
+  // ⚠️ M18 WP2 — THE BYPASS TERM. A bypass-mode CC on an account that never accepted the warning
+  // opens on it, and its default is also "No, exit"
+  // (`SURFACE-2026-11-17-AUTO-RESUME-INJECT-ANSWERS-BYPASS-PERMISSIONS-DIALOG-NO-EXIT`).
+  if (!inputs.bypassCleared) return false;
   return requiresInjection(inputs.action);
 }
 
@@ -126,7 +142,33 @@ export async function readFolderTrust(
   }
 }
 
-/** What one fire needs. The two IO seams default to the real ones and are injected by tests. */
+/**
+ * M18 WP2 — whether session `ptySessionId` can NOT open on CC's bypass-permissions warning (the
+ * Rust `bypass_dialog_cleared` command; the rule is documented in
+ * `src-tauri/src/bypass_prompt/mod.rs`). Every failure resolves `false`, never rejects (D4), as
+ * {@link readFolderTrust} does.
+ */
+export async function readBypassCleared(
+  projectPath: string,
+  ptySessionId: string,
+): Promise<boolean> {
+  try {
+    return (
+      (await invoke<boolean>("bypass_dialog_cleared", {
+        projectPath,
+        ptySessionId,
+      })) === true
+    );
+  } catch (e) {
+    console.warn(
+      `auto-resume: reading the bypass-warning state for ${projectPath} failed`,
+      e,
+    );
+    return false;
+  }
+}
+
+/** What one fire needs. The IO seams default to the real ones and are injected by tests. */
 export interface FireRun {
   action: AutoResumeAction;
   /** The Claudesk PTY session to type into. */
@@ -139,28 +181,56 @@ export interface FireRun {
    */
   isCancelled: () => boolean;
   readTrust?: (projectPath: string, ptySessionId: string) => Promise<boolean>;
+  /** M18 WP2 — the bypass-warning read ({@link readBypassCleared} in production). */
+  readBypass?: (projectPath: string, ptySessionId: string) => Promise<boolean>;
   inject?: (sessionId: string, command: string) => Promise<void>;
   /**
-   * M17 WP5 (operator ruling at P2.verify-human.3) — told when a REMOTE folder's trust withholds
-   * the command, with the plain-words notice ({@link withheldNotice}). A local row needs none: its
-   * picker label already said the command waits for trust (paydown-2026-11-08 WP5).
+   * Told when a startup dialog withheld the command and something needs saying, with the
+   * plain-words notice ({@link withheldNotice}): a REMOTE untrusted folder (M17 WP5), and the
+   * bypass-permissions warning on any row (M18 WP2). A LOCAL untrusted folder alone is not told:
+   * its picker label already said the command waits for trust (paydown-2026-11-08 WP5).
    */
   onWithheld?: (notice: string) => void;
 }
 
+/** Which of CC's startup dialogs withheld the command (M18 WP2). */
+export interface WithheldCause {
+  /** The folder-trust dialog (paydown-2026-11-08 WP5). */
+  untrusted: boolean;
+  /** The bypass-permissions warning (M18 WP2). */
+  bypass: boolean;
+}
+
 /**
- * M17 WP5 — what a REMOTE workspace says when an untrusted folder withheld `command`, or `null`
- * for a local project (its picker row warned before the click). A remote row's label comes from
- * Claudesk's LOCAL record, so nothing warned it, and a silent non-fire would read as "nothing to
- * resume" (prior `a-silent-non-action-must-not-read-as-done`).
+ * What a workspace says when CC's startup dialogs withheld `command`, or `null` when nothing needs
+ * saying.
+ *
+ * - **Trust alone, local:** `null`. The picker row already said the command waits for trust
+ *   (paydown-2026-11-08 WP5).
+ * - **Trust alone, remote (M17 WP5):** a remote row's label comes from Claudesk's LOCAL record, so
+ *   nothing warned it.
+ * - **The bypass warning, local AND remote (M18 WP2, D-2):** nothing predicts it anywhere, and a
+ *   silent non-fire would read as "nothing to resume" (prior
+ *   `a-silent-non-action-must-not-read-as-done`). When both apply, the trust dialog comes first
+ *   (probe finding 4), so the notice names both in that order.
  */
 export function withheldNotice(
   projectPath: string,
   command: string,
+  cause: WithheldCause = { untrusted: true, bypass: false },
 ): string | null {
   const authority = remoteAuthority(projectPath);
-  if (authority === null) return null;
-  return `Claude Code hasn't trusted this folder on ${shortHost(authority)} yet, so ${command} was not typed. Trust the folder, then type ${command}.`;
+  const where = authority === null ? "" : ` on ${shortHost(authority)}`;
+  if (cause.untrusted && cause.bypass) {
+    return `Claude Code hasn't trusted this folder${where} yet, and its Bypass Permissions warning comes next, so ${command} was not typed. Trust the folder, pick "Yes, I accept" on the warning, then type ${command}.`;
+  }
+  if (cause.bypass) {
+    return `Claude Code's Bypass Permissions warning hasn't been accepted${where} yet, so ${command} was not typed (its default, "No, exit", would close Claude Code). Pick "Yes, I accept", then type ${command}.`;
+  }
+  if (cause.untrusted && authority !== null) {
+    return `Claude Code hasn't trusted this folder${where} yet, so ${command} was not typed. Trust the folder, then type ${command}.`;
+  }
+  return null;
 }
 
 /**
@@ -177,17 +247,35 @@ export async function fireAutoResume(run: FireRun): Promise<boolean> {
     run.projectPath,
     run.sessionId,
   );
+  // M18 WP2 — the second startup dialog. Read in the same fire-time window, before the fresh
+  // cancellation read below.
+  const bypassCleared = await (run.readBypass ?? readBypassCleared)(
+    run.projectPath,
+    run.sessionId,
+  );
   const cancelled = run.isCancelled();
-  if (!shouldInject({ action: run.action, cancelled, trusted })) {
-    if (!cancelled && !trusted && requiresInjection(run.action)) {
-      // The one diagnostic this path has (no overlay, by operator decision): name the
-      // withheld command so a "nothing happened" report is answerable.
+  if (
+    !shouldInject({ action: run.action, cancelled, trusted, bypassCleared })
+  ) {
+    const command = injectionCommand(run.action);
+    if (!cancelled && command !== null && (!trusted || !bypassCleared)) {
+      // The one console diagnostic this path has (no overlay, by operator decision): name the
+      // withheld command and why, so a "nothing happened" report is answerable.
+      const why = [
+        trusted ? null : "Claude Code has not trusted this folder yet",
+        bypassCleared
+          ? null
+          : "Claude Code's bypass-permissions warning has not been accepted",
+      ]
+        .filter((w) => w !== null)
+        .join("; ");
       console.warn(
-        `auto-resume: ${injectionCommand(run.action) ?? "command"} withheld for ${run.projectPath} — Claude Code has not trusted this folder yet`,
+        `auto-resume: ${command} withheld for ${run.projectPath} — ${why}`,
       );
-      const command = injectionCommand(run.action);
-      const notice =
-        command === null ? null : withheldNotice(run.projectPath, command);
+      const notice = withheldNotice(run.projectPath, command, {
+        untrusted: !trusted,
+        bypass: !bypassCleared,
+      });
       if (notice !== null) run.onWithheld?.(notice);
     }
     return false;

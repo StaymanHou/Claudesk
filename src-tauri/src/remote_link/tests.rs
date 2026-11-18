@@ -269,6 +269,51 @@ fn the_launcher_exports_the_token_and_inline_mode_unsets_tmux_and_passes_args_ve
     assert_eq!(out.lines().collect::<Vec<_>>(), want);
 }
 
+/// M18 WP2 — `claude` only in `~/.local/bin` (the native installer's place) and NOT on PATH, as on
+/// an account whose PATH line lives only in `~/.zshrc`: the launcher still finds it. And a `claude`
+/// that IS on PATH wins (the fallback runs only when the PATH has none).
+#[test]
+fn the_launcher_falls_back_to_local_bin_only_when_claude_is_not_on_path() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = TempDir::new().unwrap();
+    let local_bin = home.path().join(".local/bin");
+    std::fs::create_dir_all(&local_bin).unwrap();
+    let write_fake = |path: &Path, who: &str| {
+        std::fs::write(path, format!("#!/bin/sh\nprintf 'WHO={who}\\n'\n")).unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    };
+    write_fake(&local_bin.join("claude"), "local-bin");
+    let launcher = home.path().join("cc-launch");
+    std::fs::write(&launcher, cc_launcher()).unwrap();
+    std::fs::set_permissions(&launcher, std::fs::Permissions::from_mode(0o700)).unwrap();
+    std::fs::create_dir_all(home.path().join(".claudesk")).unwrap();
+    std::fs::write(home.path().join(".claudesk/cc-oauth-token"), "tok").unwrap();
+    let run = |path: &str| {
+        let out = Command::new(&launcher)
+            .env("HOME", home.path())
+            .env("PATH", path)
+            .output()
+            .unwrap();
+        (
+            out.status.success(),
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+        )
+    };
+    // Not on PATH: found in ~/.local/bin.
+    assert_eq!(run("/usr/bin:/bin"), (true, "WHO=local-bin\n".to_string()));
+    // On PATH: the PATH one runs, not the fallback.
+    let on_path = home.path().join("bin");
+    std::fs::create_dir_all(&on_path).unwrap();
+    write_fake(&on_path.join("claude"), "path");
+    assert_eq!(
+        run(&format!("{}:/usr/bin:/bin", on_path.display())),
+        (true, "WHO=path\n".to_string())
+    );
+    // Neither: the exec fails (the preflight is what names the fix).
+    std::fs::remove_file(local_bin.join("claude")).unwrap();
+    assert!(!run("/usr/bin:/bin").0);
+}
+
 #[test]
 fn the_launcher_refuses_to_start_claude_without_a_token_file() {
     let home = TempDir::new().unwrap();
@@ -1905,6 +1950,7 @@ fn the_fire_time_trust_read_answers_a_remote_row_from_its_last_open_check() {
             unclean_flag: false,
             session_md: true,
             trusted,
+            bypass_accepted: false,
         }),
         clear_end_pending: false,
         notice: None,
@@ -1960,6 +2006,70 @@ fn the_fire_time_trust_read_answers_a_remote_row_from_its_last_open_check() {
             notice: None,
         });
         assert_eq!(remote_trust(key, Some(&h.reg)), Some(false), "{check:?}");
+    }
+}
+
+/// M18 WP2 — the fire-time BYPASS read answers a remote row from its last open check, through the
+/// same settle as trust: a start carries the remote account's answer, every other outcome
+/// overwrites an earlier `true` (no stale acceptance survives a later check).
+#[test]
+fn the_fire_time_bypass_read_answers_a_remote_row_from_its_last_open_check() {
+    use super::commands::{settle_open_decision, OpenCheck, OpenDecision, StartSignals};
+    use crate::bypass_prompt::commands::remote_cleared;
+    use crate::cc_session::{CcPermissionMode, SpawnPermission};
+    let h = harness();
+    let data = TempDir::new().unwrap();
+    let key = "ssh://me@mini-host/Users/me/p";
+    let other = "ssh://me@mini-host/Users/me/q";
+    let bypass = Some(SpawnPermission::Flag(CcPermissionMode::BypassPermissions));
+    let start = |bypass_accepted: bool| OpenDecision {
+        check: OpenCheck::Start(StartSignals {
+            unclean_flag: false,
+            session_md: true,
+            trusted: true,
+            bypass_accepted,
+        }),
+        clear_end_pending: false,
+        notice: None,
+    };
+    let settle = |d: OpenDecision| settle_open_decision(data.path(), &h.reg, key, d);
+
+    assert_eq!(
+        remote_cleared(key, bypass, Some(&h.reg)),
+        Some(false),
+        "no check yet"
+    );
+    settle(start(true));
+    assert_eq!(remote_cleared(key, bypass, Some(&h.reg)), Some(true));
+    assert_eq!(
+        remote_cleared(other, bypass, Some(&h.reg)),
+        Some(false),
+        "per key"
+    );
+    // The trust answer and the bypass answer are separate maps.
+    settle(start(false));
+    assert_eq!(remote_cleared(key, bypass, Some(&h.reg)), Some(false));
+    assert!(
+        h.reg.open_trust(key),
+        "trust is untouched by the bypass answer"
+    );
+
+    let m = || "x".to_string();
+    for check in [
+        OpenCheck::Reconnect { mode: None },
+        OpenCheck::AskEndPending { message: m() },
+        OpenCheck::AskUnrecorded { message: m() },
+        OpenCheck::FolderMissing { message: m() },
+        OpenCheck::Unreachable { message: m() },
+        OpenCheck::Invalid { message: m() },
+    ] {
+        settle(start(true));
+        settle(OpenDecision {
+            check: check.clone(),
+            clear_end_pending: false,
+            notice: None,
+        });
+        assert!(!h.reg.open_bypass(key), "{check:?}");
     }
 }
 

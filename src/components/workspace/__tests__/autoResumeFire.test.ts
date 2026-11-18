@@ -22,7 +22,12 @@ const ARGV: AutoResumeAction = { kind: "argv", flag: "--continue" };
 describe("shouldInject — the decision is re-checked AT FIRE TIME", () => {
   it("injects for the inject arm when the run is live", () => {
     expect(
-      shouldInject({ action: INJECT, cancelled: false, trusted: true }),
+      shouldInject({
+        action: INJECT,
+        cancelled: false,
+        trusted: true,
+        bypassCleared: true,
+      }),
     ).toBe(true);
   });
 
@@ -31,13 +36,23 @@ describe("shouldInject — the decision is re-checked AT FIRE TIME", () => {
     // execvp time and needs no injection. Typing `/resume` instead would open an
     // interactive session picker, which is worse than firing nothing.
     expect(
-      shouldInject({ action: ARGV, cancelled: false, trusted: true }),
+      shouldInject({
+        action: ARGV,
+        cancelled: false,
+        trusted: true,
+        bypassCleared: true,
+      }),
     ).toBe(false);
   });
 
   it("does NOT inject when there is no action", () => {
     expect(
-      shouldInject({ action: null, cancelled: false, trusted: true }),
+      shouldInject({
+        action: null,
+        cancelled: false,
+        trusted: true,
+        bypassCleared: true,
+      }),
     ).toBe(false);
   });
 
@@ -46,11 +61,21 @@ describe("shouldInject — the decision is re-checked AT FIRE TIME", () => {
     // enough to close the workspace, switch away, or relaunch. A write into a torn-down or
     // replaced session would type a slash command into someone else's live conversation.
     expect(
-      shouldInject({ action: INJECT, cancelled: true, trusted: true }),
+      shouldInject({
+        action: INJECT,
+        cancelled: true,
+        trusted: true,
+        bypassCleared: true,
+      }),
     ).toBe(false);
-    expect(shouldInject({ action: ARGV, cancelled: true, trusted: true })).toBe(
-      false,
-    );
+    expect(
+      shouldInject({
+        action: ARGV,
+        cancelled: true,
+        trusted: true,
+        bypassCleared: true,
+      }),
+    ).toBe(false);
   });
 
   it("cancellation dominates — no input combination injects while cancelled", () => {
@@ -58,7 +83,12 @@ describe("shouldInject — the decision is re-checked AT FIRE TIME", () => {
     // "someone adds an arm and forgets the cancel check".
     for (const action of [INJECT, ARGV, null] as AutoResumeAction[]) {
       expect(
-        shouldInject({ action, cancelled: true, trusted: true }),
+        shouldInject({
+          action,
+          cancelled: true,
+          trusted: true,
+          bypassCleared: true,
+        }),
         `cancelled run injected for ${JSON.stringify(action)}`,
       ).toBe(false);
     }
@@ -70,27 +100,52 @@ describe("shouldInject — the folder-trust term (paydown-2026-11-08 WP5)", () =
   // injected `\r` picks it and CC quits. Untrusted (or unknown, D4) must never inject.
   it("does NOT inject the inject arm on an untrusted folder", () => {
     expect(
-      shouldInject({ action: INJECT, cancelled: false, trusted: false }),
+      shouldInject({
+        action: INJECT,
+        cancelled: false,
+        trusted: false,
+        bypassCleared: true,
+      }),
     ).toBe(false);
   });
 
-  it("the ONLY injecting input is inject + live + trusted", () => {
+  it("the ONLY injecting input is inject + live + trusted + bypass clear", () => {
     const actions = [INJECT, ARGV, null] as AutoResumeAction[];
     const hits: string[] = [];
     for (const action of actions)
       for (const cancelled of [false, true])
         for (const trusted of [false, true])
-          if (shouldInject({ action, cancelled, trusted }))
-            hits.push(`${action?.kind ?? "null"}/${cancelled}/${trusted}`);
-    expect(hits).toEqual(["inject/false/true"]);
+          for (const bypassCleared of [false, true])
+            if (shouldInject({ action, cancelled, trusted, bypassCleared }))
+              hits.push(
+                `${action?.kind ?? "null"}/${cancelled}/${trusted}/${bypassCleared}`,
+              );
+    expect(hits).toEqual(["inject/false/true/true"]);
+  });
+});
+
+describe("shouldInject — the bypass-warning term (M18 WP2)", () => {
+  // A bypass-mode CC on an account that never accepted the warning opens on it, with the cursor on
+  // "No, exit": the injected `\r` would close CC. Not clear (or unknown, D4) must never inject.
+  it("does NOT inject on a trusted folder whose bypass warning is not accepted", () => {
+    expect(
+      shouldInject({
+        action: INJECT,
+        cancelled: false,
+        trusted: true,
+        bypassCleared: false,
+      }),
+    ).toBe(false);
   });
 });
 
 describe("fireAutoResume — read trust, THEN decide, THEN type", () => {
   function run(over: {
     trusted?: boolean;
+    bypass?: boolean;
     action?: AutoResumeAction;
     cancelledAfterRead?: boolean;
+    cancelledAfterBypassRead?: boolean;
   }) {
     const events: string[] = [];
     let cancelled = false;
@@ -107,6 +162,12 @@ describe("fireAutoResume — read trust, THEN decide, THEN type", () => {
         if (over.cancelledAfterRead) cancelled = true;
         return over.trusted ?? true;
       },
+      readBypass: async (projectPath, ptySessionId) => {
+        readArgs.push([projectPath, ptySessionId]);
+        events.push("readBypass");
+        if (over.cancelledAfterBypassRead) cancelled = true;
+        return over.bypass ?? true;
+      },
       inject: async (sessionId, command) => {
         events.push("inject");
         injected.push([sessionId, command]);
@@ -119,8 +180,11 @@ describe("fireAutoResume — read trust, THEN decide, THEN type", () => {
     const r = run({ trusted: true });
     expect(await r.promise).toBe(true);
     expect(r.injected).toEqual([["pty-7", "/session-restore"]]);
-    // Exact args: the trust read follows THIS project under THIS session's live profile.
-    expect(r.readArgs).toEqual([["/u/proj", "pty-7"]]);
+    // Exact args: both reads follow THIS project under THIS session.
+    expect(r.readArgs).toEqual([
+      ["/u/proj", "pty-7"],
+      ["/u/proj", "pty-7"],
+    ]);
   });
 
   it("types NOTHING on an untrusted folder — the reported defect", async () => {
@@ -129,10 +193,25 @@ describe("fireAutoResume — read trust, THEN decide, THEN type", () => {
     expect(r.injected).toEqual([]);
   });
 
-  it("reads trust BEFORE it types", async () => {
+  it("reads trust and the bypass warning BEFORE it types", async () => {
     const r = run({ trusted: true });
     await r.promise;
-    expect(r.events).toEqual(["read", "inject"]);
+    expect(r.events).toEqual(["read", "readBypass", "inject"]);
+  });
+
+  it("types NOTHING when the bypass warning is not accepted (M18 WP2)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const r = run({ trusted: true, bypass: false });
+    expect(await r.promise).toBe(false);
+    expect(r.injected).toEqual([]);
+    expect(warn.mock.calls[0]?.[0]).toContain("bypass-permissions warning");
+    warn.mockRestore();
+  });
+
+  it("re-reads cancellation AFTER the bypass read too", async () => {
+    const r = run({ trusted: true, cancelledAfterBypassRead: true });
+    expect(await r.promise).toBe(false);
+    expect(r.injected).toEqual([]);
   });
 
   it("re-reads cancellation AFTER the trust read — a pane closed meanwhile types nothing", async () => {
@@ -320,6 +399,7 @@ describe("withheldNotice + fireAutoResume's onWithheld", () => {
     projectPath: string,
     trusted: boolean,
     action: AutoResumeAction = INJECT,
+    bypass = true,
   ) => {
     const notices: string[] = [];
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -329,6 +409,7 @@ describe("withheldNotice + fireAutoResume's onWithheld", () => {
       projectPath,
       isCancelled: () => false,
       readTrust: async () => trusted,
+      readBypass: async () => bypass,
       inject: async () => {},
       onWithheld: (n) => notices.push(n),
     }).then((typed) => {
@@ -358,6 +439,7 @@ describe("withheldNotice + fireAutoResume's onWithheld", () => {
         cancelled = true;
         return false;
       },
+      readBypass: async () => true,
       inject: async () => {},
       onWithheld: (n) => notices.push(n),
     });
@@ -372,5 +454,68 @@ describe("withheldNotice + fireAutoResume's onWithheld", () => {
     expect((await fire(REMOTE, true)).notices).toEqual([]);
     expect((await fire("/u/proj", false)).notices).toEqual([]);
     expect((await fire(REMOTE, false, ARGV)).notices).toEqual([]);
+  });
+});
+
+// M18 WP2 — the bypass warning's notice, local AND remote (D-2: nothing predicts it in the picker).
+describe("withheldNotice — the bypass-permissions warning (M18 WP2)", () => {
+  const REMOTE = "ssh://me@mini-host.tail0000.ts.net/Users/me/p";
+  const LOCAL = "/Users/me/p";
+  const BYPASS = { untrusted: false, bypass: true };
+  const BOTH = { untrusted: true, bypass: true };
+
+  it("a local row is told, with the dialog's default and the fix", () => {
+    expect(withheldNotice(LOCAL, "/session-restore", BYPASS)).toBe(
+      `Claude Code's Bypass Permissions warning hasn't been accepted yet, so /session-restore was not typed (its default, "No, exit", would close Claude Code). Pick "Yes, I accept", then type /session-restore.`,
+    );
+  });
+
+  it("a remote row names the short host", () => {
+    expect(withheldNotice(REMOTE, "/session-restore", BYPASS)).toContain(
+      "hasn't been accepted on mini-host yet",
+    );
+  });
+
+  it("both dialogs: trust first, then the warning, local and remote", () => {
+    expect(withheldNotice(LOCAL, "/session-restore", BOTH)).toBe(
+      `Claude Code hasn't trusted this folder yet, and its Bypass Permissions warning comes next, so /session-restore was not typed. Trust the folder, pick "Yes, I accept" on the warning, then type /session-restore.`,
+    );
+    expect(withheldNotice(REMOTE, "/session-restore", BOTH)).toContain(
+      "hasn't trusted this folder on mini-host yet, and its Bypass",
+    );
+  });
+
+  it("trust alone keeps its M17 behaviour: remote told, local silent", () => {
+    const TRUST = { untrusted: true, bypass: false };
+    expect(withheldNotice(REMOTE, "/session-restore", TRUST)).toBe(
+      "Claude Code hasn't trusted this folder on mini-host yet, so /session-restore was not typed. Trust the folder, then type /session-restore.",
+    );
+    expect(withheldNotice(LOCAL, "/session-restore", TRUST)).toBeNull();
+    expect(
+      withheldNotice(LOCAL, "/session-restore", {
+        untrusted: false,
+        bypass: false,
+      }),
+    ).toBeNull();
+  });
+
+  it("fireAutoResume hands the bypass notice up for a LOCAL row", async () => {
+    const notices: string[] = [];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const typed = await fireAutoResume({
+      action: INJECT,
+      sessionId: "pty-7",
+      projectPath: LOCAL,
+      isCancelled: () => false,
+      readTrust: async () => true,
+      readBypass: async () => false,
+      inject: async () => {},
+      onWithheld: (n) => notices.push(n),
+    });
+    warn.mockRestore();
+    expect(typed).toBe(false);
+    expect(notices).toEqual([
+      withheldNotice(LOCAL, "/session-restore", BYPASS),
+    ]);
   });
 });

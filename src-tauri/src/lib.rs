@@ -20,6 +20,9 @@ mod env_path;
 // "Reveal in Finder" launcher — opens a workspace's project dir in the macOS
 // Finder (`open <dir>`), alongside the Sublime Text / Merge launch buttons.
 mod finder;
+// M18 WP2: can a session open on CC's "Bypass Permissions mode" warning? The second fire-time
+// read, beside folder trust: the warning's default is also "No, exit".
+mod bypass_prompt;
 // paydown-2026-11-08 WP5: has CC's folder-trust dialog been accepted for a project? Read before
 // the auto-resume inject fires, so `/session-restore\r` never lands on the dialog's "No, exit".
 mod folder_trust;
@@ -564,6 +567,8 @@ pub fn run() {
             transcript::commands::transcript_tail,
             // paydown-2026-11-08 WP5: one boolean for the auto-resume fire gate (`shouldInject`).
             folder_trust::commands::folder_trusted,
+            // M18 WP2: the second fire-gate boolean — can this session open on CC's bypass warning?
+            bypass_prompt::commands::bypass_dialog_cleared,
             // M15 WP4: the active WIP file's raw text, for the phase-boundary check. Returns
             // TEXT, never a decision — the parse is TS-side (R-4).
             wip::commands::wip_read,

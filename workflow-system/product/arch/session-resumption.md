@@ -138,7 +138,28 @@ On a never-trusted folder CC opens on "Quick safety check … trust this folder?
 **As built (ruling R1, default D4):** the fire (`autoResumeFire.ts` → `fireAutoResume`) reads CC's own
 trust record at FIRE time, then decides through `shouldInject` (its `trusted` term) with a fresh
 cancellation read. Untrusted or any doubt → nothing typed; the operator trusts, then types it.
-📐 **M18 (planned) extends the fire-time read to the bypass-permissions warning:** under `--dangerously-skip-permissions` the inject also requires `skipDangerousModePermissionPrompt: true` in the account's (or profile's) `settings.json`, local and remote alike (`SURFACE-2026-11-17-AUTO-RESUME-INJECT-ANSWERS-BYPASS-PERMISSIONS-DIALOG-NO-EXIT`; [claude-substrate](claude-substrate.md) §R.6).
+✅ **M18 WP2 (2026-11-18): the same withhold for CC's bypass-permissions warning.** A bypass-mode CC on
+an account (or profile) that never accepted "WARNING: Claude Code running in Bypass Permissions mode"
+opens on it, cursor on "No, exit". The fire reads a second boolean, `bypass_dialog_cleared`
+(`src-tauri/src/bypass_prompt/`), and `shouldInject` gained a `bypassCleared` term. Read it with the
+probe facts in that module's docs (CC 2.1.327, local and the mini):
+- **The session's own spawn decides whether the warning can show.** `RegisteredSession.permission`
+  records what the argv carried (`SpawnPermission`): `Flag(bypassPermissions)` needs the key;
+  any other flag never shows it, even over a bypass `defaultMode`; `Unflagged` (a profile spawn) follows
+  the profile's `permissions.defaultMode`; `NoStart` (a remote reattach, a shell) shows nothing.
+- **What clears it:** `"skipDangerousModePermissionPrompt": true` (a JSON boolean) in
+  `~/.claude/settings.json`, or the profile's `$CLAUDE_CONFIG_DIR/settings.json`. ⚠️ Inside `~/.claude/`,
+  unlike the trust record. A REMOTE row is answered from the open check's exec (`BYPASS_ACCEPTED`, kept per
+  key in `LinkRegistry::open_bypass`, overwritten by every check like the trust answer). ⚠️ **Accepted
+  gap** (operator, 2026-11-18): a `true` in the project's `.claude/settings.local.json` also clears it and
+  is not read, so such a project withholds (one typed command).
+- **It is said, local AND remote** (decision D-2): nothing in the picker predicts it, so `withheldNotice`
+  gives a toast for any row, naming the dialog's "No, exit" default and the fix ("Pick "Yes, I accept",
+  then type /session-restore"). When both dialogs apply, the notice names the trust dialog first (it comes
+  first). A local trust withhold alone stays silent, as before.
+- **Recycle too** (decision D-3): its restore reads the fresh session's answer after the settle; a
+  withheld restore is the existing `restore-not-injected` ("Recycled, but /session-restore was not sent: …
+  Run /session-restore yourself.").
 
 - **The record:** `projects[<physical path>].hasTrustDialogAccepted`, in `$HOME/.claude.json` for the
   default profile (⚠️ a SIBLING of `~/.claude/`, not inside it) or `$CLAUDE_CONFIG_DIR/.claude.json` for

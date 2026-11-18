@@ -222,14 +222,19 @@ wizard uses. A host whose link is down shows "connect a workspace on this host t
 - **Developer tools:** `xcode-select -p` before `git clone`. On a Mac without the Command Line Tools, `git` is a stub that pops
   a GUI installer on the host's console and fails over ssh. The refusal names the fix (`xcode-select --install` at the
   host's console).
-- **`claude` not on the `zsh -l` PATH** (`SURFACE-2026-11-17-REMOTE-CLAUDE-ONLY-ON-INTERACTIVE-PATH`): the deployed `cc-launch`
-  and the add-remote preflight fall back to `$HOME/.local/bin/claude`, as constant fragments. The failure message names the
-  `.zprofile` cause. Claudesk never edits a dotfile.
-- **The bypass-permissions warning** (`SURFACE-2026-11-17-AUTO-RESUME-INJECT-ANSWERS-BYPASS-PERMISSIONS-DIALOG-NO-EXIT`, high):
-  this design is recorded in `session-resumption.md` → "The inject arm withholds…". The fire-time read gains a second condition: when the spawn uses
-  `--dangerously-skip-permissions`, it also needs `skipDangerousModePermissionPrompt: true` in the account's
-  `settings.json` (the profile's dir for a profile). Otherwise it **withholds** the inject and says so, as the trust
-  case does. It applies to local and remote alike: remote reads it in the open-check exec beside `TRUSTED_KEYS`, as a constant perl fragment.
+- ✅ **`claude` not on the `zsh -l` PATH — BUILT at M18 WP2 (2026-11-18)**
+  (`SURFACE-2026-11-17-REMOTE-CLAUDE-ONLY-ON-INTERACTIVE-PATH`). One constant fragment,
+  `remote_cmd::CLAUDE_PATH_FALLBACK` (`command -v claude || PATH="$HOME/.local/bin:$PATH"`), runs ahead of the
+  first `claude` in the deployed `cc-launch` and in the add-remote preflight (so `AUTH_CHECK` gets it too). A
+  `claude` on PATH still wins. When neither place has it, the preflight's message names both places and the
+  `~/.zprofile` fix (`preflight::missing_tool`). Claudesk never edits a dotfile.
+- ✅ **The bypass-permissions warning — BUILT at M18 WP2 (2026-11-18)**
+  (`SURFACE-2026-11-17-AUTO-RESUME-INJECT-ANSWERS-BYPASS-PERMISSIONS-DIALOG-NO-EXIT`, high). As built, the
+  condition is the session's recorded spawn permission (Claudesk spawns with `--permission-mode
+  bypassPermissions`, not `--dangerously-skip-permissions`; both show the warning) plus the key in
+  `settings.json`. Remote reads it in the open-check exec beside `TRUSTED_KEYS` (`BYPASS_ACCEPTED`, a
+  constant perl fragment). Local and remote withhold and say so; Recycle's restore too. Authority:
+  `session-resumption.md` → "The inject arm withholds…".
 
 ### R.7 Remote Recycle never respawns CC — ✅ FIXED at WP1 (2026-11-18, `411bff8`)
 

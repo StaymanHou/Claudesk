@@ -226,10 +226,7 @@ fn parse_check_lines(out: &str, host: &str, path: &str, checks: &mut Vec<CheckRe
             }
             l => {
                 if let Some(tool) = l.strip_prefix("fail:tools:") {
-                    checks.push(fail(
-                        "tools",
-                        format!("{tool} was not found on {host} (looked on a login shell's PATH)"),
-                    ));
+                    checks.push(fail("tools", missing_tool(tool, host)));
                     return false;
                 }
                 // Anything else (a login-shell banner, a profile's echo) is not ours: ignore it.
@@ -241,6 +238,21 @@ fn parse_check_lines(out: &str, host: &str, path: &str, checks: &mut Vec<CheckRe
         format!("the checks on {host} stopped early (no result line came back)"),
     ));
     false
+}
+
+/// The plain-words failure for a tool the preflight did not find (M18 WP2). `claude` gets its own
+/// message: the usual cause is a PATH line that lives only in `~/.zshrc`, which Claudesk's
+/// non-interactive login shell never reads (`remote_cmd::CLAUDE_PATH_FALLBACK`).
+fn missing_tool(tool: &str, host: &str) -> String {
+    if tool == "claude" {
+        format!(
+            "claude was not found on {host}: not on a login shell's PATH and not at \
+             ~/.local/bin/claude. Claudesk's login shell reads ~/.zprofile, not ~/.zshrc, so if \
+             your PATH line for claude is only in ~/.zshrc, add it to ~/.zprofile on {host}"
+        )
+    } else {
+        format!("{tool} was not found on {host} (looked on a login shell's PATH)")
+    }
 }
 
 fn token_fix(host: &str, what: &str) -> String {
@@ -419,6 +431,12 @@ mod tests {
     fn each_check_failure_names_what_failed() {
         let cases = [
             ("fail:tools:tmux\n", "tools", "tmux was not found on mini"),
+            // M18 WP2: claude's message names both places it looked and the ~/.zprofile fix.
+            (
+                "fail:tools:claude\n",
+                "tools",
+                "not at ~/.local/bin/claude. Claudesk's login shell reads ~/.zprofile, not ~/.zshrc",
+            ),
             (
                 "ok:tools\nfail:path\n",
                 "path",

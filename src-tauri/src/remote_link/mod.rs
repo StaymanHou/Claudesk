@@ -147,7 +147,9 @@ CLAUDE_CODE_OAUTH_TOKEN=\"$(cat \"{token}\")\" || exit 1\n\
 export CLAUDE_CODE_OAUTH_TOKEN\n\
 export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1\n\
 unset TMUX\n\
-exec claude \"$@\"\n"
+{fallback}\n\
+exec claude \"$@\"\n",
+        fallback = crate::remote_cmd::CLAUDE_PATH_FALLBACK,
     )
 }
 
@@ -791,6 +793,10 @@ pub struct LinkRegistry {
     /// found it (by row key). The fire-time trust read (`folder_trusted`) answers a remote row from
     /// here: an `ssh://` key never matches the LOCAL `~/.claude.json`.
     open_trust: Mutex<HashMap<String, bool>>,
+    /// M18 WP2: whether the remote account has accepted CC's bypass-permissions warning, as the
+    /// last open check found it (by row key). The fire-time read (`bypass_dialog_cleared`) answers a
+    /// remote row from here: the LOCAL `settings.json` says nothing about the remote account.
+    open_bypass: Mutex<HashMap<String, bool>>,
     /// The next [`Link::gen`].
     next_gen: AtomicU64,
     transport: Arc<dyn Transport>,
@@ -822,6 +828,7 @@ impl LinkRegistry {
             closing_cv: Condvar::new(),
             open_notices: Mutex::new(HashMap::new()),
             open_trust: Mutex::new(HashMap::new()),
+            open_bypass: Mutex::new(HashMap::new()),
             next_gen: AtomicU64::new(1),
             transport,
             app_data,
@@ -1401,6 +1408,22 @@ impl LinkRegistry {
     /// short lock read: safe on the main thread.
     pub fn open_trust(&self, key: &str) -> bool {
         self.open_trust
+            .lock()
+            .is_ok_and(|t| t.get(key).copied().unwrap_or(false))
+    }
+
+    /// M18 WP2: record whether the remote account accepted the bypass warning (the open check's
+    /// answer for `key`).
+    pub fn set_open_bypass(&self, key: &str, accepted: bool) {
+        if let Ok(mut t) = self.open_bypass.lock() {
+            t.insert(key.to_string(), accepted);
+        }
+    }
+
+    /// M18 WP2: whether the last open check found the bypass warning accepted for `key`'s account.
+    /// No answer is `false` (D4). A short lock read: safe on the main thread.
+    pub fn open_bypass(&self, key: &str) -> bool {
+        self.open_bypass
             .lock()
             .is_ok_and(|t| t.get(key).copied().unwrap_or(false))
     }
