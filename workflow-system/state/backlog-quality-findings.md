@@ -376,3 +376,42 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** find the `RegisteredSession {` literal inside `spawn` first and assert `permission,` inside that span (see `docs/lessons/source-text-guards.md`).
 - **Priority:** low
 
+# m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18
+
+*(feature-review-quality on ship commit `e38cdc7`, window `e38cdc7^..e38cdc7`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-18-QUALITY-OSC52-PASTEJACK-VECTOR-UNRECORDED
+- **Source:** feature-review-quality (M18 WP2.5, MAJOR)
+- **Type:** gap (security reasoning)
+- **Summary:** `arch/security-posture.md` → "Terminal clipboard" justifies the every-pane OSC 52 write handler (R-d, operator-ratified) with "a local program could already do this with `pbcopy`". That considers only programs. It leaves out **displayed bytes**: `cat` of a hostile file, `git log`, `curl` output, or any in-pane OSC 52 that tmux now passes through under `set-clipboard on` can silently replace the Mac clipboard without anything running `pbcopy`. That is the standard paste-jacking setup (put a command on the clipboard, wait for the operator to paste it into a terminal), and it is why several terminals gate or prompt on OSC 52 writes.
+- **Context:** the ruling stands (operator, 2026-11-18, vh2 A). The defect is that the doc future readers will re-derive it from records incomplete reasoning.
+- **Suggested action:** add the displayed-content vector to "Terminal clipboard" as an explicitly accepted risk. Optionally note follow-up options: a per-write toast ("Copied N chars from <workspace>"), remote-only, or a size/newline heuristic. Re-ask the operator only if the recorded risk changes their call.
+- **Priority:** medium
+
+## SURFACE-2026-11-18-QUALITY-CLIPBOARD-CAP-DUPLICATED-UNPINNED
+- **Source:** feature-review-quality (M18 WP2.5, MINOR)
+- **Type:** tech-debt (duplicated constant)
+- **Summary:** `MAX_CLIPBOARD_BYTES` (4 MiB) is defined in both `osc52.ts` and `clipboard.rs`, kept equal only by a "Mirrors" comment. No test pins the two together.
+- **Suggested action:** a small test that reads both values from their sources and asserts they are equal, or drop the frontend cap and let Rust refuse (that also makes the Rust error reachable; see the next entry).
+- **Priority:** low
+
+## SURFACE-2026-11-18-QUALITY-OSC52-FAILED-COPY-IS-SILENT
+- **Source:** feature-review-quality (M18 WP2.5, MINOR)
+- **Type:** UX gap (silent failure)
+- **Summary:** an oversize copy is dropped in `osc52Text` before it reaches Rust (so `clipboard.rs`'s "refused with an error" is unreachable from its only caller). An IPC or `pbcopy` failure goes only to `console.warn`, which is unobservable in this app. Either way the operator pastes the PREVIOUS clipboard believing it is the new selection: the "pastes as if whole" harm `clipboard.rs` says it prevents.
+- **Suggested action:** surface a failed or refused copy as a workspace toast (the existing toast surface), and soften security-posture's "refused, not truncated (both sides)" to say what the operator actually sees.
+- **Priority:** low
+
+## SURFACE-2026-11-18-QUALITY-TERMINAL-FAKE-TRIPLICATED
+- **Source:** feature-review-quality (M18 WP2.5, MINOR)
+- **Type:** tech-debt (test scaffolding)
+- **Summary:** the hand-written `@xterm/xterm` `Terminal` fake now lives in 3 test files (`osc52Live`, `autoResumeFireLive`, `remoteRelaunchIntentLive`). WP2.5 had to add `parser.registerOscHandler` to two of them just to keep them mounting, and every new Terminal API `XtermPane` touches will need the same edit in every copy.
+- **Suggested action:** move one configurable fake into `__tests__/liveWorkspace.tsx` and import it from all three.
+- **Priority:** low
+
+## SURFACE-2026-11-18-QUALITY-CONF-ASSERT-NO-MESSAGE
+- **Source:** feature-review-quality (M18 WP2.5, MINOR)
+- **Type:** cosmetic (test diagnostics)
+- **Summary:** in `remote_link/tests.rs` → `the_tmux_conf_lets_in_pane_osc52_through_and_is_safe_to_re_source`, the `!TMUX_CONF.contains("-ga ") && !TMUX_CONF.contains(" -a ")` assert has no failure message, unlike its siblings, which print `{TMUX_CONF}`.
+- **Suggested action:** add `"{TMUX_CONF}"`.
+- **Priority:** low

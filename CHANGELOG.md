@@ -9,6 +9,8 @@
 - **Backlog resolved:** SURFACE-2026-11-17-AUTO-RESUME-INJECT-ANSWERS-BYPASS-PERMISSIONS-DIALOG-NO-EXIT — closed by the `bypass_dialog_cleared` fire-time read (the session's recorded spawn permission + `skipDangerousModePermissionPrompt`), local and remote, with Recycle's restore gated the same way.
 - **Backlog resolved:** SURFACE-2026-11-17-REMOTE-CLAUDE-ONLY-ON-INTERACTIVE-PATH — closed by `CLAUDE_PATH_FALLBACK` ahead of the first `claude` in the preflight and the deployed `cc-launch`, with a `~/.zprofile` failure message when `claude` is in neither place.
 - **Milestone:** WP2: Fresh-account hardening: the bypass-dialog withhold and the `claude` PATH fallback
+- **Feature shipped:** M18 WP2.5 makes a drag-select in a remote pane (and remote CC's own `/copy`) land on this Mac's clipboard: tmux already sent each copy as OSC 52, and Claudesk's terminal now handles it with a write-only handler (`clipboard_write` → `pbcopy`) that never answers a clipboard read, while Option+drag gives a native selection.
+- **Milestone:** WP2.5: Remote panes copy to the Mac's clipboard
 
 ## 2026-11-17
 

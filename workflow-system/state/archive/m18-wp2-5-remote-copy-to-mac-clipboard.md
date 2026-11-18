@@ -5,7 +5,8 @@ drive_mode: autopilot
 # Feature: M18 WP2.5 — Remote panes copy to the Mac's clipboard
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete)
+**Completed:** 2026-11-18 (ship `e38cdc7`)
 **Created:** 2026-11-18
 **WBS:** `workflow-system/product/wbs.md` → WP2.5 (tasks 2.5.1–2.5.6)
 
@@ -158,9 +159,52 @@ behaviour, which Phase 1 probes.
     Test scope: full — last phase
     — evidence: `pnpm verify:auto` → EXIT=0 in 54 s; vitest 4088 passed; cargo 1436 passed, 0 failed; lint has the same 1 pre-existing warning.
 
+## Code-Quality Review
+
+*(feature-review-quality, ship commit `e38cdc7`, drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged to `backlog-quality-findings.md` → `# m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18`, one pointer in `backlog.md`.)*
+
+### Strengths
+- The write-only boundary is documented where it is enforced and pinned by a real-pane test: a `?` read produces no terminal write and no `cc_input`/`term_input`.
+- The `pbcopy` locale guard sits at the right layer (`Command::get_envs()`, not a fake that a dev shell's exported `LANG` would satisfy).
+- The re-source test reproduces the host's login-only PATH and fails on the original code; it covers 4 arms on 2 shells.
+- The main-thread rule is followed: async, `on_blocking_worker`, bounded `run_captured`, `ASYNC_COMMANDS` entry.
+- Pure and wire are cleanly separated (`osc52Text`/`osc52Handler` with an injected sink, a narrow `Osc52Host`). The server name reuses `tmux_server`.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [arch/security-posture.md → "Terminal clipboard"] The R-d reasoning ("a local program could already `pbcopy`") leaves out the displayed-content vector (paste-jacking through `cat`/`git log`/`curl` output or a passed-through in-pane OSC 52). The ruling stands; the record is incomplete. → SURFACE-2026-11-18-QUALITY-OSC52-PASTEJACK-VECTOR-UNRECORDED
+
+**MINOR**
+- [osc52.ts / clipboard.rs] `MAX_CLIPBOARD_BYTES` duplicated with nothing pinning the two. → SURFACE-…-CLIPBOARD-CAP-DUPLICATED-UNPINNED
+- [osc52.ts] An oversize or failed copy is silent (`console.warn` only), so the operator pastes the previous clipboard. → SURFACE-…-OSC52-FAILED-COPY-IS-SILENT
+- [__tests__] The `Terminal` fake is copied into 3 files. → SURFACE-…-TERMINAL-FAKE-TRIPLICATED
+- [remote_link/tests.rs] One conf assert has no failure message. → SURFACE-…-CONF-ASSERT-NO-MESSAGE
+
+### Assessment
+Well-built and tightly scoped: the real gap (tmux already sent OSC 52; xterm dropped it) is closed with a small pure module, one bounded Rust command and two conf lines, each choice backed by a probe. The tests would each fail if the code they name were deleted. The remaining concerns are about records (the paste-jacking vector, the silent refusal), not mechanics.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** the WBS framed WP2.5 as a tmux config problem (make tmux emit OSC 52, rebind the drag). The probe showed tmux had been emitting OSC 52 on every copy all along, under its defaults. The whole gap was a missing xterm.js handler. The conf change shrank to `set-clipboard on` (for in-pane apps such as CC's `/copy`) plus making the conf safe to re-source.
+- **Assumptions that held:** keep `mouse on`; write-only (tmux never forwards a read to the client, and Claudesk never answers one); the pane registration path; the existing cancel-before-inject still works with copy-mode exits.
+- **Assumptions that were wrong:**
+  - The WBS's "highlight stays" (`copy-pipe-no-clear`) swallowed the next typed keys. Operator 1A kept the default.
+  - `navigator.clipboard` works in WKWebView: no, without live user activation it rejects with `NotAllowedError`, so the write goes through Rust `pbcopy`.
+  - `pbcopy` is UTF-8 by default: no, it needs `LANG` (MacRoman otherwise).
+  - The pre-connect script can call tmux: no, it is a plain ssh exec and tmux is only on the LOGIN PATH. The stub-on-PATH tests were green while the live re-source silently never ran (P2.vs.1, caught only by a seeded live server).
+  - A locale test through a fake child proves the env is set: no, the dev shell exports `LANG`, so the test could not see its own deletion (P2.vs.2, caught by the verify-self runner).
+- **Approach delta:** Phase 1 probe → Phase 2 build as planned, plus one F9b back-loop (two BLOCKING fixes, re-verified live and by a fresh runner). The live check needed two instrument corrections, both recorded in the WIP: a tmux copy batched with entering copy-mode emits no OSC 52 (redraw pending), and a synthetic `MouseEvent` needs `detail: 1` or xterm's selection ignores it. The review added a MAJOR (the paste-jacking vector is unrecorded in security-posture) and 4 MINORs, all backlogged.
+
+**Closure (Output B):** **Feature complete:** M18 WP2.5 (remote panes copy to the Mac clipboard) has shipped. A drag-select in a remote pane, Option+drag, or remote CC's `/copy` now lands on this Mac's clipboard through a write-only OSC 52 handler. Verify by dragging text in a remote workspace (dev build now; installed build after the next `/release`) and pasting. Requester = operator: closure notice for self-record.
+
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality (ship commit is the baseline)
+- **Path:** Feature > done (archived)
+- **Active scope:** none
 - **Blocked:** none
 - **Unvisited:** none beyond Phase 2
 - **Open discoveries:** none

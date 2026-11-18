@@ -84,6 +84,7 @@
 - [el.click() fallback](mcp-bridge-interact-click-needs-el-click-fallback.md) — If `webview_interact{click}` fails; switch tiles via a pointerdown+pointerup pair on the tile.
 - [Native geometry](mcp-bridge-manage-window-reads-native-geometry.md) — `manage_window{info}` returns native frames.
 - [Hold a status via fiber](mcp-bridge-seed-held-workspace-status-via-fiber.md) — Dispatch `setStatusMap`, not `ipc_emit_event`.
+- [Drive xterm mouse/copy](drive-xterm-mouse-and-selection-via-bridge.md) — MouseEvent needs `detail: 1`; sync scripts; read Terminal via fiber; `execCommand('copy')` lies.
 - [HMR stamped URL](vite-hmr-stamped-url-is-a-separate-module-instance.md) — A bridge import must use `<path>?t=<ts>`.
 
 ## CC hooks, PTY & terminal

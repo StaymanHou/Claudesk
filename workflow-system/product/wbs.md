@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-18  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 added
+updated: 2026-11-18  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7)
 cycle: milestone-18-remote-workflow-substrate
 ---
 
@@ -83,7 +83,7 @@ told to avoid ("don't Recycle a remote session").
 **WP2 → WP3 rationale:** the substrate track needs fresh host accounts to install into, and those accounts are exactly what WP2
 hardens. Landing WP2 first means every install WP5–WP7 verifies opens onto a CC that can't quit on the bypass dialog.
 
-### WP2.5: Remote panes copy to the Mac's clipboard (added 2026-11-18, operator, while dogfooding tank)
+### WP2.5: Remote panes copy to the Mac's clipboard (added 2026-11-18, operator, while dogfooding tank) ✅ SHIPPED 2026-11-18 (commit e38cdc7)
 **Description:** In a remote pane, a drag-select does not reach this Mac's clipboard. Today tmux's `set -g mouse on` (the deployed
 `tmux.conf`, config C, ratified at M17 WP1 for wheel scrollback) turns the drag into a tmux copy-mode selection. On mouse-up the
 default `MouseDragEnd1Pane` → `copy-pipe-and-cancel` puts the text in tmux's buffer **on the mini** and clears the highlight. The
@@ -95,16 +95,18 @@ the cause), `mouse=1`. Local panes are unaffected (no tmux).
 **Dependencies:** none (remote-only, independent of the substrate track)
 **Size:** S
 **Tasks:**
-- [ ] 2.5.1 Probe on the scratch remote row (CC 2.1.327, tmux 3.x): does `set -g set-clipboard on` plus a `terminal-features` `clipboard` entry for
+- [x] 2.5.1 Probe on the scratch remote row (CC 2.1.327, tmux 3.x): does `set -g set-clipboard on` plus a `terminal-features` `clipboard` entry for
   the pane's outer `TERM` make tmux emit OSC 52 to the client on a copy? Capture the raw bytes Claudesk's PTY receives.
-- [ ] 2.5.2 `tmux.conf` (constant, redeployed on every connect): `set-clipboard on`, the clipboard feature, and drag-end rebound to
+- [x] 2.5.2 `tmux.conf` (constant, redeployed on every connect): `set-clipboard on`, the clipboard feature, and drag-end rebound to
   `copy-pipe-no-clear` so the highlight stays.
-- [ ] 2.5.3 Frontend: an xterm.js OSC 52 handler (`term.parser.registerOscHandler(52, …)`) that writes the decoded text to the
+- [x] 2.5.3 Frontend: an xterm.js OSC 52 handler (`term.parser.registerOscHandler(52, …)`) that writes the decoded text to the
   macOS clipboard. ⚠️ Write only, never answer an OSC 52 READ query: a remote program must not be able to read this Mac's clipboard.
-- [ ] 2.5.4 Optional escape hatch: `macOptionClickForcesSelection`, so Option+drag gives a native xterm selection, as on a local pane.
-- [ ] 2.5.5 Live check on the scratch remote row: drag-select → `pbpaste` on this Mac holds the text, the highlight stays, and the wheel
+- [x] 2.5.4 Optional escape hatch: `macOptionClickForcesSelection`, so Option+drag gives a native xterm selection, as on a local pane.
+- [x] 2.5.5 Live check on the scratch remote row: drag-select → `pbpaste` on this Mac holds the text, the highlight stays, and the wheel
   still scrolls history. Plus an injected command while scrolled up still lands (cancel-before-inject unchanged).
-- [ ] 2.5.6 Update `arch/remote-workspaces.md` §I (the scrollback/copy-mode section) to as-built.
+- [x] 2.5.6 Update `arch/remote-workspaces.md` §I (the scrollback/copy-mode section) to as-built.
+
+**As built (probe deltas, `archive/m18-wp2-5-remote-copy-to-mac-clipboard.md`):** tmux already emitted OSC 52 on a copy (`52;;<b64>`), so the root fix was the missing xterm.js handler. 2.5.2 shipped as `set-clipboard on` + a fixed-index RGB line + a live re-source under the login shell. There is no clipboard-feature line (tmux's default) and no drag-end rebind (operator 1A: `copy-pipe-no-clear` swallowed the next typed keys). 2.5.3 writes through Rust `clipboard_write` → `pbcopy` (WKWebView refuses `navigator.clipboard` without activation), on every pane (operator vh2 A).
 
 **WP2.5 → WP3 rationale:** tank is in daily remote use, so this pays off now. It touches only the deployed tmux.conf and the
 terminal pane, nothing the substrate track builds on.

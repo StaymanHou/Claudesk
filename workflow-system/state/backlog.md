@@ -689,6 +689,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** pending
 - **Pickup shape:** one small remote-path follow-up task. The two MAJORs both sit on the fresh-account recovery path WP2 hardens; fold them in before WP6 (Install), whose fresh accounts hit them first.
 
+## Code-quality findings — m18-wp2-5-remote-copy-to-mac-clipboard (2026-11-18)
+
+- **Pointer:** **1 MAJOR + 4 MINOR** open from the review of the WP2.5 ship commit (`e38cdc7`). MAJOR: `security-posture.md`'s reasoning for the every-pane OSC 52 write handler leaves out the paste-jacking vector (DISPLAYED bytes such as `cat`, `git log` or `curl` output can set the Mac clipboard; the ruling stands, the record is incomplete). MINOR: the 4 MiB cap is duplicated in TS and Rust with nothing pinning them together; a failed or refused copy is silent (the operator pastes the previous clipboard); the xterm `Terminal` test fake is copied into 3 files; one conf assert has no message. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18`.
+- **Priority:** medium (the MAJOR), low (the rest)
+- **Status:** pending
+- **Pickup shape:** one small follow-up task: a doc edit for the MAJOR, plus the silent-failure toast, which also settles the duplicated cap. The test-fake consolidation fits any later `XtermPane` test touch.
+
 ## SURFACE-2026-11-17-REMOTE-EXEC-COUNT-NEEDS-A-BEHAVIOURAL-HARNESS
 - **Source:** feature:verify-self (M17 WP5 Phase 2, AC-8.2)
 - **Target level:** product:arch
