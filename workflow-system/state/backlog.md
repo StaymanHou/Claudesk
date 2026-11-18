@@ -761,3 +761,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium
 - **Routed (2026-11-17):** scheduled as **Milestone 18 (remote workflow substrate)** in `roadmap.md`, by operator ruling during M17 WP8; this entry is its seed and closes with M18. Interim: the mini's dev account was set up by hand (a git bundle of the mccc repo at `~/my-claude-code-customization`, `install.sh`, the 4 printed permissions; backup `settings.json.bak-mccc-install-2026-11-17`). That account has no GitHub access, so its copy cannot `git pull` until it gets one.
 - **Status:** routed — the seed of Milestone 18 (`roadmap.md`); closes with M18
+
+## SURFACE-2026-11-18-PICKER-SEARCH-BOX-NOT-AUTOFOCUSED
+- **Source:** operator request (2026-11-18)
+- **Target level:** task
+- **Type:** enhancement
+- **Summary:** Focus should land in the picker's search box ("Filter projects…") as soon as the workspace picker opens, so you can type to filter straight away. Today it does not: the `picker-filter` input in `ProjectPicker` has no `autoFocus` or focus call, so you have to click into it first.
+- **Context:** There are two places the picker appears. (1) `PickerOverlay`, summoned by the filmstrip "+" to open another workspace. (2) The first-open picker that `App` renders before any workspace exists. Both render `ProjectPicker`, so a fix in `ProjectPicker` covers both. Precedent: `AddRemoteForm`'s input already uses `autoFocus`. Things to check: (a) whether the overlay is mounted on summon or kept mounted and toggled; if it is kept mounted, `autoFocus` fires only once and needs a focus-on-open effect instead. (b) Focus must move out of the focused workspace's xterm, or keystrokes leak into the CC pane (see `[[wkwebview-button-click-does-not-take-focus]]`). (c) Esc-to-close is registered on the document, so it is unaffected.
+- **Suggested action:** Focus the filter input when the picker mounts or opens, in both places. Add a jsdom test asserting `document.activeElement` is `picker-filter` after the overlay opens, and mutation-prove it by removing the focus.
+- **Priority:** low
+- **Status:** open

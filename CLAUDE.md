@@ -184,7 +184,7 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 
 ## Current Milestone
 
-⭐ **NEXT: M18 — Remote workflow substrate** (planned 2026-11-17, not decomposed; entry step `/util-grill-me`): detect the workflow skills per remote host account (absent → workflow surfaces absent, like gate OFF), install them from Claudesk over the master, and decide remote profiles. Seed: `SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-…`; scope in `roadmap.md` → "### Milestone 18". Operational work first: moving the `tank-sim-lite-demo` workspace from local to remote on the mini (tank's checkpoint is **2026-12-11**).
+⭐ **NEXT: M18 — Remote workflow substrate** (planned 2026-11-17, not decomposed; entry step `/util-grill-me`): detect the workflow skills per remote host account (absent → workflow surfaces absent, like gate OFF), install them from Claudesk over the master, and decide remote profiles. Seed: `SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-…`; scope in `roadmap.md` → "### Milestone 18". ✅ The `tank-sim-lite-demo` workspace moved to the mini on 2026-11-18 (tank's checkpoint is **2026-12-11**). After the move, tank writes to its own `workflow-system/outbox/` on the mini ("read tank's outbox" = fetch it over ssh), and messages to tank go over ssh into the mini's `~/tank-sim-lite-demo/workflow-system/inbox/` (one file, no commit).
 
 **Direction (vision revisit, 2026-11-14):** Claudesk is a **cockpit for parallel CC sessions**. A workspace = one CC session in a context (local dir, profile, remote host), and the IDE half attaches where a local tree exists. Prior: `a-workspace-is-its-cc-session`. ✅ M17 closed 2026-11-17 (`v0.9.0`). The latest release is `git tag --sort=-v:refname | head -1`.
 
