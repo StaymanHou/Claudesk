@@ -343,6 +343,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     // FIRST activation only — a re-activation (panel/center-stage switch-back) is inert.
     // Reset to false on a real teardown/relaunch so a fresh spawn is allowed again.
     const hasSpawnedRef = useRef(false);
+    const doorUsedRef = useRef(false);
     // M12 WP3 follow-up — the auto-resume CONSUME-ONCE latch. True once the fire has been
     // scheduled for this pane; the fire arm refuses to schedule a second one.
     //
@@ -355,6 +356,9 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     //     LIFECYCLE block). It is `false` on a relaunch run, so it cannot express consume-once.
     //   • `hasSpawnedRef` (per-PANE ref) — spawn-once across `active` false→true edges.
     //     DELIBERATELY CLEARED by `handleRelaunch`, because a relaunch *should* spawn again.
+    //   • `doorUsedRef` (per-PANE ref, declared below) — M18 WP1: the open DOOR is spent once
+    //     the first spawn commits. NOT cleared by `handleRelaunch`: every later spawn is a
+    //     relaunch, and a relaunch must not re-send `reconnect` (`relaunchIntent`).
     //   • `hasFiredRef` (per-PANE ref, this one) — inject-once for the pane's whole lifetime.
     //     NOT cleared by `handleRelaunch`: a relaunch should spawn again but must NOT re-type
     //     the slash command. That difference is the entire defect this latch fixes — the
@@ -820,6 +824,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
               projectPath,
               openIntent,
               spawnIntentRef,
+              doorUsedRef.current,
             ),
           );
           if (cancelled) {
@@ -859,6 +864,9 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           // lost history). A cancelled/self-killed run never reaches here, so the latch is
           // only set for a session that actually survives.
           hasSpawnedRef.current = true;
+          // M18 WP1 — the door has now been used. Unlike `hasSpawnedRef`, `handleRelaunch` never
+          // clears this, so every later spawn of the pane is a relaunch (`relaunchIntent`).
+          doorUsedRef.current = true;
 
           // Listeners attached — flush the backend's pre-subscription backlog (the shell's
           // one-shot prompt was buffered since spawn) + switch to live. The `spawned`

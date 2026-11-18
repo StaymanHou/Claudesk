@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-11-17
+updated: 2026-11-18
 ---
 
 # Runtime Registry
@@ -31,7 +31,9 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 42s (2026-11-17, M17 WP8 Phase 3 verify-codify (full, last phase), EXIT=0; incremental, timeout kept at the cold-run value)
+- **Last:** 46s (2026-11-18, M18 WP1 Phase 1 verify-codify (full, last phase), EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 44s (2026-11-18, M18 WP1 Phase 1 verify-auto, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 42s (2026-11-17, M17 WP8 Phase 3 verify-codify (full, last phase), EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 50s (2026-11-17, M17 WP8 Phase 2 verify-codify, EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 120s (2026-11-17, M17 WP8 Phase 1 verify-codify, EXIT=0; cold debug build after the release's `cargo clean`, timeout kept at the cold-run value)
 - **Prior:** 73s (2026-11-17, M17 WP7 review-MAJORs task, EXIT=0; incremental, timeout kept at the cold-run value)

@@ -150,6 +150,7 @@ function XtermPaneStub(props: StubPaneProps, ref: Ref<unknown>) {
               "/stub",
               props.openIntent ?? "fire",
               props.spawnIntentRef,
+              true,
             );
             if (intent) rec.spawnIntents.push(intent);
           },

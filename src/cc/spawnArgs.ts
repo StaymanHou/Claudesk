@@ -30,11 +30,30 @@ export function takeSpawnArgs(
   projectPath: string,
   openIntent: OpenIntent,
   override: SpawnIntentRef | undefined,
+  isRelaunch = false,
 ): { projectPath: string; intent?: OpenIntent } {
   if (spawnCommand !== "cc_spawn") return { projectPath };
   const taken = override?.current ?? null;
   if (override) override.current = null;
-  return { projectPath, intent: taken ?? openIntent };
+  const door = isRelaunch ? relaunchIntent(openIntent) : openIntent;
+  return { projectPath, intent: taken ?? door };
+}
+
+/**
+ * M18 WP1 — the door a RELAUNCH of the pane spawns with (Recycle's respawn, the Relaunch / Retry
+ * button): every door unchanged except `reconnect`, which becomes `fire`.
+ *
+ * `reconnect` is the FIRST spawn's door only. It tells `cc_spawn_remote` to ATTACH to the live tmux
+ * session, never `new -A`, so a session that died while disconnected is never silently restarted.
+ * But a workspace keeps its door for life, and a relaunch comes after the pane's own session has
+ * ended (Recycle types `/exit` first). Re-sending `reconnect` attached to a session that no longer
+ * existed, and no CC was ever started (`SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC`).
+ * A relaunch is a new session, so it goes through the open's normal arm (`fire`): a plain
+ * `new -A`, with `--continue` only when the unclean flag is set. The backend's
+ * `Reconnect → attach` rule stays as it is.
+ */
+export function relaunchIntent(door: OpenIntent): OpenIntent {
+  return door === "reconnect" ? "fire" : door;
 }
 
 /**

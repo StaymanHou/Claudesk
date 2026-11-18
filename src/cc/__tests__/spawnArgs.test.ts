@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  relaunchIntent,
   spawnCommandFor,
   takeSpawnArgs,
   type SpawnIntentRef,
@@ -52,6 +53,52 @@ describe("takeSpawnArgs", () => {
   });
 });
 
+// M18 WP1 — a relaunch never re-sends the Reconnect door (`SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC`).
+describe("relaunchIntent / takeSpawnArgs on a relaunch", () => {
+  it("maps reconnect to fire and leaves every other door alone", () => {
+    expect(relaunchIntent("reconnect")).toBe("fire");
+    for (const door of ["fire", "no-fire", "turn-respawn"] as const) {
+      expect(relaunchIntent(door)).toBe(door);
+    }
+  });
+
+  for (const door of [
+    "fire",
+    "no-fire",
+    "turn-respawn",
+    "reconnect",
+  ] as const) {
+    it(`door ${door}: the FIRST spawn sends the door itself`, () => {
+      expect(
+        takeSpawnArgs("cc_spawn", "/p", door, undefined, false).intent,
+      ).toBe(door);
+      expect(takeSpawnArgs("cc_spawn", "/p", door, undefined).intent).toBe(
+        door,
+      );
+    });
+    it(`door ${door}: a relaunch sends relaunchIntent(door)`, () => {
+      expect(
+        takeSpawnArgs("cc_spawn", "/p", door, undefined, true).intent,
+      ).toBe(door === "reconnect" ? "fire" : door);
+    });
+    it(`door ${door}: a pending override still wins on a relaunch, once`, () => {
+      const ref: SpawnIntentRef = { current: "turn-respawn" };
+      expect(takeSpawnArgs("cc_spawn", "/p", door, ref, true).intent).toBe(
+        "turn-respawn",
+      );
+      expect(ref.current).toBeNull();
+    });
+  }
+
+  it("term_spawn ignores the relaunch flag (no intent at all)", () => {
+    expect(
+      takeSpawnArgs("term_spawn", "/p", "reconnect", undefined, true),
+    ).toEqual({
+      projectPath: "/p",
+    });
+  });
+});
+
 describe("XtermPane routes its spawn through takeSpawnArgs", () => {
   // The function above is only the machine; this pins its caller. Comment-stripped, and the CALL
   // shape, so the module's own prose cannot satisfy it
@@ -62,7 +109,7 @@ describe("XtermPane routes its spawn through takeSpawnArgs", () => {
 
   it("the spawn invoke's arguments come from takeSpawnArgs with the pane's override ref", () => {
     expect(code).toMatch(
-      /invoke<string>\(\s*spawnCommandFor\(spawnCommand, projectPath\),\s*takeSpawnArgs\(\s*spawnCommand,\s*projectPath,\s*openIntent,\s*spawnIntentRef,?\s*\),?\s*\)/,
+      /invoke<string>\(\s*spawnCommandFor\(spawnCommand, projectPath\),\s*takeSpawnArgs\(\s*spawnCommand,\s*projectPath,\s*openIntent,\s*spawnIntentRef,\s*doorUsedRef\.current,?\s*\),?\s*\)/,
     );
   });
 });

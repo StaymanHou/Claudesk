@@ -771,3 +771,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** Focus the filter input when the picker mounts or opens, in both places. Add a jsdom test asserting `document.activeElement` is `picker-filter` after the overlay opens, and mutation-prove it by removing the focus.
 - **Priority:** low
 - **Status:** open
+
+## SURFACE-2026-11-18-PICKER-OVERLAY-NESTED-SCROLLBARS
+- **Source:** operator report (2026-11-18, screenshot of the "+" picker overlay)
+- **Target level:** task
+- **Type:** UX bug
+- **Summary:** The picker opened from the filmstrip "+" shows **two nested vertical scrollbars**: the project list scrolls, and so does the card around it. Scrolling is ambiguous, and the bottom of the card (Open Folder / Add remote) sits behind a second scroll.
+- **Context:** `src/App.css`: `.picker-overlay-panel` is `max-height: 80%; overflow-y: auto`, and `.picker-recents` inside it is capped at `max-height: 60vh` and scrolls itself. The comment on `.picker-recents` explains why: the standalone first-open picker is a flex column where the list takes the leftover height (`flex: 1; min-height: 0`), but "the overlay variant (no flex column) falls back to the 60vh cap". 60vh of list plus the title, filter box, toasts and buttons is more than 80% of the window, so the outer card overflows as well.
+- **Suggested action:** the operator's proposal is to lower the inner list's height cap so the card never overflows. Possibly better, to weigh when this is worked: make the overlay card the same flex column as the standalone picker (`display: flex; flex-direction: column; overflow: hidden` on `.picker-overlay-panel`, the `.picker` inside it `flex: 1; min-height: 0`), so the list takes exactly the leftover height and is the **only** scroller at any window size. A smaller fixed cap would still overflow on short windows and waste space on tall ones. Verify both pickers (first-open and overlay) at a short and a tall window, and that the card's bottom controls stay visible without scrolling the card.
+- **Priority:** low
+- **Status:** open
