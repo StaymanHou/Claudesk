@@ -101,9 +101,9 @@ Each ruling is one line here. Its full text is in the archive, under the heading
 
 ## Next
 
-✅ **M17 (remote workspaces) closed 2026-11-17** (`v0.9.0`; entry archived with the cycle). **Next: Milestone 18, the remote workflow substrate** (below; not decomposed, so its entry step is `/util-grill-me`). Operational work outside the milestone list: ✅ the `tank-sim-lite-demo` workspace moved from local to remote on the mini on 2026-11-18 (its clone is on GitHub with a repo-scoped deploy key; the auto `/session-restore` fired on the remote reopen; the local row stays as a read-only clone).
+✅ **M17 (remote workspaces) closed 2026-11-17** (`v0.9.0`; entry archived with the cycle). **Next: Milestone 18, the remote workflow substrate** (below; decomposed 2026-11-18 in `wbs.md`, starting at WP1). Operational work outside the milestone list: ✅ the `tank-sim-lite-demo` workspace moved from local to remote on the mini on 2026-11-18 (its clone is on GitHub with a repo-scoped deploy key; the auto `/session-restore` fired on the remote reopen; the local row stays as a read-only clone).
 
-### Milestone 18: Remote workflow substrate (planned 2026-11-17, not decomposed)
+### Milestone 18: Remote workflow substrate (planned 2026-11-17; grilled, designed and decomposed 2026-11-18: `wbs.md`, 8 WPs)
 
 **Why:** M17 brings a remote workspace's workflow buttons (skills, Session-Start, Recycle) to the remote
 host, but nothing checks that the companion workflow system is installed there, and nothing can install it.
