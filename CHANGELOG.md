@@ -23,6 +23,7 @@
 - **Backlog resolved:** SURFACE-2026-11-17-QUALITY-DOCS-NOTICE-CLOBBERS-THE-SHARED-TOAST — the workspace toast carries its owner, so a docs notice replaces only a docs or info toast and its `null` clears only its own.
 - **Backlog resolved:** SURFACE-2026-11-17-QUALITY-QUIT-TEARDOWN-COMMENT-ORDER — the WP3 comment now sits directly above `links.stop_all()`.
 - **Backlog resolved:** SURFACE-2026-11-17-QUALITY-LINK-DOWN-WORDS-HAND-COPIED — a test reads Rust's `remote_fs::LINK_DOWN` and holds the frontend's link-down sentence to it.
+- **Backlog resolved:** SURFACE-2026-11-08-QUOTA-AUTO-RESUME-FIRED-IS-AN-UNCLASSIFIED-NOTIFICATION-TYPE — a stale duplicate: `quota_auto_resume_fired` has been in `INFORMATIONAL_NOTIFICATION_TYPES` since `4de4e70` (2026-11-06), with its classification test.
 
 ## 2026-11-16
 

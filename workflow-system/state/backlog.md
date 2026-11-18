@@ -544,16 +544,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (one dev-build sighting, and one clean deliberate probe; raise to medium on any installed-build sighting, since a blank pane hides an awaiting question)
 - **Status:** open — watch
 
-## SURFACE-2026-11-08-QUOTA-AUTO-RESUME-FIRED-IS-AN-UNCLASSIFIED-NOTIFICATION-TYPE
-- **Source:** `/release` step 1 advisory vocabulary check (v0.8.2 cut, 2026-11-08)
-- **Target level:** task
-- **Type:** bug (status dot, low frequency)
-- **Summary:** CC has sent `notification_type: "quota_auto_resume_fired"` **9 times** (prod `time-analytics.sqlite`; first 2026-09-21 12:11, recurring around 12:11 on later days, e.g. 2026-10-21). It is in neither `INPUT_NEEDED_NOTIFICATION_TYPES` nor `INFORMATIONAL_NOTIFICATION_TYPES` (`status_broadcaster/mod.rs`), so `event_to_state` falls back to **AwaitingInput** and the workspace dot goes blue when CC auto-resumes after a quota reset.
-- **Context:** The name says CC resumed work on its own, which is a completion/informational shape (like `agent_completed`, the M13.5 WP2 precedent), not a request for input. ⚠️ Classify it deliberately: capture one live payload first (`[[cc-hook-capture-beats-docs]]`) to confirm that nothing in it asks the user anything. The fallback itself must NOT be inverted.
-- **Suggested action:** add it to `INFORMATIONAL_NOTIFICATION_TYPES` with a classification test, after the payload check.
-- **Priority:** low (≈1 event per quota reset; a false blue, not a lost prompt)
-- **Status:** open
-
 ## SURFACE-2026-11-09-NEXT-OPEN-INDICATOR-PREDICTS-CONTINUE-WITH-NO-TRANSCRIPT
 - **Source:** feature:verify-self (paydown-2026-11-08 WP5 Phase 1, reproducing the side observation in `SURFACE-2026-11-03-AUTO-RESUME-FIRES-INTO-THE-FOLDER-TRUST-PROMPT`)
 - **Target level:** task
