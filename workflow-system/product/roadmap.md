@@ -177,12 +177,35 @@ the mini:
 
 **Follow-up owed:** a sized estimate (WPs + rough days) goes to tank's inbox after `/product-wbs`.
 
+### Milestone 18: Remote workflow substrate (planned 2026-11-17, not decomposed)
+
+**Why:** M17 brings a remote workspace's workflow buttons (skills, Session-Start, Recycle) to the remote
+host, but nothing checks that the companion workflow system is installed there, and nothing can install it.
+On a host account without it, every one of those buttons is dead (`SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-…`).
+M17 never scoped this: tank's 2026-11-13 request said the mini already had the skills, which held for the
+admin account and stopped holding when the work moved to the personal account (2026-11-16/17). Operator
+ruling (2026-11-17, during M17 WP8): a milestone of its own, after M17, not an insert; for tank's
+checkpoint the mini's account is set up by hand (done 2026-11-17).
+
+**Scope to settle at the entry grill (`/util-grill-me` is the entry step):**
+- **Detect** the workflow system per host account (e.g. in the open check's one exec, or once per link), and
+  treat "gate ON + absent on that host" like gate OFF for that workspace: surfaces absent, a plain-words note
+  (vision Core Principle 7).
+- **Install** it on a remote host from Claudesk, reusing the local `workflow_install/` runner over the host's
+  master (the local installer arrived in M10.9's Settings). Open questions: where the source comes from when the
+  host has no GitHub access (the mini had none: the manual setup copied a git bundle), and how a host copy is
+  kept current.
+- **Remote profiles (F-b):** M17 ruled them local-only (a profile names a LOCAL `CLAUDE_CONFIG_DIR`). Decide
+  whether a remote workspace needs a host-side config dir and its own auth, or stays out. Default lean: out,
+  unless a real need for more than one CC identity per host appears.
+
 **Held open, not scheduled:**
 - The stale minimap (feature-sized; revive as its own feature when the `drawLine` rewrite is worth
   funding). The other QoL seeds and the paydown were absorbed into M16.5.
 
 ## Revisions
 
+- **2026-11-17** — **M18 (remote workflow substrate) added** after M17, by operator ruling during M17 WP8: detect + install the workflow system on a remote host, and decide remote profiles. Not an M17 insert; the mini's account was set up by hand for tank's checkpoint.
 - **2026-11-14** — `/product-vision` revisit done: vision condensed, the CC-cockpit direction set, and remote workspaces ruled a general capability built one host first. **M17 (remote workspaces) added and scoped** at a `/util-grill-me` pass (lifecycle rulings R-1 to R-4). Its first consumer is `tank-sim-lite-demo`, with a checkpoint on 2026-12-11.
 - **2026-11-08** — M16.5 closed (9 WPs; WP9, an operator insert, made the recycle key on the F15 edge). The M15 on-screen checks and WP9's installed check stay deferred to dogfooding. Next: the `/product-vision` revisit.
 - **2026-10-20 (b)** — M16.5 scoped at a `/util-grill-me` pass: one bucket of supervisor hardening + the status-dot items + the QoL seeds (minimap excluded) + a closing code-quality paydown; the supervisor gate recorded as met by the 2026-10-12 fires.

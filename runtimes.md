@@ -31,7 +31,9 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 73s (2026-11-17, M17 WP7 review-MAJORs task, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Last:** 50s (2026-11-17, M17 WP8 Phase 2 verify-codify, EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 120s (2026-11-17, M17 WP8 Phase 1 verify-codify, EXIT=0; cold debug build after the release's `cargo clean`, timeout kept at the cold-run value)
+- **Prior:** 73s (2026-11-17, M17 WP7 review-MAJORs task, EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 75s (2026-11-17, M17 WP7 review-CRITICAL refactor, EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 70s (2026-11-17, M17 WP7 Phase 4 verify-codify (full, last phase), EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 52s (2026-11-17, M17 WP7 Phase 4 verify-auto, EXIT=0; incremental, timeout kept at the cold-run value)
@@ -230,7 +232,8 @@ real chronology.
 
 ## pnpm tauri build
 
-- **Last:** 141s (2026-11-09, /release v0.8.3: cargo clean removed 45549 files / 17.0 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)
+- **Last:** 129s (2026-11-17, /release v0.9.0: cargo clean removed 243573 files / 85.7 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)
+- **Prior:** 141s (2026-11-09, /release v0.8.3: cargo clean removed 45549 files / 17.0 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)
 - **Prior:** 151s (2026-11-08, /release v0.8.2: cargo clean removed 64056 files / 22.2 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)
 - **Prior:** 204s (2026-11-03, /release v0.8.1: cargo clean removed 69790 files / 25.6 GiB + cold build, Apple-signed + minisign-signed; notarization a separate 33s notarytool round-trip, not counted)
 - **Prior:** 106s (2026-10-20, /release v0.8.0: cargo clean removed 41435 files / 17.5 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)

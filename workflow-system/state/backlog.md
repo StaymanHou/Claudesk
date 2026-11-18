@@ -725,6 +725,22 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** pending
 
+## SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC
+- **Source:** feature:build (M17 WP8 P2.3, installed v0.9.0 against the mini, real workflow skills)
+- **Target level:** feature (M17 follow-up)
+- **Type:** bug
+- **Summary:** Recycle on a REMOTE workspace runs its first half and stops. `/session-handoff` runs and writes `.session.md`, then Recycle types `/exit` and CC exits (the remote `SessionEnd` reaches the status channel), but no new CC is ever spawned. Afterwards there is no `SessionStart`, no `claude` process and no `claudesk` tmux server on the host, and the fresh `.session.md` stays unconsumed. The operator saw "handoff worked, but CC not restarted".
+- **Context:** Evidence, 2026-11-17 21:12–21:13, scratch row `…/claudesk-scratch-remote`, installed 0.9.0:
+  - The remote transcript `4214b37c-…` has, in order, `/session-restore`, `/session-start`, `/session-handoff`, then `/exit` (21:13:15).
+  - The prod `status-channel.log` (ws-4) has Stop idle (the handoff turn) at …94323, then `SessionEnd` at …95074, then nothing.
+  - After it, `tmux -L claudesk ls` reports "no server running", and `.session.md` (21:13, `resume_skill: /session-start`) is still present.
+  - WP7 verified Recycle's `.session.md` detection on remote (it forces a `docs_stat` on `Stop`) with stub skills, but the respawn half was evidently never observed live on a remote pane.
+  - Suspects, unconfirmed: on remote, CC exiting ends the tmux session (CC runs inline as the session's only process, per WP1 conf C), so the respawn's precondition or the `wait_not_closing` gate never clears. Or the frontend's recycle completion awaits a local-only signal.
+  - An M17 IN row (Recycle) fails here. The operator accepted it as **not blocking** M17 ("for now I just avoid recycle on remote sessions").
+- **Suggested action:** Reproduce on the dev build against the scratch row. Trace the recycle state machine past `/exit` for a remote pane: does the respawn fire, and is it refused by `wait_not_closing` / the R-1 end-session path that treats the exit as an explicit close? Fix so a remote Recycle spawns a new tmux session that receives `/session-restore`, as a local one does. Add a test at the remote seam (`RemotePorts` / `RemoteTerminal`).
+- **Priority:** medium (an IN row broken on remote, with a clear workaround: don't Recycle a remote session; the operator ruled it non-blocking)
+- **Status:** pending
+
 ## SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD
 - **Source:** feature:verify-self (M17 WP7 Phase 4, live)
 - **Target level:** product:arch
@@ -733,4 +749,5 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** The gate is LOCAL (`settings.json` on this Mac) and WP5's open check gates the `/session-restore` arm on it alone. Locally the workflow layer is opt-in because the skills may be absent (M10.9: "no dead affordances"); a remote host is the same question asked again per host, and today it is never asked. Found while preparing the remote Recycle check; verification used project-local STUB skills in the scratch remote folder instead (`~/claudesk-scratch-remote/.claude/skills/`).
 - **Suggested action:** Decide at arch level: probe the remote account for the workflow skills (e.g. in the open check's one exec, or once per link) and treat "gate ON + skills absent on that host" like gate OFF for that workspace (workflow surfaces absent, plain-words note), or document that remote workflow use requires installing the skills on the host. Prior `gate-substrate-dependent-feature-class-behind-default-off-opt-in` applies.
 - **Priority:** medium
+- **Routed (2026-11-17):** scheduled as **Milestone 18 (remote workflow substrate)** in `roadmap.md`, by operator ruling during M17 WP8; this entry is its seed and closes with M18. Interim: the mini's dev account was set up by hand (a git bundle of the mccc repo at `~/my-claude-code-customization`, `install.sh`, the 4 printed permissions; backup `settings.json.bak-mccc-install-2026-11-17`). That account has no GitHub access, so its copy cannot `git pull` until it gets one.
 - **Status:** pending
