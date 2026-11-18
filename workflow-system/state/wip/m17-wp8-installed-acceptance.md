@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M17 WP8 — Installed-build acceptance against the mini
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** ship (complete)
 **Created:** 2026-11-17
 
 ## Problem Statement
@@ -138,7 +138,7 @@ SURFACE (or an in-place fix under the verify shortcut's gates), not scope creep.
     Test scope: full — suite not long (`runtimes.md` → `pnpm verify:auto` Last 120 s)
     - evidence: `pnpm verify:auto` EXIT=0, 50 s; vitest 4045 passed; cargo lib 1362 passed, 0 failed.
 
-- [ ] Phase 3: OUT rows, resilience, and nothing left behind (8.3–8.5)  <!-- status: in-progress -->
+- [x] Phase 3: OUT rows, resilience, and nothing left behind (8.3–8.5)
   **Observable outcomes:**
   - CLI: on the remote workspace, each OUT surface (editor, diff, terminal tab, file tree, finder, search, Sublime launchers, supervisor, turn jump) is absent; firing each OUT chord (⌘⇧E/D/T, ⌘P, ⌘⇧F, ⌘N, ⌘T) gives ONE neutral info notice; the app log over the whole session has no `os error`, no panic, no refused-command error from an OUT command (`grep -c` = 0).
   - CLI (operator action: Tailscale off ~20 s, then on): the tmux session id on the mini is the SAME before and after, the link overlay shows Reconnecting then clears, and a one-word turn after the drop gets its answer (remote transcript).
@@ -150,18 +150,49 @@ SURFACE (or an in-place fix under the verify shortcut's gates), not scope creep.
   **Alignment questions:**
   - The drop/reconnect as you experienced it (overlay wording, how long it took): acceptable for v1?
   - Every exit criterion seen: is M17 accepted, ready for `/product-finalize`? `(decision)`
-  - [ ] P3.1 OUT rows + log sweep  <!-- status: NOT-STARTED -->
-  - [ ] P3.2 Resilience: Tailscale drop, Detach / Reconnect, close and quit end the session  <!-- status: NOT-STARTED -->
-  - [ ] P3.2a (moved from P2.4) The killed-uncleanly door: with the workspace Detached, the agent runs `tmux -L claudesk kill-session` on the mini; the operator reopens → the remote argv (`ps` on the mini) contains `--continue` and the transcript continues  <!-- status: NOT-STARTED -->
-  - [ ] P3.3 Hygiene: no system extension, nothing left on the mini, dev vs prod on the same mini don't cross; clean up (incl. the stale control-socket file `com.claudesk.app/ssh/12bd9fa9` and the scratch folder's CC-made `.claude/memory/`)  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P3.1 OUT rows + log sweep
+    - Round 1 (operator: "all good"): the remote workspace's right half is Docs + Prompt only; ⌘⇧E/D/T, ⌘P, ⌘⇧F, ⌘N and ⌘T each give one neutral notice, with no panel and no red error. Pre-state: 0 `ssh -M`, no `claudesk` tmux server.
+    - Log sweep: prod `status-channel.log`, 68 lines for the scratch row; lines matching `os error|panic|refused` since the 20:45 install → 0.
+    - **Relevance check (before Phase 3):** requester still needs this: yes (M17 exit criteria) · requirements unchanged: yes · solution still feasible: yes · no superior alternative: yes. **Verdict:** proceed. Ordering: the app QUIT check (P3.2) runs LAST, because quitting the installed Claudesk ends this very CC session (it lives in a Claudesk workspace).
+  - [x] P3.2 Resilience: Tailscale drop, Detach / Reconnect, close and quit end the session (drop + quit waived by the operator on the installed build; Detach, Reconnect and close verified)
+    - R-3 Detach ✓ (settles the Batch B question): after Detach, `cd-f37d9999` is alive (created 21:27:57, attached=0), CC PID 19971 still running, no `SessionEnd`, and 0 ssh processes on the main box (the link stops with its last workspace).
+    - R-3 Reconnect ✓: on reopen (operator: "works well"), the SAME session (`$0`, created 21:27:57) is attached=1, the SAME CC PID 19971, no new `SessionStart`, and a new `ssh -M` (PID 83176, PPID 49107).
+    - R-2 network drop (Tailscale off/on) on the installed build: **waived by the operator** ("skip. already tested during dev"), so it rests on the dev-build verification at WP3/WP4.
+    - R-1 close ✓: close × → within the same second (21:33:14) the transcript's last command is `/exit`, the status log has `SessionEnd`, the mini has no `claudesk` tmux server and 0 `claude` processes, and the main box has 0 ssh processes.
+    - R-1 quit on the installed build: **waived by the operator** ("skip"), so it rests on WP5's dev-build verification (quitting ends every remote session; `end_session` / `kill_all`).
+  - [x] P3.2a (moved from P2.4) The killed-uncleanly door: with the workspace Detached, the agent runs `tmux -L claudesk kill-session` on the mini; the operator reopens → the remote argv (`ps` on the mini) contains `--continue` and the transcript continues
+    - Detached again (0 `ssh -M`; the only session `cd-f37d9999` with pane path `~/claudesk-scratch-remote`, pid 19971) → `tmux -L claudesk kill-session -t 'cd-f37d9999'` exit 0 → no server, CC 19971 gone.
+    - The picker label still read **↻ reconnect** (operator screenshot). That's by design: the label comes from the LOCAL session record, and the picker listing does not probe the host. The open check decided otherwise.
+    - Open → toast "The Claude Code session on <mini> had ended since Claudesk last saw it, so it was started again." (WP5 AC-2.3, shown in the error style); remote argv `claude --permission-mode bypassPermissions --continue` (PID 20149, 21:31:09); new session `cd-f37d9999` created 21:31:09, attached; transcript `31f40dbc` continued (mtime 21:31) and the pane shows the earlier conversation (screenshot).
+    - Cosmetic, for verify-human: the "started again" notice uses the RED error style although nothing failed.
+  - [x] P3.3 Hygiene: no system extension, nothing left on the mini, dev vs prod on the same mini don't cross; clean up (incl. the stale control-socket file `com.claudesk.app/ssh/12bd9fa9` and the scratch folder's CC-made `.claude/memory/`) (dev/prod live run waived by the operator)
+    - No system extension from Claudesk: `systemextensionsctl list` → 4 extensions (Camo camera, OBS camera, Tailscale network, an MCT driver), none Claudesk's.
+    - Nothing left on the mini: no `claudesk` and no `claudesk-dev` tmux server; 0 claude/tmux/claudesk/perl processes for the dev account.
+    - Dev vs prod on the same mini: **live concurrent run waived by the operator** ("skip"). Evidence on record: separate deploy dirs (`~/.claudesk/com.claudesk.app` vs `.app.dev`), separate hook scripts + socket dirs (10 entries each; both carry the SAME `CLAUDESK_ORIGIN`, which by design is a key for the host, not for the app — corrected after verify-self caught the earlier wording), and separate tmux sockets (`claudesk` / `claudesk-dev`); the dev/prod split was live-tested at WP4 on the dev build.
+    - Main box: the control-socket FILE `com.claudesk.app/ssh/12bd9fa9` is left after the last close, held by no process (`lsof` → 0); each reopen today re-created it without error, so it's inert. Noted only, no backlog entry.
+    - Cleanup done: the scratch folder's CC-made empty `.claude/` removed (no files in it); the folder is back to `README.md` + an empty `workflow-system/state/`. Removing it left a dangling symlink `~/.claude/projects/-Users-stayman-claudesk-scratch-remote/memory` (made at 21:12 by the workflow skill's memory link during `/session-start`), caught by verify-self and removed (a future `/session-start` there recreates it). The mccc install on the dev account STAYS (operator's manual-setup decision). The dev `projects.json` was not touched this WP. The prod scratch row stays in the installed app's picker for the operator to remove with its × (the agent does not edit `projects.json` while the app runs, since every launch rewrites it).
+  - [x] verify-auto
+    - evidence: no code changed in Phase 3 — `git diff --name-only` = this WIP only (0 non-doc files). The one remote write (removing the scratch folder's empty `.claude/`) checked: `~/claudesk-scratch-remote/.claude` absent; the mini's `~/.claude/settings.json` still parses.
+  - [x] verify-self  (fresh `feature-verify-self-runner`, READ-ONLY against persisted evidence + current state; 5 PASS, 0 FAIL, the operator's waivers recorded as UNVERIFIED)
+    - [x] O1 OUT rows — evidence: `status-channel.log` 419 post-install lines → `os error|panic|refus` = 0; the 50 scratch lines carry no error word; `supervisor-activity.log` has 0 entries for the scratch cwd (supervisor absent on remote). The surfaces and chords were operator-observed ("all good").
+    - [ ] O2 network drop  <!-- status: UNVERIFIED: waived by the operator ("skip. already tested during dev") — rests on the WP3/WP4 dev-build verification; mini sleep not exercised in WP8 -->
+    - [x] O3 Detach / Reconnect — evidence: status log register ws-8 + ONE `SessionStart` 21:27:57 → deregister (Detach) with NO `SessionEnd` → register ws-9 (reopen) with NO new `SessionStart`; no `SessionEnd` anywhere 21:27:57–21:33:14. Live-only (orchestrator captures): same session id + CC PID 19971, 0 ssh after the Detach.
+    - [x] O4 close ends — evidence: `31f40dbc` ends with `/exit` at 02:33:14Z; `SessionEnd` 21:33:14; prod `remote-sessions.json` records the scratch key `"state": "ended"`; no `claudesk` tmux server; 0 `ssh -M`. Quit half: <!-- UNVERIFIED: waived by the operator ("skip") — rests on WP5's dev-build verification -->.
+    - [x] O5 no system extension / nothing left on the mini — evidence: 4 system extensions, none `com.claudesk.*`; the mini's dev account has 0 claude/tmux/claudesk/perl processes.
+    - [x] O6 dev vs prod (static half) — evidence: mini `settings.json` has 10 prod + 10 dev entries; socket dirs differ (`com.claudesk.app` vs `.app.dev`); origins identical (a key for the host, by design); both deploy dirs present. Live concurrent run: <!-- UNVERIFIED: waived by the operator ("skip") — WP4 dev basis -->.
+    - [x] O7 cleanup (amended) — evidence: prod rows 31 vs 30, the only difference is +1 the scratch `ssh://` row (left for the operator's picker ×); dev `projects.json` 1 ssh row of 8 (pre-existing, untouched); scratch `.claude` absent; no tmux servers; 0 `ssh -M`. Leftovers: the inert `ssh/12bd9fa9` socket file (no holder); the dangling memory link on the mini, since removed.
+    - [x] align: drop/reconnect feel — no evidence: waived on the installed build.
+    - [x] align: M17 accepted? (decision) — tally: opens on the mini ✓; IN rows ✓ except the accepted remote-Recycle failure; OUT rows ✓; drop/sleep reconnect WAIVED (dev basis); close ✓, quit WAIVED (dev basis), Detach/Reconnect ✓; no system extension ✓; dev+prod live WAIVED (static ✓). Plus: the cosmetic red "started again" toast; M18 decided.
+  - [x] verify-human (F13)
+    - [x] P3.verify-human.1 (decision) M17 accepted, ready for `/product-finalize`? — operator: "m17 closing" (with the accepted remote-Recycle failure and supervisor check 6 carried as dogfood)
+    - [x] P3.verify-human.2 (decision) the red-style "started again" toast — operator: "accept and backlog" → `SURFACE-2026-11-17-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE` (low)
+  - [x] verify-codify — no new tests: Phase 3 changed no code (acceptance + cleanup; no integration boundary in code). Its two findings get their tests with their fixes (`…-REMOTE-RECYCLE-NEVER-RESPAWNS-CC`, `…-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE`).
+    Test scope: full — last phase
+    - evidence: `pnpm verify:auto` EXIT=0, 42 s; vitest 4045 passed; cargo lib 1362 passed, 0 failed.
 
 ## Current Node
-- **Path:** Feature > Phase 3 > P3.1
-- **Active scope:** P3.1
+- **Path:** Feature > review-quality
+- **Active scope:** review-quality
 - **Blocked:** none (v0.9.0 installed by the operator 2026-11-17, running since 20:45:49)
 - **Unvisited:** none beyond Phase 3
 - **Open discoveries:** none
@@ -171,3 +202,8 @@ SURFACE (or an in-place fix under the verify shortcut's gates), not scope creep.
      Each entry is also logged to workflow-system/state/backlog.md -->
 - [RESOLVED-2026-11-17] P1.2 — `/release` step 1's vocabulary check: every observed type is classified. `backlog.md`'s `SURFACE-2026-11-08-QUOTA-AUTO-RESUME-FIRED-…` was a stale duplicate (fixed in `4de4e70`, 2026-11-06, before it was filed); deleted with a CHANGELOG line.
 - [SURFACED-2026-11-17] P2.3 — Remote Recycle runs the handoff and `/exit` but never respawns CC → `SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC` (medium). An M17 IN row failing; the operator ruled it non-blocking (workaround: don't Recycle a remote session). Must be carried at M17's close.
+- [SURFACED-2026-11-17] P3.2a — the remote open's "started again" notice uses the red error style though nothing failed → `SURFACE-2026-11-17-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE` (low; operator: accept and backlog).
+
+## Ship
+- Full suite: reused the last-phase codify run (`Test scope: full — last phase`, `pnpm verify:auto` EXIT=0, 42 s); only docs changed since. eslint + prettier --check re-run at ship: exit 0.
+- WP8 shipped no product code: its shippable was the v0.9.0 release (`14f0237`, tag `v0.9.0`, published at P1.2). The ship commit carries the acceptance record (this WIP, backlog, runtimes).
