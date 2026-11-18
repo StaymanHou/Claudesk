@@ -138,6 +138,7 @@ On a never-trusted folder CC opens on "Quick safety check … trust this folder?
 **As built (ruling R1, default D4):** the fire (`autoResumeFire.ts` → `fireAutoResume`) reads CC's own
 trust record at FIRE time, then decides through `shouldInject` (its `trusted` term) with a fresh
 cancellation read. Untrusted or any doubt → nothing typed; the operator trusts, then types it.
+📐 **M18 (planned) extends the fire-time read to the bypass-permissions warning:** under `--dangerously-skip-permissions` the inject also requires `skipDangerousModePermissionPrompt: true` in the account's (or profile's) `settings.json`, local and remote alike (`SURFACE-2026-11-17-AUTO-RESUME-INJECT-ANSWERS-BYPASS-PERMISSIONS-DIALOG-NO-EXIT`; [claude-substrate](claude-substrate.md) §R.6).
 
 - **The record:** `projects[<physical path>].hasTrustDialogAccepted`, in `$HOME/.claude.json` for the
   default profile (⚠️ a SIBLING of `~/.claude/`, not inside it) or `$CLAUDE_CONFIG_DIR/.claude.json` for

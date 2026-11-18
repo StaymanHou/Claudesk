@@ -1,7 +1,7 @@
 ---
 stage: arch
 state: complete
-updated: 2026-11-17  # M17 closed: arch/remote-workspaces.md is the as-built record (was PLANNED); was: 2026-11-14 M17 /product-arch
+updated: 2026-11-18  # M18 /product-arch: claude-substrate.md → "Remote hosts (M18)" PLANNED; was: 2026-11-17 M17 closed
 shape: index
 archive-root: workflow-system/product/archive/
 ---
@@ -22,7 +22,7 @@ subsystem you need.
 | [Session resumption & drive mode](arch/session-resumption.md) | the two signals, the unclean-exit flag, the announcement, the drive-mode signal, the picker cell, the picker row order |
 | [Right-panel surfaces](arch/right-panel-surfaces.md) | editor, diff, terminal, the gated docs panel, `fs_index`, `editor_fs`, media in the editor tab (glance viewer, review player, 4 GiB cap) |
 | [Workflow-features gate](arch/workflow-gate.md) | the `useWorkflowFeaturesEnabled` seam, the OFF-invariant guard, Settings, the invite |
-| [The `~/.claude/` substrate](arch/claude-substrate.md) | install/uninstall wizards, provenance, the compiler-enforced refuse-guard |
+| [The `~/.claude/` substrate](arch/claude-substrate.md) | install/uninstall wizards, provenance, the compiler-enforced refuse-guard; **M18 (PLANNED): remote hosts**: the host as the funnel's third input, host detection, install/update/uninstall over the master, drift |
 | [Security & trust posture](arch/security-posture.md) | raw HTML blocked, CSP status, the M16 asset-protocol transport |
 | [Build, update & release](arch/build-update-release.md) | artifacts, self-update, signing, the release pipeline |
 | [Native app menu](arch/app-menu.md) | the menu bar, and why it carries no accelerators |
@@ -77,6 +77,7 @@ Each line is a *pointer*; the full reasoning stays at the anchor.
 - **⚠️ The gate applies PER ARM, not per feature** — the discriminator is *applicability*, never audience size. → [session-resumption](arch/session-resumption.md)
 - **A new gated surface that is not a panel / menu-id / chord / row-cell / skill-row owns a SEVENTH guard arm** — ⚠️ **arms 1–6 are TAKEN** (the fifth landed at M13 WP2; **arm 6, WORKSPACE-DRIVEMODE, landed at M13.5 WP4**). ⚠️ **CORRECTED AT M15 WP5 (2026-09-15)** — this line previously read *"a SIXTH guard arm — arms 1–5 are TAKEN … 7 subjects across the 5 arms"*, which went stale when arm 6 landed. ⚠️ **Probe each arm INDIVIDUALLY** — there are **9 subjects** across the 6 arms (arm 4 owns two derivations, arm 5 two predicates, **arm 6 two** — the drive-mode readout at M13.5 WP4 and the supervisor toggle at M14 WP0), pinned by `armSubjects` in `offInvariantGuard.test.ts` → `it("still polices all six registries")`. ⚠️ **CORRECTED AGAIN 2026-09-18 (M14 WP4)** — this clause said *"8 subjects … arm 6 one"* with a line-number citation that had drifted to an unrelated statement; arm 6 gained its second subject at M14 WP0, after the M15 WP5 edit above was written. **Cite the symbol, never a line number** (`cite-code-by-symbol-not-line`). ⚠️ **M15's supervisor does NOT own a seventh arm** — its decision logic is headless (acts only through the already-gated `injectCommand` / `recycleSession` paths), and every operator-visible supervisor surface since (the M14 WP0 toggle + suppressed badge, the 2026-09-25 activity hint / `▾` trigger / popover) renders from `workspaceSupervisorReadout`, arm 6's `WORKSPACE-SUPERVISOR` subject; the decision and its reversing condition are recorded in [workflow-supervisor](arch/workflow-supervisor.md) §G (and in `workflow-system/state/archive/m15-wp5-milestone-exit-verify.md`). ⚠️ `WORKFLOW_TERMS` contains neither `"recycle"` nor `"session"`, so a `RECYCLE_SESSION` menu id or panel registers **unseen** by arms 1–3 — **not widened at M15**, because the `recycle`-named exports are data, not surfaces (the numeric `RECYCLE_TOKEN_THRESHOLD`, and since M16.5 WP9 the edge set `RECYCLE_BOUNDARY_EDGES`). → [gate](arch/workflow-gate.md)
 - **Provenance, not abstinence,** for anything touching `~/.claude/`: only remove what Claudesk **recorded** installing; every degraded read fails toward `developer`. Compiler-enforced. → [substrate](arch/claude-substrate.md)
+- **(M18, planned) A host's workflow presence enters through `workflow_applicable`'s third input, never a per-site flag**; unknown fails closed; and **the live host install that a real workspace runs on is never a verification target** (sandbox root, debug builds only). → [substrate](arch/claude-substrate.md) §R.1, §R.8
 - **Raw HTML is BLOCKED**, and the two controls are **redundant, not layered** — `rehype-raw` alone measured **6 live vectors**. Never reason about one without the other. → [security](arch/security-posture.md)
 - **Read-only is a property of the PANEL, not the webview** — under `csp: null` the webview still reaches `editor_fs::write_file`. → [security](arch/security-posture.md)
 - **The asset scope stays `allow: []` statically; roots enter ONLY via `stat_media` after both `editor_fs` guards.** A static entry would break the "adds no new reach" statement. SVG is `<img>`-only, and the PDF `<iframe>` is gated on the `%PDF-` sniff, never the name. → [security](arch/security-posture.md)
