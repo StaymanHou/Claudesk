@@ -50,7 +50,7 @@ SURFACE (or an in-place fix under the verify shortcut's gates), not scope creep.
 - [x] Phase 1: Release candidate — publish and check what users receive
   **Observable outcomes:**
   - CLI: `git log origin/main..main` lists no commits after the release push, and the release tag `git tag --sort=-v:refname | head -1` is newer than `v0.8.3`.
-  - CLI: before the push, `git log -p origin/main..main` contains none of the real mini identifiers (host, accounts) recorded in the gitignored memory `mini-remote-user-is-stayman` → `grep -c` = 0 for each.
+  - CLI: before the push, `git log -p origin/main..main` contains none of the real mini identifiers (host, accounts) recorded in the gitignored memory the gitignored mini-account memory → `grep -c` = 0 for each.
   - HTTP: the updater endpoint (`latest.json` as `/release` publishes it) → 200, `version` = the new tag, and its signature verifies against the trust anchor key used since v0.2.9.
   - CLI: the DOWNLOADED `.dmg` and the DOWNLOADED `.app.tar.gz` (extracted with `tar`, not `cp`) each pass `stapler validate` and `spctl -a -vv` (`source=Notarized Developer ID`); `shasum` of each download = the published asset.
   **Alignment questions:**
@@ -95,9 +95,9 @@ SURFACE (or an in-place fix under the verify shortcut's gates), not scope creep.
   - [x] P2.1 Confirm the installed version + Dock launch; add the scratch remote row through the picker (operator clicks, agent captures)
     - **Relevance check (before Phase 2):** requester still needs this: yes (M17 exit criteria) · requirements unchanged: yes · solution still feasible: yes · no superior alternative: yes. **Verdict:** proceed.
     - Pre-state 2026-11-17: `/Applications/Claudesk.app` `CFBundleShortVersionString` = 0.9.0; PID 49107, PPID 1 (launchd: the updater's relaunch), started 20:45:49. Prod `projects.json`: 30 rows, 0 remote (row set saved in the session scratchpad `prod-rows-before.txt`). Prod `settings.json` `workflow_features_enabled: true`.
-    - ⚠️ `tailscale status` → "Tailscale stopped", so the mini's name does not resolve. Waiting on the operator to start Tailscale. (The dev `projects.json`'s one remote row still names the admin account; per memory `mini-remote-user-is-stayman` the scratch row uses the dev account.)
+    - ⚠️ `tailscale status` → "Tailscale stopped", so the mini's name does not resolve. Waiting on the operator to start Tailscale. (The dev `projects.json`'s one remote row still names the admin account; per memory the gitignored mini-account memory the scratch row uses the dev account.)
     - Tailscale started by the operator. Mini pre-state (dev account, `zsh -l`): `~/claudesk-scratch-remote` = `README.md` + WP5's `workflow-system/state/.session.md`; no `claudesk` and no `claudesk-dev` tmux server; no claude/tmux processes; `claude` = `~/.local/bin/claude` 2.1.326; `~/.claude/settings.json` `skipDangerousModePermissionPrompt: True`, hooks = 10 entries, ALL the dev app's (`~/.claudesk/com.claudesk.app.dev/claudesk-remote-hook-dev.pl`), none from prod yet; `~/.claude/skills` absent; `~/.claudesk/` = `cc-oauth-token` + `com.claudesk.app.dev/` only (no prod dir yet).
-  - [x] P2.1 evidence (first open, 20:58): operator added the row through the picker ("worked well"), the next-open label predicted `/session-restore`, the open showed the CC pane, then `Unknown command: /session-restore` (screenshot). Captures: exactly ONE `ssh -M` for the host, PPID 49107 (the installed app); `tmux -L claudesk ls` → one session `cd-f37d9999` (attached); the remote CC argv `claude --permission-mode bypassPermissions`; the mini's `settings.json` now has 10 prod `claudesk-remote-hook.pl` entries ALONGSIDE the 10 dev ones, `skipDangerousModePermissionPrompt: True` kept; `~/.claudesk/com.claudesk.app/` deployed (cc-launch, hook script, hook.sock, tmux.conf); prod `status-channel.log` shows the remote events `resolved=ws-2` (origin routing). Prod `projects.json` gained exactly one row, `ssh://stayman@<host>/Users/stayman/claudesk-scratch-remote` (the `~` was normalized to the absolute path).
+  - [x] P2.1 evidence (first open, 20:58): operator added the row through the picker ("worked well"), the next-open label predicted `/session-restore`, the open showed the CC pane, then `Unknown command: /session-restore` (screenshot). Captures: exactly ONE `ssh -M` for the host, PPID 49107 (the installed app); `tmux -L claudesk ls` → one session `cd-f37d9999` (attached); the remote CC argv `claude --permission-mode bypassPermissions`; the mini's `settings.json` now has 10 prod `claudesk-remote-hook.pl` entries ALONGSIDE the 10 dev ones, `skipDangerousModePermissionPrompt: True` kept; `~/.claudesk/com.claudesk.app/` deployed (cc-launch, hook script, hook.sock, tmux.conf); prod `status-channel.log` shows the remote events `resolved=ws-2` (origin routing). Prod `projects.json` gained exactly one row, `ssh://<user>@<host>/Users/<user>/claudesk-scratch-remote` (the `~` was normalized to the absolute path).
   - [x] P2.2 Terminal, dots on 3 surfaces + attention, Docs (+ the WP7 MAJOR quick-switch check), Prompt, drive-mode line, thumbnails
     - Operator: "all good" for all 7 steps (drive mode, Prompt + dots, blue, purple, terminal feel, Docs + quick switch with no red toast, thumbnails).
     - Captures: prod `projects.json` scratch row `default_drive_mode: orchestrated`; the remote transcript has 20× `Claudesk reports the drive mode for this workspace as orchestrated`, and the user turns `reply with only the word ok` (→ `ok`, sent from the Prompt panel), `use AskUserQuestion…` (→ AskUserQuestion, answered), `run "sleep 30" as a background task…` (→ Bash background, then the task-notification turn). The prod `status-channel.log` for `cwd=…/claudesk-scratch-remote`, in order: UPS running → Stop idle; UPS running → Notification **awaiting_input** → PostToolUse running → Stop idle; UPS running → PostToolUse running → Stop **background_work**; UPS running → Stop idle. Every event was `outcome=emitted`.
@@ -115,7 +115,7 @@ SURFACE (or an in-place fix under the verify shortcut's gates), not scope creep.
     - evidence: no code changed in Phase 2 — `git diff --name-only` lists only `.md` files (runtimes, roadmap, backlog, this WIP), so 0 non-doc files. The mini's manual install: `~/.claude/settings.json` parses (json.load ok); 0 broken symlinks under `~/.claude/skills` + `~/.claude/agents`; `~/.claude/CLAUDE.md` has 1 workflow-block marker; the `~/my-claude-code-customization` clone has 0 dirty files.
   - [x] verify-self  (fresh `feature-verify-self-runner`, READ-ONLY re-derivation from persisted evidence: transcripts, `status-channel.log`, both `settings.json`, prod `projects.json`, the installed bundle)
     - [x] O1 installed version — evidence: `CFBundleShortVersionString` 0.9.0; `49107 1 Tue Nov 17 20:45:49 2026 /Applications/Claudesk.app/Contents/MacOS/claudesk` (PPID 1, a LaunchServices launch); bundle mtime 20:45:49 (the updater's replace).
-    - [x] O2 remote row + nothing left running — evidence: prod `projects.json` has exactly 1 `ssh://` row (of 31), `ssh://stayman@<host>/Users/stayman/claudesk-scratch-remote`, orchestrated; REGISTRY register lines ws-2…ws-7 for that key; STATUS events for its cwd resolve to them. Now: mini `tmux -L claudesk ls` → no server; no local `/usr/bin/ssh -M`. The live one-session / one-master / PPID check rests on the orchestrator's capture at open time (P2.1 evidence). Leftover: a control-socket FILE `com.claudesk.app/ssh/12bd9fa9` (21:17) held by no process (`lsof` empty), carried to P3.3.
+    - [x] O2 remote row + nothing left running — evidence: prod `projects.json` has exactly 1 `ssh://` row (of 31), `ssh://<user>@<host>/Users/<user>/claudesk-scratch-remote`, orchestrated; REGISTRY register lines ws-2…ws-7 for that key; STATUS events for its cwd resolve to them. Now: mini `tmux -L claudesk ls` → no server; no local `/usr/bin/ssh -M`. The live one-session / one-master / PPID check rests on the orchestrator's capture at open time (P2.1 evidence). Leftover: a control-socket FILE `com.claudesk.app/ssh/12bd9fa9` (21:17) held by no process (`lsof` empty), carried to P3.3.
     - [x] O3 hooks — evidence: local `~/.claude/settings.json` {`claudesk-hook.pl`: 10, `claudesk-hook-dev.pl`: 10}; mini {`claudesk-remote-hook.pl`: 10, `claudesk-remote-hook-dev.pl`: 10} over the same 10 events; mini `skipDangerousModePermissionPrompt` = True; `permissions.allow` = exactly the 4 mccc entries.
     - [x] O4 workflow buttons <!-- status: FAILED — accepted non-blocking by operator ruling 2026-11-17 ("not a blocker tho. we can fix it later. for now I just avoid recycle on remote sessions") --> — evidence: no stubs (`~/claudesk-scratch-remote/.claude` holds only an empty `memory/` CC made at 21:12, no `skills/`); `~/.claude/skills` has 48 symlinks into the mccc clone, 0 broken; transcript `4214b37c` has `/session-restore` (L5 02:12:18Z), `/session-start` (L50), `/session-handoff` (L74, 02:13:06–14Z) and `/exit` (L98 02:13:15Z), once each. ✗ Recycle respawn: `Stop` 21:13:14 → `SessionEnd` 21:13:15 → no `SessionStart` until a FRESH open (register ws-5, 21:17:07). The runner rated it BLOCKING per the taxonomy; the operator's ruling makes it non-blocking. → `SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC`.
     - [x] O5 auto-resume doors — (c) ✓ the first user turn of `4214b37c` (02:12:18Z) and of `31f40dbc` (02:17:09Z) is `/session-restore`, and `.session.md` is consumed (02:17:12Z `rm`). (b) PARTIAL: two `--continue` starts (21:08:11 into `cb495f65` after its `/exit`; 21:17:26 into `31f40dbc` after its `/exit`), both after a CLEAN exit; the KILLED-uncleanly door was never driven (Batch B ended before the agent's kill step) → **moved to Phase 3 (P3.2a)**. (a) <!-- status: UNVERIFIED: undrivable — live-only (an attach emits no SessionStart); the ws-3→ws-4 and ws-7 reopens show no SessionEnd/SessionStart, which fits a reattach; the operator reported reconnect "all good" -->.
@@ -170,7 +170,7 @@ SURFACE (or an in-place fix under the verify shortcut's gates), not scope creep.
     - Nothing left on the mini: no `claudesk` and no `claudesk-dev` tmux server; 0 claude/tmux/claudesk/perl processes for the dev account.
     - Dev vs prod on the same mini: **live concurrent run waived by the operator** ("skip"). Evidence on record: separate deploy dirs (`~/.claudesk/com.claudesk.app` vs `.app.dev`), separate hook scripts + socket dirs (10 entries each; both carry the SAME `CLAUDESK_ORIGIN`, which by design is a key for the host, not for the app — corrected after verify-self caught the earlier wording), and separate tmux sockets (`claudesk` / `claudesk-dev`); the dev/prod split was live-tested at WP4 on the dev build.
     - Main box: the control-socket FILE `com.claudesk.app/ssh/12bd9fa9` is left after the last close, held by no process (`lsof` → 0); each reopen today re-created it without error, so it's inert. Noted only, no backlog entry.
-    - Cleanup done: the scratch folder's CC-made empty `.claude/` removed (no files in it); the folder is back to `README.md` + an empty `workflow-system/state/`. Removing it left a dangling symlink `~/.claude/projects/-Users-stayman-claudesk-scratch-remote/memory` (made at 21:12 by the workflow skill's memory link during `/session-start`), caught by verify-self and removed (a future `/session-start` there recreates it). The mccc install on the dev account STAYS (operator's manual-setup decision). The dev `projects.json` was not touched this WP. The prod scratch row stays in the installed app's picker for the operator to remove with its × (the agent does not edit `projects.json` while the app runs, since every launch rewrites it).
+    - Cleanup done: the scratch folder's CC-made empty `.claude/` removed (no files in it); the folder is back to `README.md` + an empty `workflow-system/state/`. Removing it left a dangling symlink `~/.claude/projects/-Users-<user>-claudesk-scratch-remote/memory` (made at 21:12 by the workflow skill's memory link during `/session-start`), caught by verify-self and removed (a future `/session-start` there recreates it). The mccc install on the dev account STAYS (operator's manual-setup decision). The dev `projects.json` was not touched this WP. The prod scratch row stays in the installed app's picker for the operator to remove with its × (the agent does not edit `projects.json` while the app runs, since every launch rewrites it).
   - [x] verify-auto
     - evidence: no code changed in Phase 3 — `git diff --name-only` = this WIP only (0 non-doc files). The one remote write (removing the scratch folder's empty `.claude/`) checked: `~/claudesk-scratch-remote/.claude` absent; the mini's `~/.claude/settings.json` still parses.
   - [x] verify-self  (fresh `feature-verify-self-runner`, READ-ONLY against persisted evidence + current state; 5 PASS, 0 FAIL, the operator's waivers recorded as UNVERIFIED)
@@ -191,8 +191,8 @@ SURFACE (or an in-place fix under the verify shortcut's gates), not scope creep.
     - evidence: `pnpm verify:auto` EXIT=0, 42 s; vitest 4045 passed; cargo lib 1362 passed, 0 failed.
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality
+- **Path:** Feature > refactor (F40)
+- **Active scope:** refactor complete → finalize
 - **Blocked:** none (v0.9.0 installed by the operator 2026-11-17, running since 20:45:49)
 - **Unvisited:** none beyond Phase 3
 - **Open discoveries:** none
@@ -203,6 +203,37 @@ SURFACE (or an in-place fix under the verify shortcut's gates), not scope creep.
 - [RESOLVED-2026-11-17] P1.2 — `/release` step 1's vocabulary check: every observed type is classified. `backlog.md`'s `SURFACE-2026-11-08-QUOTA-AUTO-RESUME-FIRED-…` was a stale duplicate (fixed in `4de4e70`, 2026-11-06, before it was filed); deleted with a CHANGELOG line.
 - [SURFACED-2026-11-17] P2.3 — Remote Recycle runs the handoff and `/exit` but never respawns CC → `SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC` (medium). An M17 IN row failing; the operator ruled it non-blocking (workaround: don't Recycle a remote session). Must be carried at M17's close.
 - [SURFACED-2026-11-17] P3.2a — the remote open's "started again" notice uses the red error style though nothing failed → `SURFACE-2026-11-17-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE` (low; operator: accept and backlog).
+
+## Code-Quality Review — m17-wp8-installed-acceptance
+
+(`code-quality-reviewer`, ship `b293cb6`, base `ddefbb9`.)
+
+### Strengths
+- The v0.9.0 bump is consistent across `Cargo.toml` / `Cargo.lock` / `tauri.conf.json` (one line each, no reflow), proven mechanically at verify-auto.
+- The new backlog entries are accurate against the code they cite (`readRemoteOpenToast` → `setInjectFailure`; the wording in `remote_link/commands.rs`; `RemotePorts` / `RemoteTerminal`; `wait_not_closing`).
+- The quota-duplicate CHANGELOG line is true (`4de4e70`), and delete-on-resolve was followed.
+- The M18 entry agrees with `arch/remote-workspaces.md` (profiles local-only).
+- Release evidence: byte-compares, a trust-anchor key-id match, and a negative control. The remote-Recycle report is evidence-first.
+
+### Issues
+**CRITICAL**
+- [this WIP, the Phase 2/3 evidence lines] The mini's real dev-account name is committed: in the remote key `ssh://<account>@<host>/Users/<account>/claudesk-scratch-remote` and in the memory-link path `-Users-<account>-claudesk-scratch-remote`. It breaks the public-repo rule (use `<user>`) and is already on `origin/main` (`b293cb6`). The disclosure is small, since the name matches the public git author, so redacting going forward is enough. Process gap: the identifier grep did not include the dev account's name, and the Phase 2/3 commits were not checked against it.
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [`backlog.md` → `SURFACE-2026-11-17-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE`] The suggested action ("return a kind with its text") misses that `readRemoteOpenToast` joins the open notice and the hook warning into ONE string, so a single toast can mix info and error. The entry should say the error kind wins, or the toast splits.
+
+### Assessment
+A well-built acceptance WP. The only code change, the version bump, is consistent and mechanically verified. The documentation is accurate and its code references check out. The one real slip is public-repo hygiene in the live-evidence lines.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+## Refactor (F40, from review-quality)
+- CRITICAL fixed: the dev-account name redacted from this WIP (5 occurrences → `<user>` / "the gitignored mini-account memory"). The account name is the same as the public git author, so the earlier pushed copy (`b293cb6`) needs no history rewrite. Process fix for the rest of this session: the pre-push identifier grep now includes the dev account's name and the mini's short hostname.
+- MINOR folded in: `SURFACE-2026-11-17-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE`'s suggested action now says the error kind wins when one toast carries both (`readRemoteOpenToast` joins the open notice and the hook warning into one string).
 
 ## Ship
 - Full suite: reused the last-phase codify run (`Test scope: full — last phase`, `pnpm verify:auto` EXIT=0, 42 s); only docs changed since. eslint + prettier --check re-run at ship: exit 0.

@@ -731,7 +731,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Type:** tech-debt (cosmetic)
 - **Summary:** When a remote open's check finds the session dead although the picker label predicted "reconnect", the workspace shows "The Claude Code session on <host> had ended since Claudesk last saw it, so it was started again." in the RED error toast style (`role="alert"`). Nothing failed: it reports what happened, so it belongs in the neutral info style (`is-info`, `role="status"`), as WP6's absent-surface notices do.
 - **Context:** The notice rides `readRemoteOpenToast` → `setInjectFailure` in `Workspace.tsx` (the `onSessionId` handler), which always sets `kind: "error"`. The same path also carries the real failures (the remote hook install failed), so the fix has to give each notice its own kind, not flip the whole path. Operator ruling at WP8 verify-human: accept as-is for M17, backlog the restyle.
-- **Suggested action:** Have `readRemoteOpenToast` return a kind with its text, so the "started again" / predicted-vs-actual notices render as info and the hook-install warning stays an error. Pin it with a live-mount test on the toast's `data-kind`.
+- **Suggested action:** Have `readRemoteOpenToast` return a kind with its text, so the "started again" / predicted-vs-actual notices render as info and the hook-install warning stays an error. ⚠️ `readRemoteOpenToast` joins the open notice and the hook warning into ONE string (`parts.join(" ")`), so one toast can carry both: the **error kind must win** in that case (or split it into two toasts), so a real hook-install failure is never shown as neutral. Pin both cases with a live-mount test on the toast's `data-kind`.
 - **Priority:** low
 - **Status:** pending
 
