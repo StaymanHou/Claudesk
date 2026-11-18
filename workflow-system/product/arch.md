@@ -1,7 +1,7 @@
 ---
 stage: arch
 state: complete
-updated: 2026-11-14  # M17 /product-arch: arch/remote-workspaces.md added (PLANNED); was: 2026-11-08 M16.5 closed: recycle keys on the fired edge (workflow-supervisor §E), picker row order (session-resumption); was: 2026-10-20 M16 closed
+updated: 2026-11-17  # M17 closed: arch/remote-workspaces.md is the as-built record (was PLANNED); was: 2026-11-14 M17 /product-arch
 shape: index
 archive-root: workflow-system/product/archive/
 ---
@@ -29,7 +29,7 @@ subsystem you need.
 | [Time analytics](arch/time-analytics.md) | the SQLite exception and its load-bearing rules |
 | [Claude Code profiles (F-b)](arch/profiles.md) | named `CLAUDE_CONFIG_DIR`s: store, fail-closed resolution, spawn env/argv, workflow-off funnel, per-profile hooks, the create wizard, Delete-to-Trash |
 | [Workflow supervisor](arch/workflow-supervisor.md) | the typed policy graph (⚠️ only feature/task/session-ops edges chain), turn-end detection (the emitted-token rule), the `claude -p` adjudicator (full-id pin + resolved-model check; question re-measured and kept at M16.5 WP3), context-pressure recycle (on the F15 edge only since M16.5 WP9), observability (activity record + failure alarm), the mccc ownership boundary |
-| [Remote workspaces (M17, ⚠️ PLANNED)](arch/remote-workspaces.md) | a workspace whose CC runs on another Mac: the per-host SSH master link + hook forward, `SpawnTarget::Remote`, the `(origin, cwd)` hook match, R-1–R-4 lifecycle, `remote_fs` polling, the `workspaceSurfaces` funnel |
+| [Remote workspaces (M17)](arch/remote-workspaces.md) | a workspace whose CC runs on another Mac: the per-host SSH master link + hook forward, `SpawnTarget::Remote`, the `(origin, cwd)` hook match, R-1–R-4 lifecycle, `remote_fs` polling, the `workspaceSurfaces` funnel |
 
 **Writing here:** add to the **subsystem** file — never a new milestone section; that append habit is
 what grew the old file monotonically. A superseded design survives only as a `⚠️ do not reinstate` note

@@ -50,6 +50,14 @@ Edits to child components (`RightPanelHost.tsx`, `Workspace.tsx`) hot-swap witho
   running App.tsx mutants; after any App.tsx save, reload the webview and reopen before trusting a live read.
   Backlog: `SURFACE-2026-11-17-APP-TSX-FAST-REFRESH-CLOSES-REMOTE-WORKSPACES`.
 
+**5. UPDATE 2026-11-17 (M17 WP8): the mini's dev account now HAS the workflow skills**, installed by hand at the
+operator's request: a git bundle of the mccc repo's pushed `main` → `~/my-claude-code-customization` (origin = the GitHub
+URL), `./install.sh` (48 skills + 6 agents symlinked, workflow block in `~/.claude/CLAUDE.md`), and the 4 printed
+permissions merged into `~/.claude/settings.json` (backup `settings.json.bak-mccc-install-2026-11-17`). Stub skills are
+no longer needed. Real workflow commands still fire ONLY in a scratch remote folder (rule #1), since they act for real now.
+⚠️ That account has NO GitHub access (no key, no `gh`), so its copy cannot `git pull`: refreshing it means re-sending
+a bundle from the main box. Detect + install from Claudesk is Milestone 18. The original note follows (history):
+
 **5. The mini's dev account has NO workflow skills** (found 2026-11-17, M17 WP7 Phase 4: `~/.claude/skills` absent).
 A real `/session-handoff`, `/session-restore`, `/session-start` or skill-button command there is an unknown command,
 so Recycle ends `failed` and skill buttons do nothing useful (product gap: backlog

@@ -26,6 +26,7 @@
 - **Backlog resolved:** SURFACE-2026-11-08-QUOTA-AUTO-RESUME-FIRED-IS-AN-UNCLASSIFIED-NOTIFICATION-TYPE — a stale duplicate: `quota_auto_resume_fired` has been in `INFORMATIONAL_NOTIFICATION_TYPES` since `4de4e70` (2026-11-06), with its classification test.
 - **Feature shipped:** M17 WP8 released v0.9.0 and accepted it on the installed build against the remote Mac mini: every M17 IN and OUT row was checked live except remote Recycle, which never respawns Claude Code (backlogged as a known, non-blocking failure), and the operator waived the network-drop, app-quit and concurrent dev+prod checks on the strength of dev-build testing.
 - **Milestone:** WP8: Installed-build acceptance against the mini
+- **Product cycle complete:** Milestone 17 (remote workspaces) closed: a workspace whose Claude Code session runs on another Mac over SSH and tmux is one click and glanceable like a local one, survives drops and detaches, hides every local-only surface, and shipped in v0.9.0, accepted on the installed build with one known gap (remote Recycle does not respawn Claude Code).
 
 ## 2026-11-16
 

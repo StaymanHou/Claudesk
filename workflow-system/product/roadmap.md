@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-11-17  # M17 WP6 shipped: OUT rows absent (workspaceSurfaces funnel); turn jump ruled absent permanently
+updated: 2026-11-17  # M17 closed (v0.9.0); M18 next
 ---
 
 # Roadmap
@@ -54,6 +54,7 @@ record is `arch/<subsystem>.md`** (indexed by `arch.md`). Where the two disagree
 | — | Analytics week export | 2026-09-29 | Day view 5.7× faster, resumed-session lives, Week default, `claudesk export-week` (`v0.7.1`) |
 | M16 | Right-panel media viewer | 2026-10-20 | Images, SVG, sniff-gated PDF, audio and video open in the editor file tab: glance viewer, review player (midpoint frame-step, frame-accurate timecode, reload keeps the playhead), a 4 GiB cap with Open in default app (`arch/right-panel-surfaces.md`) |
 | M16.5 | Supervisor hardening, QoL + paydown | 2026-11-08 | Only execution workflows chain; emitted-token rule; full-id adjudicator pin + loud failures; artifact watch reads idle, every verify-human pause reads blue; QoL batch; per-result replace; the 15-WP code-quality paydown; context-pressure recycle only at F15 |
+| M17 | Remote workspaces (one SSH host first) | 2026-11-17 | A workspace whose CC runs on another Mac over SSH + tmux: one ControlMaster per host, the hook over the link with `(origin, cwd)` routing, lifecycle R-1–R-4 (reconnect, Detach, dialogs, the remote two-signal rule), OUT rows absent through one `workspaceSurfaces` funnel, remote Docs with an on-screen-only poller. Released in `v0.9.0` and accepted on the installed build against the mini. Known gap: remote Recycle never respawns CC (backlogged); drop / quit / live dev+prod waived on the installed build (dev-build basis). Entry: `archive/milestone-17-remote-workspaces/roadmap-entry.md` |
 
 **Carried forward from shipped work. These are not complete, so read them before reading any `[x]` as "done":**
 - ⚠️ **M15's live half: firing IS observed on an installed build** (`v0.7.1`, four fires on
@@ -100,82 +101,7 @@ Each ruling is one line here. Its full text is in the archive, under the heading
 
 ## Next
 
-✅ **The `/product-vision` revisit is done (2026-11-14)**, so milestones past M16 can be numbered. **Next: Milestone 17, remote workspaces.** Earlier items in this list are archived with their cycles: the mccc asks went out 2026-09-29, and M16.5 closed 2026-11-08 (`archive/milestone-16-5-supervisor-hardening-qol-and-paydown/`).
-
-### Milestone 17: Remote workspaces (one SSH host first)
-
-**Why:** the vision revisit (2026-11-14) made Claudesk a **cockpit for parallel CC sessions**, and ruled
-remote workspaces a general capability built against one host first. The first host and consumer is
-the `tank-sim-lite-demo` Mac mini (accepted inbox request
-`archive/2026-11-13-tank-sim-lite-demo-remote-workspace.md`). That project won't start agent-driven
-game development until this milestone ships, and its **checkpoint is 2026-12-11**.
-
-**Goal:** a workspace whose CC session runs on another Mac over SSH is as one-click and as glanceable
-as a local one, and it survives the network or the remote going away (vision Metric 7).
-
-**Scope:** the operator's parity table (2026-11-13), as codified in `vision.md` → "The direction from here".
-- **IN:** the CC terminal; the status dots on the filmstrip, menu bar and PiP (four states plus
-  attention); the Docs and Prompt panels; the drive mode and its `UserPromptSubmit` line; smart
-  auto-resume; the skill, Session-Start and Recycle buttons; live filmstrip thumbnails.
-- **OUT:** the editor, diff viewer and second terminal; ⌘P, the file tree, project search and the
-  Sublime launchers. These are **hidden** on a remote workspace (Core Principle 7), never greyed
-  out or erroring. Time analytics and the supervisor are deferred.
-  ✅ **As built (M17 WP6, 2026-11-17):** all of these are absent, plus the supervisor and the
-  **turn-marker jump** (operator ruling: absent permanently, no tmux-history rebuild). A chord or menu
-  item for an absent surface shows one neutral info notice rather than doing nothing (arch §G).
-- **Constraints:** the per-workspace config lives in `projects.json`, with no multi-host screen; no
-  system extension on the main box; no long-running remote process beyond CC, its session host and
-  the hook path. Windows isn't needed but shouldn't be foreclosed.
-
-**Lifecycle rulings (`/util-grill-me`, 2026-11-14; settled):**
-- **R-1: explicit actions keep local parity.** Close (×), **⏸ "Close, resume later"** (`onPauseClose`), Recycle and quit **end**
-  the remote session (CC gets `/exit`), as they do locally, with no extra dialog beyond the existing
-  active-close confirm. ⏸ leaves the unclean flag set, as it does locally, so the next open **resumes**
-  (`--continue` on the remote).
-- **R-2: passive events leave the session running on the remote.** A lost connection, a Claudesk
-  crash, or the remote sleeping. Reopening **reconnects** to the live session, and that beats both
-  resume signals. Only a dead remote session falls back to the two-signal rule (unclean flag →
-  `--continue`, else `.session.md` → `/session-restore`, else nothing).
-- **R-3: a deliberate Detach / Reconnect control** on remote workspaces leaves the session running
-  on purpose and reconnects later.
-  ⚠️ **As built (M17 WP5, operator ruling 2026-11-16):** Detach is a control on the remote TILE that
-  closes it and leaves the session running ("simply detach and quit; the tile is gone"); there is no
-  Detached tile, and Reconnect is reopening the row from the picker.
-- **R-4: when the state is genuinely unclear, show a dialog** so the operator chooses deliberately.
-  Don't guess.
-
-- ⚠️ **Vocabulary (operator, 2026-11-14): reconnect ≠ resume.** **Reconnect** = the CC session is
-  still alive on the remote; Claudesk only connects back to it (tmux attach). No resume command fires.
-  **Resume** = the session already ended (`/exit`) on the remote; Claudesk connects and starts CC
-  through the existing two-signal rule (unclean flag → `--continue`, else `.session.md` →
-  `/session-restore`). Never call the live case "resume" or the dead case "reconnect".
-
-**Defaults taken at the grill (correct at arch/WBS if wrong):**
-- A self-update relaunch counts as an explicit quit (R-1).
-- Adding a remote project goes through a minimal entry in the picker (host + path), because Open
-  Folder can't pick a remote path.
-- The remote hook installs automatically, keeping the dev/prod identifier split; remote events stay
-  out of the local time analytics.
-- F-b profiles stay local-only.
-- The Detach / Reconnect control lives in the remote workspace's header. ⚠️ Superseded at WP5: Detach is a tile control; Reconnect is reopening (see R-3).
-- WPs are ordered core-first (terminal, status, reconnect, OUT rows hidden), so a partial release
-  *could* be cut; full parity remains the exit criterion.
-
-**Probe:** Claudesk's `/product-research` probes the mechanisms Claudesk needs (the terminal over
-ssh + a session host, the hook path back to `hook_socket`, remote reads and watches, the reconnect
-rule). ⚠️ Whether the tank side runs its own spikes is **tank's call**, and Claudesk's messages
-don't steer it (operator, 2026-11-14).
-
-**Exit criteria:** tank's "done" list, verified on an **installed release** on the main box against
-the mini:
-- A remote workspace opens on the mini's CC.
-- Every IN row works, verified row by row by the operator.
-- Every OUT row is hidden, with nothing broken.
-- After a network drop or the mini sleeping, the workspace reconnects to the same session.
-- Close and quit end the session (R-1), and Detach / Reconnect works (R-3).
-- No system extension is installed on the main box.
-
-**Follow-up owed:** a sized estimate (WPs + rough days) goes to tank's inbox after `/product-wbs`.
+✅ **M17 (remote workspaces) closed 2026-11-17** (`v0.9.0`; entry archived with the cycle). **Next: Milestone 18, the remote workflow substrate** (below; not decomposed, so its entry step is `/util-grill-me`). Operational work outside the milestone list: moving the `tank-sim-lite-demo` workspace from local to remote on the mini (the next session).
 
 ### Milestone 18: Remote workflow substrate (planned 2026-11-17, not decomposed)
 
@@ -205,6 +131,7 @@ checkpoint the mini's account is set up by hand (done 2026-11-17).
 
 ## Revisions
 
+- **2026-11-17 (b)** — **M17 closed** at `/product-finalize` (WP1–WP8; `v0.9.0`), moved to Shipped, its entry archived verbatim to `archive/milestone-17-remote-workspaces/roadmap-entry.md`. Exit criteria: met on the installed build except remote Recycle (accepted known failure) and the drop / quit / live dev+prod checks the operator waived on the installed build (dev-build basis WP3–WP5). Next: M18.
 - **2026-11-17** — **M18 (remote workflow substrate) added** after M17, by operator ruling during M17 WP8: detect + install the workflow system on a remote host, and decide remote profiles. Not an M17 insert; the mini's account was set up by hand for tank's checkpoint.
 - **2026-11-14** — `/product-vision` revisit done: vision condensed, the CC-cockpit direction set, and remote workspaces ruled a general capability built one host first. **M17 (remote workspaces) added and scoped** at a `/util-grill-me` pass (lifecycle rulings R-1 to R-4). Its first consumer is `tank-sim-lite-demo`, with a checkpoint on 2026-12-11.
 - **2026-11-08** — M16.5 closed (9 WPs; WP9, an operator insert, made the recycle key on the F15 edge). The M15 on-screen checks and WP9's installed check stay deferred to dogfooding. Next: the `/product-vision` revisit.

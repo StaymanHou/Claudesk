@@ -42,3 +42,14 @@ artifact A at a different stage, a check on A is evidence about A only.
 Related: [[never-propose-brew-upgrade-to-verify-a-release]] (the install side of the same pipeline),
 [[verify-self-stub-cannot-cross-subprocess-boundary]] (same shape: the thing you can reach is not
 the thing that ships).
+
+**Verifying the payload's minisign `.sig` without the `minisign` CLI (v0.9.0, 2026-11-17).** OpenSSL 3
+(`/opt/homebrew/opt/openssl@3/bin/openssl`) can check it:
+- The trust anchor is `tauri.conf.json` → `plugins.updater.pubkey`, base64 of a minisign key file. Line 2, decoded, is
+  `"Ed"` + an 8-byte key id (reversed hex = `774E2E8429FDF78A`) + the 32-byte Ed25519 key. Wrap that key as SPKI DER:
+  hex prefix `302a300506032b6570032100` + the 32 bytes.
+- The `.sig` is base64 of a minisign signature file. Line 2, decoded, is `"ED"` + the key id + a 64-byte signature
+  over **BLAKE2b-512 of the payload** (the "ED" form is prehashed; `hashlib.blake2b(data, digest_size=64)`). Line 4 is
+  the global signature over (those 64 bytes + the trusted-comment text).
+- `openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER -rawin -in <msg> -sigfile <sig>` → "Signature Verified
+  Successfully" for both. ⚠️ Always add a negative control: flip one byte of the payload and require a failure.

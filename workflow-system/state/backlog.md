@@ -552,7 +552,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** Display-only today: the action is re-derived at open time, so nothing is typed wrongly. The cost is a false promise, plus a reopen after an unclean exit that runs neither arm. The picker's batch announce has the same blind spot: it reads the flag but not the transcript guard.
 - **Suggested action:** Have `announce_actions` apply the same transcript check the spawn uses (one predicate shared by both, never a copy), so a no-transcript project predicts the `.session.md` arm or nothing. Decide whether the flag should then still outrank `.session.md` when `--continue` cannot run (likely: fall through to `/session-restore`, which needs a matching change in `resolve_resume_arm`).
 - **Priority:** low (display-only mis-prediction; most real projects have transcripts)
-- **Status:** open
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## SURFACE-2026-11-09-F10B-MEASUREMENT-COUNTS-A-CORRECT-FSD-CHAIN-AS-A-STOP
 - **Source:** task:act (backlog-paydown-2026-11-08 WP1, the F10b re-measure)
@@ -569,7 +569,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Pointer:** **4 MINOR** from the review of `1ccf9c4` (its MAJOR, the unbounded kill-exit drain, was resolved 2026-11-09). `MAX_OUTPUT` carries three meanings; the truncation note implies arrival order; docs still name `spawn_blocking`; a long line is cut without a marker.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-08-wp6-subprocess-primitives — 2026-11-09`.
 - **Priority:** low (all)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** one small doc/naming cleanup task.
 
 ## Code-quality findings — paydown-2026-11-08-wp5-auto-resume-folder-trust (2026-11-09)
@@ -577,7 +577,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Pointer:** **4 MINOR** from the review of `80128a4`: `apply_trust` re-parses `.claude.json` per row; the shared resolver's tests live in `transcript`; the `announceRow.ts` header contradicts manual rows (and has a merged line); a `PickerRow` comment carries review history.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-08-wp5-auto-resume-folder-trust — 2026-11-09`.
 - **Priority:** low (all)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** one small cleanup task; the parse fix wants a "parsed once" test.
 
 ## Code-quality findings — m17-wp2-remote-rows (2026-11-16)
@@ -593,7 +593,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp2-remote-rows — 2026-11-16`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** one small cleanup task (could ride with the m17-wp3 MINORs).
 ## SURFACE-2026-11-16-PRUNE-COMMENT-CLAIMS-UNCHANGED-FILE-BUT-IT-RE-SORTS
 - **Source:** session-reflect (M17 WP2 verify-self evidence)
@@ -602,7 +602,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Summary:** `prune_missing`'s comment says the always-write funnel leaves "the file content … identical" when nothing is dropped. It is not: `read_projects` sorts by recency, so the rewrite reorders any file not already in recency order. Measured 2026-11-16: the dev `projects.json` shasum changed across a launch with the same row set. `remove` has the same funnel and the same effect.
 - **Suggested action:** Correct the comment (the rows are identical, the order is recency). Optionally note it at `read_projects`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## SURFACE-2026-11-16-REMOTE-LINK-MASTER-ORPHANED-WHEN-THE-APP-IS-KILLED
 - **Source:** feature:verify-human (M17 WP3 Phase 3; observed while stopping the dev app with SIGTERM)
@@ -612,7 +612,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** Observed 2026-11-16: `kill <dev app pid>` left one `ssh -M` (ControlPath under the dev app-data dir). The next launch's pre-connect `rm -f`s the remote socket and binds a new master, so it does not break the new link, but each crash leaks one local ssh process and one remote sshd session until the network drops.
 - **Suggested action:** In WP5 (crash/R-2 work): tie the master's lifetime to the app's, e.g. a stdin pipe the master watches (ssh exits on EOF when not `-N`/`-n`; needs a probe), or on launch reap any `ssh -M` whose `-S` is under this app's `ssh/` dir before starting a link. Add a live test: SIGKILL the app → no `ssh -M` with this app's ControlPath survives the next launch.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN
 - **Source:** feature:verify-self (M17 WP3 Phase 4; a `window` `unhandledrejection` tap in the agent-launched dev app)
@@ -622,7 +622,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** Not WP3's: `useTauriListen.ts` is untouched since 2026-06-30, the `tauri` crate (2.11.2) and `@tauri-apps/api` are unchanged by WP3 (it added only `sha2`), and a local scratch-c open reproduces it. Odd: the identical tap read `[]` across WP3 Phase 3's session, so either the tap missed them there or the trigger is newer; not established. Behavior looked unaffected (sends, status, closes all worked).
 - **Suggested action:** Reproduce in a HEAD build with the same tap (positive control), check whether a prod build (no StrictMode) raises it, and look upstream for the Tauri unlisten-twice race. If confirmed, swallow the double-unlisten in `useTauriListen` (or guard it) so real rejections stay visible.
 - **Priority:** low
-- **Status:** open
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## Code-quality findings — m17-wp3-remote-terminal (2026-11-16)
 
@@ -637,7 +637,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp3-remote-terminal — 2026-11-16`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** one cleanup task.
 
 ## SURFACE-2026-11-16-TRAY-HAS-NO-READOUT-FOR-LIVE-VERIFY
@@ -648,7 +648,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** Accepted twice (P2.verify-human.1, P4.verify-human.4). Any future tray work hits the same wall.
 - **Suggested action:** Add a dev-only command (e.g. `tray_debug_state`, compiled in debug builds only) returning `TrayState.applied` plus the per-workspace map, callable over the MCP bridge. Then verify both WP4 behaviours live.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## Code-quality findings — m17-wp4-status-over-the-link (2026-11-16)
 
@@ -661,7 +661,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp4-status-over-the-link — 2026-11-16`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** the alias/emit-race MINORs are one status-path cleanup; the toast item pairs with WP9.
 
 ## Code-quality findings — m17-wp5-lifecycle (2026-11-17)
@@ -672,7 +672,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp5-lifecycle — 2026-11-17`.
 - **Priority:** medium (the MAJOR), low (the rest)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** the MAJOR + the `DRIVE_MODES` copy + the `SessionExists` comment are one reconnect-mode cleanup; the doc/comment MINORs are a docs pass; the toast/coupling MINORs fold into WP9 or the WP4 toast item.
 
 ## SURFACE-2026-11-17-REMOTE-CLAUDE-ONLY-ON-INTERACTIVE-PATH
@@ -683,7 +683,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** Hit 2026-11-17 when the mini's dev user moved to a fresh personal account: `zsh -lc 'command -v claude'` found nothing. Fixed on that host by one `~/.zprofile` line, but any new remote host can hit it.
 - **Suggested action:** In the deployed `cc-launch` and the preflight, fall back to `$HOME/.local/bin/claude` when `claude` is not on PATH (both constant fragments, no variable value), and make the preflight's failure message name the PATH/`.zprofile` cause in plain words.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## SURFACE-2026-11-17-REMOTE-EXEC-COUNT-NEEDS-A-BEHAVIOURAL-HARNESS
 - **Source:** feature:verify-self (M17 WP5 Phase 2, AC-8.2)
@@ -693,7 +693,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** The commands take an `AppHandle`, and `LinkRegistry::exec` spawns a real `/usr/bin/ssh` outside the `Transport` seam, so no fake can count execs behaviourally. Operator ruling 2026-11-17: accept the guards, log this.
 - **Suggested action:** Make the ssh binary path injectable for tests (or route `LinkRegistry::exec` through `Transport`), split `remote_open_check` / `cc_spawn_remote` into AppHandle-free worker functions, and replace the source guards' exec count with a test that drives an open and counts real ssh invocations.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## SURFACE-2026-11-17-AUTO-RESUME-INJECT-ANSWERS-BYPASS-PERMISSIONS-DIALOG-NO-EXIT
 - **Source:** feature:verify-self (M17 WP5 Phase 2, live)
@@ -703,7 +703,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** Hit live 2026-11-17 on a fresh remote account; reproduces outside Claudesk with `cc-launch --dangerously-skip-permissions` in a pty. Same class as the folder-trust dialog that the fire-time trust read already guards (paydown-2026-11-08 WP5, ruling R1), which the inject path does not cover for this dialog. Local accounts that ever accepted the warning never see it, which is why it went unnoticed. ⚠️ WP1's probe outcomes (M17 `wbs.md`, "First open on a fresh host") had already recorded this warning as "WP5 input"; WP5's spec did not pick it up.
 - **Suggested action:** Extend the fire-time read so the inject is withheld unless CC has also accepted bypass mode for the spawn's account/profile (live-captured 2026-11-17, CC 2.1.325: accepting writes `skipDangerousModePermissionPrompt: true` to the account's `~/.claude/settings.json`, so for a profile read its config dir's `settings.json`; nothing else in `~/.claude.json` changes), local and remote alike; and say so in the same withheld diagnostic.
 - **Priority:** high
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## SURFACE-2026-11-17-REMOTE-SETTLE-COULD-BE-READINESS-ONLY
 - **Source:** feature:build (M17 WP5 P2.4, AC-7)
@@ -713,7 +713,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** WP5 kept 1500 ms because no run fired on readiness alone; the local cliff (350 ms unreliable) is why the margin exists.
 - **Suggested action:** Probe ≥10 cold remote opens with the settle at 0 (readiness only) through `cc_inject`; if all land, drop the settle for remote panes only.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## SURFACE-2026-11-17-APP-TSX-FAST-REFRESH-CLOSES-REMOTE-WORKSPACES
 - **Source:** feature:build (M17 WP6 Phase 3 verify-self)
@@ -723,7 +723,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** Hit twice in one phase (an App.tsx edit, then App.tsx mutants). The close was clean (no orphaned ssh master or tmux session), but a live remote check silently lost its workspace and needed a reopen; a real (non-scratch) remote session would be ended by a dev edit.
 - **Suggested action:** Add to the remote-verify hygiene memory: close remote workspaces (or use a scratch row) before editing `App.tsx` or running App.tsx mutants. Optionally move App's workspace state into a module that Fast Refresh preserves.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## SURFACE-2026-11-17-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE
 - **Source:** feature:verify-human (M17 WP8 P3.2a, installed v0.9.0)
@@ -733,7 +733,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** The notice rides `readRemoteOpenToast` → `setInjectFailure` in `Workspace.tsx` (the `onSessionId` handler), which always sets `kind: "error"`. The same path also carries the real failures (the remote hook install failed), so the fix has to give each notice its own kind, not flip the whole path. Operator ruling at WP8 verify-human: accept as-is for M17, backlog the restyle.
 - **Suggested action:** Have `readRemoteOpenToast` return a kind with its text, so the "started again" / predicted-vs-actual notices render as info and the hook-install warning stays an error. ⚠️ `readRemoteOpenToast` joins the open notice and the hook warning into ONE string (`parts.join(" ")`), so one toast can carry both: the **error kind must win** in that case (or split it into two toasts), so a real hook-install failure is never shown as neutral. Pin both cases with a live-mount test on the toast's `data-kind`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC
 - **Source:** feature:build (M17 WP8 P2.3, installed v0.9.0 against the mini, real workflow skills)
@@ -749,7 +749,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
   - An M17 IN row (Recycle) fails here. The operator accepted it as **not blocking** M17 ("for now I just avoid recycle on remote sessions").
 - **Suggested action:** Reproduce on the dev build against the scratch row. Trace the recycle state machine past `/exit` for a remote pane: does the respawn fire, and is it refused by `wait_not_closing` / the R-1 end-session path that treats the exit as an explicit close? Fix so a remote Recycle spawns a new tmux session that receives `/session-restore`, as a local one does. Add a test at the remote seam (`RemotePorts` / `RemoteTerminal`).
 - **Priority:** medium (an IN row broken on remote, with a clear workaround: don't Recycle a remote session; the operator ruled it non-blocking)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD
 - **Source:** feature:verify-self (M17 WP7 Phase 4, live)
@@ -760,4 +760,4 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** Decide at arch level: probe the remote account for the workflow skills (e.g. in the open check's one exec, or once per link) and treat "gate ON + skills absent on that host" like gate OFF for that workspace (workflow surfaces absent, plain-words note), or document that remote workflow use requires installing the skills on the host. Prior `gate-substrate-dependent-feature-class-behind-default-off-opt-in` applies.
 - **Priority:** medium
 - **Routed (2026-11-17):** scheduled as **Milestone 18 (remote workflow substrate)** in `roadmap.md`, by operator ruling during M17 WP8; this entry is its seed and closes with M18. Interim: the mini's dev account was set up by hand (a git bundle of the mccc repo at `~/my-claude-code-customization`, `install.sh`, the 4 printed permissions; backup `settings.json.bak-mccc-install-2026-11-17`). That account has no GitHub access, so its copy cannot `git pull` until it gets one.
-- **Status:** pending
+- **Status:** routed — the seed of Milestone 18 (`roadmap.md`); closes with M18

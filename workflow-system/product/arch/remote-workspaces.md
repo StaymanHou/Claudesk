@@ -1,13 +1,15 @@
 ---
-updated: 2026-11-17  # M17 /product-arch: PLANNED design; §A/§C/§H carry WP2 as-built notes, §B/§E WP3's, §D WP4's, §E WP5's lifecycle table, §G WP6's funnel, §F WP7's reads + active-only poller. Resync at M17's /product-finalize.
+updated: 2026-11-17  # M17 CLOSED (/product-finalize): AS-BUILT record. WP8 acceptance on installed v0.9.0 folded in: the remote-Recycle respawn gap (§E), the picker label is a local-record prediction (§E), no per-host workflow-skills check (§G → M18), auto-resume confirmed live (§E).
 ---
 
 # Remote workspaces (M17)
 
-⚠️ **PLANNED, NOT AS-BUILT.** This is M17's design (`/product-arch`, 2026-11-14). It becomes the as-built
-record when M17 closes. Until then, where it disagrees with code, the code is the truth and this file is
-the intent. Inputs: `roadmap.md` → "### Milestone 17" (scope, lifecycle rulings R-1–R-4),
-`research.md` (live probes against the mini, 2026-11-14), `vision.md` → "The direction from here".
+✅ **AS-BUILT (M17 closed 2026-11-17).** Designed at `/product-arch` (2026-11-14), built WP1–WP7, and accepted
+on the installed v0.9.0 against the mini at WP8. Each section carries its WP's as-built notes; where a note
+says "planned", the as-built note beside it wins. Evidence of record: `archive/milestone-17-remote-workspaces/`
+(`wbs.md` incl. probe outcomes, `research.md`) and the WP archives in `workflow-system/state/archive/m17-*`.
+**Known gaps at close:** remote Recycle never respawns CC (§E); no per-host check that the workflow skills
+exist (§G, → Milestone 18); remote profiles stay out (§C, → decided in M18).
 
 A **remote workspace** is a picker row whose CC session runs on another Mac over SSH, inside a
 tmux session that outlives Claudesk's connection. The left half is the same xterm pane, showing the
@@ -359,9 +361,11 @@ remote. Code, UI copy and tests use these two words for these two cases only.
 | Quit / self-update relaunch (link up) | explicit | the same cancel-then-`kill()` for every remote workspace, then the quit continues | R-1 |
 | ⏸ "Close, resume later" (`onPauseClose`, link up) | explicit | the same cancel-then-`kill()` (`/exit` → CC and tmux end), but the unclean flag is **left set**, as it is locally, so the next open **resumes** with `--continue` on the remote | R-1 |
 | Recycle | explicit | the existing flow: handoff → composite marker (remote poll + `Stop` hook) → cancel-then-`kill()` → respawn → `/session-restore`; every injection in it (the handoff command, `/session-restore`) also goes through the cancel-before-inject funnel | R-1 |
+|  |  | ⚠️ **KNOWN FAILURE (WP8, installed v0.9.0):** on a remote pane the handoff and `/exit` run, but the respawn never fires (no `SessionStart`, no tmux session, `.session.md` unconsumed). Operator: non-blocking; workaround: don't Recycle a remote session. `SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC`. |  |
 | Claudesk crash, link lost, host unreachable | passive | the local ssh dies; tmux and CC keep running; the link retries with backoff and reconnects every workspace on that host | R-2 |
 | Detach (⇥ on the remote tile) | deliberate | **as built (WP5):** `cc_detach` → `RemoteCcSession::detach` hangs up the local `ssh` WITHOUT `/exit` (no copy-mode cancel, no end, no record write), then the tile closes (unclean: the flag stays). No Detached tile (operator ruling); the record stays `running`, so the next open labels **Reconnect** and attaches. Works with the link down | R-3 |
 | Reopen from the picker | — | **as built (WP5):** ONE open-check exec over the master (folder, live, its `@cd_mode`, physical path, gated remote `.session.md`, the remote CC's trusted keys) + Claudesk's LOCAL session record (`remote_record`: running / ended / end-pending) decide: live + `running` → **attach** (beats both resume signals; registers the session's original mode); live + `end-pending` → dialog A; live + no/ended record → dialog B; dead → the two-signal rule from the remote signals (an untrusted folder withholds `/session-restore` with a workspace toast) | R-2 |
+|  |  | ⚠️ **The picker label is a LOCAL prediction** (seen live at WP8): listing the picker does not probe the host, so a remote row's label comes from `remote_record`. After a crash while detached it still reads **↻ reconnect**; the open check then decides (`--continue`) and says so in the AC-2.3 toast. That toast uses the error style though nothing failed (`SURFACE-2026-11-17-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE`). |  |
 | ~~Close a detached workspace~~ | — | **dropped at WP5:** there is no detached tile | — |
 | Quit or close **while the link is down** | unclear at the next open | **as built (WP5):** the end can't be delivered → the record goes `end-pending` (writes serialized: the quit's parallel kills must not lose one) and a close tells the app (`remote-close-not-ended` → app toast). At the next open, live + `end-pending` → **dialog A** (End it and open [default] / Reconnect / Cancel); dead → the stale intent is cleared and the open resumes without asking | R-4 |
 | Host unreachable at open | unclear | **as built (WP5):** a toast in plain words with **Retry** (re-runs the same check and door); never Remove, never a fallback | R-4 |
@@ -383,7 +387,8 @@ remote. Code, UI copy and tests use these two words for these two cases only.
   `injectCommand` → `cc_inject`, which for a remote session waits (≤ 15 s) for the pane's
   `#{bracket_paste_flag}` before writing, so a cold remote `/session-restore` should no longer land
   before CC listens. WP5 confirms this live on the auto-resume path, then decides whether the
-  settle delay is still needed for remote.
+  settle delay is still needed for remote. ✅ **Confirmed live at WP8 (installed v0.9.0):** a real `/session-restore` auto-fired on two
+  remote reopens, landed, and consumed `.session.md` both times.
 - **The unclean flag is unchanged.** It is set on open and cleared only by an explicit clean route. A passive
   drop leaves it set, which is correct: if the remote session later dies too (the remote reboots),
   reopening falls to `--continue`.
@@ -434,7 +439,7 @@ remote. Code, UI copy and tests use these two words for these two cases only.
 - **`remote_fs`** (`src-tauri/src/remote_fs/`): `list_docs` / `read_doc` / `stat_doc`, no general `exists` / `list_dir`. `validate_rel` rejects `..`, absolute, empty and unframeable (NUL, newline) paths LOCALLY, before any command string; the remote Perl script (`remote_cmd::DOC_LIST_PROG` / `DOC_READ_PROG`, `Time::HiRes` for ms mtimes) then `realpath`s root and target ON THE REMOTE and refuses anything outside, so an in-project symlink pointing out is refused as locally. The read cap is `REMOTE_READ_MAX_BYTES` = 3 MiB (stdout is capped at 4 MiB), with the local error words. Every exec is `LinkRegistry::master_exec`: Up-only, master-only (`NO_DIRECT_FALLBACK`), and a dead master (255) or a timeout reads as `LINK_DOWN` = "The remote host isn't reachable right now."
 - **Routing:** `docs_list` / `docs_read` / the new `docs_stat` are async and dispatch by root kind in ONE function, `docs::commands::serve` (they are `ROUTED` in `tests/remote_refusal_is_first.rs`). The remote list feeds the same curated rules as local `discover` through `docs::filter_listing`, tied to `discover` by `filter_listing_agrees_with_discover`. Recycle's baseline uses `docs_stat` for both kinds (local = `stat_file_core`, pinned by `local_docs_stat_is_stat_files_answer_with_no_exec`); `stat_file` stays an editor command, refused on remote. `workspaceSurfaces` lost its `docsRead` flag.
 - **The poller** (`remote_fs/poller.rs`): ⚠️ **5 s, not 1.5 s** (operator, spec review), and ⚠️ **ACTIVE ONLY** (operator, P3.verify-human.2; prior `background-work-only-for-what-is-on-screen`): a workspace is polled only while it is centre stage AND its Docs tab is fronted. One worker per host; each tick reads the gate and the link first, then runs ONE batched `doc_list_command` over every ACTIVE root (so ≤1 in-flight exec per host), diffs each workspace's curated docs set (mtime + size) and emits the existing `fs-change`. A paused workspace keeps its snapshot. `remote_poll_start` / `remote_poll_stop` (from `useWorkspaceStatus`, where a local workspace calls the watcher) subscribe PAUSED and unsubscribe; `remote_poll_catch_up` (async) / `remote_poll_pause` come from `DocsPanel` going on / off screen (`docs/remoteDocsCatchUp.ts`). A catch-up wakes the worker and answers that workspace's tick outcome; a RETURN (not the opening show) is announced in the workspace toast: "Checking the remote docs for changes…" → "Remote docs checked: no changes / N docs changed." (clears after 4 s) or "Couldn't check the remote docs: …" (stays). ⚠️ `subscribe` is idempotent for the same (workspace, target): the panel's catch-up can land before `remote_poll_start` (review CRITICAL, fixed). ⚠️ `pause` DROPS the workspace's waiting catch-ups, and the panel treats a catch-up whose Docs left the screen before it answered as stale (no result toast; its "checking…" is cleared). The toast slot is SHARED (`Workspace.showDocsNotice`): a docs notice never replaces another source's standing error, and its `null` clears only a docs-owned toast (review MAJORs, fixed). The worker waits before each tick. The quit drops every subscription before `links.stop_all()`; workers are detached, never joined.
-- **Recycle on remote:** the poller may be paused, so a remote `Stop` first forces ONE `docs_stat` of `.session.md` and feeds any write BEFORE the `Stop` (`recycleSession.awaitCompletion`); local feeds the `Stop` directly. Verified end to end on the mini with Docs fronted and with Prompt fronted (0 poll execs).
+- **Recycle on remote:** the poller may be paused, so a remote `Stop` first forces ONE `docs_stat` of `.session.md` and feeds any write BEFORE the `Stop` (`recycleSession.awaitCompletion`); local feeds the `Stop` directly. Verified end to end on the mini with Docs fronted and with Prompt fronted (0 poll execs). ⚠️ Only this detection half is verified: the respawn half fails on remote (see §E's Recycle row).
 - ⚠️ **Not built here, open:** the remote ACCOUNT may lack the workflow skills (the mini's dev account has none), and nothing checks it: `SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD`. The other seam-map items above (`announce::has_session_md`, the transcript guard, `folder_trusted`) were routed at WP4/WP5.
 
 ## G. Surface applicability (vision Q6, inbox Q3)
@@ -450,6 +455,7 @@ remote. Code, UI copy and tests use these two words for these two cases only.
     decided. The prior `a-session-behaves-the-same-wherever-it-runs` says "reproducible at bounded
     cost → match local", so the rebuild cost has to be assessed before choosing absent.
   - **present:** prompt, docs (still through the gate), skill row, Recycle, Session-Start, drive mode,
+    ⚠️ The skill row, Recycle and Session-Start assume the workflow skills exist on the REMOTE account; nothing checks it (found at WP8: the mini's personal account had none, so the buttons were dead until a manual install). Detect + install on a host is **Milestone 18**.
     resume announce.
   - **remote-only:** Detach / Reconnect.
 

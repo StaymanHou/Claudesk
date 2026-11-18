@@ -3,6 +3,7 @@
 ## Operator preferences
 
 - [Labelling pass shape](feedback-operator-labelling-pass-shape.md) — Keyboard card reviewer, two blind readers, sample-then-contested; never a text sheet.
+- ["All good" is the verdict](feedback-operator-all-good-is-the-verdict.md) — Record it; never re-interrogate on ambiguous logs, re-check with own captures.
 
 ## Verification method & instrument traps
 
@@ -69,10 +70,10 @@
 - [Installed-build checks](installed-build-verify-deferred-to-release.md) — Installed-`.app` and native-window checks wait for the `/release` gate.
 - [Run CLI captures yourself](verify-human-agent-runs-cli-captures.md) — Ask the operator only for judgment calls.
 - [TCC granted, still flaky](macos-tcc-permissions-granted.md) — `screencapture` can fail a session; use the bridge screenshot.
-- [notarytool when locked](notarytool-credential-unreadable-while-screen-locked.md) — "No Keychain password item" while locked; unlock, don't re-store.
+- [notarytool preflight errors](notarytool-credential-unreadable-while-screen-locked.md) — "No Keychain password item" = screen locked (unlock, don't re-store); 403 "agreement missing" = Account Holder must accept.
 - [Trash via Finder](verify-trash-via-finder-not-ls.md) — `~/.Trash` is TCC-blocked; read-only Finder osascript query.
-- [Mini account](mini-remote-user-is-stayman.md) — Which account to use (never root-ops), token location, `zsh -l` PATH. Gitignored: names real accounts.
-- [Remote verify hygiene](remote-verify-hygiene.md) — Real commands only in a scratch remote folder; check open remote workspaces before stopping the app; rebuilds and App.tsx edits are hard stops; the mini has no workflow skills (stub them in the scratch folder).
+- [Mini account](mini-remote-user-is-stayman.md) — Which account to use (never root-ops), token location, `zsh -l` PATH, the pre-push identifier grep list. Gitignored: names real accounts.
+- [Remote verify hygiene](remote-verify-hygiene.md) — Real commands only in a scratch remote folder; check open remote workspaces before stopping the app; rebuilds and App.tsx edits are hard stops; the mini's dev account HAS the workflow skills since 2026-11-17 (manual install, no `git pull`).
 - [Trust dialog exits](cc-trust-dialog-defaults-to-exit.md) — Defaults to "No, exit"; read the pane, answer ↓ then \r.
 - [Drive the real hook](drive-status-channel-with-real-hook-script.md) — Pipe a payload into the working-tree hook script at the dev socket.
 - [WKWebView perf](wp4-macos-perf-measurement.md) — How to measure CPU, RAM and frame time on macOS.
@@ -137,7 +138,7 @@
 - [Scaffold recipe](tauri-scaffold-recipe.md) — Non-interactive scaffold + merge that keeps strategic docs.
 - [--help before matrix](feedback_read_help_before_cli_matrix.md) — Collapses rows, surfaces native flags.
 - [Never brew upgrade to verify](never-propose-brew-upgrade-to-verify-a-release.md) — ⚠️ It kills every running Claudesk.
-- [Release = three artifacts](release-is-three-artifacts-verify-each.md) — .app / .dmg / .app.tar.gz; the self-update payload above all.
+- [Release = three artifacts](release-is-three-artifacts-verify-each.md) — .app / .dmg / .app.tar.gz; the self-update payload above all; minisign `.sig` checkable via OpenSSL 3.
 - [Stage around operator edits](stage-around-operator-edits-via-blob.md) — Computed blob via `git update-index --cacheinfo`.
 
 ## Dev-time side effects (macOS focus)

@@ -21,3 +21,11 @@ check is not evidence that the credential is missing.
 **How to apply:** if the notary preflight fails with this error, first ask whether the screen is locked, and re-run
 the check after an unlock. Never tell the operator to re-run `store-credentials` on this evidence alone. Run the
 notarize step (`notarytool submit --wait`) while the operator is at the machine. Related: [[installed-build-verify-deferred-to-release]].
+
+**A different notary preflight failure (v0.9.0 cut, 2026-11-17): `Error: HTTP status code: 403. A required agreement
+is missing or has expired.`** This is Apple, not the keychain: the Developer team has a pending (new or renewed)
+legal agreement. Only the team's **Account Holder** can accept it (developer.apple.com → Account → Agreements, or
+App Store Connect → Business). Retrying does nothing until then, and it cleared about 1–2 minutes after the operator
+accepted. On the next check the locked-screen error above appeared separately: two different errors, two different
+fixes, and a pass on one says nothing about the other. Poll `notarytool history` once a minute instead of asking the
+operator to retry by hand.
