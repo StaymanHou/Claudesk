@@ -231,7 +231,9 @@ wizard uses. A host whose link is down shows "connect a workspace on this host t
   `settings.json` (the profile's dir for a profile). Otherwise it **withholds** the inject and says so, as the trust
   case does. It applies to local and remote alike: remote reads it in the open-check exec beside `TRUSTED_KEYS`, as a constant perl fragment.
 
-### R.7 Remote Recycle never respawns CC
+### R.7 Remote Recycle never respawns CC — ✅ FIXED at WP1 (2026-11-18, `411bff8`)
+
+**As built:** the cause was the Reconnect DOOR being re-sent by the relaunch (a workspace keeps `open_intent` for its whole life), so `cc_spawn_remote` attached to the session Recycle's `/exit` had just ended. Both constraints below held, and the fix is frontend-only (`relaunchIntent` + `XtermPane`'s `doorUsedRef`). Full record: `remote-workspaces.md` §E, Recycle row.
 
 `SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC` is a **bug with an unconfirmed cause**, so M18 schedules it
 **reproduce-first** (dev build, scratch row), not design-first. Two constraints bound the fix:

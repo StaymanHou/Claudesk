@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-18  # M18 decomposed (/product-wbs)
+updated: 2026-11-18  # WP1 shipped (411bff8)
 cycle: milestone-18-remote-workflow-substrate
 ---
 
@@ -42,7 +42,7 @@ no new library, and the open unknowns are on-host behaviours, which WP3 probes.
 
 ## Work Packages
 
-### WP1: Remote Recycle respawns CC (reproduce-first)
+### WP1: Remote Recycle respawns CC (reproduce-first) ✅ SHIPPED 2026-11-18 (commit 411bff8)
 **Description:** Fix `SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC`. Today a remote Recycle hands off and `/exit`s, but never
 respawns. Run it as a bug fix: reproduce on the dev build against the scratch remote row, find the cause, then fix it inside the
 §R.7 constraints. The respawn is a **new** session through the open's spawn path (never a reattach), and Recycle's `/exit` must not
@@ -51,11 +51,11 @@ be classified as the operator's close.
 **Dependencies:** none
 **Size:** S–M (the cause is unknown; the timebox for diagnosis is half a day, after which the WP escalates rather than guesses)
 **Tasks:**
-- [ ] 1.1 Reproduce on the dev build with the scratch remote row (real workflow skills via a scratch HOME, or stub skills as at M17 WP7). Capture the status-channel log, the tmux state and the session registry across `/exit`.
-- [ ] 1.2 Locate the cause. Leading suspects: the `/exit` is classified as an explicit close (Ended latched, end-intent written), or `wait_not_closing` never clears.
-- [ ] 1.3 Fix it, and add a test at the remote seam (`RemotePorts` / `RemoteTerminal`) that fails on the pre-fix behaviour (a HEAD positive control).
-- [ ] 1.4 Live check: Recycle a remote scratch workspace → a new tmux session → `/session-restore` lands → `.session.md` consumed.
-- [ ] 1.5 Update `arch/remote-workspaces.md` §E: the Recycle row's KNOWN FAILURE becomes as-built.
+- [x] 1.1 Reproduce on the dev build with the scratch remote row (real workflow skills via a scratch HOME, or stub skills as at M17 WP7). Capture the status-channel log, the tmux state and the session registry across `/exit`.
+- [x] 1.2 Locate the cause. Leading suspects: the `/exit` is classified as an explicit close (Ended latched, end-intent written), or `wait_not_closing` never clears.
+- [x] 1.3 Fix it, and add a test at the remote seam (`RemotePorts` / `RemoteTerminal`) that fails on the pre-fix behaviour (a HEAD positive control).
+- [x] 1.4 Live check: Recycle a remote scratch workspace → a new tmux session → `/session-restore` lands → `.session.md` consumed.
+- [x] 1.5 Update `arch/remote-workspaces.md` §E: the Recycle row's KNOWN FAILURE becomes as-built.
 
 **WP1 → WP2 rationale:** both are independent of the substrate track. WP1 goes first because it is the live gap a remote workspace in daily use is
 told to avoid ("don't Recycle a remote session").

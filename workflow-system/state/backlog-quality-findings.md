@@ -308,3 +308,33 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** one shared test helper with one cut rule, tested once.
 - **Priority:** low
 - **Status:** pending
+
+# m18-wp1-remote-recycle-respawn — 2026-11-18
+
+## SURFACE-2026-11-18-QUALITY-XTERMPANE-LIFECYCLE-FLAG-BLOCK-STALE-COUNT
+- **Source:** feature-review-quality (M18 WP1, MINOR)
+- **Type:** tech-debt (comment)
+- **Summary:** In `XtermPane.tsx`, the lifecycle-flag warning block still says "THIS PANE NOW HAS THREE LIFECYCLE FLAGS" but now lists four (`cancelled`, `hasSpawnedRef`, `doorUsedRef`, `hasFiredRef`). The new `doorUsedRef` bullet says "declared below" when it is declared above (beside `hasSpawnedRef`), and that declaration has no comment of its own, unlike its neighbours.
+- **Suggested action:** fix the count and the pointer, and add a one-line comment on the `doorUsedRef` declaration. The block is the "read before simplifying" warning, so its accuracy matters.
+- **Priority:** low
+
+## SURFACE-2026-11-18-QUALITY-RELAUNCH-LIVE-TEST-ASSERTS-NOT-EQUAL
+- **Source:** feature-review-quality (M18 WP1, MINOR)
+- **Type:** test precision
+- **Summary:** `remoteRelaunchIntentLive.test.tsx` asserts `intents[1]).not.toBe("reconnect")` while its Fire control asserts `toEqual(["fire", "fire"])`. A mutant mapping `reconnect` → `no-fire` (which would skip the unclean-flag resume) passes the test on the real pane. The unit test pins `fire`, so the hole is small.
+- **Suggested action:** assert `toEqual(["reconnect", "fire"])`.
+- **Priority:** low
+
+## SURFACE-2026-11-18-QUALITY-LIVE-PANE-XTERM-MOCKS-DUPLICATED
+- **Source:** feature-review-quality (M18 WP1, MINOR)
+- **Type:** tech-debt (test scaffolding)
+- **Summary:** The `@xterm/*` mocks and the ResizeObserver / rAF shims are now copied verbatim in two live-pane tests (`autoResumeFireLive.test.tsx`, `remoteRelaunchIntentLive.test.tsx`). A change to the Terminal surface `XtermPane` uses then has to be made in N places.
+- **Suggested action:** move the mock factories into `liveWorkspace.tsx`, beside `bootIpc`. `vi.mock` hoisting limits how they can be shared: factories can be imported, the `vi.mock` calls stay per file.
+- **Priority:** low
+
+## SURFACE-2026-11-18-QUALITY-STUB-RELAUNCH-ASSUMES-COMMITTED-FIRST-SPAWN
+- **Source:** feature-review-quality (M18 WP1, MINOR)
+- **Type:** tech-debt (comment)
+- **Summary:** The `liveWorkspace.tsx` stub's `relaunch()` always passes `isRelaunch = true`, which assumes the pane's first spawn already committed. That is right for every current consumer, but nothing says so. A stub test that relaunches after a "failed" first spawn would get `fire` where the real pane sends `reconnect`.
+- **Suggested action:** add a one-line comment stating the assumption.
+- **Priority:** low

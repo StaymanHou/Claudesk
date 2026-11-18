@@ -55,8 +55,10 @@ operator's request: a git bundle of the mccc repo's pushed `main` → `~/my-clau
 URL), `./install.sh` (48 skills + 6 agents symlinked, workflow block in `~/.claude/CLAUDE.md`), and the 4 printed
 permissions merged into `~/.claude/settings.json` (backup `settings.json.bak-mccc-install-2026-11-17`). Stub skills are
 no longer needed. Real workflow commands still fire ONLY in a scratch remote folder (rule #1), since they act for real now.
-⚠️ That account has NO GitHub access (no key, no `gh`), so its copy cannot `git pull`: refreshing it means re-sending
-a bundle from the main box. Detect + install from Claudesk is Milestone 18. The original note follows (history):
+⚠️ CORRECTED 2026-11-18: the account has no GitHub KEY (no SSH access, no `gh`), but the mccc repo is PUBLIC, so HTTPS
+works anonymously. Its clone's `origin` was switched to `https://github.com/StaymanHou/stayman-claude-code-customization.git`
+on 2026-11-18, so `git -C ~/my-claude-code-customization pull` works there now (then re-run `install.sh` if skills were
+added or renamed). No bundle is needed. Detect + install from Claudesk is Milestone 18. The original note follows (history):
 
 **5. The mini's dev account has NO workflow skills** (found 2026-11-17, M17 WP7 Phase 4: `~/.claude/skills` absent).
 A real `/session-handoff`, `/session-restore`, `/session-start` or skill-button command there is an unknown command,
@@ -69,3 +71,12 @@ so Recycle ends `failed` and skill buttons do nothing useful (product gap: backl
   stubs existed does not see them. Remove `.claude/` from the scratch folder afterwards. Never install skills into the
   account's `~/.claude/` for a check. Keep remote turns tiny (that account showed 92% of its weekly limit used).
 
+**6. A live REMOTE Recycle check needs a throwaway WIP seeded in the scratch folder first** (hit 2026-11-18, M18 WP1
+verify-self). With real skills, `/session-handoff` in the bare scratch folder (README + an empty `workflow-system/state/`)
+answers "nothing to hand off" and writes NO `.session.md`, so Recycle correctly stops before its kill + respawn. It looks
+like the respawn bug but isn't. No toast was visible minutes later, so don't rely on one.
+- **How to apply:** before clicking Recycle, write `~/claudesk-scratch-remote/workflow-system/state/wip/<x>.md` (a tiny task
+  with a `## Current Node` whose next action is "reply ok"). The handoff then writes `.session.md`, the respawn fires, and
+  `/session-restore` stops at its drive-mode pick when the row has no drive mode: answer it (`tmux -L claudesk-dev send-keys
+  -t '=<session>:' Enter`) before checking that `.session.md` was consumed. Remove the WIP (and the empty `wip/`) afterwards,
+  so the folder is back to README + an empty `state/`.

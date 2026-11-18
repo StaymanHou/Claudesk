@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-18
+
+- **Feature shipped:** M18 WP1 makes Recycle on a remote workspace respawn CC and restore the session. A relaunch no longer re-sends the Reconnect door, so a workspace opened through Reconnect gets a fresh `new -A` session instead of an attach to the session Recycle had just ended.
+- **Backlog resolved:** SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC — fixed by `relaunchIntent` + `XtermPane`'s `doorUsedRef`, and verified live on the dev build for both the Fire and the Reconnect door.
+- **Milestone:** WP1: Remote Recycle respawns CC (reproduce-first)
+
 ## 2026-11-17
 
 - **Feature shipped:** M17 WP5 makes a remote workspace's open decide what its tmux session needs: it reconnects to a session Claudesk left running, resumes a dead one through the two-signal rule using the remote's own `.session.md` and folder trust, asks with a dialog when the session's state is unclear (closed while the host was unreachable, or never recorded), adds a Detach that leaves a session running, and offers Retry when the host is unreachable.

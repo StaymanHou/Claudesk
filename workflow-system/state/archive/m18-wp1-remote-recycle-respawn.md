@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP1 — remote Recycle respawns CC
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-11-18 (finalize)
 **Created:** 2026-11-18
 **Entry:** reproduce (bug-fix feature)
 **WBS:** `workflow-system/product/wbs.md` → WP1. **Constraints:** `arch/claude-substrate.md` §R.7.
@@ -102,11 +102,40 @@ unconsumed. Expected, as for a local workspace: a fresh CC spawns and receives `
     - evidence: `pnpm verify:auto` (full) → EXIT=0 in 46s; vitest 319 files / 4061 tests, cargo test 1362 passed.
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship
+- **Path:** Feature > done (archived)
+- **Active scope:** none
 - **Blocked:** none
 - **Unvisited:** none (single phase)
 - **Open discoveries:** none
 
+## Code-Quality Review — m18-wp1-remote-recycle-respawn
+
+Reviewer subagent on `411bff8^..411bff8`, 2026-11-18. **0 CRITICAL / 0 MAJOR / 4 MINOR**, all auto-backlogged (drive_mode=autopilot) to `backlog-quality-findings.md` → `# m18-wp1-remote-recycle-respawn — 2026-11-18`.
+
+**Strengths:**
+- The fix is in the right layer: a pure mapping plus one latch, with the backend `Reconnect → attach` rule untouched.
+- The latch sits after the `cancelled` self-kill, so a Retry after a failed spawn still reconnects.
+- The caller is pinned, not just the machine: the call-shape guard and the real-pane test, both mutation-checked.
+- The override precedence is preserved.
+- The §E row matches the code.
+
+**MINOR:**
+- `XtermPane` flag block: it says "THREE" but lists four, says "declared below" for a ref declared above, and the declaration has no comment.
+- The real-pane test should be `toEqual(["reconnect","fire"])`, not `not.toBe("reconnect")`.
+- The live-pane xterm mocks are duplicated across two tests.
+- The stub `relaunch()`'s `isRelaunch = true` assumption is unstated.
+
+**Assessment:** a tight, well-placed fix that adds almost no debt. Every finding is polish for the backlog, and none warrants a refactor.
+
+**If you disagree:** mark a line `[DISMISSED]` here before finalize archives this file.
+
 ## Discoveries
 - [NOTE-2026-11-18] verify-self — the first Recycle attempt in the EMPTY scratch folder was declined by the real `/session-handoff` ("nothing to hand off", no `.session.md`), so Recycle stopped before its respawn, correctly. Whether the operator saw a toast for that stop wasn't captured: no toast was in the DOM ~4 min later, and it may have expired. Not filed, because it's unconfirmed. Seeding a throwaway WIP made the handoff write, as above.
+
+## Retrospect
+- **What changed in our understanding:** the M17 backlog entry's suspects (`wait_not_closing`, the R-1 close misclassifying `/exit`) were both wrong. The cause was frontend state: the picker DOOR (`open_intent`) lives as long as the workspace, and the respawn re-sent `reconnect`, which the backend correctly turns into "attach, never `new -A`". The decisive evidence was already on disk: the prod `status-channel.log` showed WP8's ws-4 had been registered by a reattach (no `SessionStart`). The WP8 notes, which describe a close + reopen, had read as a Fire-door open.
+- **Assumptions that held:** §R.7's two constraints (the respawn is a new session; keep the backend's reconnect rule). The fix needed no backend change. A Fire-door remote Recycle had never been observed live, and it works.
+- **Assumptions that were wrong:** that WP8's failing Recycle ran on a Fire-door workspace (the first reading of the WIP notes). Also, a live Recycle in an EMPTY scratch folder can't reach the respawn: the real `/session-handoff` rightly refuses to write `.session.md` with nothing to hand off.
+- **Approach delta:** verify-self ran in the orchestrator, not the runner subagent, because the `tauri` bridge isn't exposed to subagents. It needed a seeded throwaway WIP in the scratch folder, removed afterwards. Everything else went as planned: one phase, no back-loops.
+
+**Feature complete:** M18 WP1 has shipped (`411bff8`). Recycle on a remote workspace now respawns CC and restores the session, including on a workspace opened through Reconnect, and the pane's Relaunch / Retry starts a fresh session there. Verify: Recycle any remote workspace; a new tmux session starts and its first prompt is `/session-restore`. Requester = operator — closure notice for self-record.

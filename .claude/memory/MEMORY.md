@@ -73,7 +73,7 @@
 - [notarytool preflight errors](notarytool-credential-unreadable-while-screen-locked.md) — "No Keychain password item" = screen locked (unlock, don't re-store); 403 "agreement missing" = Account Holder must accept.
 - [Trash via Finder](verify-trash-via-finder-not-ls.md) — `~/.Trash` is TCC-blocked; read-only Finder osascript query.
 - [Mini account](mini-remote-user-is-stayman.md) — Which account to use (never root-ops), token location, `zsh -l` PATH, the pre-push identifier grep list. Gitignored: names real accounts.
-- [Remote verify hygiene](remote-verify-hygiene.md) — Real commands only in a scratch remote folder; check open remote workspaces before stopping the app; rebuilds and App.tsx edits are hard stops; the mini's dev account HAS the workflow skills since 2026-11-17 (manual install, no `git pull`).
+- [Remote verify hygiene](remote-verify-hygiene.md) — Real commands only in a scratch remote folder; check open remote workspaces before stopping the app; rebuilds and App.tsx edits are hard stops; the mini's dev account HAS the workflow skills (HTTPS origin, `git pull` works since 2026-11-18); seed a scratch WIP before a live Recycle.
 - [Trust dialog exits](cc-trust-dialog-defaults-to-exit.md) — Defaults to "No, exit"; read the pane, answer ↓ then \r.
 - [Drive the real hook](drive-status-channel-with-real-hook-script.md) — Pipe a payload into the working-tree hook script at the dev socket.
 - [WKWebView perf](wp4-macos-perf-measurement.md) — How to measure CPU, RAM and frame time on macOS.

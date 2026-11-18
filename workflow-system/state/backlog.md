@@ -675,6 +675,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** the MAJOR + the `DRIVE_MODES` copy + the `SessionExists` comment are one reconnect-mode cleanup; the doc/comment MINORs are a docs pass; the toast/coupling MINORs fold into WP9 or the WP4 toast item.
 
+## Code-quality findings — m18-wp1-remote-recycle-respawn (2026-11-18)
+
+- **Pointer:** **4 MINOR** open from the review of the WP1 ship commit (`411bff8`): a stale lifecycle-flag count and pointer in `XtermPane`; the real-pane test's `not.toBe` should be an exact `toEqual`; the live-pane xterm mocks copied twice; the stub `relaunch()`'s unstated assumption. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp1-remote-recycle-respawn — 2026-11-18`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** one small test-and-comment polish pass. The mock dedupe fits whenever a third live-pane test appears.
+
 ## SURFACE-2026-11-17-REMOTE-CLAUDE-ONLY-ON-INTERACTIVE-PATH
 - **Source:** feature:build (M17 WP5 Phase 2)
 - **Target level:** product:arch
@@ -733,22 +740,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** The notice rides `readRemoteOpenToast` → `setInjectFailure` in `Workspace.tsx` (the `onSessionId` handler), which always sets `kind: "error"`. The same path also carries the real failures (the remote hook install failed), so the fix has to give each notice its own kind, not flip the whole path. Operator ruling at WP8 verify-human: accept as-is for M17, backlog the restyle.
 - **Suggested action:** Have `readRemoteOpenToast` return a kind with its text, so the "started again" / predicted-vs-actual notices render as info and the hook-install warning stays an error. ⚠️ `readRemoteOpenToast` joins the open notice and the hook warning into ONE string (`parts.join(" ")`), so one toast can carry both: the **error kind must win** in that case (or split it into two toasts), so a real hook-install failure is never shown as neutral. Pin both cases with a live-mount test on the toast's `data-kind`.
 - **Priority:** low
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-
-## SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC
-- **Source:** feature:build (M17 WP8 P2.3, installed v0.9.0 against the mini, real workflow skills)
-- **Target level:** feature (M17 follow-up)
-- **Type:** bug
-- **Summary:** Recycle on a REMOTE workspace runs its first half and stops. `/session-handoff` runs and writes `.session.md`, then Recycle types `/exit` and CC exits (the remote `SessionEnd` reaches the status channel), but no new CC is ever spawned. Afterwards there is no `SessionStart`, no `claude` process and no `claudesk` tmux server on the host, and the fresh `.session.md` stays unconsumed. The operator saw "handoff worked, but CC not restarted".
-- **Context:** Evidence, 2026-11-17 21:12–21:13, scratch row `…/claudesk-scratch-remote`, installed 0.9.0:
-  - The remote transcript `4214b37c-…` has, in order, `/session-restore`, `/session-start`, `/session-handoff`, then `/exit` (21:13:15).
-  - The prod `status-channel.log` (ws-4) has Stop idle (the handoff turn) at …94323, then `SessionEnd` at …95074, then nothing.
-  - After it, `tmux -L claudesk ls` reports "no server running", and `.session.md` (21:13, `resume_skill: /session-start`) is still present.
-  - WP7 verified Recycle's `.session.md` detection on remote (it forces a `docs_stat` on `Stop`) with stub skills, but the respawn half was evidently never observed live on a remote pane.
-  - Suspects, unconfirmed: on remote, CC exiting ends the tmux session (CC runs inline as the session's only process, per WP1 conf C), so the respawn's precondition or the `wait_not_closing` gate never clears. Or the frontend's recycle completion awaits a local-only signal.
-  - An M17 IN row (Recycle) fails here. The operator accepted it as **not blocking** M17 ("for now I just avoid recycle on remote sessions").
-- **Suggested action:** Reproduce on the dev build against the scratch row. Trace the recycle state machine past `/exit` for a remote pane: does the respawn fire, and is it refused by `wait_not_closing` / the R-1 end-session path that treats the exit as an explicit close? Fix so a remote Recycle spawns a new tmux session that receives `/session-restore`, as a local one does. Add a test at the remote seam (`RemotePorts` / `RemoteTerminal`).
-- **Priority:** medium (an IN row broken on remote, with a clear workaround: don't Recycle a remote session; the operator ruled it non-blocking)
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD
