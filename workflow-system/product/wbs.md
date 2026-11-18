@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-18  # WP1 shipped (411bff8)
+updated: 2026-11-18  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 added
 cycle: milestone-18-remote-workflow-substrate
 ---
 
@@ -60,7 +60,7 @@ be classified as the operator's close.
 **WP1 → WP2 rationale:** both are independent of the substrate track. WP1 goes first because it is the live gap a remote workspace in daily use is
 told to avoid ("don't Recycle a remote session").
 
-### WP2: Fresh-account hardening: the bypass-dialog withhold and the `claude` PATH fallback
+### WP2: Fresh-account hardening: the bypass-dialog withhold and the `claude` PATH fallback ✅ SHIPPED 2026-11-18 (commit 1a71d1b)
 **Description:** §R.6, two items.
 - **The bypass-dialog withhold.** Extend the fire-time read so auto-resume's inject is **withheld** under
   `--dangerously-skip-permissions` unless the account's (or profile's) `settings.json` has
@@ -72,13 +72,13 @@ told to avoid ("don't Recycle a remote session").
 **Dependencies:** none
 **Size:** M
 **Tasks:**
-- [ ] 2.1 Live-capture CC's current behaviour: the dialog's default, and the settings key written on accept (re-verify against today's CC, per `cc-hook-capture-beats-docs`).
-- [ ] 2.2 Local: the fire-time read adds the bypass term (default and profile config dirs). Wire it through `shouldInject`'s existing cancellation read.
-- [ ] 2.3 Remote: add a constant perl fragment to the open-check exec beside `TRUSTED_KEYS`, plus the decision term.
-- [ ] 2.4 Withheld diagnostic copy: one line naming the cause and the fix ("accept the warning once in the pane, then run `/session-restore`").
-- [ ] 2.5 The PATH fallback in `cc-launch` + preflight, and its message.
-- [ ] 2.6 Tests: mutation-prove each new term on its own (the withhold must go red when the term is deleted). For the remote read, run it against a scratch HOME on the mini that lacks the key.
-- [ ] 2.7 Update `arch/session-resumption.md` and `arch/remote-workspaces.md` §H to as-built.
+- [x] 2.1 Live-capture CC's current behaviour: the dialog's default, and the settings key written on accept (re-verify against today's CC, per `cc-hook-capture-beats-docs`).
+- [x] 2.2 Local: the fire-time read adds the bypass term (default and profile config dirs). Wire it through `shouldInject`'s existing cancellation read.
+- [x] 2.3 Remote: add a constant perl fragment to the open-check exec beside `TRUSTED_KEYS`, plus the decision term.
+- [x] 2.4 Withheld diagnostic copy: one line naming the cause and the fix ("accept the warning once in the pane, then run `/session-restore`").
+- [x] 2.5 The PATH fallback in `cc-launch` + preflight, and its message.
+- [x] 2.6 Tests: mutation-prove each new term on its own (the withhold must go red when the term is deleted). For the remote read, run it against a scratch HOME on the mini that lacks the key.
+- [x] 2.7 Update `arch/session-resumption.md` and `arch/remote-workspaces.md` §H to as-built.
 
 **WP2 → WP3 rationale:** the substrate track needs fresh host accounts to install into, and those accounts are exactly what WP2
 hardens. Landing WP2 first means every install WP5–WP7 verifies opens onto a CC that can't quit on the bypass dialog.

@@ -5,6 +5,10 @@
 - **Feature shipped:** M18 WP1 makes Recycle on a remote workspace respawn CC and restore the session. A relaunch no longer re-sends the Reconnect door, so a workspace opened through Reconnect gets a fresh `new -A` session instead of an attach to the session Recycle had just ended.
 - **Backlog resolved:** SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC — fixed by `relaunchIntent` + `XtermPane`'s `doorUsedRef`, and verified live on the dev build for both the Fire and the Reconnect door.
 - **Milestone:** WP1: Remote Recycle respawns CC (reproduce-first)
+- **Feature shipped:** M18 WP2 hardens fresh CC accounts: auto-resume and Recycle hold back `/session-restore` when Claude Code would open on its Bypass Permissions warning (whose default "No, exit" closed CC and lost the session), say why in a toast, and a remote host whose `claude` lives only in `~/.local/bin` now passes the preflight and starts CC through `cc-launch`.
+- **Backlog resolved:** SURFACE-2026-11-17-AUTO-RESUME-INJECT-ANSWERS-BYPASS-PERMISSIONS-DIALOG-NO-EXIT — closed by the `bypass_dialog_cleared` fire-time read (the session's recorded spawn permission + `skipDangerousModePermissionPrompt`), local and remote, with Recycle's restore gated the same way.
+- **Backlog resolved:** SURFACE-2026-11-17-REMOTE-CLAUDE-ONLY-ON-INTERACTIVE-PATH — closed by `CLAUDE_PATH_FALLBACK` ahead of the first `claude` in the preflight and the deployed `cc-launch`, with a `~/.zprofile` failure message when `claude` is in neither place.
+- **Milestone:** WP2: Fresh-account hardening: the bypass-dialog withhold and the `claude` PATH fallback
 
 ## 2026-11-17
 

@@ -338,3 +338,41 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Summary:** The `liveWorkspace.tsx` stub's `relaunch()` always passes `isRelaunch = true`, which assumes the pane's first spawn already committed. That is right for every current consumer, but nothing says so. A stub test that relaunches after a "failed" first spawn would get `fire` where the real pane sends `reconnect`.
 - **Suggested action:** add a one-line comment stating the assumption.
 - **Priority:** low
+
+# m18-wp2-fresh-account-hardening — 2026-11-18
+
+## SURFACE-2026-11-18-QUALITY-REMOTE-BYPASS-ANSWER-STALE-ACROSS-RECYCLE
+- **Source:** feature-review-quality (M18 WP2, MAJOR)
+- **Type:** gap (stale cached state)
+- **Summary:** For a remote row, `bypass_prompt::commands::remote_cleared` answers from `LinkRegistry::open_bypass`, which only the open check writes, and Recycle runs no open check. On a fresh remote account the first open withholds `/session-restore` and tells the operator to accept the warning. Accepting writes the key on the host, but the cached `false` remains, so every later Recycle of that workspace withholds the restore and shows a now-false "is showing its Bypass Permissions warning" toast until the workspace is closed and reopened.
+- **Suggested action:** refresh the remote bypass answer for a Recycle respawn (one small exec reading the `BYPASS_ACCEPTED` fragment over the link, through `settle`-style single writer), or treat the cached remote answer as stale on Recycle and word the toast as a possibility. Fails safe today (one typed command), never a lost session.
+- **Priority:** medium
+
+## SURFACE-2026-11-18-QUALITY-TOKEN-FIX-HINT-ASSUMES-CLAUDE-ON-NONLOGIN-PATH
+- **Source:** feature-review-quality (M18 WP2, MAJOR)
+- **Type:** bug (copy / dead-end hint)
+- **Summary:** `remote_cmd::preflight::token_fix` still tells the operator to run `ssh -t <host> claude setup-token`. `ssh host cmd` runs a non-login, non-interactive shell, so on exactly the account shape WP2 hardens (`claude` only in `~/.local/bin`, PATH line only in `~/.zshrc`) the tools check now passes via the fallback, the token check fails, and the suggested fix fails with "command not found".
+- **Suggested action:** suggest `ssh -t <host> ~/.local/bin/claude setup-token` when that is where `claude` lives (the preflight could report which path `command -v claude` resolved to), or wrap the hint in the same `CLAUDE_PATH_FALLBACK` (`ssh -t <host> 'zsh -lc "…; claude setup-token"'`).
+- **Priority:** medium
+
+## SURFACE-2026-11-18-QUALITY-WITHHELD-NOTICE-CAUSE-DEFAULT
+- **Source:** feature-review-quality (M18 WP2, MINOR)
+- **Type:** tech-debt (API shape)
+- **Summary:** `autoResumeFire.ts` → `withheldNotice`'s `cause` defaults to `{ untrusted: true, bypass: false }`. Production always passes it; only one older test relies on the default, and a future caller that forgets it silently gets trust-only behaviour.
+- **Suggested action:** make `cause` required and update the one test.
+- **Priority:** low
+
+## SURFACE-2026-11-18-QUALITY-RECYCLE-BYPASS-REASON-OVERCLAIMS
+- **Source:** feature-review-quality (M18 WP2, MINOR)
+- **Type:** copy
+- **Summary:** `recycleSession.ts` → `RESTORE_WITHHELD_FOR_BYPASS` says the warning "is showing", but the value is a prediction from settings plus the recorded spawn mode, not read off the screen (and false in the stale-remote case above).
+- **Suggested action:** "has not been accepted" (matches the auto-resume notice) instead of "is showing". Pairs with the stale-answer fix above.
+- **Priority:** low
+
+## SURFACE-2026-11-18-QUALITY-SPAWN-PERMISSION-GUARD-INDENT-BOUND
+- **Source:** feature-review-quality (M18 WP2, MINOR)
+- **Type:** test precision (source guard)
+- **Summary:** `cc_session::tests::profile_spawn_caller_orders_its_profile_decisions` checks `code.contains("                permission,\n")`, which is indentation-bound and not anchored to the `RegisteredSession {` literal. Any other struct literal in `spawn` gaining a `permission,` field at that depth would satisfy it with registration deleted.
+- **Suggested action:** find the `RegisteredSession {` literal inside `spawn` first and assert `permission,` inside that span (see `docs/lessons/source-text-guards.md`).
+- **Priority:** low
+

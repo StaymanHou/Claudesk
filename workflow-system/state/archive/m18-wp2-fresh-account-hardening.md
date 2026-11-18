@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP2 — Fresh-account hardening (bypass-dialog withhold + `claude` PATH fallback)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-11-18 (ship `1a71d1b`)
 **Created:** 2026-11-18
 **WBS:** `workflow-system/product/wbs.md` → WP2 · **Design:** `arch/claude-substrate.md` §R.6 · `arch/session-resumption.md` → "The inject arm withholds…"
 
@@ -259,11 +259,67 @@ that WP5–WP7 install into opens onto a CC that can't quit on the bypass dialog
     — evidence: `pnpm verify:auto` → EXIT=0 in 61s; vitest `Tests 4079 passed (4079)`; Rust 1430 passed, 0 failed; eslint 0 errors (1 pre-existing warning)
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality (shipped as a local commit on `main`, not pushed; the full suite was reused from the last-phase codify run)
+- **Path:** Feature > finalize
+- **Active scope:** finalize (review-quality: 0 CRITICAL, 2 MAJOR + 3 MINOR auto-backlogged)
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
-- **Open discoveries:** two NOTED entries (both documented); WP2.5 was added to `wbs.md` (remote copy to the Mac clipboard, operator 2026-11-18)
+- **Unvisited:** finalize
+- **Open discoveries:** two NOTED entries (both documented); 5 quality findings backlogged
+
+## Code-Quality Review — m18-wp2-fresh-account-hardening
+
+*(reviewer subagent, ship commit `1a71d1b`, base `f76941e`; MAJOR + MINOR auto-backlogged per drive_mode=autopilot)*
+
+### Strengths
+- `argv_mode` is bound once and feeds both the argv and `RegisteredSession.permission`, so the fire-time read sees exactly what CC was started with (a wiring guard pins it).
+- Doubt withholds consistently across Rust, the remote perl fragment and the TS reader.
+- The remote answer rides the existing `settle_open_decision` funnel; every outcome overwrites an earlier `true`.
+- The probe facts and the accepted `settings.local.json` gap are recorded in the module docs; local and remote strictness are tested with the same cases.
+- `CLAUDE_PATH_FALLBACK` is one constant; the tests execute the real scripts under real `zsh`/`sh`.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`bypass_prompt/commands.rs` `remote_cleared`; `recycleSession.ts`] The remote bypass answer is cached from the open check and goes stale across Recycle; after the operator accepts, later Recycles keep withholding with a now-false toast until a reopen. → `SURFACE-2026-11-18-QUALITY-REMOTE-BYPASS-ANSWER-STALE-ACROSS-RECYCLE`
+- [`remote_cmd/preflight.rs` `token_fix`] `ssh -t <host> claude setup-token` dead-ends on a `~/.local/bin`-only account (non-login ssh shell). → `SURFACE-2026-11-18-QUALITY-TOKEN-FIX-HINT-ASSUMES-CLAUDE-ON-NONLOGIN-PATH`
+
+**MINOR**
+- [`autoResumeFire.ts` `withheldNotice`] defaulted `cause` hides a missing argument. → `…-QUALITY-WITHHELD-NOTICE-CAUSE-DEFAULT`
+- [`recycleSession.ts` `RESTORE_WITHHELD_FOR_BYPASS`] "is showing" overclaims a prediction. → `…-QUALITY-RECYCLE-BYPASS-REASON-OVERCLAIMS`
+- [`cc_session/mod.rs` wiring test] `permission,` check is indent-bound, not anchored to `RegisteredSession {`. → `…-QUALITY-SPAWN-PERMISSION-GUARD-INDENT-BOUND`
+
+### Assessment
+Well built and fits the codebase: it mirrors the folder-trust withhold (Rust does the IO and returns one boolean, the decision stays in `shouldInject`, the remote answer goes through the settle funnel). It adds one new concept, `SpawnPermission`, which is the right one. Error handling refuses on doubt; there is no `unwrap()` outside tests, and the new sync command is cheap. The two soft spots are at the remote edges: the cached acceptance goes stale across Recycle, and an older preflight hint assumes `claude` is on the non-login ssh PATH. Neither can lose a session, but both weaken the fresh-account recovery story this WP exists to deliver.
+
+### If you disagree
+Mark a line `[DISMISSED]` here before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:**
+  - Profile rows never reach the restore arm (F-b ruling 4), and Recycle is gated the same way. So the bypass read in practice only meets `--permission-mode` (Flag) sessions on the default profile; the profile (`Unflagged`) arm is defensive.
+  - CC also honours the key in a project's `.claude/settings.local.json`; that gap was accepted.
+  - The trust dialog comes before the bypass warning, and both default to "No, exit".
+- **Assumptions that held:**
+  - The WBS rule: only bypass spawns show the warning, and only a JSON `true` in the user/profile `settings.json` clears it. The live probe at CC 2.1.327 confirmed it locally and on the mini.
+  - The fire funnel (`shouldInject`) and the settle funnel (`settle_open_decision`) each took the new term with no new path.
+  - `CLAUDE_PATH_FALLBACK` fixed both the preflight and `cc-launch` in one constant.
+- **Assumptions that were wrong:**
+  - The plan's live local check used a profile with a bypass `defaultMode`. That can't reach the restore arm, so it moved to a sandboxed-`$HOME` launch, which also needs `COREPACK_HOME` and a short path for the hook socket (lesson updated).
+  - The plan assumed the spawn used `--dangerously-skip-permissions`; it uses `--permission-mode bypassPermissions` (both show the warning).
+  - The remote withheld path can't be driven live without a second key-less CC account (gap accepted).
+  - The dev `projects.json` remote row is still the old admin-account row, so one read-only ssh went out as that account before it was caught.
+- **Approach delta:**
+  - Recycle's restore got the bypass check too (D-3, not in the WBS tasks).
+  - The notice is shown on local rows too (D-2).
+  - The live remote checks ran as positive controls on the real account plus scratch-HOME runs of the exact emitted scripts, instead of an Add Remote against a scratch HOME (not drivable).
+  - Review-quality backlogged 2 MAJOR findings, both on the remote fresh-account recovery edge: the bypass answer goes stale across Recycle, and the `setup-token` hint dead-ends.
+  - While dogfooding, the operator surfaced WP2.5 (remote copy to the Mac clipboard).
+
+## Closure
+> **Feature complete:** M18 WP2 (fresh-account hardening) has shipped. Auto-resume and Recycle no longer type `/session-restore` into Claude Code's Bypass Permissions warning (whose default, "No, exit", closed CC); they hold it back and say why. And a remote host whose `claude` is only in `~/.local/bin` now passes the preflight and starts CC. To see it, open a project on an account that never accepted the warning: the toast names the fix.
+
+Requester = operator — closure notice for self-record.
 
 ## Verification constraints (from §R.8 + memories)
 - ⚠️ Never the live mini account `~/.claude` (it serves tank). Remote captures use a scratch `HOME` on the mini and the scratch remote

@@ -682,15 +682,12 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** pending
 - **Pickup shape:** one small test-and-comment polish pass. The mock dedupe fits whenever a third live-pane test appears.
 
-## SURFACE-2026-11-17-REMOTE-CLAUDE-ONLY-ON-INTERACTIVE-PATH
-- **Source:** feature:build (M17 WP5 Phase 2)
-- **Target level:** product:arch
-- **Type:** gap
-- **Summary:** Claudesk runs every remote command under `zsh -lc` (a NON-interactive login shell), which reads `.zprofile` but not `.zshrc`. Claude Code's native installer puts `claude` in `~/.local/bin` and, on an account set up interactively, the PATH line often lives only in `.zshrc`. The preflight's `command -v claude` then fails (`fail:tools:claude`), and `cc-launch`'s `exec claude` would too.
-- **Context:** Hit 2026-11-17 when the mini's dev user moved to a fresh personal account: `zsh -lc 'command -v claude'` found nothing. Fixed on that host by one `~/.zprofile` line, but any new remote host can hit it.
-- **Suggested action:** In the deployed `cc-launch` and the preflight, fall back to `$HOME/.local/bin/claude` when `claude` is not on PATH (both constant fragments, no variable value), and make the preflight's failure message name the PATH/`.zprofile` cause in plain words.
-- **Priority:** medium
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
+## Code-quality findings — m18-wp2-fresh-account-hardening (2026-11-18)
+
+- **Pointer:** **2 MAJOR + 3 MINOR** open from the review of the WP2 ship commit (`1a71d1b`). MAJOR: the remote bypass answer goes stale across Recycle (accepting the warning doesn't clear it until a reopen); `token_fix`'s `ssh -t <host> claude setup-token` hint dead-ends on a `~/.local/bin`-only account. MINOR: `withheldNotice`'s defaulted `cause`; the Recycle reason overclaims "is showing"; an indent-bound source guard. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-fresh-account-hardening — 2026-11-18`.
+- **Priority:** medium (the 2 MAJOR), low (the rest)
+- **Status:** pending
+- **Pickup shape:** one small remote-path follow-up task. The two MAJORs both sit on the fresh-account recovery path WP2 hardens; fold them in before WP6 (Install), whose fresh accounts hit them first.
 
 ## SURFACE-2026-11-17-REMOTE-EXEC-COUNT-NEEDS-A-BEHAVIOURAL-HARNESS
 - **Source:** feature:verify-self (M17 WP5 Phase 2, AC-8.2)
@@ -700,16 +697,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** The commands take an `AppHandle`, and `LinkRegistry::exec` spawns a real `/usr/bin/ssh` outside the `Transport` seam, so no fake can count execs behaviourally. Operator ruling 2026-11-17: accept the guards, log this.
 - **Suggested action:** Make the ssh binary path injectable for tests (or route `LinkRegistry::exec` through `Transport`), split `remote_open_check` / `cc_spawn_remote` into AppHandle-free worker functions, and replace the source guards' exec count with a test that drives an open and counts real ssh invocations.
 - **Priority:** low
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-
-## SURFACE-2026-11-17-AUTO-RESUME-INJECT-ANSWERS-BYPASS-PERMISSIONS-DIALOG-NO-EXIT
-- **Source:** feature:verify-self (M17 WP5 Phase 2, live)
-- **Target level:** product:arch
-- **Type:** bug
-- **Summary:** On an account that has never accepted Claude Code's "Bypass Permissions mode" warning, a `--dangerously-skip-permissions` spawn (Claudesk's default) opens on that dialog, whose DEFAULT is "No, exit". An auto-fired `/session-restore` ends in `\r`, which confirms "No, exit": CC quits, the pane reads "Session ended", and no transcript is written.
-- **Context:** Hit live 2026-11-17 on a fresh remote account; reproduces outside Claudesk with `cc-launch --dangerously-skip-permissions` in a pty. Same class as the folder-trust dialog that the fire-time trust read already guards (paydown-2026-11-08 WP5, ruling R1), which the inject path does not cover for this dialog. Local accounts that ever accepted the warning never see it, which is why it went unnoticed. ⚠️ WP1's probe outcomes (M17 `wbs.md`, "First open on a fresh host") had already recorded this warning as "WP5 input"; WP5's spec did not pick it up.
-- **Suggested action:** Extend the fire-time read so the inject is withheld unless CC has also accepted bypass mode for the spawn's account/profile (live-captured 2026-11-17, CC 2.1.325: accepting writes `skipDangerousModePermissionPrompt: true` to the account's `~/.claude/settings.json`, so for a profile read its config dir's `settings.json`; nothing else in `~/.claude.json` changes), local and remote alike; and say so in the same withheld diagnostic.
-- **Priority:** high
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## SURFACE-2026-11-17-REMOTE-SETTLE-COULD-BE-READINESS-ONLY
