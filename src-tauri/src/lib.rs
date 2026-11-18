@@ -6,6 +6,8 @@ mod app_menu;
 // The one hop from an `async` command onto a blocking worker (`on_blocking_worker`).
 mod blocking;
 mod cc_session;
+// M18 WP2.5: write-only macOS clipboard (`pbcopy`), the sink of the terminal's OSC 52 handler.
+mod clipboard;
 mod config_store;
 // M11 WP2: workflow-docs discovery — enumerates a project's conventional strategic
 // docs (vision/roadmap/wbs/wip/backlog/…) for the Docs panel. Curated set, not a
@@ -639,6 +641,9 @@ pub fn run() {
             // Trash (root-confined, recoverable). Wired to folder-delete; the blast radius
             // of a recursive delete makes Trash the safe default over a hard remove_dir_all.
             editor_fs::commands::trash_path,
+            // M18 WP2.5: the terminal's OSC 52 handler writes a remote copy to the Mac clipboard
+            // (write-only; async, it waits on `pbcopy`).
+            clipboard::clipboard_write,
             // QoL-WP5b: create a directory (+ missing intermediates) under the workspace
             // root (root-confined via a parent-tolerant lexical guard, idempotent). Backs
             // the "new folder" affordance + the nested-file create's mkdir -p of the parent.

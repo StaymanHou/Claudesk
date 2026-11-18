@@ -35,6 +35,11 @@ vi.mock("@xterm/xterm", () => {
     onData() {
       return { dispose() {} };
     }
+    parser = {
+      registerOscHandler() {
+        return { dispose() {} };
+      },
+    };
   }
   return { Terminal };
 });

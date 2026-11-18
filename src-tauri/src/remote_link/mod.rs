@@ -83,9 +83,21 @@ pub const HOME_SENTINEL: &str = "CLAUDESK-REMOTE-HOME:";
 
 /// The tmux config every Claudesk session starts with (arch §C.1, ratified 2026-11-14), loaded
 /// with `-f` because `-L` isolates the socket but NOT `~/.tmux.conf`.
+///
+/// M18 WP2.5 (probed on tmux 3.8, `m18-wp2-5-…` WIP → "Probe evidence"):
+/// - `set-clipboard on` lets an app INSIDE the pane (remote CC's `/copy`) reach the Mac via OSC 52.
+///   A tmux copy (a drag) already emits OSC 52 under the default `external`, so a drag doesn't need
+///   it. Side effect: tmux then answers an in-pane clipboard READ from its OWN buffer. The read never
+///   reaches Claudesk, which never answers one (`osc52.ts`).
+/// - The RGB feature is set at a FIXED index, never `-as` (append), because [`pre_connect_script`]
+///   re-sources this file into a running server on every connect: `-as` stacked a duplicate entry
+///   per source. No `clipboard` feature line (tmux's default `xterm*` entry has it), and no
+///   `MouseDragEnd` rebinding: `copy-pipe-no-clear` left the pane in copy-mode and SWALLOWED the next
+///   typed keys, so the default `copy-pipe-and-cancel` stays (operator, 2026-11-18).
 pub const TMUX_CONF: &str = "set -g status off\n\
 set -g mouse on\n\
-set -as terminal-features ',xterm*:RGB'\n";
+set -s terminal-features[100] 'xterm*:RGB'\n\
+set -g set-clipboard on\n";
 
 /// One link's state, as broadcast on `remote-link`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -167,6 +179,12 @@ pub(crate) const HEREDOC_DELIMITER: &str = "CLAUDESK_EOF";
 /// written through QUOTED heredocs (`<<'EOF'`), so nothing in them is expanded by this script.
 /// Each file is written to a temp name and renamed, so a concurrent spawn never reads half of
 /// one. Prints [`HOME_SENTINEL`]`$HOME` last.
+///
+/// M18 WP2.5: tmux reads `-f` only when its server STARTS, so a server already running on the host
+/// (a detached workspace keeps it up) would keep the old options forever. After writing the conf,
+/// the script sources it into this build's `-L` server when one is up. It is a no-op when tmux is
+/// absent or no server runs, and a source error never fails the connect. [`TMUX_CONF`] must stay safe
+/// to re-apply.
 pub fn pre_connect_script(identifier: &str) -> String {
     format!(
         "set -e\n\
@@ -177,6 +195,7 @@ rm -f \"$d/hook.sock\"\n\
 cat > \"$d/tmux.conf.tmp\" <<'CLAUDESK_EOF'\n\
 {conf}CLAUDESK_EOF\n\
 mv -f \"$d/tmux.conf.tmp\" \"$d/tmux.conf\"\n\
+{reload} claudesk \"$d/tmux.conf\" >/dev/null 2>&1 || :\n\
 cat > \"$d/cc-launch.tmp\" <<'CLAUDESK_EOF'\n\
 {launcher}CLAUDESK_EOF\n\
 chmod 700 \"$d/cc-launch.tmp\"\n\
@@ -188,11 +207,24 @@ mv -f \"$h.tmp\" \"$h\"\n\
 printf '%s%s\\n' '{sentinel}' \"$HOME\"\n",
         id = quote(identifier),
         conf = TMUX_CONF,
+        reload = conf_reload(identifier),
         launcher = cc_launcher(),
         hook = quote(remote_script_basename(identifier)),
         script = with_final_newline(HOOK_SCRIPT),
         sentinel = HOME_SENTINEL,
     )
+}
+
+/// M18 WP2.5 — the live re-source, as one [`crate::remote_cmd::login_shell`] command that takes the
+/// conf path as `$1`. ⚠️ It must run under the LOGIN shell: the pre-connect script itself is a
+/// plain ssh exec, and `tmux` is not on the mini's NON-login PATH. The first version tested
+/// `command -v tmux` in the outer shell, so it skipped silently on the real host while a stub
+/// `tmux` on PATH kept the tests green (Phase 2 verify-self, P2.vs.1).
+fn conf_reload(identifier: &str) -> String {
+    let srv = quote(crate::remote_cmd::tmux_server(identifier));
+    crate::remote_cmd::login_shell(&format!(
+        "tmux -L {srv} has-session 2>/dev/null || exit 0; exec tmux -L {srv} source-file \"$1\""
+    ))
 }
 
 /// A heredoc body must end in a newline, or the delimiter would not start a line.

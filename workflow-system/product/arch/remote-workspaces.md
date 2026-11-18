@@ -254,6 +254,11 @@ Measured in a real Claudesk xterm.js pane (the second terminal, same `XtermPane`
   Missing or expired → §H preflight and the open path say so in plain words.
 - **WP3's conf (ratified 2026-11-14):** `set -g status off`, `set -g mouse on`,
   `set -as terminal-features ',xterm*:RGB'` (the probe's `d.conf`), loaded with `-f`.
+  ✅ **M18 WP2.5 as-built (2026-11-18):** the conf is now `status off`, `mouse on`,
+  `set -s terminal-features[100] 'xterm*:RGB'` (a FIXED index, so it is safe to re-source) and
+  `set -g set-clipboard on`. The pre-connect script sources the fresh conf into this build's running
+  `-L` server, because a running server never re-reads `-f`. ⚠️ It does so under `login_shell` (`zsh -lc`), because tmux is
+  not on the non-login PATH a plain ssh exec gets. The first version checked that PATH and skipped silently (P2.vs.1). Why each line is there: §I → "Copying from a remote pane".
 - **WP3's remote inner command** is the one in §C's code block (token export, inline TUI,
   `unset TMUX`, then `exec claude`), each element probed (auth-2, P2.2 B, P2.4). How the token's `$(cat …)` coexists with
   `remote_cmd::quote` is §C's ⚠️ OPEN point.
@@ -564,6 +569,23 @@ remote. Code, UI copy and tests use these two words for these two cases only.
   - **E is retired** (operator, 2026-11-14). Phase 2 then measured C on real CC: it held (with CC
     inline, the history is complete in tmux, and cancel-before-inject makes a scrolled-up injection
     land), so E stays retired.
+  - ✅ **Copying from a remote pane (M18 WP2.5, PROBED 2026-11-18 on tmux 3.8; evidence in the archived
+    `m18-wp2-5-remote-copy-to-mac-clipboard` WIP).** Under `mouse on`, a drag is tmux's copy-mode selection,
+    not xterm's. On mouse-up, the default `copy-pipe-and-cancel` copies it, and **tmux already sends it to
+    its client as OSC 52** (`ESC ] 52 ; ; <b64> BEL`, an EMPTY Pc) under its default `set-clipboard external`
+    and `xterm*:clipboard` feature. The gap was only that xterm.js has no OSC 52 handler. As built:
+    - Every pane registers a **write-only** OSC 52 handler (`osc52.ts` → `clipboard_write` → `pbcopy`).
+      `navigator.clipboard` was ruled out: WKWebView rejects it with no live user activation.
+      Write-only rule: `security-posture.md` → "Terminal clipboard".
+    - `set -g set-clipboard on` lets an in-pane app's OSC 52 (remote CC's `/copy`) through. Under
+      `external`, it was dropped.
+    - **No drag-end rebinding** (operator, 2026-11-18): `copy-pipe-no-clear` would keep the highlight, but it
+      leaves the pane in copy-mode, and the next keys typed were swallowed (measured). The highlight
+      clears on mouse-up.
+    - **Option+drag** (`macOptionClickForcesSelection`) gives a native xterm selection on a remote pane,
+      copied with Edit → Copy as on a local pane. It covers only what is on screen. A plain drag copies via tmux.
+    - ⚠️ **Instrument trap:** entering copy-mode and copying in ONE tmux command batch emits no OSC 52 (tmux
+      skips a client with a redraw pending). A probe must select, then copy in a later command.
   - ⚠️ **On real CC (WP1 Phase 2), CC's own TUI mode decides where history lives, not tmux.** A fresh
     host boots CC 2.1.325's **fullscreen** TUI (alternate screen, even outside tmux); the operator's
     local CC is **inline** (`"tui": "default"`). Measured under C (`d.conf`) with a 200-line CC turn:

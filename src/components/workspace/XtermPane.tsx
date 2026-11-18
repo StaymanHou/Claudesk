@@ -54,6 +54,7 @@ import {
 import { routeCcInput } from "./ccInputRouting";
 import { trimTrailingBlankRows } from "./mirrorTrim";
 import { loadTerminalFontSize } from "./terminalFontZoom";
+import { registerOsc52 } from "./osc52";
 import { useTauriListen } from "../../useTauriListen";
 import {
   WORKSPACE_STATUS_EVENT,
@@ -648,6 +649,11 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           foreground: "#d4d4d4",
           cursor: "#d4d4d4",
         },
+        // M18 WP2.5 — Option+drag always makes a native xterm selection, even while the pane's
+        // program has mouse reporting on (a remote pane's tmux, `mouse on`), so it copies with
+        // Edit → Copy like a local pane. A plain drag on a remote pane is tmux's copy, which
+        // reaches the Mac through the OSC 52 handler below.
+        macOptionClickForcesSelection: true,
         // DOM renderer is the default; no WebGL addon loaded.
       });
       const fit = new FitAddon();
@@ -658,6 +664,10 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       const serialize = new SerializeAddon();
       term.loadAddon(serialize);
       term.open(host);
+      // M18 WP2.5 — OSC 52 → this Mac's clipboard, WRITE ONLY (a read query is never answered).
+      // Every pane registers it, local and remote, CC and the second terminal (R-d): a local
+      // program could already write the clipboard with `pbcopy`. `term.dispose()` disposes it.
+      registerOsc52(term);
       termRef.current = term;
       fitRef.current = fit;
       if (spawnCommand === "cc_spawn") {

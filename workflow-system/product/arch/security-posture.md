@@ -114,3 +114,24 @@ that passed the same two guard layers, so it can only open a file inside a known
 
 ⚠️ **Hardened runtime is unmeasured for this transport** — deferred to `/release`, not passed (the
 probe's bundle was ad-hoc, linker-signed).
+
+
+### Terminal clipboard (M18 WP2.5) — OSC 52 is write-only
+
+Every terminal pane (CC and the second terminal, local and remote) handles OSC 52 ("set the
+clipboard") by writing the decoded text to this Mac's clipboard (`src/components/workspace/osc52.ts`
+→ the `clipboard_write` command → `/usr/bin/pbcopy` with `LANG=en_US.UTF-8`). This is how a remote
+pane's tmux copy (a drag) and remote CC's `/copy` reach the Mac.
+
+- **Write only.** An OSC 52 READ query (`Pd = ?`) is ignored and **never answered**: nothing is
+  written back to the terminal or the PTY, so no program in any pane can read this Mac's clipboard.
+  Pinned by `osc52Live.test.tsx` (the real pane; a reply would show as a terminal write or a
+  `cc_input`).
+- **What a pane CAN do:** replace the clipboard's contents by printing OSC 52. A local program
+  could already do this with `pbcopy`. For a remote pane it is the point of the feature, so it adds
+  no reach worth gating (decision R-d, operator 2026-11-18).
+- **tmux answers in-pane reads itself** under `set-clipboard on`, from ITS OWN buffer on the host
+  (measured). That buffer holds what was copied in any Claudesk session on that `-L` server. The
+  same account could already read it with `tmux show-buffer`. It never involves the Mac.
+- **Bounded:** a copy over `MAX_CLIPBOARD_BYTES` (4 MiB) is refused, not truncated (both sides),
+  and `pbcopy` runs through `run_captured` with a 5 s deadline on the blocking pool.

@@ -139,6 +139,11 @@ const ASYNC_COMMANDS: &[(&str, &str)] = &[
          `spawn_blocking`",
     ),
     (
+        "clipboard_write",
+        "M18 WP2.5: waits on `pbcopy` up to `WRITE_TIMEOUT_MS` (5 s) via `run_captured`; the work \
+         runs on `spawn_blocking` (`on_blocking_worker`)",
+    ),
+    (
         "supervisor_adjudicate",
         "waits on `claude -p` up to `timeout_ms`; the work runs on `spawn_blocking`",
     ),

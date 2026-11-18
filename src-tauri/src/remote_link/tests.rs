@@ -192,6 +192,140 @@ fn the_pre_connect_script_deploys_both_files_and_reports_home_in_sh_and_zsh() {
     }
 }
 
+/// M18 WP2.5 — the conf as probed and ruled (Probe evidence Q1/Q1b/Q3/Q4).
+#[test]
+fn the_tmux_conf_lets_in_pane_osc52_through_and_is_safe_to_re_source() {
+    let lines: Vec<&str> = TMUX_CONF.lines().collect();
+    assert!(lines.contains(&"set -g set-clipboard on"), "{TMUX_CONF}");
+    assert!(lines.contains(&"set -g mouse on"), "{TMUX_CONF}");
+    // Fixed index, never an append: a re-source must not stack a duplicate RGB entry.
+    assert!(
+        lines.contains(&"set -s terminal-features[100] 'xterm*:RGB'"),
+        "{TMUX_CONF}"
+    );
+    assert!(!TMUX_CONF.contains(" -as "), "{TMUX_CONF}");
+    assert!(!TMUX_CONF.contains("-ga ") && !TMUX_CONF.contains(" -a "));
+    // No drag-end rebinding: `copy-pipe-no-clear` swallows the next typed keys (R-b).
+    assert!(!TMUX_CONF.contains("MouseDragEnd"), "{TMUX_CONF}");
+    assert!(!TMUX_CONF.contains("no-clear"), "{TMUX_CONF}");
+}
+
+/// A stub `tmux` that logs its argv and answers `has-session` / `source-file` with the given exit
+/// codes. Like `tmux` on the mini, it is reachable ONLY from the LOGIN shell: its dir is added to
+/// PATH by `$HOME/.zprofile` (which also prints noise to stdout, as a real profile may), never by
+/// the outer PATH the pre-connect script runs with. No local tmux is installed on the dev Mac.
+fn tmux_on_login_path_only(home: &Path, has: i32, src: i32) {
+    let bin = home.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let log = home.join("tmux.log");
+    let stub = bin.join("tmux");
+    std::fs::write(
+        &stub,
+        format!(
+            "#!/bin/sh\necho \"$@\" >> '{}'\ncase \"$3\" in has-session) exit {has};; \
+             source-file) exit {src};; esac\nexit 0\n",
+            log.display()
+        ),
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(
+        home.join(".zprofile"),
+        format!(
+            "export PATH='{}':\"$PATH\"\necho profile-noise\n",
+            bin.display()
+        ),
+    )
+    .unwrap();
+}
+
+/// The pre-connect run with an outer PATH that has NO tmux (the mini's non-login PATH).
+fn run_pre_connect_without_tmux_on_path(
+    shell: &str,
+    home: &Path,
+    identifier: &str,
+) -> std::process::Output {
+    Command::new(shell)
+        .arg("-c")
+        .arg(pre_connect_script(identifier))
+        .env("HOME", home)
+        .env("PATH", "/usr/bin:/bin")
+        .env_remove("ZDOTDIR")
+        .output()
+        .expect("shell runs")
+}
+
+fn tmux_log(home: &Path) -> String {
+    std::fs::read_to_string(home.join("tmux.log")).unwrap_or_default()
+}
+
+/// M18 WP2.5 (R-c): a running server never re-reads `-f`, so the pre-connect sources the fresh conf
+/// into THIS build's `-L` server when one is up, and does nothing when none is. ⚠️ `tmux` is reachable
+/// only from the login shell here, exactly as on the mini: the first version checked the OUTER
+/// PATH and skipped silently on the real host (P2.vs.1). This test fails on that version.
+#[test]
+fn the_pre_connect_sources_the_conf_into_a_running_server_only() {
+    for shell in ["/bin/sh", "/bin/zsh"] {
+        // Server up: one has-session, then a source-file of the just-written conf.
+        let home = TempDir::new().unwrap();
+        tmux_on_login_path_only(home.path(), 0, 0);
+        let out = run_pre_connect_without_tmux_on_path(shell, home.path(), DEV);
+        assert!(
+            out.status.success(),
+            "{shell}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let conf = home.path().join(".claudesk").join(DEV).join("tmux.conf");
+        assert_eq!(
+            tmux_log(home.path()),
+            format!(
+                "-L claudesk-dev has-session\n-L claudesk-dev source-file {}\n",
+                conf.display()
+            ),
+            "{shell}"
+        );
+        assert_eq!(std::fs::read_to_string(&conf).unwrap(), TMUX_CONF);
+        // The login profile's own output never reaches the stdout the HOME sentinel is read from.
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(!stdout.contains("profile-noise"), "{shell}: {stdout}");
+        assert!(parse_home(&stdout).is_ok(), "{shell}");
+
+        // No server: has-session fails, so nothing is sourced (and the connect still succeeds).
+        let home = TempDir::new().unwrap();
+        tmux_on_login_path_only(home.path(), 1, 0);
+        let out = run_pre_connect_without_tmux_on_path(shell, home.path(), DEV);
+        assert!(out.status.success(), "{shell}");
+        assert_eq!(
+            tmux_log(home.path()),
+            "-L claudesk-dev has-session\n",
+            "{shell}"
+        );
+
+        // A failing source never fails the connect, and the sentinel is still printed.
+        let home = TempDir::new().unwrap();
+        tmux_on_login_path_only(home.path(), 0, 1);
+        let out = run_pre_connect_without_tmux_on_path(shell, home.path(), DEV);
+        assert!(out.status.success(), "{shell}");
+        assert!(parse_home(&String::from_utf8_lossy(&out.stdout)).is_ok());
+
+        // No tmux anywhere.
+        let home = TempDir::new().unwrap();
+        let out = run_pre_connect_without_tmux_on_path(shell, home.path(), DEV);
+        assert!(out.status.success(), "{shell}");
+        assert!(parse_home(&String::from_utf8_lossy(&out.stdout)).is_ok());
+        assert_eq!(tmux_log(home.path()), "");
+    }
+    // The prod build sources into the prod server, never the dev one.
+    let home = TempDir::new().unwrap();
+    tmux_on_login_path_only(home.path(), 0, 0);
+    let out = run_pre_connect_without_tmux_on_path("/bin/sh", home.path(), "com.claudesk.app");
+    assert!(out.status.success());
+    let log = tmux_log(home.path());
+    assert_eq!(log.lines().count(), 2, "{log}");
+    assert!(log.lines().all(|l| l.starts_with("-L claudesk ")), "{log}");
+}
+
 #[test]
 fn a_hostile_identifier_is_data_in_the_pre_connect_script() {
     let home = TempDir::new().unwrap();
