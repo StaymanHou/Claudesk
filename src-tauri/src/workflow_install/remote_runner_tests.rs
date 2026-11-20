@@ -146,7 +146,13 @@ fn the_sentinels_and_the_install_window_come_in_order() {
     assert!(at("trap '' HUP PIPE TERM INT") < at("CLAUDESK-RUN:phase:install"));
     assert!(at("CLAUDESK-RUN:phase:install") < at("./install.sh"));
     assert!(at("./install.sh") < at("printf '%s\\n'"));
-    assert!(at("./install.sh ) </dev/null >\"$log\" 2>&1").gt(&0));
+    assert!(at("./install.sh </dev/null >\"$log\" 2>&1").gt(&0));
+    // A direct child, never a subshell: zsh resets an ignored trap inside `( … )` (the behaviour
+    // itself is proven by `a_group_kill_after_the_install_phase_cannot_split_links_from_the_record`).
+    assert!(
+        !s.contains("( cd"),
+        "install.sh must not run in a subshell: {s}"
+    );
     assert!(at("printf '%s\\n'") < at("CLAUDESK-RUN:result:ok"));
 }
 
@@ -183,6 +189,7 @@ fn sentinel_lines_parse_and_anything_else_is_output() {
     for (line, want) in [
         ("ok", RunResult::Ok),
         ("no-root", RunResult::NoRoot),
+        ("no-write", RunResult::NoWrite),
         ("no-devtools", RunResult::NoDevTools),
         ("already-present", RunResult::AlreadyPresent),
         ("no-install-script", RunResult::NoInstallScript),
@@ -260,6 +267,7 @@ fn a_run_that_never_reported_is_judged_by_what_the_host_now_is() {
 fn every_failure_arm_is_not_ok_and_says_something() {
     for r in [
         RunResult::NoRoot,
+        RunResult::NoWrite,
         RunResult::NoDevTools,
         RunResult::AlreadyPresent,
         RunResult::StaleRefused("outside-root".into()),
@@ -274,6 +282,45 @@ fn every_failure_arm_is_not_ok_and_says_something() {
     }
     let nd = resolve("h", Some(&RunResult::NoDevTools), 0, false, None);
     assert!(nd.message.unwrap().contains(DEV_TOOLS_FIX));
+}
+
+/// Every message `resolve` can produce, over every result × cancel × re-probe: none carries a run
+/// of spaces (WP6's review found four that did, from `\` continuations a scripted edit dropped).
+#[test]
+fn no_resolve_message_carries_a_space_run() {
+    let results = [
+        None,
+        Some(RunResult::Ok),
+        Some(RunResult::NoRoot),
+        Some(RunResult::NoWrite),
+        Some(RunResult::NoDevTools),
+        Some(RunResult::AlreadyPresent),
+        Some(RunResult::StaleRefused("outside-root".into())),
+        Some(RunResult::CloneFailed(128)),
+        Some(RunResult::NoInstallScript),
+        Some(RunResult::InstallFailed(7)),
+        Some(RunResult::RecordWriteFailed),
+    ];
+    let afters = [
+        None,
+        Some(HostSubstrate::Unknown),
+        Some(HostSubstrate::Absent),
+        Some(HostSubstrate::Developer {
+            root: None,
+            head: None,
+        }),
+        Some(managed()),
+    ];
+    for r in &results {
+        for cancel in [false, true] {
+            for after in &afters {
+                let f = resolve("h", r.as_ref(), 3, cancel, after.as_ref());
+                if let Some(m) = f.message {
+                    assert!(!m.contains("  "), "{r:?} {cancel} {after:?}: {m:?}");
+                }
+            }
+        }
+    }
 }
 
 // ── The real script, locally ─────────────────────────────────────────────────────────────
@@ -634,6 +681,68 @@ fn a_root_that_does_not_exist_is_refused() {
     assert!(!Path::new(&root).exists());
 }
 
+/// WP7 Phase 1 (MINOR): a root that exists but where Claudesk's own folder can't be created is
+/// `no-write`, not "the install folder doesn't exist". Here the vendor dir is a FILE, so
+/// `mkdir -p` fails; nothing is cloned or recorded.
+#[test]
+fn a_root_where_the_vendor_folder_cannot_be_made_is_no_write() {
+    let repo = fixture_repo(true);
+    let host = Host::new();
+    let vendor = host.sandbox.vendor_dir();
+    std::fs::remove_dir(&vendor).unwrap();
+    std::fs::write(&vendor, "a file in the way").unwrap();
+    let out = host.run(&host.script(repo.path()), &[]);
+    assert_eq!(result_of(&out), Some(RunResult::NoWrite), "{out}");
+    assert!(!host.record().exists() && vendor.is_file());
+    let f = resolve(
+        "h",
+        Some(&RunResult::NoWrite),
+        0,
+        false,
+        Some(&HostSubstrate::Absent),
+    );
+    assert!(f.message.unwrap().contains(".claudesk/vendor"));
+}
+
+/// The run script's fixed names come from the shared constants (WP7 Phase 1, MINOR): the record
+/// is `provenance::RECORD_FILENAME` under the vendor subpath's dot-dir, the clone the vendor
+/// subpath + `CLONE_DIR_NAME`, so the script, the probe's reader and the local wizard agree.
+#[test]
+fn the_scripts_names_come_from_the_shared_constants() {
+    let s = install_script_from(
+        "/Users/me",
+        REMOTE_ORIGIN_URL,
+        &remote_record("/Users/me", NOW),
+    )
+    .unwrap();
+    assert!(
+        s.contains(&format!(
+            "rec=\"$root/{}/{}\"",
+            crate::workflow_install::DEFAULT_VENDOR_SUBPATH[0],
+            provenance::RECORD_FILENAME
+        )),
+        "{s}"
+    );
+    assert!(s.contains(&format!(
+        "vendor=\"$root/{}\"",
+        crate::workflow_install::DEFAULT_VENDOR_SUBPATH.join("/")
+    )));
+    assert!(
+        s.contains("clone=\"$vendor/my-claude-code-customization\""),
+        "{s}"
+    );
+    for c in [CLONE_DIR_NAME, provenance::RECORD_FILENAME]
+        .into_iter()
+        .chain(crate::workflow_install::DEFAULT_VENDOR_SUBPATH)
+    {
+        assert!(
+            c.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b)),
+            "{c:?} enters the script unquoted, so it must be a plain name"
+        );
+    }
+}
+
 /// The preflight's three arms, with `xcode-select` stubbed on PATH ("Probe outcomes" (5)).
 #[test]
 fn the_developer_tools_preflight_refuses_without_running_git() {
@@ -696,15 +805,26 @@ impl Lines {
     }
 }
 
-/// Run `script` the way the commands layer does (own process group, streamed), and when the
-/// stream shows `when`, send `kill -TERM -- -<pgid>` to the run's group, as Cancel does on the
-/// host. Returns the lines and the exit code.
+/// How long after its line a test's group kill is delivered: well inside the step the line opens.
+/// ⚠️ Not immediately: a kill sent within ~2 ms of `phase:install` landed before zsh forked
+/// `install.sh`'s subshell, so the WP6 version of this test passed while a TERM 5 ms later killed
+/// `install.sh` (WP7 Phase 1).
+const KILL_DELAY: Duration = Duration::from_millis(300);
+
+/// Run `script` the way the commands layer does (own process group, streamed), and
+/// [`KILL_DELAY`] after the stream shows `when`, send `kill -TERM -- -<pgid>` to the run's group,
+/// as Cancel does on the host. Returns the lines and the exit code.
 fn run_and_group_kill_at(host: &Host, script: &str, when: &str, env: &str) -> (Vec<String>, i32) {
     let sink = Lines(Mutex::new(Vec::new()));
     let killed = std::cell::Cell::new(false);
+    let seen_at = std::cell::Cell::new(None::<Instant>);
     let ours = unsafe { libc::getpgrp() };
     let hook = || {
-        if !killed.get() && sink.saw(when) {
+        if seen_at.get().is_none() && sink.saw(when) {
+            seen_at.set(Some(Instant::now()));
+        }
+        let due = seen_at.get().is_some_and(|t| t.elapsed() >= KILL_DELAY);
+        if !killed.get() && due {
             let pgid = sink.pgid().expect("the pgid came first") as libc::pid_t;
             assert_ne!(pgid, ours, "never signal the test runner's own group");
             // SAFETY: a TERM to the run's own process group, as the remote Cancel sends.
@@ -786,4 +906,236 @@ fn a_group_kill_during_the_clone_stops_the_run_and_records_nothing() {
     // SAFETY: signal 0 only asks whether any process is left in the group.
     let alive = unsafe { libc::kill(-(pgid.unwrap() as libc::pid_t), 0) } == 0;
     assert!(!alive, "a process of the run's group is still running");
+}
+
+// ── WP7 D2: Cancel reads the stream to its end once the pgid is known ────────────────────
+
+/// Cancel's decision, per phase: honoured before and during the clone (a remote group kill when
+/// the pgid is known, else a local stop), never once `install.sh` has started; and without a
+/// Cancel nothing stops.
+#[test]
+fn the_abort_step_honours_cancel_only_before_the_install_phase() {
+    let st = |cancel, pgid, phase| RemoteRunState {
+        pgid,
+        phase,
+        cancel_requested: cancel,
+    };
+    assert_eq!(
+        abort_step(&st(false, Some(9), Some(Phase::Clone))),
+        AbortStep::Continue
+    );
+    assert_eq!(abort_step(&st(true, None, None)), AbortStep::StopLocal);
+    assert_eq!(
+        abort_step(&st(true, Some(9), None)),
+        AbortStep::KillRemote(9)
+    );
+    assert_eq!(
+        abort_step(&st(true, Some(9), Some(Phase::Clone))),
+        AbortStep::KillRemote(9)
+    );
+    assert_eq!(
+        abort_step(&st(true, Some(9), Some(Phase::Install))),
+        AbortStep::Continue
+    );
+}
+
+/// With the pgid known, the poll sends the kill ONCE and never asks for the local ssh to stop,
+/// whether the kill confirmed or not; an unconfirmed kill says so once. Without a pgid it stops.
+#[test]
+fn the_abort_poll_kills_once_and_keeps_reading() {
+    for kill_ok in [true, false] {
+        let state = Mutex::new(RemoteRunState {
+            pgid: Some(42),
+            phase: Some(Phase::Clone),
+            cancel_requested: true,
+        });
+        let sent = std::cell::Cell::new(false);
+        let kills = Mutex::new(Vec::new());
+        let notes = Mutex::new(Vec::new());
+        let send = |p: u32| {
+            kills.lock().unwrap().push(p);
+            if kill_ok {
+                Ok(())
+            } else {
+                Err("timed out".to_string())
+            }
+        };
+        let note = |l: &str| notes.lock().unwrap().push(l.to_string());
+        for _ in 0..5 {
+            assert!(
+                !abort_poll(&state, &sent, &send, &note),
+                "a known pgid never stops the local side (kill_ok={kill_ok})"
+            );
+        }
+        assert_eq!(*kills.lock().unwrap(), vec![42], "one kill");
+        let expected: Vec<String> = if kill_ok {
+            vec![]
+        } else {
+            vec![CANCEL_UNCONFIRMED_NOTE.to_string()]
+        };
+        assert_eq!(*notes.lock().unwrap(), expected);
+    }
+    let state = Mutex::new(RemoteRunState {
+        pgid: None,
+        phase: None,
+        cancel_requested: true,
+    });
+    let sent = std::cell::Cell::new(false);
+    assert!(abort_poll(&state, &sent, &|_| Ok(()), &|_| {}));
+    let idle = Mutex::new(RemoteRunState::default());
+    assert!(!abort_poll(&idle, &sent, &|_| Ok(()), &|_| {}));
+}
+
+/// The worker's sink, as `commands::RemoteSink` writes the cancel state, plus a Cancel requested
+/// the moment the clone starts.
+struct CancellingSink {
+    lines: std::sync::Arc<Mutex<Vec<String>>>,
+    state: Mutex<RemoteRunState>,
+}
+impl OutputSink for CancellingSink {
+    fn line(&self, line: &str) {
+        self.lines.lock().unwrap().push(line.to_string());
+        let mut r = self.state.lock().unwrap();
+        match parse_run_line(line) {
+            Some(RunLine::Pgid(p)) => {
+                r.pgid.get_or_insert(p);
+            }
+            Some(RunLine::Phase(p)) => {
+                r.phase = Some(p);
+                if p == Phase::Clone {
+                    r.cancel_requested = true;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Run the real install script through the PRODUCTION abort poll, with Cancel requested as the
+/// clone starts and `send_kill` standing in for the remote group-kill exec. The clone is slowed
+/// by a sleep in front of it, so the poll sees the Clone phase. The lines land in `lines` as they
+/// arrive (a test's kill stand-in may watch them); returns them at the end.
+fn run_with_cancel(
+    host: &Host,
+    repo: &Path,
+    lines: &std::sync::Arc<Mutex<Vec<String>>>,
+    send_kill: &dyn Fn(u32) -> Result<(), String>,
+) -> Vec<String> {
+    let script = host.script(repo).replace(
+        "GIT_TERMINAL_PROMPT=0 \"$d/usr/bin/git\" clone",
+        "sleep 1; GIT_TERMINAL_PROMPT=0 \"$d/usr/bin/git\" clone",
+    );
+    assert!(
+        script.contains("sleep 1; GIT_TERMINAL_PROMPT=0"),
+        "{script}"
+    );
+    let sink = CancellingSink {
+        lines: std::sync::Arc::clone(lines),
+        state: Mutex::new(RemoteRunState::default()),
+    };
+    let sent = std::cell::Cell::new(false);
+    let abort = || abort_poll(&sink.state, &sent, send_kill, &|l| sink.line(l));
+    let script = format!(
+        "export HOME={} FIXTURE_SLEEP=1\n{script}",
+        quote(&host.decoy.path().display().to_string())
+    );
+    run_streaming_abortable(
+        "/bin/zsh",
+        &["-c".into(), script],
+        None,
+        &sink,
+        Duration::from_secs(60),
+        &abort,
+    )
+    .unwrap();
+    assert!(sent.get(), "the poll sent the kill during the clone");
+    let lines = sink.lines.lock().unwrap().clone();
+    lines
+}
+
+/// The MAJOR's first arm: the remote kill did not confirm (a failed or timed-out exec). The run
+/// carries on on the host, so the result must come from the run, never "Nothing was installed".
+/// Locally, stopping the ssh kills the script itself, so the old "kill then stop" code fails this
+/// test by ending the run with no result.
+#[test]
+fn a_cancel_whose_kill_fails_waits_for_the_run_and_reports_the_install() {
+    let repo = fixture_repo(true);
+    let host = Host::new();
+    let lines = run_with_cancel(
+        &host,
+        repo.path(),
+        &std::sync::Arc::new(Mutex::new(Vec::new())),
+        &|_| Err("timed out".to_string()),
+    );
+    let out = lines.join("\n");
+    assert!(out.contains(CANCEL_UNCONFIRMED_NOTE), "{out}");
+    assert_eq!(result_of(&out), Some(RunResult::Ok), "{out}");
+    let after = host.reprobe();
+    assert!(matches!(after, HostSubstrate::Managed { .. }));
+    let finished = resolve("h", result_of(&out).as_ref(), 0, true, Some(&after));
+    assert!(finished.ok && !finished.cancelled, "{finished:?}");
+    assert_eq!(
+        finished.message.as_deref(),
+        Some("Cancel came after install.sh had started, so the install finished.")
+    );
+}
+
+/// The MAJOR's second arm: the kill reaches the host only after the clone ended and the install
+/// window's trap was set (here it is delivered when `phase:install` arrives, while install.sh
+/// runs for 2 s). The trap ignores it, the stream is read to its end, and the run reports `ok`.
+#[test]
+fn a_cancel_whose_kill_lands_after_the_trap_reports_the_finished_install() {
+    let repo = fixture_repo(true);
+    let host = Host::new();
+    let lines: std::sync::Arc<Mutex<Vec<String>>> = std::sync::Arc::new(Mutex::new(Vec::new()));
+    let delivered = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let ours = unsafe { libc::getpgrp() };
+    let (watch, flag) = (
+        std::sync::Arc::clone(&lines),
+        std::sync::Arc::clone(&delivered),
+    );
+    // The kill exec "succeeds", but its TERM reaches the group only once install.sh is running.
+    let send = move |pgid: u32| {
+        assert_ne!(
+            pgid as libc::pid_t, ours,
+            "never signal the test runner's own group"
+        );
+        let (watch, flag) = (std::sync::Arc::clone(&watch), std::sync::Arc::clone(&flag));
+        std::thread::spawn(move || {
+            let until = Instant::now() + Duration::from_secs(30);
+            while Instant::now() < until {
+                if watch
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|l| l == "CLAUDESK-RUN:phase:install")
+                {
+                    std::thread::sleep(KILL_DELAY);
+                    // SAFETY: a TERM to the run's own process group, as the remote Cancel sends.
+                    unsafe { libc::kill(-(pgid as libc::pid_t), libc::SIGTERM) };
+                    flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        });
+        Ok(())
+    };
+    let out = run_with_cancel(&host, repo.path(), &lines, &send).join("\n");
+    assert!(
+        delivered.load(std::sync::atomic::Ordering::SeqCst),
+        "the TERM reached the run's group during install.sh"
+    );
+    assert!(!out.contains(CANCEL_UNCONFIRMED_NOTE), "{out}");
+    assert_eq!(result_of(&out), Some(RunResult::Ok), "{out}");
+    assert!(host.record().exists(), "the record was written");
+    let after = host.reprobe();
+    assert!(matches!(after, HostSubstrate::Managed { .. }));
+    let finished = resolve("h", result_of(&out).as_ref(), 0, true, Some(&after));
+    assert!(finished.ok && !finished.cancelled, "{finished:?}");
+    assert_eq!(
+        finished.message.as_deref(),
+        Some("Cancel came after install.sh had started, so the install finished."),
+        "the operator is told the Cancel came too late, not shown a bare success"
+    );
 }

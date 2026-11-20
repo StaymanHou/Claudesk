@@ -463,9 +463,10 @@ pub(crate) const ABORTED_NOTE: &str = "[stopped on request; the process group wa
 /// `true` the whole group is killed and reaped, the lines already queued are kept (bounded by
 /// [`DRAIN_GRACE`]), [`ABORTED_NOTE`] is appended, and the result is exit code `-1`.
 ///
-/// M18 WP6 (D10): a remote install's Cancel ends the LOCAL ssh this way, after the remote group
-/// kill (`remote_runner`). A local run passes "never" through [`run_streaming`]; its cancel stays
-/// cooperative, between steps, because killing `git` halfway corrupts a LOCAL object store. On a
+/// M18 WP6 (D10): a remote install's Cancel ends the LOCAL ssh this way ONLY before the run
+/// printed its pgid; once it has, the remote group kill is sent and the stream is read to its
+/// end (`remote_runner::abort_poll`, WP7 D2). A local run passes "never" through
+/// [`run_streaming`]; its cancel stays cooperative, between steps, because killing `git` halfway corrupts a LOCAL object store. On a
 /// remote run the host's own `git` handles the TERM the remote kill sends (WP3 "Probe outcomes"
 /// (1): it removes the partial clone).
 pub(crate) fn run_streaming_abortable(

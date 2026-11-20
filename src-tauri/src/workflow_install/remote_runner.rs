@@ -35,6 +35,10 @@
 //!    app quit) can stop `install.sh` between two links. `install.sh` writes to a log file, not
 //!    the stream: it is `set -e`, so an echo into a dead pipe would end it even with SIGPIPE
 //!    ignored. The log is printed afterwards.
+//!    ⚠️ `install.sh` runs as a DIRECT child of the script's shell, never inside `( … )`: zsh
+//!    resets an ignored trap in a subshell, so a `( cd … && ./install.sh )` let a TERM or HUP that
+//!    arrived while `install.sh` ran kill it (exit 143) between two links (WP7 Phase 1; the WP6
+//!    test passed only because its kill landed within ~2 ms, before zsh forked the subshell).
 //! 7. The record is written LAST, only after `install.sh` exits 0: Rust's JSON, written by a
 //!    constant-format `printf` to a temp file, then `mv`'d into place.
 //! 8. `result:<arm>`.
@@ -43,8 +47,8 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-use super::provenance::InstallRecord;
-use super::CLONE_DIR_NAME;
+use super::provenance::{InstallRecord, RECORD_FILENAME};
+use super::{CLONE_DIR_NAME, DEFAULT_VENDOR_SUBPATH};
 use crate::remote_cmd::{
     is_normalized_remote_path, login_shell, quote, substrate_probe_invocation, DEV_TOOLS_FIX,
     DEV_TOOLS_GUARD,
@@ -63,9 +67,15 @@ pub const RUN_SENTINEL: &str = "CLAUDESK-RUN:";
 /// deadlines together. Only a true hang reaches it (a clone takes ~4 s, `install.sh` ~0.5 s).
 pub const REMOTE_INSTALL_DEADLINE: Duration = Duration::from_secs(1200);
 
+/// The vendor dir's path under a root, `/`-joined: `.claudesk/vendor`, from the local wizard's
+/// [`DEFAULT_VENDOR_SUBPATH`] (one source for both, and for the run script's paths).
+fn vendor_subpath() -> String {
+    DEFAULT_VENDOR_SUBPATH.join("/")
+}
+
 /// The clone's path under `root` on the host.
 pub fn remote_clone_path(root: &str) -> String {
-    format!("{root}/.claudesk/vendor/{CLONE_DIR_NAME}")
+    format!("{root}/{}/{CLONE_DIR_NAME}", vendor_subpath())
 }
 
 /// The record a successful run writes on the host.
@@ -87,9 +97,10 @@ pub fn valid_root(root: &str) -> bool {
 /// [`install_script_from`], each with an already-quoted value or a constant fragment.
 const TEMPLATE: &str = r#"echo "CLAUDESK-RUN:pgid:$(ps -o pgid= -p $$ | tr -d ' ')"
 root=__ROOT__
-clone="$root/.claudesk/vendor/__NAME__"
-rec="$root/.claudesk/install-record.json"
-log="$root/.claudesk/install.log"
+vendor="$root/__VENDOR__"
+clone="$vendor/__NAME__"
+rec="$root/__DOTDIR__/__RECORD__"
+log="$root/__DOTDIR__/install.log"
 if [ ! -d "$root" ]; then echo 'CLAUDESK-RUN:result:no-root'; exit 0; fi
 if ! { __GUARD__; }; then echo 'CLAUDESK-RUN:result:no-devtools'; exit 0; fi
 p=$(__PROBE__)
@@ -102,13 +113,13 @@ if [ -e "$clone" ] || [ -L "$clone" ]; then
   if [ -L "$clone" ] || [ ! -d "$clone" ]; then echo 'CLAUDESK-RUN:result:stale-refused:not-a-folder'; exit 0; fi
   rp=$(cd -P -- "$root" && pwd -P)
   cp=$(cd -P -- "$clone" && pwd -P)
-  if [ -z "$rp" ] || [ "$cp" != "$rp/.claudesk/vendor/__NAME__" ]; then echo 'CLAUDESK-RUN:result:stale-refused:outside-root'; exit 0; fi
+  if [ -z "$rp" ] || [ "$cp" != "$rp/__VENDOR__/__NAME__" ]; then echo 'CLAUDESK-RUN:result:stale-refused:outside-root'; exit 0; fi
   echo 'Removing a leftover clone from an earlier run that did not finish.'
   echo 'CLAUDESK-RUN:stale-removed'
   rm -rf -- "$cp"
   if [ -e "$cp" ]; then echo 'CLAUDESK-RUN:result:stale-refused:not-removed'; exit 0; fi
 fi
-mkdir -p -- "$root/.claudesk/vendor" || { echo 'CLAUDESK-RUN:result:no-root'; exit 0; }
+mkdir -p -- "$vendor" || { echo 'CLAUDESK-RUN:result:no-write'; exit 0; }
 echo 'CLAUDESK-RUN:phase:clone'
 GIT_TERMINAL_PROMPT=0 "$d/usr/bin/git" clone -- __URL__ "$clone" </dev/null 2>&1
 rc=$?
@@ -116,7 +127,7 @@ if [ "$rc" -ne 0 ]; then echo "CLAUDESK-RUN:result:clone-failed:$rc"; exit 0; fi
 if [ ! -f "$clone/install.sh" ]; then echo 'CLAUDESK-RUN:result:no-install-script'; exit 0; fi
 trap '' HUP PIPE TERM INT
 echo 'CLAUDESK-RUN:phase:install'
-( cd -- "$clone" && HOME="$root" ./install.sh ) </dev/null >"$log" 2>&1
+cd -- "$clone" && HOME="$root" ./install.sh </dev/null >"$log" 2>&1
 irc=$?
 if [ "$irc" -eq 0 ]; then
   if printf '%s\n' __JSON__ >"$rec.tmp" && mv -f -- "$rec.tmp" "$rec"; then w=0; else w=1; fi
@@ -148,6 +159,9 @@ pub fn install_script_from(
         &[
             ("__ROOT__", &quote(root)),
             ("__NAME__", CLONE_DIR_NAME),
+            ("__VENDOR__", &vendor_subpath()),
+            ("__DOTDIR__", DEFAULT_VENDOR_SUBPATH[0]),
+            ("__RECORD__", RECORD_FILENAME),
             ("__GUARD__", DEV_TOOLS_GUARD),
             ("__PROBE__", &probe),
             ("__URL__", &quote(url)),
@@ -200,6 +214,78 @@ pub fn cancel_command(pgid: u32) -> String {
     format!("kill -TERM -- -{pgid}")
 }
 
+/// What Cancel needs to know about a remote run in flight, written by the run's worker as the
+/// sentinels arrive and read by the Cancel command (a lock read).
+#[derive(Debug, Default)]
+pub(crate) struct RemoteRunState {
+    /// The run's process group on the host, once the script's first line arrived.
+    pub(crate) pgid: Option<u32>,
+    /// The phase the stream last reported.
+    pub(crate) phase: Option<Phase>,
+    /// Cancel was requested, and not refused as too late.
+    pub(crate) cancel_requested: bool,
+}
+
+/// What the run's abort poll decides, from the cancel state. Pure.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum AbortStep {
+    /// Keep running: no Cancel, or Cancel came too late (the install phase).
+    Continue,
+    /// Kill the run's group on the host, then keep reading until the stream ends by itself.
+    KillRemote(u32),
+    /// Stop the local ssh: the script has not printed its pgid yet, so there is nothing to
+    /// address on the host (its next write, the pgid line or the phase, then ends it).
+    StopLocal,
+}
+
+pub(crate) fn abort_step(state: &RemoteRunState) -> AbortStep {
+    if !state.cancel_requested || state.phase == Some(Phase::Install) {
+        return AbortStep::Continue;
+    }
+    match state.pgid {
+        Some(pgid) => AbortStep::KillRemote(pgid),
+        None => AbortStep::StopLocal,
+    }
+}
+
+/// The line shown when the host did not confirm the Cancel's group kill.
+pub const CANCEL_UNCONFIRMED_NOTE: &str =
+    "[Cancel: the host did not confirm the stop; waiting for the run to end.]";
+
+/// One poll of a remote run's abort (every 20 ms, on the run's worker). Returns whether the local
+/// ssh is to be stopped.
+///
+/// ⚠️ **Once the pgid is known it never stops the local side** (WP7 D2,
+/// `SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-CAN-REPORT-NOTHING-INSTALLED-WRONGLY`). Stopping the
+/// local ssh does NOT stop the host's run (WP3 "Probe outcomes" (1)): if the kill failed, or reached
+/// the host after the clone ended and the install window's `trap` was set, the run carried on
+/// unread, the re-probe read Absent (no record YET), and the result said "Nothing was installed"
+/// moments before the host became Managed. So the kill is sent ONCE and the stream is read to its
+/// end: a kill that landed in the clone ends it with no result (true: nothing installed), a late
+/// one is ignored by the trap and the run reports its own `result:ok`. A kill that did not confirm
+/// prints [`CANCEL_UNCONFIRMED_NOTE`] and still waits; the deadline bounds a true hang.
+pub(crate) fn abort_poll(
+    state: &std::sync::Mutex<RemoteRunState>,
+    kill_sent: &std::cell::Cell<bool>,
+    send_kill: &dyn Fn(u32) -> Result<(), String>,
+    notify: &dyn Fn(&str),
+) -> bool {
+    let step = state
+        .lock()
+        .map(|r| abort_step(&r))
+        .unwrap_or(AbortStep::Continue);
+    match step {
+        AbortStep::Continue => false,
+        AbortStep::StopLocal => true,
+        AbortStep::KillRemote(pgid) => {
+            if !kill_sent.replace(true) && send_kill(pgid).is_err() {
+                notify(CANCEL_UNCONFIRMED_NOTE);
+            }
+            false
+        }
+    }
+}
+
 /// The phase a run has reached.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -216,6 +302,8 @@ pub enum Phase {
 pub enum RunResult {
     Ok,
     NoRoot,
+    /// The root exists, but Claudesk's own folder under it could not be created (permissions).
+    NoWrite,
     NoDevTools,
     AlreadyPresent,
     /// A leftover clone could not be removed safely: `not-a-folder`, `outside-root` or
@@ -254,6 +342,7 @@ pub fn parse_run_line(line: &str) -> Option<RunLine> {
         "stale-removed" => RunLine::StaleRemoved,
         "result:ok" => RunLine::Result(RunResult::Ok),
         "result:no-root" => RunLine::Result(RunResult::NoRoot),
+        "result:no-write" => RunLine::Result(RunResult::NoWrite),
         "result:no-devtools" => RunLine::Result(RunResult::NoDevTools),
         "result:already-present" => RunLine::Result(RunResult::AlreadyPresent),
         "result:no-install-script" => RunLine::Result(RunResult::NoInstallScript),
@@ -315,7 +404,11 @@ pub fn resolve(
         message,
     };
     let nothing_recorded = "Nothing was recorded, so you can retry.";
+    let too_late = "Cancel came after install.sh had started, so the install finished.";
     match result {
+        Some(RunResult::Ok) if managed && cancel_requested => {
+            done(true, false, Some(too_late.to_string()))
+        }
         Some(RunResult::Ok) if managed => done(true, false, None),
         Some(RunResult::Ok) if after.is_none() || after == Some(&HostSubstrate::Unknown) => done(
             true,
@@ -339,6 +432,15 @@ pub fn resolve(
             false,
             Some(format!(
                 "The install folder doesn't exist on the host. {nothing_recorded}"
+            )),
+        ),
+        Some(RunResult::NoWrite) => done(
+            false,
+            false,
+            Some(format!(
+                "Claudesk couldn't create its folder ({}) under the install folder on the host; \
+                 check that account's permissions there. {nothing_recorded}",
+                vendor_subpath()
             )),
         ),
         Some(RunResult::NoDevTools) => done(
@@ -397,11 +499,7 @@ pub fn resolve(
                     .to_string(),
             ),
         ),
-        None if cancel_requested && managed => done(
-            true,
-            false,
-            Some("Cancel came after install.sh had started, so the install finished.".to_string()),
-        ),
+        None if cancel_requested && managed => done(true, false, Some(too_late.to_string())),
         None if cancel_requested && after == Some(&HostSubstrate::Absent) => done(
             false,
             true,

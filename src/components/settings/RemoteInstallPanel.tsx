@@ -78,8 +78,10 @@ export function RemoteInstallPanel({
 
   // A consent step belongs to the moment the operator opened it, while the host was offered. When
   // `offered` CHANGES, in either direction, close any consent step:
-  // - turned false (another run installed the host, or its link went down): an open consent would
-  //   offer an Install the backend then refuses;
+  // - turned false (another run installed the host): an open consent would offer an Install the
+  //   backend then refuses. ⚠️ `offered` reads the entry's `link_up` from `getRemoteHosts` at
+  //   mount, which never updates, so a link that drops does NOT close the step: only the
+  //   backend's "isn't connected" refusal catches it;
   // - turned true again: a consent step hidden by the render gate below (a start refused AFTER the
   //   host stopped being offered) would otherwise come back by itself, with a stale reason.
   // A run already started stays, to show its result (the host stops being Absent mid-run).

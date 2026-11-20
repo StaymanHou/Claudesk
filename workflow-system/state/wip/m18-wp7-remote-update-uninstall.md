@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP7 — Update and Uninstall (the remote refuse-guard)
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** verify-codify (phase 1 complete)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -78,7 +78,7 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
 
 ## Work Tree
 
-- [ ] Phase 1: 7.0 — the WP6-review carry-ins (Cancel truth, the delete guard, the five MINORs)  <!-- status: NOT-STARTED -->
+- [x] Phase 1: 7.0 — the WP6-review carry-ins (Cancel truth, the delete guard, the five MINORs)  <!-- status: done 2026-11-20 -->
   **Observable outcomes:**
   - CLI: `cd src-tauri && cargo test --lib workflow_install` exits 0, with these tests passing:
     - a new real-script test (`/bin/zsh -c`, fixture repo) drives the late-TERM arm: a group TERM sent after `phase:install` is read, the stream is read to its end, the run reports `result:ok`, the root reads Managed, and `resolve(…, cancel_requested = true, Managed)` is `ok: true` with the "came after install.sh had started" message;
@@ -88,21 +88,56 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
   - CLI: `cargo test --lib source_guard` exits 0. A throwaway mutant of `remote_runner.rs` adding each of these spellings **one at a time** fails `only_the_sanctioned_paths_may_call_deletion_apis`, every one, restored and re-shasummed: `rm -fr --`, `rm -Rf --`, `rm -R --`, `rm --recursive`, `find "$x" -delete`, `rmdir --`, and a `  *) rm -rf -- "$x" ;;` case arm inside the template.
   - CLI: a test asserts no remote run message (the four WP6 strings and every `resolve` message) contains two consecutive spaces. `grep -c '      ' src-tauri/src/workflow_install/commands.rs` drops by the four space runs (each fixed with Edit, never a Python heredoc).
   - CLI: `pnpm verify:auto` exits 0.
+  - Browser (consuming surface; added at P1.verify-self per the integration-boundary rule: the Cancel path of `workflow_remote_install_start` / `workflow_remote_install_cancel` changed). State-changing: a scratch remote row + gate ON in the DEV `projects.json` / `settings.json`, with the app stopped; `CLAUDESK_REMOTE_SUBSTRATE_ROOT=<abs empty sandbox dir on the mini>`; both files restored to their pre-check shas after.
+    - The dev app's Settings → Remote hosts → Install → Cancel during the clone, over the real master, ends with "Cancelled. Nothing was installed.".
+    - The stream ends by itself after the remote group kill: no local stop, so no `ABORTED_NOTE` in the log.
+    - The sandbox then holds no record and no clone, and the live account's baseline is byte-identical before and after.
   **Alignment questions:**
   - none (copy-only fixes; the late-cancel sentence was written at WP6 and is reused verbatim)
-  - [ ] P1.1 Cancel truth (D2): `AbortStep::KillRemote(pgid)` sends the group kill once and returns "keep reading"; `StopLocal` only without a pgid. A failed kill exec emits one output line and keeps waiting. `resolve` gets `Some(Ok) if managed && cancel_requested` → `ok: true` + the too-late sentence (MINOR 5). The command's doc is corrected: it sets `cancel_requested` even with no run in flight, and the next start resets it.  <!-- status: NOT-STARTED -->
-  - [ ] P1.2 The late-TERM real-script test + the `abort_step` unit test; mutation-prove the old behaviour fails.  <!-- status: NOT-STARTED -->
-  - [ ] P1.3 The delete guard (D3): a `regex` scan for every recursive `rm` spelling, `-delete`, `rmdir`, `unlink`, `remove_dir*` and `remove_file`; `strip_comments` keeps lines inside `r#"…"#` raw strings. Meta-tests: a raw-string `*)` line survives the strip, and a real `/* … */` block is still stripped. Mutation-prove each spelling individually.  <!-- status: NOT-STARTED -->
-  - [ ] P1.4 MINORs:
+  - [x] P1.1 Cancel truth (D2): `AbortStep::KillRemote(pgid)` sends the group kill once and returns "keep reading"; `StopLocal` only without a pgid. A failed kill exec emits one output line and keeps waiting. `resolve` gets `Some(Ok) if managed && cancel_requested` → `ok: true` + the too-late sentence (MINOR 5). The command's doc is corrected: it sets `cancel_requested` even with no run in flight, and the next start resets it.  <!-- status: done 2026-11-20 -->
+  - [x] P1.2 The late-TERM real-script test + the `abort_step` unit test; mutation-prove the old behaviour fails.  <!-- status: done 2026-11-20 -->
+  - [x] P1.3 The delete guard (D3): a `regex` scan for every recursive `rm` spelling, `-delete`, `rmdir`, `unlink`, `remove_dir*` and `remove_file`; `strip_comments` keeps lines inside `r#"…"#` raw strings. Meta-tests: a raw-string `*)` line survives the strip, and a real `/* … */` block is still stripped. Mutation-prove each spelling individually.  <!-- status: done 2026-11-20 -->
+  - [x] P1.4 MINORs:
     - the four space-run strings restored with Edit, plus the no-double-space test;
     - the template's record name filled from `provenance::RECORD_FILENAME` (and `.claudesk` from its constant, if one exists);
     - a distinct `result:no-write` arm for a failed `mkdir -p`, with its own message;
     - `REMOTE_CLONE_PATH` in TS pinned by a test reading Rust's `CLONE_DIR_NAME` (the `?raw`/`node:fs` read of `workflow_install/mod.rs`, anchored on a unique substring);
-    - the consent comment in `RemoteInstallPanel` corrected (`link_up` is a mount-time read).  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+    - the consent comment in `RemoteInstallPanel` corrected (`link_up` is a mount-time read).  <!-- status: done 2026-11-20 -->
+  - [x] verify-auto  <!-- status: done 2026-11-20 -->
+    — evidence: `pnpm verify:auto` → EXIT=0, 56 s (lint 0 errors, 1 pre-existing warning at an unchanged file's 988:7; format:check; tsc; check:link; vitest `Tests 4172 passed (4172)`; cargo fmt --check; clippy --all-targets -D warnings; cargo test `1462 passed; 0 failed; 4 ignored`)
+    — evidence: scoped `cargo test --lib -- workflow_install::remote_runner workflow_install::source_guard workflow_install::commands remote_link::tests::begin_remote_install` → `50 passed; 0 failed`
+    — evidence: `vitest run src/state/__tests__/remoteClonePath.test.ts` → `Tests 1 passed (1)`
+    — evidence (at build, mutation): subshell restored → 3 tests FAIL; stop-local-after-kill restored → 3 tests FAIL; 9 deletion spellings planted one at a time in `remote_runner.rs`'s template → `only_the_sanctioned_paths_may_call_deletion_apis` FAILS on each, naming its kind; every restore `shasum -c` OK
+  - [x] verify-self  <!-- status: done 2026-11-20 (runner: 5 CLI PASS; orchestrator: the live consuming-surface outcome PASS) -->
+    - [x] Late-TERM real-script test, the clone-arm test and the `abort_step` unit test pass — evidence: `cargo test --lib workflow_install` → exit 0, `142 passed; 0 failed` (runner)
+      - runner note (for codify): `a_cancel_whose_kill_lands_after_the_trap_…` asserts `ok && !cancelled` but not the "came after install.sh had started" text; the sibling `a_cancel_whose_kill_fails_…` asserts the exact string. Add the text assert at verify-codify.
+    - [x] The "kill then stop" mutant fails the new tests — evidence: `abort_poll`'s KillRemote `false`→`true`, landed (grep 1) → `test result: FAILED. 25 passed; 3 failed` (the two real-script cancel tests + `the_abort_poll_kills_once_and_keeps_reading`); restore `shasum -c` OK (runner, independent of the build-time run)
+    - [x] Each deletion spelling planted alone fails the delete guard — evidence: unmutated `cargo test --lib source_guard` → `9 passed`; 7 mutants (`rm -fr`, `rm -Rf`, `rm -R`, `rm --recursive`, `find -delete`, `rmdir`, a `*)` case arm) each landed → `FAILED. 8 passed; 1 failed` naming its kind; every restore `shasum -c` OK (runner)
+    - [x] No space runs — evidence: `no_resolve_message_carries_a_space_run` + the cancel/panic + begin-refusal asserts pass; the four runs each HEAD=1 → working tree=0 (runner). Live: the dev app's refusal "…Claudesk last read this one as unknown. Reopen Settings…" arrived with single spaces.
+    - [x] `pnpm verify:auto` exits 0 — evidence: exit 0, 86 s, vitest `4172 passed`, cargo `1462 passed; 0 failed; 4 ignored` (runner)
+    - [x] Consuming surface, live (orchestrator, tauri bridge). The dev app ran with `CLAUDESK_REMOTE_SUBSTRATE_ROOT=/Users/<user>/claudesk-m18-wp7-sandbox` (empty), and the scratch row was added to the dev `projects.json`. In ONE fired script:
+      1. `remote_open_check` → `start`, then `remote_substrate_refresh` → `checked`, `absent`;
+      2. `workflow_remote_install_start(<user>@<mini-host>)`;
+      3. at the `remote-install-phase` `clone` event (336 ms), `workflow_remote_install_cancel` → accepted.
+
+      — evidence: `remote-install-finished` at 447 ms `{ok:false, cancelled:true, message:"Cancelled. Nothing was installed."}`. The only output line was git's "Cloning into '…/claudesk-m18-wp7-sandbox/.claudesk/vendor/my-claude-code-customization'...", with NO `[stopped on request…]` note: the stream ended by itself after the remote group kill.
+      — evidence (host, over the agent's own `ssh -M`):
+        - the sandbox held only `./.claudesk ./.claudesk/vendor` (git removed its partial clone): no record, no clone, 0 processes;
+        - the live baseline (54 links, `CLAUDE.md` / `settings.json` shas, clone `f8e8873` clean, no record) was identical before and after.
+      — cleanup:
+        - the dev app was stopped (no workspace was opened, so there was no tmux session);
+        - the dev `projects.json` / `settings.json` were restored to `38ee76dd…` / `72bfef1c…`;
+        - `tmux -L claudesk-dev ls` → no server;
+        - the sandbox was removed after its `cd -P` check;
+        - the scratch folder is unchanged (README + empty `workflow-system/state/`);
+        - the agent's master was closed, and no `ssh -M` is left.
+  - [x] verify-human  <!-- status: done 2026-11-20 --> — zero admissible leaves (F11); digest printed. Assumed: the CANCEL_UNCONFIRMED_NOTE and `no-write` copy (shown in the digest as a read-time veto)
+  - [x] verify-codify  <!-- status: done 2026-11-20 -->
+    Test scope: full — suite not long (runtimes.md `pnpm verify:auto` Last 56 s; no CLAUDE.md declaration)
+    — evidence: `pnpm verify:auto` → EXIT=0, 87 s; vitest `4172 passed`; cargo `1463 passed; 0 failed; 4 ignored`
+    — new: `the_remote_install_worker_decides_cancel_through_abort_poll` (caller guard: the worker's abort IS `remote_runner::abort_poll`, polled by `run_streaming_abortable`; no `abort_step(` / `AbortStep::` re-derived in `commands.rs`). Mutation-proven: an inline "stop when cancel_requested" abort landed (grep 1) → `FAILED. 0 passed; 1 failed`; restore `shasum -c` OK.
+    — new: the late-TERM test now asserts the "Cancel came after install.sh had started…" text (runner's note).
+    — consuming surface: the live dev-app Cancel over the real master (P1.verify-self) + the caller guard above; an automated run of `workflow_remote_install_start` needs a running app and a host, so the guard is the CI-reachable half.
 
 - [ ] Phase 2: Uninstall backend — the remote refuse-guard, the preview, and the run  <!-- status: NOT-STARTED; depends on Phase 1 -->
   **Observable outcomes:**
@@ -241,13 +276,14 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > P1.1
-- **Active scope:** P1.1 (Cancel truth)
+- **Path:** Feature > Phase 2 > P2.1
+- **Active scope:** P2.1 (the remote refuse-guard)
 - **Blocked:** none
-- **Unvisited:** Phase 2 (Uninstall backend), Phase 3 (Update backend), Phase 4 (Settings UI + live 7.5)
-- **Open discoveries:** none
+- **Unvisited:** Phase 3 (Update backend), Phase 4 (Settings UI + live 7.5)
+- **Open discoveries:** D-P1-a (fixed in P1.1: `install.sh` ran in a zsh subshell, which resets the ignored trap)
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
 - [SURFACED-2026-11-20] feature-plan — wbs.md exceeds size guard (361 lines); read in full via section reads anyway (the WP7 section and "Probe outcomes" are the load-bearing parts). No action.
+- [SURFACED-2026-11-20] Phase 1 > P1.1 — **WP6's install window did not hold (fixed here, not backlogged).** zsh resets an ignored `trap` inside a `( … )` subshell, so `( cd -- "$clone" && HOME="$root" ./install.sh )` let a TERM / HUP / INT that reached the group while `install.sh` ran kill it (exit 143) between two links: links with no record (Developer, no Uninstall), the exact state 6.3b exists to prevent. Measured with a perl harness: a TERM at 5 ms … 1.5 s into the window → `irc=143`; the same script with `install.sh` as a DIRECT child → `irc=0` at every delay, for TERM, HUP and INT. **The WP6 test passed while checking nothing:** its kill landed within ~2 ms of the `phase:install` line, before zsh forked the subshell. Fixed: the template runs `install.sh` as a direct child (`cd -- "$clone" && HOME="$root" ./install.sh …`), both kill tests deliver their TERM `KILL_DELAY` = 300 ms after their line, and a builder test refuses `( cd` in the script. Mutation-proven: the subshell restored fails 3 tests. ⚠️ Phases 2–3 inherit the rule: Uninstall's and Update's untrappable windows must run their children directly, never in `( … )`. For `arch/claude-substrate.md` → "R.3 Install as built" at finalize.

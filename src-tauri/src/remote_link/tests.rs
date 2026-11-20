@@ -2589,6 +2589,8 @@ fn begin_remote_install_refuses_each_unsafe_start_and_leaves_the_lock_free() {
     h.reg.set_substrate(HOST, HostSubstrate::Absent);
     let e = begin(&rows, HOST, None).err().expect("no link");
     assert!(e.contains("isn't connected"), "{e}");
+    // WP7 Phase 1: the WP6 messages carried space runs from lost `\` continuations.
+    assert!(!e.contains("  "), "no space runs: {e:?}");
     assert!(
         h.reg.state(HOST).is_none(),
         "Install never brings a link up"
@@ -2618,6 +2620,7 @@ fn begin_remote_install_refuses_each_unsafe_start_and_leaves_the_lock_free() {
             e.contains("only on a host that has no workflow system"),
             "{e}"
         );
+        assert!(!e.contains("  "), "no space runs: {e:?}");
     }
     h.reg.set_substrate(HOST, HostSubstrate::Absent);
     // A bad sandbox override is refused, never built into a script.

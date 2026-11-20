@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
 
-use super::remote_runner::{self, Phase, RunLine};
+use super::remote_runner::{self, Phase, RemoteRunState, RunLine};
 use super::runner::{self, OutputSink};
 use super::{provenance, terminal, InstallState};
 
@@ -53,18 +53,6 @@ pub struct InstallControl {
     /// M18 WP6 — the in-flight REMOTE install's cancel state. Separate from `cancelled`, because
     /// a remote Cancel is not cooperative: it kills the run's process group on the host.
     remote: std::sync::Mutex<RemoteRunState>,
-}
-
-/// M18 WP6 — what Cancel needs to know about a remote install in flight, written by the run's
-/// worker as the sentinels arrive and read by [`workflow_remote_install_cancel`] (a lock read).
-#[derive(Debug, Default)]
-pub(crate) struct RemoteRunState {
-    /// The run's process group on the host, once the script's first line arrived.
-    pgid: Option<u32>,
-    /// The phase the stream last reported.
-    phase: Option<Phase>,
-    /// Cancel was requested, and not refused as too late.
-    cancel_requested: bool,
 }
 
 /// What the frontend learns when a run ends.
@@ -583,7 +571,8 @@ pub(crate) fn begin_remote_install(
     let substrate = links.substrate(host);
     if substrate != crate::remote_substrate::HostSubstrate::Absent {
         return Err(format!(
-            "Install is offered only on a host that has no workflow system; Claudesk last read              this one as {}. Reopen Settings to check it again.",
+            "Install is offered only on a host that has no workflow system; Claudesk last read \
+             this one as {}. Reopen Settings to check it again.",
             match substrate {
                 crate::remote_substrate::HostSubstrate::Unknown => "unknown",
                 crate::remote_substrate::HostSubstrate::Developer { .. } => "Developer",
@@ -594,7 +583,8 @@ pub(crate) fn begin_remote_install(
     }
     let (hold, home) = links.hold_if_up(host).ok_or_else(|| {
         format!(
-            "Claudesk isn't connected to {host} right now. Open a workspace on it, then try              again: Claudesk installs over that connection and never opens one by itself."
+            "Claudesk isn't connected to {host} right now. Open a workspace on it, then try \
+             again: Claudesk installs over that connection and never opens one by itself."
         )
     })?;
     let root = sandbox_root.unwrap_or(home);
@@ -651,28 +641,6 @@ impl OutputSink for RemoteSink {
                 }
             }
         }
-    }
-}
-
-/// What the run's abort poll decides, from the cancel state. Pure.
-#[derive(Debug, PartialEq, Eq)]
-enum AbortStep {
-    /// Keep running: no Cancel, or Cancel came too late (the install phase).
-    Continue,
-    /// Kill the run's group on the host first, then stop the local ssh.
-    KillRemoteThenStop(u32),
-    /// Stop the local ssh only: the script has not printed its pgid yet, so there is nothing to
-    /// address on the host (its next write then ends it).
-    StopLocal,
-}
-
-fn abort_step(state: &RemoteRunState) -> AbortStep {
-    if !state.cancel_requested || state.phase == Some(Phase::Install) {
-        return AbortStep::Continue;
-    }
-    match state.pgid {
-        Some(pgid) => AbortStep::KillRemoteThenStop(pgid),
-        None => AbortStep::StopLocal,
     }
 }
 
@@ -734,29 +702,23 @@ pub fn workflow_remote_install_start(
             result: std::sync::Mutex::new(None),
         };
         // Polled every 20 ms by the streaming loop, ON THIS WORKER: the remote group kill (one
-        // short exec) runs here, never on the main thread the Cancel command runs on.
-        let remote_killed = std::cell::Cell::new(false);
-        let abort = || {
-            let step = ctl
-                .remote
-                .lock()
-                .map(|r| abort_step(&r))
-                .unwrap_or(AbortStep::Continue);
-            match step {
-                AbortStep::Continue => false,
-                AbortStep::StopLocal => true,
-                AbortStep::KillRemoteThenStop(pgid) => {
-                    if !remote_killed.replace(true) {
-                        let _ = links.master_exec(
-                            &target,
-                            &remote_runner::cancel_command(pgid),
-                            REMOTE_CANCEL_TIMEOUT_MS,
-                        );
-                    }
-                    true
-                }
-            }
+        // short exec) runs here, never on the main thread the Cancel command runs on. Once the
+        // kill is sent the stream is read to its end (`remote_runner::abort_poll`, D2).
+        let kill_sent = std::cell::Cell::new(false);
+        let send_kill = |pgid: u32| {
+            links
+                .master_exec(
+                    &target,
+                    &remote_runner::cancel_command(pgid),
+                    REMOTE_CANCEL_TIMEOUT_MS,
+                )
+                .map(|_| ())
+                .map_err(|e| e.to_string())
         };
+        let notify = |line: &str| {
+            let _ = app.emit(REMOTE_INSTALL_OUTPUT_EVENT, line);
+        };
+        let abort = || remote_runner::abort_poll(&ctl.remote, &kill_sent, &send_kill, &notify);
         let exit = match runner::run_streaming_abortable(
             &argv[0],
             &argv[1..],
@@ -811,11 +773,12 @@ pub fn workflow_remote_install_start(
 }
 
 /// The message a panicked remote install worker reports.
-const REMOTE_PANIC_MESSAGE: &str = "The install stopped unexpectedly. Check Settings → Remote      hosts before retrying: the host may or may not have been changed.";
+const REMOTE_PANIC_MESSAGE: &str = "The install stopped unexpectedly. Check Settings → Remote \
+     hosts before retrying: the host may or may not have been changed.";
 
 /// Request Cancel of the remote install in flight (ruling A). `Err` in plain words once
 /// `install.sh` has started: from then on the run cannot be split, so it finishes. With no remote
-/// run in flight it does nothing.
+/// run in flight it still records the request, which is harmless: the next start resets it.
 ///
 /// Sync and cheap (a lock write): the remote group kill itself runs on the install's worker.
 #[tauri::command]
@@ -833,7 +796,8 @@ fn request_remote_cancel(control: &InstallControl) -> Result<(), String> {
         .map_err(|_| "the install's state is unreadable".to_string())?;
     if r.phase == Some(Phase::Install) {
         return Err(
-            "Too late to cancel: install.sh is running, and stopping it halfway would leave the              host half-installed. It finishes in about a second."
+            "Too late to cancel: install.sh is running, and stopping it halfway would leave the \
+             host half-installed. It finishes in about a second."
                 .to_string(),
         );
     }
@@ -851,37 +815,8 @@ fn now_rfc3339() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{abort_step, request_remote_cancel, AbortStep, InstallControl, RemoteRunState};
+    use super::{request_remote_cancel, InstallControl};
     use crate::workflow_install::remote_runner::Phase;
-
-    /// M18 WP6 (ruling A) — Cancel's decision, per phase: honoured before and during the clone
-    /// (a remote group kill when the pgid is known, else a local stop), never once `install.sh`
-    /// has started; and without a Cancel nothing stops.
-    #[test]
-    fn the_abort_poll_honours_cancel_only_before_the_install_phase() {
-        let st = |cancel, pgid, phase| RemoteRunState {
-            pgid,
-            phase,
-            cancel_requested: cancel,
-        };
-        assert_eq!(
-            abort_step(&st(false, Some(9), Some(Phase::Clone))),
-            AbortStep::Continue
-        );
-        assert_eq!(abort_step(&st(true, None, None)), AbortStep::StopLocal);
-        assert_eq!(
-            abort_step(&st(true, Some(9), None)),
-            AbortStep::KillRemoteThenStop(9)
-        );
-        assert_eq!(
-            abort_step(&st(true, Some(9), Some(Phase::Clone))),
-            AbortStep::KillRemoteThenStop(9)
-        );
-        assert_eq!(
-            abort_step(&st(true, Some(9), Some(Phase::Install))),
-            AbortStep::Continue
-        );
-    }
 
     /// The Cancel command refuses once the install phase began (and records nothing), and
     /// records the request otherwise.
@@ -891,6 +826,13 @@ mod tests {
         ctl.remote.lock().unwrap().phase = Some(Phase::Install);
         let e = request_remote_cancel(&ctl).unwrap_err();
         assert!(e.contains("Too late"), "{e}");
+        // WP7 Phase 1: the WP6 messages carried space runs from lost `\` continuations.
+        assert!(!e.contains("  "), "no space runs: {e:?}");
+        assert!(
+            !super::REMOTE_PANIC_MESSAGE.contains("  "),
+            "no space runs: {:?}",
+            super::REMOTE_PANIC_MESSAGE
+        );
         assert!(!ctl.remote.lock().unwrap().cancel_requested);
         ctl.remote.lock().unwrap().phase = Some(Phase::Clone);
         request_remote_cancel(&ctl).unwrap();
@@ -1124,6 +1066,37 @@ mod tests {
             !ctl.running.load(Ordering::SeqCst),
             "a panic keeps the lock"
         );
+    }
+
+    /// WP7 D2 — the remote install's worker decides Cancel through `remote_runner::abort_poll`,
+    /// the pure function the real-script cancel tests drive, and never re-derives it. Without this
+    /// guard those tests prove the function, not that the worker calls it (memory
+    /// `extracted-machine-needs-a-live-caller-guard`): an inline "kill, then stop the local ssh"
+    /// here would bring back the false "Nothing was installed" with every test green.
+    #[test]
+    fn the_remote_install_worker_decides_cancel_through_abort_poll() {
+        let code =
+            crate::workflow_install::source_guard::production_code(include_str!("commands.rs"));
+        let at = code
+            .find("pub fn workflow_remote_install_start")
+            .expect("the remote install command");
+        let end = code[at..].find("\n}\n").map_or(code.len(), |rel| at + rel);
+        let body = &code[at..end];
+        assert_eq!(
+            body.matches("remote_runner::abort_poll(").count(),
+            1,
+            "the worker's abort is `remote_runner::abort_poll`: {body}"
+        );
+        assert!(
+            body.contains("run_streaming_abortable(") && body.contains("&abort,"),
+            "and that abort is the one the streaming run polls"
+        );
+        for re_derived in ["abort_step(", "AbortStep::", "cancel_requested ||"] {
+            assert!(
+                !code.contains(re_derived),
+                "the cancel decision lives in remote_runner, not here (`{re_derived}`)"
+            );
+        }
     }
 
     #[test]

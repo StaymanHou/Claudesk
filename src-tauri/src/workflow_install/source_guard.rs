@@ -48,35 +48,197 @@ pub fn production_code(src: &str) -> String {
     strip_comments(production)
 }
 
-/// Remove comment lines: full-line `//` / `///` / `//!` comments, `* …` doc-block
-/// continuation lines, and `/* … */` blocks (including multi-line ones).
+/// Remove every comment — `//` / `///` / `//!` (full-line or trailing) and `/* … */` blocks
+/// (multi-line and nested) — and keep everything else, string contents included, with every
+/// newline kept so line structure survives.
 ///
-/// Multi-line block tracking exists because WP3's guards matched their own prose twice —
-/// once via a JSX comment's continuation lines, once via a doc comment naming the very call
-/// a mutation had deleted ("a guard reading raw source matches its own prose").
+/// A small Rust lexer, not a line filter (WP7 Phase 1,
+/// `SURFACE-2026-11-20-QUALITY-DELETE-GUARD-MISSES-SHELL-SPELLINGS-AND-STAR-LINES`): the old
+/// line filter dropped every line whose trimmed text started with `*`, meant for doc-block
+/// continuation lines, and so also dropped a `*) rm -rf -- "$x" ;;` case arm inside a raw-string
+/// shell template, before the delete scan ever saw it. Here a `*` line is dropped only when it IS
+/// inside a block comment, and `//` / `/*` inside a string (a URL, a glob) start nothing.
+///
+/// Comment stripping exists because WP3's guards matched their own prose twice — once via a JSX
+/// comment's continuation lines, once via a doc comment naming the very call a mutation had
+/// deleted ("a guard reading raw source matches its own prose").
 fn strip_comments(src: &str) -> String {
-    let mut kept: Vec<&str> = Vec::new();
-    let mut in_block = false;
-    for line in src.lines() {
-        let t = line.trim_start();
-        if in_block {
-            if t.contains("*/") {
-                in_block = false;
-            }
-            continue;
-        }
-        if t.starts_with("/*") {
-            if !t.contains("*/") {
-                in_block = true;
-            }
-            continue;
-        }
-        if t.starts_with("//") || t.starts_with('*') {
-            continue;
-        }
-        kept.push(line);
+    #[derive(PartialEq)]
+    enum St {
+        Code,
+        Line,
+        Block(u32),
+        Str,
+        Raw(usize),
     }
-    kept.join("\n")
+    let b = src.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut st = St::Code;
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        let next = b.get(i + 1).copied();
+        match st {
+            St::Code => {
+                if c == b'/' && next == Some(b'/') {
+                    st = St::Line;
+                    i += 2;
+                    continue;
+                }
+                if c == b'/' && next == Some(b'*') {
+                    st = St::Block(1);
+                    i += 2;
+                    continue;
+                }
+                if c == b'"' {
+                    st = St::Str;
+                } else if c == b'r' && {
+                    let ident = |k: usize| b[k].is_ascii_alphanumeric() || b[k] == b'_';
+                    i == 0 || !ident(i - 1) || (b[i - 1] == b'b' && (i == 1 || !ident(i - 2)))
+                } {
+                    // `r"…"` / `r#"…"#`, and `br…` (whose `b` was copied as code).
+                    let hashes = b[i + 1..].iter().take_while(|&&h| h == b'#').count();
+                    if b.get(i + 1 + hashes) == Some(&b'"') {
+                        out.extend_from_slice(&b[i..i + 2 + hashes]);
+                        i += 2 + hashes;
+                        st = St::Raw(hashes);
+                        continue;
+                    }
+                } else if c == b'\'' {
+                    // A char literal (`'"'`, `'\''`) is copied whole so its quote starts no
+                    // string; anything else (`'a` lifetimes) is plain code.
+                    // An escape's own char (`'\''`) is skipped before looking for the close.
+                    let len = if next == Some(b'\\') {
+                        b.get(i + 3..)
+                            .and_then(|rest| rest.iter().position(|&x| x == b'\''))
+                            .map(|p| p + 4)
+                    } else if b.get(i + 2) == Some(&b'\'') {
+                        Some(3)
+                    } else {
+                        None
+                    };
+                    if let Some(len) = len {
+                        out.extend_from_slice(&b[i..(i + len).min(b.len())]);
+                        i += len;
+                        continue;
+                    }
+                }
+                out.push(c);
+            }
+            St::Line => {
+                if c == b'\n' {
+                    out.push(c);
+                    st = St::Code;
+                }
+            }
+            St::Block(depth) => {
+                if c == b'/' && next == Some(b'*') {
+                    st = St::Block(depth + 1);
+                    i += 2;
+                    continue;
+                }
+                if c == b'*' && next == Some(b'/') {
+                    st = if depth == 1 {
+                        St::Code
+                    } else {
+                        St::Block(depth - 1)
+                    };
+                    i += 2;
+                    continue;
+                }
+                if c == b'\n' {
+                    out.push(c);
+                }
+            }
+            St::Str => {
+                out.push(c);
+                if c == b'\\' {
+                    if let Some(n) = next {
+                        out.push(n);
+                    }
+                    i += 2;
+                    continue;
+                }
+                if c == b'"' {
+                    st = St::Code;
+                }
+            }
+            St::Raw(hashes) => {
+                if c == b'"'
+                    && b[i + 1..]
+                        .iter()
+                        .take(hashes)
+                        .filter(|&&h| h == b'#')
+                        .count()
+                        == hashes
+                {
+                    out.extend_from_slice(&b[i..i + 1 + hashes]);
+                    i += 1 + hashes;
+                    st = St::Code;
+                    continue;
+                }
+                out.push(c);
+            }
+        }
+        i += 1;
+    }
+    // Comments are dropped whole and strings copied whole, so the bytes kept are UTF-8 still.
+    let kept = String::from_utf8_lossy(&out).into_owned();
+    // Lines left blank by a stripped comment carry no code.
+    kept.lines()
+        .filter(|l| !l.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// A kind of deletion the delete guard counts. Each is a pattern over the production slice
+/// ([`production_code`]: comments gone, string contents kept, so a shell template's commands
+/// are scanned).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Deletion {
+    /// `std::fs::remove_dir` / `remove_dir_all`.
+    RemoveDir,
+    /// `std::fs::remove_file`.
+    RemoveFile,
+    /// A shell `rm` with a recursive flag in ANY spelling: `-r`, `-R`, `-rf`, `-fr`, `-Rf`,
+    /// `-f -r`, `--recursive`.
+    RmRecursive,
+    /// A shell `rm` with no recursive flag (a file).
+    Rm,
+    /// `find … -delete`.
+    FindDelete,
+    /// `rmdir`.
+    Rmdir,
+    /// `unlink`.
+    Unlink,
+}
+
+/// Every [`Deletion`] in `code`, with its count. ⚠️ A pattern per kind, not a token list: the
+/// WP6 list (`"rm -rf"`, `"rm -r "`) passed `rm -fr`, `rm -Rf`, `rm -R`, `find -delete` and
+/// `rmdir`.
+pub fn deletions(code: &str) -> Vec<(Deletion, usize)> {
+    use regex::Regex;
+    // `rm`, then any flags, at least one of them recursive. `\b` keeps `rm` a word of its own
+    // (`perm`, `rm_x`, `rmdir` do not match).
+    let rm_recursive = Regex::new(
+        r"\brm\b(?:\s+-{1,2}[A-Za-z-]+)*?\s+(?:-[A-Za-z]*[rR][A-Za-z]*\b|--recursive\b)",
+    )
+    .expect("pattern");
+    let rm_any = Regex::new(r"\brm\b(?:\s|$)").expect("pattern");
+    let count = |p: &str| Regex::new(p).expect("pattern").find_iter(code).count();
+    let recursive = rm_recursive.find_iter(code).count();
+    vec![
+        (Deletion::RemoveDir, count(r"\bremove_dir(?:_all)?\b")),
+        (Deletion::RemoveFile, count(r"\bremove_file\b")),
+        (Deletion::RmRecursive, recursive),
+        (
+            Deletion::Rm,
+            rm_any.find_iter(code).count().saturating_sub(recursive),
+        ),
+        (Deletion::FindDelete, count(r"(?:^|\s)-delete\b")),
+        (Deletion::Rmdir, count(r"\brmdir\b")),
+        (Deletion::Unlink, count(r"\bunlink\b")),
+    ]
 }
 
 #[cfg(test)]
@@ -167,31 +329,113 @@ mod tests {
         // re-checked there is no record, the probe reads `no`, and the folder's physical path is
         // exactly `<root>/.claudesk/vendor/<name>`. WP7's Uninstall removal will be a second,
         // behind a `RemoteUninstallTarget`.
-        const DELETION_TOKENS: &[&str] = &["remove_dir", "remove_file", "rm -rf", "rm -r "];
-        const ALLOWED: &[(&str, &str, usize)] = &[
-            ("runner.rs", "remove_dir", 1),
-            ("provenance.rs", "remove_file", 1),
-            ("remote_runner.rs", "rm -rf", 1),
+        // WP7 Phase 1: the scan is per KIND of deletion (`deletions`, a pattern per kind), not a
+        // token list: WP6's `"rm -rf"` / `"rm -r "` passed every other spelling.
+        const ALLOWED: &[(&str, Deletion, usize)] = &[
+            ("runner.rs", Deletion::RemoveDir, 1),
+            ("provenance.rs", Deletion::RemoveFile, 1),
+            ("remote_runner.rs", Deletion::RmRecursive, 1),
         ];
 
         for (name, src, _) in MODULE_FILES {
             let code = production_code(src);
-            for token in DELETION_TOKENS {
-                let found = code.matches(token).count();
+            for (kind, found) in deletions(&code) {
                 let permitted = ALLOWED
                     .iter()
-                    .find(|(f, t, _)| f == name && t == token)
+                    .find(|(f, k, _)| f == name && *k == kind)
                     .map(|(_, _, n)| *n)
                     .unwrap_or(0);
                 assert_eq!(
                     found, permitted,
-                    "{name}: found {found} `{token}` occurrence(s), {permitted} permitted. \
+                    "{name}: found {found} {kind:?} deletion(s), {permitted} permitted. \
                      A new deleting call must be sanctioned HERE, in the same change that \
                      adds it — and it must consume a `guard::UninstallTarget` so the \
                      refuse-guard is structurally in front of it."
                 );
             }
         }
+    }
+
+    /// The classifier, one spelling at a time: each must count as a deletion of its kind, inside a
+    /// raw-string shell template run through the real extractor (as a template in a module is).
+    /// ⚠️ One spelling per case, so a pattern that misses one fails on that one alone.
+    #[test]
+    fn every_deletion_spelling_is_counted_inside_a_template() {
+        let cases: &[(&str, Deletion)] = &[
+            (r#"rm -rf -- "$x""#, Deletion::RmRecursive),
+            (r#"rm -fr -- "$x""#, Deletion::RmRecursive),
+            (r#"rm -Rf -- "$x""#, Deletion::RmRecursive),
+            (r#"rm -fR -- "$x""#, Deletion::RmRecursive),
+            (r#"rm -R -- "$x""#, Deletion::RmRecursive),
+            (r#"rm -r "$x""#, Deletion::RmRecursive),
+            (r#"rm -f -r -- "$x""#, Deletion::RmRecursive),
+            (r#"rm --recursive --force "$x""#, Deletion::RmRecursive),
+            (r#"rm -f -- "$x""#, Deletion::Rm),
+            (r#"rm "$x""#, Deletion::Rm),
+            (r#"find "$x" -delete"#, Deletion::FindDelete),
+            (r#"rmdir -- "$x""#, Deletion::Rmdir),
+            (r#"unlink "$x""#, Deletion::Unlink),
+            (r#"  *) rm -rf -- "$x" ;;"#, Deletion::RmRecursive),
+            ("std::fs::remove_dir_all(&p)?;", Deletion::RemoveDir),
+            ("std::fs::remove_dir(&p)?;", Deletion::RemoveDir),
+            ("std::fs::remove_file(&p)?;", Deletion::RemoveFile),
+        ];
+        for (line, kind) in cases {
+            let src = format!(
+                "const T: &str = r#\"case \"$p\" in\n  ok) ;;\n{line}\nesac\"#;\nfn tail() {{}}\n"
+            );
+            let src = if line.starts_with("std::") {
+                format!("fn f() {{\n    {line}\n}}\n")
+            } else {
+                src
+            };
+            let found = deletions(&production_code(&src));
+            for (k, n) in found {
+                let want = usize::from(k == *kind);
+                assert_eq!(n, want, "{line:?}: {k:?} counted {n}, want {want}");
+            }
+        }
+    }
+
+    /// Words that merely contain the letters are not deletions.
+    #[test]
+    fn near_misses_are_not_deletions() {
+        for line in [
+            "let perm = 1;",
+            "let rm_x = 2;",
+            r#"echo "form -r""#,
+            "fn remove_directory_listing() {}",
+            r#"let s = "unlinked";"#,
+            r#"let s = "a -deleted flag";"#,
+        ] {
+            let found: usize = deletions(&production_code(line))
+                .iter()
+                .map(|(_, n)| n)
+                .sum();
+            assert_eq!(found, 0, "{line:?} is not a deletion");
+        }
+    }
+
+    /// WP7 Phase 1: a `*` line inside a raw string is template text, not a comment continuation,
+    /// and survives the strip; `//` and `/*` inside strings start nothing.
+    #[test]
+    fn strip_comments_keeps_string_contents() {
+        let src = "const T: &str = r#\"case $x in\n  *) echo star ;;\nesac // not a comment\n/* nor this */\"#;\nlet u = \"https://example.com/*\"; // gone\nlet c = '\"'; let q = '\\''; fn after() {}\n";
+        let kept = strip_comments(src);
+        assert!(kept.contains("  *) echo star ;;"), "{kept}");
+        assert!(kept.contains("esac // not a comment"), "{kept}");
+        assert!(kept.contains("/* nor this */"), "{kept}");
+        assert!(kept.contains("https://example.com/*\";"), "{kept}");
+        assert!(!kept.contains("gone"), "{kept}");
+        assert!(kept.contains("fn after"), "{kept}");
+    }
+
+    #[test]
+    fn strip_comments_handles_trailing_and_nested_comments() {
+        let src = "fn a() {} // remove_dir in a trailing comment\n/* outer /* inner remove_dir */ still remove_dir */\nfn b() {}\n";
+        let kept = strip_comments(src);
+        assert!(!kept.contains("remove_dir"), "{kept}");
+        assert!(kept.contains("fn a") && kept.contains("fn b"), "{kept}");
     }
 
     #[test]
