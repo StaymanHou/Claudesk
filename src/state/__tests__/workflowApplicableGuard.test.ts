@@ -158,7 +158,66 @@ export function topLevelArgs(flat: string, open: number): string[] | null {
   return null;
 }
 
-/** A violation for one funnel call's host argument, or null. */
+/** The index of the bracket closing the one opened at `open`, or -1. */
+function closeOf(text: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    const c = text[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * A TOP-LEVEL conditional `cond ? a : b`, split into its arms, or null. `?.` and `??` are not a
+ * conditional's `?`; nested conditionals in an arm stay whole (their arms are split on recursion).
+ */
+export function splitConditional(
+  e: string,
+): { cond: string; a: string; b: string } | null {
+  let depth = 0;
+  let q = -1;
+  let pending = 0;
+  for (let i = 0; i < e.length; i++) {
+    const c = e[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") depth--;
+    else if (depth === 0 && c === "?") {
+      const next = e[i + 1];
+      if (next === "." || next === "?" || e[i - 1] === "?") continue;
+      if (q === -1) q = i;
+      else pending++;
+    } else if (depth === 0 && c === ":" && q !== -1) {
+      if (pending > 0) pending--;
+      else
+        return { cond: e.slice(0, q), a: e.slice(q + 1, i), b: e.slice(i + 1) };
+    }
+  }
+  return null;
+}
+
+/** `e` with one layer of WHOLE-expression parentheses removed (`(x?a:b)` → `x?a:b`). */
+function unwrap(e: string): string {
+  return e.startsWith("(") && closeOf(e, 0) === e.length - 1
+    ? unwrap(e.slice(1, -1))
+    : e;
+}
+
+/**
+ * A violation for one funnel call's host argument, or null.
+ *
+ * ⚠️ PER ARM, not per argument (WP4 review MAJOR,
+ * `SURFACE-2026-11-20-QUALITY-HOST-ARG-GUARD-CHECKS-BY-INCLUDES`). The first version accepted any
+ * argument that merely CONTAINED a seam call, so `c ? hostSubstrateFor(p, m) : LOCAL` passed: one
+ * seam arm vouched for a non-seam arm (`source-text-guards.md`, the `includes`-instead-of-per-arm
+ * form). Now a conditional is split into its arms (recursively), and EACH arm must be exactly one
+ * seam call (nothing chained after it: `hostSubstrateFor(p, m) || X` is not a seam value) or an
+ * identifier bound from the seam.
+ */
 export function checkHostArg(
   flat: string,
   host: string | undefined,
@@ -166,7 +225,23 @@ export function checkHostArg(
   if (host === undefined || host === "") return "no host argument";
   if (host.includes('"local"') || host.includes("'local'"))
     return `a literal "local" host: ${host}`;
-  if (HOST_SOURCES.some((src) => host.includes(src))) return null;
+  return checkHostValue(flat, unwrap(host));
+}
+
+function checkHostValue(flat: string, host: string): string | null {
+  const cond = splitConditional(host);
+  if (cond !== null) {
+    return (
+      checkHostValue(flat, unwrap(cond.a)) ??
+      checkHostValue(flat, unwrap(cond.b))
+    );
+  }
+  const src = HOST_SOURCES.find((x) => host.startsWith(x));
+  if (src !== undefined) {
+    return closeOf(host, src.length - 1) === host.length - 1
+      ? null
+      : `host is more than one seam call: ${host}`;
+  }
   if (/^[A-Za-z_$][\w$]*$/.test(host)) {
     const bound = new RegExp(
       `const${host.replace(/\$/g, "\\$")}(?::[A-Za-z_$][\\w$<>.|]*)?=(${HOST_SOURCES.map(
@@ -253,6 +328,39 @@ describe("workflow-applicability funnel — every call passes a seam host (M18 W
         .violation,
     ).toMatch(/literal/);
     expect(call(',{state:"developer"}')).toMatch(/not from the seam/);
+  });
+
+  // WP4 review MAJOR: a seam call in ONE arm must not vouch for the other.
+  it("every arm of a conditional host is checked on its own", () => {
+    const hook = "constwsHost=useHostSubstrate(p);";
+    const call = (host: string) =>
+      funnelCalls(`${hook}isWorkflowApplicable(g,profile,${host})`)[0]
+        .violation;
+    // An identifier arm and an object arm beside a seam arm (the two shapes the review named).
+    expect(call("c?hostSubstrateFor(p,m):LOCAL")).toMatch(
+      /`LOCAL` is not bound/,
+    );
+    expect(call('c?hostFromOpenCheck(x):{state:"developer"}')).toMatch(
+      /not from the seam/,
+    );
+    // Either arm, and a nested conditional's inner arm.
+    expect(call("c?LOCAL:hostSubstrateFor(p,m)")).toMatch(/not bound/);
+    expect(call("c?wsHost:d?hostSubstrateFor(p,m):OTHER")).toMatch(/OTHER/);
+    // A seam call with something chained after it is not one seam value.
+    expect(call("hostSubstrateFor(p,m)||FALLBACK")).toMatch(/more than one/);
+    expect(call("hostSubstrateFor(p,m)??FALLBACK")).toMatch(/more than one/);
+    // Positive controls: all-seam arms, nested and parenthesised, and the picker's real shape.
+    expect(
+      call("c?wsHost:d?hostSubstrateFor(p,m):hostFromOpenCheck(x)"),
+    ).toBeNull();
+    expect(call("(c?wsHost:hostSubstrateFor(p,m))")).toBeNull();
+    expect(
+      call(
+        "remoteStart!==null?hostFromOpenCheck(remoteStart):hostSubstrateFor(projectPath,hostMap)",
+      ),
+    ).toBeNull();
+    // `?.` / `??` inside an arm are not a conditional's `?`.
+    expect(call("c?hostSubstrateFor(a?.b,m):wsHost")).toBeNull();
   });
 });
 

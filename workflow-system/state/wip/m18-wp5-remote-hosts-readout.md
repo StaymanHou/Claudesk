@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP5: Settings → "Remote hosts" (read-only readout + drift)
 
 **Workflow:** feature
-**State:** verify-codify (phase 2 complete)
+**State:** verify-codify (all phases complete)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -189,7 +189,13 @@ endpoint, reached by `git ls-remote` from the host (measured ~1 s at arch time).
     — evidence: the outcome wording amended per P2.verify-human.6 (decision A)
     — evidence: `pnpm verify:auto` → EXIT=0 in 56s (vitest `4150 passed`; `cargo test` lib `1420 passed`; fmt, clippy, `tsc`, `check:link` clean; the one pre-existing lint warning)
 
-- [ ] Phase 3: The host-argument guard checks each arm (WP4 review MAJOR)  <!-- status: NOT-STARTED; depends on Phase 2 -->
+- [x] Phase 3: The host-argument guard checks each arm (WP4 review MAJOR)
+  **Relevance check (before Phase 3):**
+  - Requester still needs this: yes — the MAJOR is open in the backlog, and Phase 2 added no new host-arg site
+  - Requirements unchanged: yes
+  - Solution still feasible: yes
+  - No superior alternative discovered: yes
+  **Verdict:** proceed
   **Observable outcomes:**
   - CLI: `workflowApplicableGuard.test.ts` splits a host argument's top-level conditional arms and requires EACH arm
     to be a seam call or a seam-bound identifier. New self-tests: `c ? hostSubstrateFor(p, m) : LOCAL` (identifier
@@ -200,15 +206,28 @@ endpoint, reached by `git ls-remote` from the host (measured ~1 s at arch time).
   - CLI: `pnpm verify:auto` exits 0.
   **Alignment questions:**
   - none (test-only)
-  - [ ] P3.1 Per-arm split in `checkHostArg` (nested ternaries recurse), plus the self-tests and the mutation proof.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P3.1 Per-arm split in `checkHostArg` (nested ternaries recurse), plus the self-tests and the mutation proof.  <!-- status: done -->
+  - [x] verify-auto  <!-- status: done -->
+    — evidence: `pnpm verify:auto` → EXIT=0 in 52s (vitest `4151 passed (4151)`, incl. the guard's 7; `cargo test` lib `1420 passed`; fmt, clippy, `tsc`, `check:link` clean; the one pre-existing `XtermPane.tsx` lint warning)
+    — evidence: the HEAD-copy proof + the two guard mutants (build notes)
+  - [x] verify-self  <!-- status: done --> — no integration boundary (a test file only)
+    - [x] Per-arm self-tests (runner)  — evidence: `vitest run workflowApplicableGuard.test.ts` → `7 passed`; the identifier arm (`LOCAL` not bound) and the object arm (not from the seam) are flagged, and the picker's real shape passes
+    - [x] Picker mutation (runner, declared state change, restored)  — evidence: the second arm → `UNKNOWN_SUBSTRATE` landed (grep 1, `cmp` differs) → `2 failed | 5 passed (7)` with "ProjectPicker.tsx: host `UNKNOWN_SUBSTRATE` is not bound from the seam"; restored (shasum `9862e96d…` matches) → `7 passed`; `git status` of the picker dir is clean
+    - [x] `pnpm verify:auto` (runner)  — evidence: EXIT=0, `Tests 4151 passed (4151)`, `test result: ok. 1420 passed; 0 failed`
+  - [x] verify-human  <!-- status: done --> — zero admissible leaves (F11); the feature-level floor is met (Phase 2 had an operator look)
+  - [x] verify-codify  <!-- status: done --> — no integration boundary (the phase adds a guard's own checks; its self-tests ARE the codified form)
+    Test scope: full — last phase
+    — evidence: `pnpm verify:auto` → EXIT=0 in 48s (vitest `4151 passed (4151)`; every `cargo test` binary `0 failed`, lib `1420 passed`; fmt, clippy, `tsc`, `check:link` clean; the one pre-existing lint warning)
 
 ## Current Node
-- **Path:** Feature > Phase 3 > P3.1
-- **Active scope:** P3.1 (per-arm host-argument check)
+- **Path:** Feature > ship
+- **Active scope:** ship
+- **Build notes (Phase 3):**
+  - `checkHostArg` now unwraps whole-expression parens, splits a top-level conditional (`splitConditional`, recursive; `?.`/`??` are not its `?`), and requires EACH arm to be exactly one seam call (`closeOf` the call's paren = the arm's end) or a seam-bound identifier.
+  - New self-test block covers: an identifier arm, an object arm, either arm, a nested inner arm, `||` / `??` chained after a seam call, all-seam nested + parenthesised arms, the picker's real shape, and `?.` inside an arm.
+  - Old hole proven with HEAD's guard as a throwaway `zz` copy: with the picker's open-path second arm swapped for `UNKNOWN_SUBSTRATE`, HEAD's guard passes 6/6, the new one fails ("host `UNKNOWN_SUBSTRATE` is not bound from the seam"). Both pass on the clean tree.
+  - Guard mutants (only arm a checked; a seam prefix suffices) each red.
+  - At close: resolve `SURFACE-2026-11-20-QUALITY-HOST-ARG-GUARD-CHECKS-BY-INCLUDES` (this phase) and `SURFACE-2026-11-20-QUALITY-ONOPENSETTINGS-OPTIONAL-PROP` (Phase 2, D9) per delete-on-resolve.
 - **Blocked:** none
 - **Unvisited:** ship → review-quality → finalize
 - **Open discoveries:** none
