@@ -842,7 +842,12 @@ const KILL_DELAY: Duration = Duration::from_millis(300);
 /// Run `script` the way the commands layer does (own process group, streamed), and
 /// [`KILL_DELAY`] after the stream shows `when`, send `kill -TERM -- -<pgid>` to the run's group,
 /// as Cancel does on the host. Returns the lines and the exit code.
-fn run_and_group_kill_at(host: &Host, script: &str, when: &str, env: &str) -> (Vec<String>, i32) {
+pub(crate) fn run_and_group_kill_at(
+    host: &Host,
+    script: &str,
+    when: &str,
+    env: &str,
+) -> (Vec<String>, i32) {
     let sink = Lines(Mutex::new(Vec::new()));
     let killed = std::cell::Cell::new(false);
     let seen_at = std::cell::Cell::new(None::<Instant>);

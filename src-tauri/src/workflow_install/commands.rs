@@ -600,6 +600,11 @@ pub(crate) fn begin_remote_run(
             "Install is offered only on a host that has no workflow system",
             "installs",
         ),
+        RemoteOp::Update => (
+            matches!(substrate, HostSubstrate::Managed { .. }),
+            "Update is offered only on a host where Claudesk installed the workflow system",
+            "updates",
+        ),
         RemoteOp::Uninstall => (
             matches!(substrate, HostSubstrate::Managed { .. }),
             "Uninstall is offered only on a host where Claudesk installed the workflow system",
@@ -637,18 +642,34 @@ pub(crate) fn begin_remote_run(
     })
 }
 
-/// Streams a remote install's output to the webview, and reads the sentinel lines as they
-/// arrive: the pgid and the phase go to [`RemoteRunState`] (the phase also to the UI), the
-/// result is kept for the reducer, and none of them is shown as output.
-struct RemoteSink {
+/// Streams a remote run's output to the webview, and reads the sentinel lines as they arrive: the
+/// pgid and the phase go to [`RemoteRunState`] (the phase also to the UI), the result (read by
+/// `parse_result`: the install's or the update's vocabulary) is kept for the reducer, and none of
+/// them is shown as output.
+struct RemoteSink<R> {
     app: AppHandle,
     host: String,
     control: Arc<InstallControl>,
-    result: std::sync::Mutex<Option<remote_runner::RunResult>>,
+    result: std::sync::Mutex<Option<R>>,
+    parse_result: fn(&str) -> Option<R>,
 }
 
-impl OutputSink for RemoteSink {
+/// The install's result vocabulary, for [`RemoteSink`].
+fn install_result(line: &str) -> Option<remote_runner::RunResult> {
+    match remote_runner::parse_run_line(line) {
+        Some(RunLine::Result(r)) => Some(r),
+        _ => None,
+    }
+}
+
+impl<R: Send> OutputSink for RemoteSink<R> {
     fn line(&self, line: &str) {
+        if let Some(result) = (self.parse_result)(line) {
+            if let Ok(mut r) = self.result.lock() {
+                r.get_or_insert(result);
+            }
+            return;
+        }
         match remote_runner::parse_run_line(line) {
             None => {
                 let _ = self.app.emit(REMOTE_INSTALL_OUTPUT_EVENT, line);
@@ -670,14 +691,86 @@ impl OutputSink for RemoteSink {
                     },
                 );
             }
-            Some(RunLine::StaleRemoved) => {}
-            Some(RunLine::Result(result)) => {
-                if let Ok(mut r) = self.result.lock() {
-                    r.get_or_insert(result);
-                }
-            }
+            // A result line is `parse_result`'s (above); one it did not take is not shown either.
+            Some(RunLine::StaleRemoved) | Some(RunLine::Result(_)) => {}
         }
     }
+}
+
+/// Run one remote script over the master with Cancel per ruling A, ON THE CALLER'S WORKER: the
+/// abort is polled every 20 ms by the streaming loop, the remote group kill (one short exec) runs
+/// here, never on the main thread the Cancel command runs on, and once it is sent the stream is
+/// read to its end (`remote_runner::abort_poll`, WP7 D2). Returns the exit code (`-1` when ssh
+/// could not start, said in the output).
+fn stream_with_cancel(
+    app: &AppHandle,
+    ctl: &InstallControl,
+    links: &crate::remote_link::LinkRegistry,
+    target: &crate::remote_cmd::ValidTarget,
+    argv: &[String],
+    sink: &dyn OutputSink,
+) -> i32 {
+    let kill_sent = std::cell::Cell::new(false);
+    let send_kill = |pgid: u32| {
+        links
+            .master_exec(
+                target,
+                &remote_runner::cancel_command(pgid),
+                REMOTE_CANCEL_TIMEOUT_MS,
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    };
+    let notify = |line: &str| {
+        let _ = app.emit(REMOTE_INSTALL_OUTPUT_EVENT, line);
+    };
+    let abort = || remote_runner::abort_poll(&ctl.remote, &kill_sent, &send_kill, &notify);
+    match runner::run_streaming_abortable(
+        &argv[0],
+        &argv[1..],
+        None,
+        sink,
+        remote_runner::REMOTE_INSTALL_DEADLINE,
+        &abort,
+    ) {
+        Ok((code, _)) => code,
+        Err(e) => {
+            let _ = app.emit(
+                REMOTE_INSTALL_OUTPUT_EVENT,
+                format!("[could not run ssh: {e}]"),
+            );
+            -1
+        }
+    }
+}
+
+/// The host decides what a run did (WP6 D6): re-probe it through the one settle every Settings
+/// refresh uses (an answerless probe writes nothing; every open workspace on the host hears a new
+/// answer). `None` when the host could not be re-checked.
+fn reprobe_host(
+    links: &Arc<crate::remote_link::LinkRegistry>,
+    target: &crate::remote_cmd::ValidTarget,
+    host: &str,
+) -> Option<crate::remote_substrate::HostSubstrate> {
+    let out = links.master_exec(
+        target,
+        &crate::remote_cmd::substrate_refresh_command(
+            crate::remote_cmd::substrate_home_override().as_deref(),
+        ),
+        crate::remote_link::EXEC_TIMEOUT_MS,
+    );
+    match crate::remote_link::commands::settle_refresh(links, host, out) {
+        crate::remote_link::commands::RefreshOutcome::Checked { substrate, .. } => Some(substrate),
+        _ => None,
+    }
+}
+
+/// Whether Cancel was requested during the run that just ended.
+fn cancel_was_requested(ctl: &InstallControl) -> bool {
+    ctl.remote
+        .lock()
+        .map(|r| r.cancel_requested)
+        .unwrap_or(false)
 }
 
 /// Install the workflow system on `host` over its open connection (M18 WP6, §R.3).
@@ -737,69 +830,16 @@ pub fn workflow_remote_install_start(
             host: host.clone(),
             control: Arc::clone(&ctl),
             result: std::sync::Mutex::new(None),
+            parse_result: install_result,
         };
-        // Polled every 20 ms by the streaming loop, ON THIS WORKER: the remote group kill (one
-        // short exec) runs here, never on the main thread the Cancel command runs on. Once the
-        // kill is sent the stream is read to its end (`remote_runner::abort_poll`, D2).
-        let kill_sent = std::cell::Cell::new(false);
-        let send_kill = |pgid: u32| {
-            links
-                .master_exec(
-                    &target,
-                    &remote_runner::cancel_command(pgid),
-                    REMOTE_CANCEL_TIMEOUT_MS,
-                )
-                .map(|_| ())
-                .map_err(|e| e.to_string())
-        };
-        let notify = |line: &str| {
-            let _ = app.emit(REMOTE_INSTALL_OUTPUT_EVENT, line);
-        };
-        let abort = || remote_runner::abort_poll(&ctl.remote, &kill_sent, &send_kill, &notify);
-        let exit = match runner::run_streaming_abortable(
-            &argv[0],
-            &argv[1..],
-            None,
-            &sink,
-            remote_runner::REMOTE_INSTALL_DEADLINE,
-            &abort,
-        ) {
-            Ok((code, _)) => code,
-            Err(e) => {
-                let _ = app.emit(
-                    REMOTE_INSTALL_OUTPUT_EVENT,
-                    format!("[could not run ssh: {e}]"),
-                );
-                -1
-            }
-        };
-
-        // The host decides what happened (D6): re-probe it, through the one settle every Settings
-        // refresh uses (an answerless probe writes nothing).
-        let out = links.master_exec(
-            &target,
-            &crate::remote_cmd::substrate_refresh_command(
-                crate::remote_cmd::substrate_home_override().as_deref(),
-            ),
-            crate::remote_link::EXEC_TIMEOUT_MS,
-        );
-        let after = match crate::remote_link::commands::settle_refresh(&links, &host, out) {
-            crate::remote_link::commands::RefreshOutcome::Checked { substrate, .. } => {
-                Some(substrate)
-            }
-            _ => None,
-        };
+        let exit = stream_with_cancel(&app, &ctl, &links, &target, &argv, &sink);
+        let after = reprobe_host(&links, &target, &host);
         let result = sink.result.lock().ok().and_then(|r| r.clone());
-        let cancel_requested = ctl
-            .remote
-            .lock()
-            .map(|r| r.cancel_requested)
-            .unwrap_or(false);
         guard.finish(remote_runner::resolve(
             &host,
             result.as_ref(),
             exit,
-            cancel_requested,
+            cancel_was_requested(&ctl),
             after.as_ref(),
         ));
         // The link hold goes last, after the re-probe that needed it.
@@ -1027,19 +1067,7 @@ pub fn workflow_remote_uninstall_start(
                 -1
             }
         };
-        let out = links.master_exec(
-            &target,
-            &crate::remote_cmd::substrate_refresh_command(
-                crate::remote_cmd::substrate_home_override().as_deref(),
-            ),
-            crate::remote_link::EXEC_TIMEOUT_MS,
-        );
-        let after = match crate::remote_link::commands::settle_refresh(&links, &host, out) {
-            crate::remote_link::commands::RefreshOutcome::Checked { substrate, .. } => {
-                Some(substrate)
-            }
-            _ => None,
-        };
+        let after = reprobe_host(&links, &target, &host);
         let result = sink.result.lock().ok().and_then(|r| r.clone());
         guard.finish(remote_ops::resolve_uninstall(
             &host,
@@ -1052,6 +1080,115 @@ pub fn workflow_remote_uninstall_start(
 
     Ok(())
 }
+
+/// Update the workflow system on `host` (M18 WP7 Phase 3, §R.3): `git fetch` →
+/// `merge --ff-only` → `install.sh` → the record's `updated_at`, LAST. Returns at once; output on
+/// [`REMOTE_INSTALL_OUTPUT_EVENT`], the phase on [`REMOTE_INSTALL_PHASE_EVENT`] (`fetch`, then
+/// `install`), the outcome on [`REMOTE_INSTALL_FINISHED_EVENT`] with `op: "update"`.
+///
+/// The worker observes the host and runs the remote refuse-guard first (the clone it updates is
+/// one Claudesk recorded, never a protected root), as Uninstall does. Cancel
+/// ([`workflow_remote_install_cancel`]) is honoured during the fetch only, through the install's
+/// [`stream_with_cancel`]. The host is re-probed afterwards. ⚠️ It never touches the local gate.
+#[tauri::command]
+pub fn workflow_remote_update_start(
+    app: AppHandle,
+    control: State<'_, Arc<InstallControl>>,
+    links: State<'_, crate::remote_link::commands::SharedLinks>,
+    host: String,
+) -> Result<(), String> {
+    let dir = crate::config_store::commands::resolve_data_dir(&app)?;
+    let projects = crate::config_store::read_projects(&dir).map_err(|e| e.to_string())?;
+    let start = begin_remote_run(
+        control.inner(),
+        links.inner(),
+        &projects,
+        &host,
+        crate::remote_cmd::substrate_home_override(),
+        RemoteOp::Update,
+    )?;
+    let ctl = Arc::clone(&control);
+    let links = Arc::clone(&links);
+
+    std::thread::spawn(move || {
+        let RemoteInstallStart {
+            lock,
+            hold,
+            target,
+            root,
+        } = start;
+        let mut guard = RunGuard {
+            app: app.clone(),
+            lock: Some(lock),
+            reported: false,
+            terminal_event: REMOTE_INSTALL_FINISHED_EVENT,
+            panic_payload: serde_json::to_value(remote_runner::RemoteRunFinished {
+                host: host.clone(),
+                op: RemoteOp::Update,
+                ok: false,
+                cancelled: false,
+                message: Some(REMOTE_UPDATE_PANIC_MESSAGE.to_string()),
+            })
+            .unwrap_or_default(),
+        };
+        let refuse = |guard: &mut RunGuard, message: String| {
+            guard.finish(remote_runner::RemoteRunFinished {
+                host: host.clone(),
+                op: RemoteOp::Update,
+                ok: false,
+                cancelled: false,
+                message: Some(message),
+            });
+        };
+        let exec = host_exec(&links, &target);
+        let approved = match remote_ops::observe_and_guard(&root, &exec) {
+            Ok(t) => t,
+            Err(refusal) => {
+                refuse(&mut guard, refusal);
+                drop(hold);
+                return;
+            }
+        };
+        let script = remote_ops::updated_record(&approved, &now_rfc3339())
+            .ok_or_else(|| {
+                "Claudesk couldn't read the install record. Nothing was changed.".to_string()
+            })
+            .and_then(|record| remote_ops::update_script(&approved, &record));
+        let script = match script {
+            Ok(s) => s,
+            Err(e) => {
+                refuse(&mut guard, e);
+                drop(hold);
+                return;
+            }
+        };
+        let argv = links.master_run_argv(&host, &crate::remote_cmd::login_shell(&script));
+        let sink = RemoteSink {
+            app: app.clone(),
+            host: host.clone(),
+            control: Arc::clone(&ctl),
+            result: std::sync::Mutex::new(None),
+            parse_result: remote_ops::parse_update_line,
+        };
+        let exit = stream_with_cancel(&app, &ctl, &links, &target, &argv, &sink);
+        let after = reprobe_host(&links, &target, &host);
+        let result = sink.result.lock().ok().and_then(|r| r.clone());
+        guard.finish(remote_ops::resolve_update(
+            &host,
+            result.as_ref(),
+            exit,
+            cancel_was_requested(&ctl),
+            after.as_ref(),
+        ));
+        drop(hold);
+    });
+
+    Ok(())
+}
+
+/// The message a panicked remote update worker reports.
+const REMOTE_UPDATE_PANIC_MESSAGE: &str = "The update stopped unexpectedly. Check Settings → \
+     Remote hosts before retrying: the host may or may not have been changed.";
 
 /// The message a panicked remote uninstall worker reports.
 const REMOTE_UNINSTALL_PANIC_MESSAGE: &str = "The uninstall stopped unexpectedly. Check Settings \
@@ -1247,13 +1384,14 @@ mod tests {
         // covering the uninstall worker while staying green (code review, 2026-07-31: "the one
         // guard in this WP whose failure mode is 'quietly stops checking'").
         let worker_bodies: Vec<&str> = production.split("std::thread::spawn").skip(1).collect();
-        // M18 WP6 added the third: the remote install's worker; M18 WP7 the fourth, the remote
-        // uninstall's.
+        // M18 WP6 added the third: the remote install's worker; M18 WP7 the fourth and fifth,
+        // the remote uninstall's and update's.
         assert_eq!(
             worker_bodies.len(),
-            4,
-            "expected exactly four spawned workers (install, uninstall, remote install, remote \
-             uninstall); if another was added it must also delegate its lock release to RunGuard"
+            5,
+            "expected exactly five spawned workers (install, uninstall, remote install, remote \
+             uninstall, remote update); if another was added it must also delegate its lock \
+             release to RunGuard"
         );
         assert!(
             production.contains("terminal_event: REMOTE_INSTALL_FINISHED_EVENT"),
@@ -1352,29 +1490,42 @@ mod tests {
         );
     }
 
-    /// WP7 D2 — the remote install's worker decides Cancel through `remote_runner::abort_poll`,
-    /// the pure function the real-script cancel tests drive, and never re-derives it. Without this
-    /// guard those tests prove the function, not that the worker calls it (memory
-    /// `extracted-machine-needs-a-live-caller-guard`): an inline "kill, then stop the local ssh"
-    /// here would bring back the false "Nothing was installed" with every test green.
+    /// WP7 D2 — every remote run with a Cancel decides it through `remote_runner::abort_poll`, the
+    /// pure function the real-script cancel tests drive, inside ONE helper (`stream_with_cancel`)
+    /// that both the install and the update workers call. Without this guard those tests prove
+    /// the function, not that a worker calls it (memory `extracted-machine-needs-a-live-caller-guard`):
+    /// an inline "kill, then stop the local ssh" would bring back the false "Nothing was installed"
+    /// with every test green.
     #[test]
     fn the_remote_install_worker_decides_cancel_through_abort_poll() {
         let code =
             crate::workflow_install::source_guard::production_code(include_str!("commands.rs"));
-        let at = code
-            .find("pub fn workflow_remote_install_start")
-            .expect("the remote install command");
-        let end = code[at..].find("\n}\n").map_or(code.len(), |rel| at + rel);
-        let body = &code[at..end];
+        let body = |sig: &str| {
+            let at = code.find(sig).unwrap_or_else(|| panic!("{sig}"));
+            let end = code[at..].find("\n}\n").map_or(code.len(), |rel| at + rel);
+            code[at..end].to_string()
+        };
+        let helper = body("fn stream_with_cancel(");
         assert_eq!(
-            body.matches("remote_runner::abort_poll(").count(),
+            helper.matches("remote_runner::abort_poll(").count(),
             1,
-            "the worker's abort is `remote_runner::abort_poll`: {body}"
+            "the abort is `remote_runner::abort_poll`: {helper}"
         );
         assert!(
-            body.contains("run_streaming_abortable(") && body.contains("&abort,"),
+            helper.contains("run_streaming_abortable(") && helper.contains("&abort,"),
             "and that abort is the one the streaming run polls"
         );
+        for worker in [
+            "pub fn workflow_remote_install_start",
+            "pub fn workflow_remote_update_start",
+        ] {
+            assert_eq!(
+                body(worker).matches("stream_with_cancel(").count(),
+                1,
+                "{worker} streams through the one Cancel helper"
+            );
+        }
+        assert_eq!(code.matches("remote_runner::abort_poll(").count(), 1);
         for re_derived in ["abort_step(", "AbortStep::", "cancel_requested ||"] {
             assert!(
                 !code.contains(re_derived),
@@ -1395,6 +1546,15 @@ mod tests {
             let end = code[at..].find("\n}\n").map_or(code.len(), |rel| at + rel);
             code[at..end].to_string()
         };
+        // Update acts on the same approved target: guard first, then its script.
+        let update = body("pub fn workflow_remote_update_start");
+        let g = update
+            .find("remote_ops::observe_and_guard(")
+            .expect("the update worker runs the guard");
+        let u = update
+            .find("remote_ops::update_script(&approved")
+            .expect("the update script is built from the approved target");
+        assert!(g < u, "the guard comes before the update script");
         let start = body("pub fn workflow_remote_uninstall_start");
         let guard_at = start
             .find("remote_ops::observe_and_guard(")
@@ -1408,7 +1568,7 @@ mod tests {
         let preview = body("pub async fn workflow_remote_uninstall_preview");
         assert!(preview.contains("remote_ops::observe_and_guard("));
         assert!(preview.contains("remote_ops::dry_run_script(&approved)"));
-        for b in [&start, &preview] {
+        for b in [&start, &preview, &update] {
             for gate in [
                 "revert_gate",
                 "workflow_gate",
@@ -1474,6 +1634,7 @@ mod tests {
                 "pub fn workflow_remote_uninstall_start",
                 "begin_remote_run(",
             ),
+            ("pub fn workflow_remote_update_start", "begin_remote_run("),
         ] {
             assert!(
                 body_of(command).contains(takes_it_via),

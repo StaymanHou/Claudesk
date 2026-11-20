@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP7 — Update and Uninstall (the remote refuse-guard)
 
 **Workflow:** feature
-**State:** verify-codify (phase 2 complete)
+**State:** verify-codify (phase 3 complete)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -253,7 +253,13 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
       - the 4-worker `RunGuard` count.
     — consuming surface: the live dev-app run (P2.verify-self) + `the_remote_uninstall_guards_first_…` and WP6's begin tests over `begin_remote_run`; an automated end-to-end of the commands needs a running app and a host.
 
-- [ ] Phase 3: Update backend — fetch, ff-only, re-install, record `updated_at`  <!-- status: NOT-STARTED; depends on Phase 2 -->
+- [x] Phase 3: Update backend — fetch, ff-only, re-install, record `updated_at`  <!-- status: done 2026-11-20 -->
+  **Relevance check (before Phase 3):**
+  - Requester still needs this: yes — Update is §R.3's third action and a WBS exit criterion
+  - Requirements unchanged: yes — Probe outcome (2) ruled Update = pull → install.sh → `updated_at`
+  - Solution still feasible: yes — Phase 2's guard and the Phase 1 stream / cancel shape are reusable
+  - No superior alternative discovered: yes
+  **Verdict:** proceed
   **Observable outcomes:**
   - CLI: `cargo test --lib workflow_install` exits 0. Each test runs the real update script against a Managed fixture root whose clone is a clone of a local bare fixture origin:
     - **Behind:** a new commit pushed to the bare origin gives `result:ok`, the clone's HEAD equals the origin's, and `install.sh` ran (its log printed). The record still parses, keeps `installed_at` / `clone_path` / `origin_url` byte-equal, and has `updated_at` set.
@@ -264,15 +270,17 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
   - CLI: `install.sh` failing after the merge gives `result:install-failed:<n>` with the record unchanged (no `updated_at` written). The reducer's message says the clone moved but the install did not complete, and that re-running Update is safe (Probe outcome (2): content-idempotent).
   - CLI: Cancel during `phase:fetch` (a group TERM, real script, a fetch slowed by a local `GIT_SSH`-free stall fixture such as a `file://` origin behind a `sleep` hook, or a pre-fetch sleep stub) ends the stream with no result. The HEAD and the record are unchanged, and the reducer says "Cancelled. Nothing was updated." A TERM after the trap is ignored and the run finishes (the D2 shape).
   - CLI: an `InstallRecord` with no `updated_at` serializes byte-identically to before (a local-record golden test), and a record with one parses through `provenance::read_record`.
-  - CLI (state-changing, the mini, sandbox only, own `ssh -M`, as in Phase 2):
-    - a sandbox install whose clone was `git reset --hard HEAD~1` (sandbox-only) is updated by the printed script;
-    - the result is `result:ok`, and HEAD equals `git ls-remote origin HEAD`;
+  - Browser/IPC (consuming surface, amended at P3.verify-self: the phase refactored `workflow_remote_install_start`'s worker onto the shared Cancel helper; state-changing, the dev app, the mini, a sandbox root only, the P2 recipe):
+    - `workflow_remote_install_start` → `{op:"install", ok:true}` (the refactored worker);
+    - a sandbox-only `git reset --hard HEAD~1` of the sandbox clone (agent's own `ssh -M`) → `remote_substrate_refresh` reads `differs`;
+    - `workflow_remote_update_start` → `{op:"update", ok:true}`, `phase` events `fetch` then `install`, the clone's HEAD = `git ls-remote origin HEAD`, the record keeps `installed_at` and gains `updated_at`;
+    - `workflow_remote_uninstall_start` → Absent (cleanup through the product);
     - the live baseline is byte-identical, and the sandbox is removed.
   - CLI: `pnpm verify:auto` exits 0.
   **Alignment questions:**
   - none (backend only)
-  - [ ] P3.1 `InstallRecord.updated_at: Option<String>` (D9) + the golden test.  <!-- status: NOT-STARTED -->
-  - [ ] P3.2 The update script in `remote_ops.rs` (D8):
+  - [x] P3.1 `InstallRecord.updated_at: Option<String>` (D9) + the golden test.  <!-- status: done 2026-11-20 -->
+  - [x] P3.2 The update script in `remote_ops.rs` (D8):
     - pgid line;
     - the record + probe re-check;
     - the dirty and no-upstream refusals;
@@ -283,13 +291,58 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
     - the record rewritten LAST (`printf` → tmp → `mv`);
     - `result:`.
 
-    Every `git` runs behind `DEV_TOOLS_GUARD` as `"$d/usr/bin/git"`, with `GIT_TERMINAL_PROMPT=0`. The new results go through the shared sentinel parser, and the phase enum gains `Fetch` (cancellable).  <!-- status: NOT-STARTED -->
-  - [ ] P3.3 `workflow_remote_update_start(host)` (begin: lock, Managed, link Up, root) + the worker. The cancel path is shared with Install's (fixed in P1), and `workflow_remote_install_cancel` is generalized (renamed `workflow_remote_run_cancel` in Phase 4 with its consumer, D11). Then a pure `resolve_update`.  <!-- status: NOT-STARTED -->
-  - [ ] P3.4 The tests above (a bare-origin fixture + the cancel arms).  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+    Every `git` runs behind `DEV_TOOLS_GUARD` as `"$d/usr/bin/git"`, with `GIT_TERMINAL_PROMPT=0`. The new results go through the shared sentinel parser, and the phase enum gains `Fetch` (cancellable).  <!-- status: done 2026-11-20 -->
+  - [x] P3.3 `workflow_remote_update_start(host)` (begin: lock, Managed, link Up, root) + the worker. The cancel path is shared with Install's (fixed in P1), and `workflow_remote_install_cancel` is generalized (renamed `workflow_remote_run_cancel` in Phase 4 with its consumer, D11). Then a pure `resolve_update`.  <!-- status: done 2026-11-20 -->
+  - [x] P3.4 The tests above (a bare-origin fixture + the cancel arms).  <!-- status: done 2026-11-20 -->
+  - Build notes:
+    - Update acts on the remote refuse-guard's approved target (a recorded clone, never a protected root), like Uninstall; it deletes nothing.
+    - `pull --ff-only` is split into `fetch` (cancellable, `phase:fetch`) + `merge --ff-only` inside the window.
+    - The install worker's streaming / Cancel / re-probe moved into `stream_with_cancel` + `reprobe_host` + `cancel_was_requested`, shared by the install and update workers. The caller guard now pins the helper and both callers.
+    - `RemoteSink` is generic over its result vocabulary.
+    - The Cancel command is still `workflow_remote_install_cancel` (it cancels any remote run; the P4.1 rename is D11).
+    - The `RunGuard` worker count is 5.
+  - [x] verify-auto  <!-- status: done 2026-11-20 -->
+    — evidence: `cargo fmt` then `pnpm verify:auto` on the final tree → EXIT=0, 55 s (lint 0 errors + the pre-existing XtermPane warning; vitest `4172 passed`; clippy clean; cargo `1502 passed; 0 failed; 4 ignored` + integration suites)
+    — evidence: scoped `cargo test --lib -- workflow_install::remote_ops workflow_install::provenance workflow_install::commands workflow_install::remote_runner` → `77 passed; 0 failed`
+    — evidence: `cargo test --test sync_commands_do_not_block` → `17 passed` (incl. the new `path_named_test_modules_are_not_scanned_as_production`)
+  - [x] verify-self  <!-- status: done 2026-11-20 (runner: 5 CLI PASS; orchestrator: the live consuming-surface outcome PASS) -->
+    - [x] Update real-script tests — evidence: `cargo test --lib workflow_install` → `181 passed`. Behind, Dirty, Non-ff, No-upstream and record-gone all hold. Accepted wordings: the origin is the non-bare fixture repo, and "install.sh did not run" is read from the `# workflow block` count staying 1. Mutants (each restored, `shasum -c` OK):
+      - M1 (dirty check deleted) → the dirty test FAILED;
+      - M2 (no `--ff-only`) → the non-ff test FAILED ("Merge made by the 'ort' strategy");
+      - M4 (no `updated_at` stamp) → the behind + window tests FAILED.
+
+      (runner3 logs)
+      - ⚠️ runner gap, for codify: "its log printed" is asserted by no test. M6 (the update template's post-install `cat -- "$log"` deleted) SURVIVED all 181. The behaviour itself was observed in the M1 run (install.sh's output before `result:ok`). Add an assertion that the behind run's output carries install.sh's own lines (e.g. the fixture's `[ok] feature-build`).
+    - [x] `install.sh` failing after the merge — evidence: `FIXTURE_FAIL=3` → `InstallFailed(3)`, HEAD = origin's new commit, record bytes unchanged; the `resolve_update` arm says the clone moved, the record was not updated, and Update can be retried (runner)
+    - [x] Cancel during the fetch, and a TERM inside the window — evidence:
+      - a group TERM 300 ms after `phase:fetch` (fetch stubbed by `sleep 30`) stops in under 10 s with no result; HEAD, record and blocks are unchanged; `resolve_update` says "Cancelled. Nothing was updated.";
+      - a TERM 300 ms into `phase:install` → `Ok` with `updated_at` written;
+      - M5 (trap before the fetch) → the cancel test FAILED (30.6 s);
+      - M3 (install.sh in a subshell) → the window test FAILED `InstallFailed(143)`.
+
+      (runner)
+    - [x] `updated_at` golden — evidence: `updated_at_is_absent_until_an_update_sets_it` ok; `read_record` = `fs::read` + `parse_record`, so the test's `parse_record` is the same path (runner)
+    - [x] `pnpm verify:auto` — evidence: exit 0, 61.6 s, vitest `4172 passed`, cargo `1502 passed; 0 failed; 4 ignored` (runner, after every restore)
+    - [x] Consuming surface, live (orchestrator, tauri bridge; resumed after the operator's turn-level pause). Setup: the dev app with `CLAUDESK_REMOTE_SUBSTRATE_ROOT=/Users/<user>/claudesk-m18-wp7-sandbox` (empty), the scratch row in the dev `projects.json`, and `remote_open_check` before each start.
+      1. `workflow_remote_install_start` (the refactored worker) → `{op:"install", ok:true}`, phases `clone`, `install`.
+      2. Over the agent's own `ssh -M`, after a `cd -P` path check, the sandbox clone was reset `f8e8873` → `755d1db`. `remote_substrate_refresh` → `managed`, drift `differs` (head `755d1db`, remote `f8e8873`).
+      3. `workflow_remote_update_start` → `{op:"update", ok:true, message:null}`. Phase events: `fetch`, then `install`. The log (82 lines) opens with git's "Updating 755d1db..f8e8873 / Fast-forward" and carries `install.sh`'s own output. The refresh then reads `managed`, `up_to_date`, head `f8e8873`.
+      4. On the host, the record keeps `installed_at` / `clone_path` / `origin_url` byte-identical and gains `updated_at`; the clone is clean at `f8e8873`; 54 links.
+      5. `workflow_remote_uninstall_start` → `{op:"uninstall", ok:true}`; the refresh reads `absent`. On the host: no record, no clone, 0 links, 0 processes.
+
+      — evidence (live baseline): 54 links, the `CLAUDE.md` / `settings.json` shas, `f8e8873` clean, no record — identical before and after.
+      — cleanup:
+        - the dev app was stopped (no workspace opened, no `claudesk-dev` tmux server);
+        - the dev `projects.json` / `settings.json` were restored to `38ee76dd…` / `72bfef1c…`;
+        - the sandbox was removed after its `cd -P` check;
+        - the scratch folder is unchanged;
+        - the master was closed, and no `ssh -M` is left.
+  - [x] verify-human  <!-- status: done 2026-11-20 --> — zero admissible leaves (F11); digest printed. Assumed: the runner-accepted plan wordings; the install.sh-output assertion is added at codify
+  - [x] verify-codify  <!-- status: done 2026-11-20 -->
+    Test scope: full — suite not long (runtimes.md `pnpm verify:auto` Last 69 s; no CLAUDE.md declaration)
+    — evidence: `cargo fmt` + `pnpm verify:auto` → EXIT=0, 77 s; vitest `4172 passed`; cargo `1502 passed; 0 failed; 4 ignored`
+    — new: the behind test now asserts that install.sh's own output (`[ok] feature-build`) is shown before `result:ok`. This closes the runner's surviving M6: with the update template's `cat -- "$log"` removed, the test FAILED; restore `shasum -c` OK.
+    — consuming surface: the live dev-app install → behind → update → uninstall run (P3.verify-self), plus the caller guards over `stream_with_cancel` and the guard-first order of the update worker.
 
 - [ ] Phase 4: Settings → Remote hosts — the Update and Uninstall buttons, one run panel, re-attach on reopen; live on the sandbox (7.5)  <!-- status: NOT-STARTED; depends on Phase 3 -->
   **Observable outcomes:**
@@ -341,10 +394,10 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 3 > P3.1
-- **Active scope:** P3.1 (`InstallRecord.updated_at`)
+- **Path:** Feature > Phase 4 > P4.1
+- **Active scope:** P4.1 (IPC: one event triple with `{host, op, …}`, `workflow_remote_run_state`, the cancel rename)
 - **Blocked:** none
-- **Unvisited:** Phase 4 (Settings UI + live 7.5)
+- **Unvisited:** none after Phase 4
 - **Open discoveries:** D-P1-a (fixed in P1.1: `install.sh` ran in a zsh subshell, which resets the ignored trap)
 
 ## Discoveries
@@ -352,3 +405,4 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
      Each entry is also logged to workflow-system/state/backlog.md -->
 - [SURFACED-2026-11-20] feature-plan — wbs.md exceeds size guard (361 lines); read in full via section reads anyway (the WP7 section and "Probe outcomes" are the load-bearing parts). No action.
 - [SURFACED-2026-11-20] Phase 1 > P1.1 — **WP6's install window did not hold (fixed here, not backlogged).** zsh resets an ignored `trap` inside a `( … )` subshell, so `( cd -- "$clone" && HOME="$root" ./install.sh )` let a TERM / HUP / INT that reached the group while `install.sh` ran kill it (exit 143) between two links: links with no record (Developer, no Uninstall), the exact state 6.3b exists to prevent. Measured with a perl harness: a TERM at 5 ms … 1.5 s into the window → `irc=143`; the same script with `install.sh` as a DIRECT child → `irc=0` at every delay, for TERM, HUP and INT. **The WP6 test passed while checking nothing:** its kill landed within ~2 ms of the `phase:install` line, before zsh forked the subshell. Fixed: the template runs `install.sh` as a direct child (`cd -- "$clone" && HOME="$root" ./install.sh …`), both kill tests deliver their TERM `KILL_DELAY` = 300 ms after their line, and a builder test refuses `( cd` in the script. Mutation-proven: the subshell restored fails 3 tests. ⚠️ Phases 2–3 inherit the rule: Uninstall's and Update's untrappable windows must run their children directly, never in `( … )`. For `arch/claude-substrate.md` → "R.3 Install as built" at finalize.
+- [SURFACED-2026-11-20] Phase 3 > P3.4 — **The sync-command scanner read `#[path]` test files as production (fixed here, not backlogged).** `tests/sync_commands_do_not_block.rs` skipped an out-of-line `#[cfg(test)] mod x;` only as `x.rs` / `x/mod.rs`, so `#[path = "remote_runner_tests.rs"] mod tests;` (WP6) and `remote_ops_tests.rs` were scanned as production code. It surfaced when Phase 3's test helpers `head` / `git_in` (which call `Command::output`) shared names with fns on `git_recent_commits`' chain, a false "reaches a blocking call". Fixed: the scanner honours `#[path]` (relative to the declaring file). A positive control on the real crate pins both test files skipped and their declaring files scanned. Mutation-proven: dropping the `#[path]` skip fails both the control and the detector.

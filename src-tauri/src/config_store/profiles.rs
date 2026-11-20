@@ -432,6 +432,7 @@ mod tests {
             root: None,
             head: None,
             record: crate::workflow_install::provenance::InstallRecord {
+                updated_at: None,
                 clone_path: "/r".into(),
                 installed_at: "t".into(),
                 origin_url: "u".into(),

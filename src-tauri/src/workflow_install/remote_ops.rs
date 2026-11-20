@@ -30,7 +30,7 @@ use super::provenance::{self, InstallRecord, RECORD_FILENAME};
 use super::remote_guard::{remote_refuse_guard, HostObservation, RemoteUninstallTarget};
 use super::remote_runner::{fill, valid_root, RemoteOp, RemoteRunFinished, RUN_SENTINEL};
 use super::DEFAULT_VENDOR_SUBPATH;
-use crate::remote_cmd::{decode_hex, quote};
+use crate::remote_cmd::{decode_hex, quote, DEV_TOOLS_FIX, DEV_TOOLS_GUARD};
 use crate::remote_substrate::HostSubstrate;
 
 /// The prefix of an observation line.
@@ -325,6 +325,275 @@ pub fn resolve_uninstall(
         ),
         None => done(
             absent,
+            Some(format!(
+                "The run ended without reporting a result (exit {exit}). The host now reads as \
+                 {}.",
+                state_words(after)
+            )),
+        ),
+    }
+}
+
+// ── Update (WP7 Phase 3) ─────────────────────────────────────────────────────────────────
+//
+// Update acts on the same guard-approved target as Uninstall: a clone Claudesk recorded, which
+// the guard has checked is no protected root and carries the repo's scripts. It never deletes.
+
+/// The record an Update writes: the record the guard saw, with `updated_at` set and every other
+/// field kept byte-for-byte (`installed_at`, `clone_path`, `origin_url`). `None` when the guard's
+/// bytes no longer parse (which the guard itself would have refused).
+pub fn updated_record(target: &RemoteUninstallTarget, now: &str) -> Option<InstallRecord> {
+    let mut record = decode_hex(target.record_hex()).and_then(|b| provenance::parse_record(&b))?;
+    record.updated_at = Some(now.to_string());
+    Some(record)
+}
+
+/// The update script's text, placeholders still in it ([`update_script`] fills them).
+///
+/// Order on the host: pgid → developer tools → the host re-check (the record's bytes and the
+/// clone's physical path, as Uninstall's D6; else `not-managed`) → refuse local changes (`dirty`)
+/// and a clone with no upstream (`no-upstream`) → `phase:fetch` (Cancel honoured; a stalled
+/// transfer gives up after 30 s below 1 KB/s) → the window, untrappable from here (WP7 D8): `trap`,
+/// `phase:install`, `merge --ff-only` (`not-ff`, nothing else runs), `install.sh` as a DIRECT child
+/// (never inside `( … )`: zsh resets an ignored trap in a subshell, WP7 Phase 1), the record LAST.
+const UPDATE_TEMPLATE: &str = r#"echo "CLAUDESK-RUN:pgid:$(ps -o pgid= -p $$ | tr -d ' ')"
+root=__ROOT__
+target=__TARGET__
+want=__RECHEX__
+rec=__REC__
+log="$root/__DOTDIR__/update.log"
+if ! { __GUARD__; }; then echo 'CLAUDESK-RUN:result:no-devtools'; exit 0; fi
+now=$(perl -e 'my $x; if (open(my $f, "<", $ARGV[0])) { local $/; $x = <$f>; $x = "" unless defined $x; print unpack("H*", $x) } else { print "-" }' -- "$rec")
+if [ "$now" != "$want" ]; then echo 'CLAUDESK-RUN:result:not-managed'; exit 0; fi
+if [ -L "$target" ] || [ ! -d "$target" ] || [ ! -f "$target/install.sh" ]; then echo 'CLAUDESK-RUN:result:not-managed'; exit 0; fi
+cp=$(cd -P -- "$target" 2>/dev/null && pwd -P)
+if [ "$cp" != "$target" ]; then echo 'CLAUDESK-RUN:result:not-managed'; exit 0; fi
+if ! st=$(GIT_TERMINAL_PROMPT=0 "$d/usr/bin/git" -C "$target" status --porcelain </dev/null 2>&1); then echo "$st"; echo 'CLAUDESK-RUN:result:git-failed'; exit 0; fi
+if [ -n "$st" ]; then echo "$st"; echo 'CLAUDESK-RUN:result:dirty'; exit 0; fi
+if ! up=$(GIT_TERMINAL_PROMPT=0 "$d/usr/bin/git" -C "$target" rev-parse --abbrev-ref --symbolic-full-name '@{u}' </dev/null 2>/dev/null); then echo 'CLAUDESK-RUN:result:no-upstream'; exit 0; fi
+echo 'CLAUDESK-RUN:phase:fetch'
+GIT_TERMINAL_PROMPT=0 "$d/usr/bin/git" -C "$target" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 fetch --quiet </dev/null 2>&1
+frc=$?
+if [ "$frc" -ne 0 ]; then echo "CLAUDESK-RUN:result:fetch-failed:$frc"; exit 0; fi
+trap '' HUP PIPE TERM INT
+echo 'CLAUDESK-RUN:phase:install'
+GIT_TERMINAL_PROMPT=0 "$d/usr/bin/git" -C "$target" merge --ff-only "$up" </dev/null >"$log" 2>&1
+mrc=$?
+if [ "$mrc" -ne 0 ]; then cat -- "$log"; echo 'CLAUDESK-RUN:result:not-ff'; exit 0; fi
+cd -- "$target" && HOME="$root" ./install.sh </dev/null >>"$log" 2>&1
+irc=$?
+cd -- "$root" || cd /
+if [ "$irc" -eq 0 ]; then
+  if printf '%s\n' __JSON__ >"$rec.tmp" && mv -f -- "$rec.tmp" "$rec"; then w=0; else w=1; fi
+fi
+cat -- "$log"
+if [ "$irc" -ne 0 ]; then echo "CLAUDESK-RUN:result:install-failed:$irc"
+elif [ "$w" -ne 0 ]; then echo 'CLAUDESK-RUN:result:record-failed'
+else echo 'CLAUDESK-RUN:result:ok'; fi"#;
+
+/// The update script for an approved target, writing `record` LAST (built by Rust,
+/// [`updated_record`]; written by a constant-format `printf`, as the install's).
+pub fn update_script(
+    target: &RemoteUninstallTarget,
+    record: &InstallRecord,
+) -> Result<String, String> {
+    let json = serde_json::to_string(record).map_err(|e| e.to_string())?;
+    fill(
+        UPDATE_TEMPLATE,
+        &[
+            ("__ROOT__", &quote(target.root())),
+            ("__TARGET__", &quote(target.clone_dir())),
+            ("__RECHEX__", &quote(target.record_hex())),
+            ("__REC__", &quote(&record_path(target.root()))),
+            ("__DOTDIR__", DEFAULT_VENDOR_SUBPATH[0]),
+            ("__GUARD__", DEV_TOOLS_GUARD),
+            ("__JSON__", &quote(&json)),
+        ],
+    )
+}
+
+/// How an update run ended, as it reported it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpdateResult {
+    Ok,
+    NoDevTools,
+    /// The record or the clone is not what the guard approved. Nothing ran.
+    NotManaged,
+    /// `git status` failed in the clone. Nothing ran.
+    GitFailed,
+    /// The clone has local changes. Nothing ran.
+    Dirty,
+    /// The clone's branch tracks no upstream. Nothing ran.
+    NoUpstream,
+    /// `git fetch` failed. The work tree was not touched.
+    FetchFailed(i32),
+    /// The clone cannot be fast-forwarded. Nothing was merged or installed.
+    NotFf,
+    /// The clone moved, but `install.sh` failed. The record was not rewritten.
+    InstallFailed(i32),
+    /// Installed, but the record's `updated_at` could not be written.
+    RecordWriteFailed,
+}
+
+/// One update output line: `Some` for a result sentinel, `None` otherwise.
+pub fn parse_update_line(line: &str) -> Option<UpdateResult> {
+    let r = line
+        .trim()
+        .strip_prefix(RUN_SENTINEL)?
+        .strip_prefix("result:")?;
+    let code = |p: &str| r.strip_prefix(p).and_then(|c| c.parse::<i32>().ok());
+    Some(match r {
+        "ok" => UpdateResult::Ok,
+        "no-devtools" => UpdateResult::NoDevTools,
+        "not-managed" => UpdateResult::NotManaged,
+        "git-failed" => UpdateResult::GitFailed,
+        "dirty" => UpdateResult::Dirty,
+        "no-upstream" => UpdateResult::NoUpstream,
+        "not-ff" => UpdateResult::NotFf,
+        "record-failed" => UpdateResult::RecordWriteFailed,
+        _ => {
+            if let Some(c) = code("fetch-failed:") {
+                UpdateResult::FetchFailed(c)
+            } else {
+                UpdateResult::InstallFailed(code("install-failed:")?)
+            }
+        }
+    })
+}
+
+/// The ending of an update → what it means. Pure. The re-probe decides success: `ok` only when
+/// the host still reads Managed. Every arm is written out.
+pub fn resolve_update(
+    host: &str,
+    result: Option<&UpdateResult>,
+    exit: i32,
+    cancel_requested: bool,
+    after: Option<&HostSubstrate>,
+) -> RemoteRunFinished {
+    let managed = matches!(after, Some(HostSubstrate::Managed { .. }));
+    let done = |ok: bool, cancelled: bool, message: Option<String>| RemoteRunFinished {
+        host: host.to_string(),
+        op: RemoteOp::Update,
+        ok,
+        cancelled,
+        message,
+    };
+    let unchanged = "Nothing was changed on the host.";
+    match result {
+        Some(UpdateResult::Ok) if managed && cancel_requested => done(
+            true,
+            false,
+            Some("Cancel came after the update had started, so it finished.".to_string()),
+        ),
+        Some(UpdateResult::Ok) if managed => done(true, false, None),
+        Some(UpdateResult::Ok) if after.is_none() || after == Some(&HostSubstrate::Unknown) => {
+            done(
+                true,
+                false,
+                Some(
+                    "Updated. Claudesk couldn't re-check the host afterwards; reopen Settings to \
+                 refresh it."
+                        .to_string(),
+                ),
+            )
+        }
+        Some(UpdateResult::Ok) => done(
+            false,
+            false,
+            Some(format!(
+                "install.sh finished, but the host now reads as {}.",
+                state_words(after)
+            )),
+        ),
+        Some(UpdateResult::NoDevTools) => done(
+            false,
+            false,
+            Some(format!(
+                "The host has no developer tools, so git can't run there: {DEV_TOOLS_FIX}. \
+                 {unchanged}"
+            )),
+        ),
+        Some(UpdateResult::NotManaged) => done(
+            false,
+            false,
+            Some(format!(
+                "The host changed after Claudesk checked it: the install record or the clone \
+                 folder is not what was approved. {unchanged} Reopen Settings and try again."
+            )),
+        ),
+        Some(UpdateResult::GitFailed) => done(
+            false,
+            false,
+            Some(format!(
+                "git couldn't read the clone on the host; its output is above. {unchanged}"
+            )),
+        ),
+        Some(UpdateResult::Dirty) => done(
+            false,
+            false,
+            Some(format!(
+                "The clone on the host has local changes (listed above), so Claudesk won't \
+                 update it. {unchanged} Commit or discard them on the host, then try again."
+            )),
+        ),
+        Some(UpdateResult::NoUpstream) => done(
+            false,
+            false,
+            Some(format!(
+                "The clone on the host isn't tracking a branch on GitHub, so there is nothing to \
+                 update from. {unchanged}"
+            )),
+        ),
+        Some(UpdateResult::FetchFailed(code)) => done(
+            false,
+            false,
+            Some(format!(
+                "Fetching from GitHub failed (exit {code}); its output is above. {unchanged}"
+            )),
+        ),
+        Some(UpdateResult::NotFf) => done(
+            false,
+            false,
+            Some(format!(
+                "The clone on the host can't be fast-forwarded to GitHub (it has commits of its \
+                 own); git's output is above. {unchanged}"
+            )),
+        ),
+        Some(UpdateResult::InstallFailed(code)) => done(
+            false,
+            false,
+            Some(format!(
+                "The clone moved to GitHub's version, but install.sh failed (exit {code}); its \
+                 output is above. The record was not updated. install.sh is safe to re-run, so \
+                 Update can be retried. The host now reads as {}.",
+                state_words(after)
+            )),
+        ),
+        Some(UpdateResult::RecordWriteFailed) => done(
+            managed,
+            false,
+            Some(
+                "Updated, but the install record's update time could not be written. The host \
+                 still reads as installed by Claudesk."
+                    .to_string(),
+            ),
+        ),
+        None if cancel_requested && managed => done(
+            false,
+            true,
+            Some("Cancelled. Nothing was updated.".to_string()),
+        ),
+        None if cancel_requested => done(
+            false,
+            true,
+            Some(format!(
+                "Cancelled. The host now reads as {}.",
+                state_words(after)
+            )),
+        ),
+        None => done(
+            false,
+            false,
             Some(format!(
                 "The run ended without reporting a result (exit {exit}). The host now reads as \
                  {}.",

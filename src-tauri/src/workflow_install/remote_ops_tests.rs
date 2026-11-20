@@ -460,3 +460,312 @@ fn the_deleting_builders_take_only_an_approved_target() {
         );
     }
 }
+
+// ── Update (WP7 Phase 3) ─────────────────────────────────────────────────────────────────
+//
+// The Managed root's clone was cloned from the fixture repo, so the fixture repo is its origin:
+// a commit there makes the host clone behind. The fixture `install.sh` appends one block per run,
+// so the block count says whether it ran.
+
+use crate::workflow_install::remote_runner::tests::run_and_group_kill_at;
+
+fn git_in(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new("git")
+        .args([
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "commit.gpgsign=false",
+        ])
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// A new commit on the clone's origin: the host clone is now behind.
+fn advance_origin(repo: &Path) -> String {
+    std::fs::write(repo.join("NEWS"), "a newer version\n").unwrap();
+    git_in(repo, &["add", "-A"]);
+    git_in(repo, &["commit", "-q", "-m", "newer"]);
+    git_in(repo, &["rev-parse", "HEAD"])
+}
+
+fn blocks(host: &Host) -> usize {
+    std::fs::read_to_string(format!("{}/.claude/CLAUDE.md", host.root()))
+        .unwrap_or_default()
+        .matches("# workflow block")
+        .count()
+}
+
+fn head(host: &Host) -> String {
+    git_in(&host.clone_dir(), &["rev-parse", "HEAD"])
+}
+
+fn update_of(host: &Host, now: &str) -> String {
+    let t = guard(host).expect("approved");
+    update_script(&t, &updated_record(&t, now).unwrap()).unwrap()
+}
+
+fn update_result(out: &str) -> Option<UpdateResult> {
+    out.lines().find_map(parse_update_line)
+}
+
+fn record_bytes(host: &Host) -> Vec<u8> {
+    std::fs::read(host.record()).unwrap()
+}
+
+#[test]
+fn a_behind_clone_is_fast_forwarded_reinstalled_and_its_record_stamped_last() {
+    let (host, repo) = managed_host();
+    let before: InstallRecord = serde_json::from_slice(&record_bytes(&host)).unwrap();
+    assert_eq!(before.updated_at, None);
+    let newer = advance_origin(repo.path());
+    assert_ne!(head(&host), newer);
+    let out = exec_on(&host)(&update_of(&host, "2026-11-21T00:00:00+00:00")).unwrap();
+    assert_eq!(update_result(&out), Some(UpdateResult::Ok), "{out}");
+    assert!(out.contains("CLAUDESK-RUN:phase:fetch") && out.contains("CLAUDESK-RUN:phase:install"));
+    assert_eq!(head(&host), newer, "fast-forwarded to the origin");
+    assert_eq!(blocks(&host), 2, "install.sh ran again");
+    // install.sh writes to a log (it is `set -e`; a dead pipe would end it), and the script
+    // prints that log before its result: the operator sees what the re-install did (runner M6).
+    let shown = out
+        .find("[ok] feature-build")
+        .expect("install.sh's output is shown");
+    assert!(shown < out.find("CLAUDESK-RUN:result:ok").unwrap(), "{out}");
+    let after: InstallRecord = serde_json::from_slice(&record_bytes(&host)).unwrap();
+    assert_eq!(
+        after,
+        InstallRecord {
+            updated_at: Some("2026-11-21T00:00:00+00:00".into()),
+            ..before
+        },
+        "every other field kept byte-for-byte"
+    );
+    let reprobed = host.reprobe();
+    assert!(matches!(reprobed, HostSubstrate::Managed { .. }));
+    let f = resolve_update("h", update_result(&out).as_ref(), 0, false, Some(&reprobed));
+    assert!(
+        f.ok && f.message.is_none() && f.op == RemoteOp::Update,
+        "{f:?}"
+    );
+    assert!(host.decoy_is_empty(), "a write escaped the root");
+}
+
+/// Every refusal before the fetch runs nothing: HEAD, the record and the install stay as they were.
+fn assert_untouched(host: &Host, head_before: &str, record_before: &[u8]) {
+    assert_eq!(head(host), head_before);
+    assert_eq!(record_bytes(host), record_before);
+    assert_eq!(blocks(host), 1, "install.sh did not run");
+}
+
+#[test]
+fn a_dirty_clone_is_refused_before_anything_runs() {
+    let (host, repo) = managed_host();
+    advance_origin(repo.path());
+    let (h0, r0) = (head(&host), record_bytes(&host));
+    std::fs::write(
+        host.clone_dir().join("install.sh"),
+        "#!/bin/bash\n# claude-workflow-system\necho hacked\n",
+    )
+    .unwrap();
+    let script = update_of(&host, "t");
+    let out = exec_on(&host)(&script).unwrap();
+    assert_eq!(update_result(&out), Some(UpdateResult::Dirty), "{out}");
+    assert!(
+        out.contains("install.sh"),
+        "the changed file is listed: {out}"
+    );
+    assert!(!out.contains("phase:fetch"));
+    assert_untouched(&host, &h0, &r0);
+}
+
+#[test]
+fn a_clone_that_cannot_fast_forward_is_refused_before_install_sh() {
+    let (host, repo) = managed_host();
+    advance_origin(repo.path());
+    std::fs::write(host.clone_dir().join("LOCAL"), "a host-only commit\n").unwrap();
+    git_in(&host.clone_dir(), &["add", "-A"]);
+    git_in(&host.clone_dir(), &["commit", "-q", "-m", "local"]);
+    let (h0, r0) = (head(&host), record_bytes(&host));
+    let out = exec_on(&host)(&update_of(&host, "t")).unwrap();
+    assert_eq!(update_result(&out), Some(UpdateResult::NotFf), "{out}");
+    assert_untouched(&host, &h0, &r0);
+}
+
+#[test]
+fn a_clone_without_an_upstream_and_a_vanished_record_are_refused() {
+    let (host, _repo) = managed_host();
+    git_in(&host.clone_dir(), &["branch", "--unset-upstream"]);
+    let (h0, r0) = (head(&host), record_bytes(&host));
+    let out = exec_on(&host)(&update_of(&host, "t")).unwrap();
+    assert_eq!(update_result(&out), Some(UpdateResult::NoUpstream), "{out}");
+    assert_untouched(&host, &h0, &r0);
+
+    let (host, repo) = managed_host();
+    advance_origin(repo.path());
+    let h0 = head(&host);
+    let script = update_of(&host, "t");
+    std::fs::remove_file(host.record()).unwrap();
+    let out = exec_on(&host)(&script).unwrap();
+    assert_eq!(update_result(&out), Some(UpdateResult::NotManaged), "{out}");
+    assert_eq!(head(&host), h0);
+    assert!(!host.record().exists(), "no record is resurrected");
+    assert_eq!(blocks(&host), 1);
+}
+
+#[test]
+fn a_failed_install_sh_after_the_merge_keeps_the_old_record() {
+    let (host, repo) = managed_host();
+    let newer = advance_origin(repo.path());
+    let r0 = record_bytes(&host);
+    let out = exec_on(&host)(&format!("export FIXTURE_FAIL=3\n{}", update_of(&host, "t"))).unwrap();
+    assert_eq!(
+        update_result(&out),
+        Some(UpdateResult::InstallFailed(3)),
+        "{out}"
+    );
+    assert_eq!(head(&host), newer, "the merge happened");
+    assert_eq!(
+        record_bytes(&host),
+        r0,
+        "no updated_at for an update that did not install"
+    );
+    let f = resolve_update(
+        "h",
+        update_result(&out).as_ref(),
+        0,
+        false,
+        Some(&host.reprobe()),
+    );
+    assert!(!f.ok && f.message.unwrap().contains("Update can be retried"));
+}
+
+/// Cancel during the fetch: the group TERM ends the run before the merge (no result), and the
+/// clone and the record are as they were. The fetch is replaced by a sleep, as the install's
+/// clone-arm test replaces its clone.
+#[test]
+fn a_cancel_during_the_fetch_stops_the_run_and_changes_nothing() {
+    let (host, repo) = managed_host();
+    advance_origin(repo.path());
+    let (h0, r0) = (head(&host), record_bytes(&host));
+    let script = update_of(&host, "t");
+    let fetch = "GIT_TERMINAL_PROMPT=0 \"$d/usr/bin/git\" -C \"$target\" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 fetch --quiet </dev/null 2>&1";
+    assert!(script.contains(fetch), "{script}");
+    let script = script.replace(fetch, "sleep 30");
+    let started = std::time::Instant::now();
+    let (lines, _) = run_and_group_kill_at(&host, &script, "CLAUDESK-RUN:phase:fetch", "");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(10),
+        "stopped promptly"
+    );
+    let out = lines.join("\n");
+    assert_eq!(update_result(&out), None, "killed before reporting: {out}");
+    assert_untouched(&host, &h0, &r0);
+    let f = resolve_update("h", None, -1, true, Some(&host.reprobe()));
+    assert!(!f.ok && f.cancelled);
+    assert_eq!(
+        f.message.as_deref(),
+        Some("Cancelled. Nothing was updated.")
+    );
+}
+
+/// A TERM that arrives once the window opened (here `KILL_DELAY` into `phase:install`, while a
+/// slowed install.sh runs) is ignored: the update finishes and is recorded.
+#[test]
+fn a_group_kill_inside_the_update_window_cannot_split_it() {
+    let (host, repo) = managed_host();
+    let newer = advance_origin(repo.path());
+    let (lines, _) = run_and_group_kill_at(
+        &host,
+        &update_of(&host, "2026-11-21T00:00:00+00:00"),
+        "CLAUDESK-RUN:phase:install",
+        "FIXTURE_SLEEP=1; export FIXTURE_SLEEP",
+    );
+    let out = lines.join("\n");
+    assert_eq!(update_result(&out), Some(UpdateResult::Ok), "{out}");
+    assert_eq!(head(&host), newer);
+    let rec: InstallRecord = serde_json::from_slice(&record_bytes(&host)).unwrap();
+    assert_eq!(rec.updated_at.as_deref(), Some("2026-11-21T00:00:00+00:00"));
+}
+
+#[test]
+fn update_lines_parse_and_every_update_message_is_plain() {
+    for (line, want) in [
+        ("CLAUDESK-RUN:result:ok", Some(UpdateResult::Ok)),
+        (
+            "CLAUDESK-RUN:result:no-devtools",
+            Some(UpdateResult::NoDevTools),
+        ),
+        (
+            "CLAUDESK-RUN:result:not-managed",
+            Some(UpdateResult::NotManaged),
+        ),
+        (
+            "CLAUDESK-RUN:result:git-failed",
+            Some(UpdateResult::GitFailed),
+        ),
+        ("CLAUDESK-RUN:result:dirty", Some(UpdateResult::Dirty)),
+        (
+            "CLAUDESK-RUN:result:no-upstream",
+            Some(UpdateResult::NoUpstream),
+        ),
+        ("CLAUDESK-RUN:result:not-ff", Some(UpdateResult::NotFf)),
+        (
+            "CLAUDESK-RUN:result:record-failed",
+            Some(UpdateResult::RecordWriteFailed),
+        ),
+        (
+            "CLAUDESK-RUN:result:fetch-failed:128",
+            Some(UpdateResult::FetchFailed(128)),
+        ),
+        (
+            "CLAUDESK-RUN:result:install-failed:2",
+            Some(UpdateResult::InstallFailed(2)),
+        ),
+        ("CLAUDESK-RUN:result:install-failed:x", None),
+        ("CLAUDESK-RUN:phase:fetch", None),
+        ("Already up to date.", None),
+    ] {
+        assert_eq!(parse_update_line(line), want, "{line}");
+    }
+    let managed = HostSubstrate::Managed {
+        root: None,
+        head: None,
+        record: crate::workflow_install::remote_runner::remote_record("/Users/me", "t"),
+    };
+    for r in [
+        None,
+        Some(UpdateResult::Ok),
+        Some(UpdateResult::NoDevTools),
+        Some(UpdateResult::NotManaged),
+        Some(UpdateResult::GitFailed),
+        Some(UpdateResult::Dirty),
+        Some(UpdateResult::NoUpstream),
+        Some(UpdateResult::FetchFailed(1)),
+        Some(UpdateResult::NotFf),
+        Some(UpdateResult::InstallFailed(1)),
+        Some(UpdateResult::RecordWriteFailed),
+    ] {
+        for cancel in [false, true] {
+            for after in [None, Some(HostSubstrate::Absent), Some(managed.clone())] {
+                let f = resolve_update("h", r.as_ref(), 1, cancel, after.as_ref());
+                assert_eq!(f.op, RemoteOp::Update);
+                let clean =
+                    r == Some(UpdateResult::Ok) && !cancel && after == Some(managed.clone());
+                assert_eq!(f.message.is_none(), clean, "{r:?} {cancel} {after:?}");
+                if let Some(m) = f.message {
+                    assert!(!m.contains("  "), "{m:?}");
+                }
+            }
+        }
+    }
+}

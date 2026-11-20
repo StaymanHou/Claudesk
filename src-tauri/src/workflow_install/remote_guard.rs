@@ -149,6 +149,7 @@ mod tests {
 
     fn record() -> InstallRecord {
         InstallRecord {
+            updated_at: None,
             clone_path: PathBuf::from(CLONE),
             installed_at: "2026-11-20T00:00:00+00:00".into(),
             origin_url: "https://example.com/r.git".into(),

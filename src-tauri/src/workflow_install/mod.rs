@@ -194,6 +194,7 @@ mod tests {
 
     fn a_record() -> InstallRecord {
         InstallRecord {
+            updated_at: None,
             clone_path: PathBuf::from("/somewhere/.claudesk/vendor/my-claude-code-customization"),
             installed_at: "2026-07-29T12:00:00Z".to_string(),
             origin_url: "git@example.com:someone/repo.git".to_string(),

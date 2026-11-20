@@ -42,6 +42,12 @@ pub struct InstallRecord {
     pub installed_at: String,
     /// The origin the clone came from, so a later reader can tell *what* was installed.
     pub origin_url: String,
+    /// M18 WP7 (D9) — RFC-3339 UTC timestamp of the last remote Update, set only by an Update.
+    /// Absent from every record written before one, and then not serialized at all, so a local
+    /// record and a fresh install's stay byte-identical; an older Claudesk reading an updated
+    /// record ignores the unknown field (this struct has no `deny_unknown_fields`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
 }
 
 /// The record's path under an injected `claudesk_root` (normally `~/.claudesk/`).
@@ -112,6 +118,7 @@ mod tests {
 
     fn a_record(clone_path: PathBuf) -> InstallRecord {
         InstallRecord {
+            updated_at: None,
             clone_path,
             installed_at: "2026-07-29T12:00:00Z".to_string(),
             origin_url: "git@example.com:someone/repo.git".to_string(),
@@ -302,5 +309,31 @@ mod tests {
             code.contains("claudesk_root: &Path"),
             "the root must appear as an injected parameter"
         );
+    }
+
+    /// M18 WP7 (D9) — `updated_at` is invisible until an Update sets it: a record without it
+    /// serializes to exactly the pre-WP7 bytes (local and freshly installed records unchanged),
+    /// a pre-WP7 record still parses, and an updated record round-trips through `parse_record`.
+    #[test]
+    fn updated_at_is_absent_until_an_update_sets_it() {
+        let rec = InstallRecord {
+            updated_at: None,
+            clone_path: PathBuf::from("/h/.claudesk/vendor/x"),
+            installed_at: "2026-11-20T00:00:00+00:00".into(),
+            origin_url: "https://e/r.git".into(),
+        };
+        let old_bytes = r#"{"clone_path":"/h/.claudesk/vendor/x","installed_at":"2026-11-20T00:00:00+00:00","origin_url":"https://e/r.git"}"#;
+        assert_eq!(serde_json::to_string(&rec).unwrap(), old_bytes);
+        assert_eq!(parse_record(old_bytes.as_bytes()), Some(rec.clone()));
+        let updated = InstallRecord {
+            updated_at: Some("2026-11-21T00:00:00+00:00".into()),
+            ..rec
+        };
+        let json = serde_json::to_string(&updated).unwrap();
+        assert!(
+            json.ends_with(r#","updated_at":"2026-11-21T00:00:00+00:00"}"#),
+            "{json}"
+        );
+        assert_eq!(parse_record(json.as_bytes()), Some(updated));
     }
 }

@@ -781,6 +781,7 @@ pub fn run() {
             workflow_install::commands::workflow_remote_install_cancel,
             workflow_install::commands::workflow_remote_uninstall_preview,
             workflow_install::commands::workflow_remote_uninstall_start,
+            workflow_install::commands::workflow_remote_update_start,
             // WP3.5b: the uninstall path. dry_run drives the 3-intent dialog's preview
             // (the script's own output — one source of truth); start runs the guarded
             // removal (refuse-guard structurally in the call path, record deleted LAST).

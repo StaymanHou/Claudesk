@@ -214,6 +214,7 @@ mod tests {
     /// A record pointing at `clone_path`, shaped like a real install's.
     fn a_record(clone_path: PathBuf) -> InstallRecord {
         InstallRecord {
+            updated_at: None,
             clone_path,
             installed_at: "2026-07-31T12:00:00Z".to_string(),
             origin_url: "git@example.com:someone/repo.git".to_string(),

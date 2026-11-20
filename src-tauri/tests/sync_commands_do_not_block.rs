@@ -346,6 +346,20 @@ fn cfg_is_test_only(meta: &syn::Meta) -> bool {
     }
 }
 
+/// The file a `#[path = "…"]` attribute names, if the item carries one.
+fn path_attr(attrs: &[syn::Attribute]) -> Option<String> {
+    attrs.iter().find_map(|a| match &a.meta {
+        syn::Meta::NameValue(nv) if nv.path.is_ident("path") => match &nv.value {
+            syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(s),
+                ..
+            }) => Some(s.value()),
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
 struct Command {
     file: PathBuf,
     name: String,
@@ -425,6 +439,16 @@ impl Crate {
                             let dir = module_dir(file);
                             skip_files.insert(dir.join(format!("{}.rs", m.ident)));
                             skip_files.insert(dir.join(m.ident.to_string()).join("mod.rs"));
+                            // M18 WP7: a `#[path = "x_tests.rs"] mod tests;` names ITS file, relative
+                            // to the declaring file's directory. Without this the scan read
+                            // `remote_runner_tests.rs` / `remote_ops_tests.rs` as production code,
+                            // and a test helper named like a production fn (`head`) put a test-only
+                            // `Command::output` on `git_recent_commits`' chain.
+                            if let Some(p) = path_attr(&m.attrs) {
+                                if let Some(parent) = file.parent() {
+                                    skip_files.insert(parent.join(p));
+                                }
+                            }
                         }
                         continue;
                     }
@@ -474,6 +498,16 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// Every file an out-of-line `#[cfg(test)] mod` declares, by its module name or its `#[path]`.
+fn test_only_files(parsed: &[(PathBuf, syn::File)]) -> HashSet<PathBuf> {
+    let mut skip = HashSet::new();
+    let mut probe = Crate::default();
+    for (p, ast) in parsed {
+        probe.add_items(p, &ast.items, &mut skip);
+    }
+    skip
+}
+
 fn parse_crate(src: &Path) -> Crate {
     let mut files = Vec::new();
     rust_files(src, &mut files);
@@ -487,11 +521,7 @@ fn parse_crate(src: &Path) -> Crate {
             (p, ast)
         })
         .collect();
-    let mut skip = HashSet::new();
-    let mut probe = Crate::default();
-    for (p, ast) in &parsed {
-        probe.add_items(p, &ast.items, &mut skip);
-    }
+    let skip = test_only_files(&parsed);
     let mut krate = Crate::default();
     let mut unused = HashSet::new();
     for (p, ast) in &parsed {
@@ -998,4 +1028,36 @@ fn a_listed_command_that_is_sync_or_missing_fails_the_async_ledger() {
         problems[1].contains("deleted names no command"),
         "got {problems:?}"
     );
+}
+
+/// M18 WP7 — the scan never reads a test-only file as production: an out-of-line
+/// `#[cfg(test)] #[path = "…"] mod tests;` names its own file. Positive control on the real crate:
+/// both `#[path]` test files of `workflow_install` are skipped, and the files that declare them are
+/// not (a skip set that grew to swallow production would hide real blocking calls).
+#[test]
+fn path_named_test_modules_are_not_scanned_as_production() {
+    let mut files = Vec::new();
+    rust_files(&src_dir(), &mut files);
+    let parsed: Vec<(PathBuf, syn::File)> = files
+        .into_iter()
+        .map(|p| {
+            let text = std::fs::read_to_string(&p).expect("readable source");
+            let ast = syn::parse_file(&text).expect("parses");
+            (p, ast)
+        })
+        .collect();
+    let skip = test_only_files(&parsed);
+    let wi = src_dir().join("workflow_install");
+    for test_file in ["remote_runner_tests.rs", "remote_ops_tests.rs"] {
+        assert!(
+            skip.contains(&wi.join(test_file)),
+            "{test_file} is test-only"
+        );
+    }
+    for production in ["remote_runner.rs", "remote_ops.rs", "commands.rs"] {
+        assert!(
+            !skip.contains(&wi.join(production)),
+            "{production} is production"
+        );
+    }
 }

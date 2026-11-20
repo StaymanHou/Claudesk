@@ -184,6 +184,7 @@ mod tests {
         // (the provenance write) against the fixture, then assert where it landed.
         let sandbox = Sandbox::new();
         let record = provenance::InstallRecord {
+            updated_at: None,
             clone_path: sandbox.vendor_dir().join("my-claude-code-customization"),
             installed_at: "2026-07-29T12:00:00Z".to_string(),
             origin_url: "git@example.com:someone/repo.git".to_string(),
@@ -243,6 +244,7 @@ mod tests {
         provenance::write_record(
             &sandbox.claudesk_root(),
             &provenance::InstallRecord {
+                updated_at: None,
                 clone_path: sandbox.vendor_dir().join("mccc"),
                 installed_at: "2026-07-29T12:00:00Z".to_string(),
                 origin_url: "u".to_string(),
@@ -262,6 +264,7 @@ mod tests {
             provenance::write_record(
                 &sandbox.claudesk_root(),
                 &provenance::InstallRecord {
+                    updated_at: None,
                     clone_path: sandbox.vendor_dir(),
                     installed_at: "t".to_string(),
                     origin_url: "u".to_string(),

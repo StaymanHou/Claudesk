@@ -677,6 +677,7 @@ pub fn run_install(
 
     // ── 3. Record provenance — LAST, and only on success ────────────────────────────
     let record = InstallRecord {
+        updated_at: None,
         clone_path: dest.to_path_buf(),
         installed_at: installed_at.to_string(),
         origin_url: url.to_string(),
@@ -2038,6 +2039,7 @@ mod tests {
             std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
         let record = InstallRecord {
+            updated_at: None,
             clone_path: clone,
             installed_at: "2026-07-31T12:00:00Z".to_string(),
             origin_url: "git@example.com:someone/repo.git".to_string(),

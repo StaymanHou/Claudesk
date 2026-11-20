@@ -81,6 +81,7 @@ pub fn remote_clone_path(root: &str) -> String {
 /// The record a successful run writes on the host.
 pub fn remote_record(root: &str, installed_at: &str) -> InstallRecord {
     InstallRecord {
+        updated_at: None,
         clone_path: remote_clone_path(root).into(),
         installed_at: installed_at.to_string(),
         origin_url: REMOTE_ORIGIN_URL.to_string(),
@@ -293,7 +294,11 @@ pub enum Phase {
     /// `git clone` is running. Cancel is honoured. (Before it, while the checks and any
     /// leftover-clone removal run, no phase has been reported: Cancel is honoured then too.)
     Clone,
-    /// `install.sh` and the record write. Cancel is NOT honoured (ruling A).
+    /// M18 WP7 — an Update's `git fetch`. Cancel is honoured, as during the clone (a killed fetch
+    /// leaves the clone's work tree as it was).
+    Fetch,
+    /// `install.sh` and the record write (an Update's merge too). Cancel is NOT honoured
+    /// (ruling A).
     Install,
 }
 
@@ -338,6 +343,7 @@ pub fn parse_run_line(line: &str) -> Option<RunLine> {
     let code = |s: &str| s.parse::<i32>().ok();
     Some(match rest {
         "phase:clone" => RunLine::Phase(Phase::Clone),
+        "phase:fetch" => RunLine::Phase(Phase::Fetch),
         "phase:install" => RunLine::Phase(Phase::Install),
         "stale-removed" => RunLine::StaleRemoved,
         "result:ok" => RunLine::Result(RunResult::Ok),
@@ -367,6 +373,7 @@ pub fn parse_run_line(line: &str) -> Option<RunLine> {
 #[serde(rename_all = "snake_case")]
 pub enum RemoteOp {
     Install,
+    Update,
     Uninstall,
 }
 
