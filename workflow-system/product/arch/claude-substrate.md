@@ -99,7 +99,7 @@ Also as-built:
 
 ---
 
-## Remote hosts (M18) — 📐 PLANNED 2026-11-18 (`/product-arch`); §R.1–R.2 ✅ BUILT at WP4 (2026-11-20)
+## Remote hosts (M18) — 📐 PLANNED 2026-11-18 (`/product-arch`); §R.1–R.2 ✅ BUILT at WP4, §R.4–R.5 (readout) ✅ BUILT at WP5 (2026-11-20)
 
 **Milestone 18, the remote workflow substrate.** Scope was settled at the entry grill
 (`roadmap.md` → "### Milestone 18" → "Scope, settled at the entry grill"). In short: detect the workflow system
@@ -228,8 +228,11 @@ What the build settled that the design above left open (the WP4 WIP's D1–D10; 
 
 ### R.4 Drift (Settings only)
 
-- **What is compared:** the host clone's `HEAD` (from the open-check probe or a refresh) against `git ls-remote <url> HEAD`, **run from the
-  host**. The URL is the record's `origin_url` for Managed, or the repo's own `remote get-url origin` for Developer (read-only).
+- **What is compared:** the host clone's `HEAD` (from the open-check probe or a refresh) against `git ls-remote origin HEAD`, **run from the
+  host**. ⚠️ **Revised at WP5 (D1):** the URL is the clone's own `origin`, for Developer AND Managed, not the record's `origin_url`.
+  WP7's Update runs `git -C <clone> pull --ff-only`, which fetches from that same `origin`, so drift and Update cannot disagree, and the
+  fragment stays constant (no JSON parsing on the host, no Rust-interpolated URL). A Managed clone's `origin` IS the record's URL unless
+  someone edited the host clone.
 - ⚠️ **"Behind GitHub", not "N commits behind".** A count needs a `fetch`, which writes into the host repo's `.git` on a
   read path. That would be a write into a Developer install Claudesk does not own. This revises the grill wording. The readout shows the
   two short SHAs and "up to date / behind GitHub / can't check (reason)".
@@ -244,6 +247,34 @@ Developer), the HEAD, the drift, and the buttons: Install (Absent), Update (Mana
 boundary ("Settings owns the substrate; discovery lives elsewhere"). **It is not gated:** like the local substrate section, it
 is the on-ramp, and it shows only when at least one remote row exists. Run output streams into the same output panel the local
 wizard uses. A host whose link is down shows "connect a workspace on this host to check". Settings never brings up a link by itself.
+
+### R.4 + R.5 as built — ✅ WP5 (2026-11-20)
+
+What the build settled (the WP5 WIP's D1–D9, archived as `m18-wp5-remote-hosts-readout.md`):
+- **One exec per host, the probe AND the drift:** `remote_cmd::substrate_refresh_command`. The probe runs exactly as the open check's (same
+  `substrate-probed` marker, same debug sandbox prefix), captured in `$p`; the drift half reads the root the PROBE printed, never
+  re-derived. One parser for both callers: `parse_substrate` (shared by `parse_open_facts` and `parse_refresh`).
+- **Every remote `git` is behind `DEV_TOOLS_GUARD`** (`d=$(xcode-select -p) && [ -n "$d" ] && [ -x "$d/usr/bin/git" ]`, Probe outcome (5))
+  and runs as `"$d/usr/bin/git"`, never a PATH lookup, non-interactively (`GIT_TERMINAL_PROMPT=0`, ssh `BatchMode=yes`, stdin closed).
+  ⚠️ The `-n` test only bites for empty output with exit 0 (the assignment's own status catches exit 2); a test drives that arm.
+  WP6's preflight reuses the constant.
+- **The drift line:** `drift-remote:<sha>`, or `drift-error:no-devtools | no-origin | git:<last line>`. `remote_substrate::Drift`
+  (`up_to_date | behind | cant_check`) compares FULL heads; `behind` means "differs" (no fetch, D6). Absent / Unknown → no drift at all.
+- **Commands:** `remote_hosts` (sync: the distinct hosts of the VALID remote rows, each with `link_up` + its cached substrate) and async
+  `remote_substrate_refresh(host)` over `LinkRegistry::master_exec` (Up-only, master-only; a caller guard pins it as the only `links.`
+  call). A down link answers `link_down` and sends nothing; a host that is not a row's host is refused before any exec. An answer writes
+  the per-host cache through `set_substrate` (the same `remote-substrate` event every workspace hears).
+- **The group:** "Remote hosts", right after Workflow features, rendered only when `remote_hosts` is non-empty, NOT gated (the on-ramp,
+  operator-confirmed). Each entry: the full `user@host` (operator decision), the state tag (Developer / Managed / Absent / Unknown), a detail
+  line with `HEAD <short>` (tooltip: the clone root), and the drift or "Connect a workspace on this host to check." line. The substrate is
+  read through `useHostSubstrates` (the seam), never a one-shot copy. Refresh runs once per mount, only for hosts whose link is Up; closing
+  the panel starts no further work.
+- **5.2b:** the absent-host note's button calls `onOpenSettings("remote-hosts")` (required on `CenterStage` / `Workspace`); App's
+  `openSettingsAt` sets the highlight, and `SettingsGroup` scrolls a highlighted group into view. **D8:** every close (button, Esc, the ⌘,
+  toggle) clears App's `settingsHighlight`; before WP5 nothing did, so every open after the invite re-flashed Workflow features.
+- ⚠️ Open (backlogged at WP5 review): an answerless refresh writes `Unknown` over a known host
+  (`SURFACE-2026-11-20-QUALITY-SETTINGS-REFRESH-WRITES-UNKNOWN-OVER-A-KNOWN-HOST`), and `Drift::Behind` should become `Differs` before
+  WP7 reads it.
 
 ### R.6 Preflight, for a fresh host account (what an install actually meets next)
 

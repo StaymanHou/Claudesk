@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP5: Settings → "Remote hosts" (read-only readout + drift)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** Completed 2026-11-20 (finalize)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -220,8 +220,9 @@ endpoint, reached by `git ls-remote` from the host (measured ~1 s at arch time).
     — evidence: `pnpm verify:auto` → EXIT=0 in 48s (vitest `4151 passed (4151)`; every `cargo test` binary `0 failed`, lib `1420 passed`; fmt, clippy, `tsc`, `check:link` clean; the one pre-existing lint warning)
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship
+- **Path:** Feature > Completed (archived 2026-11-20)
+- **Active scope:** finalize (review-quality complete: 1 MAJOR + 2 MINOR backlogged; resync §R.4 here)
+- **Ship:** full suite reused from the last-phase codify run (`Test scope: full — last phase`, EXIT=0, vitest 4151 / cargo 1420); lint + `tsc` re-run clean; the scratch dir is empty; no debug or TODO in the window. NOT pushed: `main` is 20 commits ahead of `origin` (operator holds the push).
 - **Build notes (Phase 3):**
   - `checkHostArg` now unwraps whole-expression parens, splits a top-level conditional (`splitConditional`, recursive; `?.`/`??` are not its `?`), and requires EACH arm to be exactly one seam call (`closeOf` the call's paren = the arm's end) or a seam-bound identifier.
   - New self-test block covers: an identifier arm, an object arm, either arm, a nested inner arm, `||` / `??` chained after a seam call, all-seam nested + parenthesised arms, the picker's real shape, and `?.` inside an arm.
@@ -239,7 +240,83 @@ endpoint, reached by `git ls-remote` from the host (measured ~1 s at arch time).
   hand-added dev `projects.json` row needs integer timestamps. Never touch the installed Claudesk's `ssh -M` (tank).
 - Restore the dev `projects.json` / `settings.json` to their pre-check state after verify-self.
 
+## Code-Quality Review — m18-wp5-remote-hosts-readout
+
+*(window `e3926dc^..9fd2c46`, ship `9fd2c46`; drive_mode=autopilot → the MAJOR and two MINORs auto-backlogged, the arch-resync MINOR resolved at finalize)*
+
+### Strengths
+- **One substrate parser for both callers.** `parse_substrate` and `is_sha` are factored out of `parse_open_facts`, so the open check and the Settings refresh cannot read a probe two ways, and the consuming surface `remote_open_check` was verified after the refactor.
+- **The drift script is tested as the real generated text,** never a retyped copy:
+  - fixtures with a local bare `origin`, plus a `for-each-ref` check that nothing was fetched;
+  - each developer-tools guard arm on a stub `xcode-select`, including empty output with exit 0;
+  - a wrapper `git` proving the developer dir's own binary runs;
+  - the full `zsh -lc` wrapped command run through `/bin/sh`.
+- **"Settings never brings a link up" is enforced in the backend.** `master_exec` is the only route, a caller guard pins it, and an unknown host is refused before any exec.
+- **Both WP4 review findings are fixed properly:**
+  - the per-arm conditional check, with negative and positive controls;
+  - `onOpenSettings` is required, so dropping it is a type error.
+- **D8 pays down a latent M10.9 re-flash bug.** The reopen goes through the picker gear, so the close path's clear cannot pass vacuously.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`remote_link::commands::settle_refresh`] The doc says the cache is written ONLY when the host answered, but an answerless probe (the `substrate-probed` marker prints before the probe) parses as `Unknown` and overwrites a known host. That fails closed in the funnel, so a passive Settings readout can hide open workspaces' workflow surfaces until the next open check. → backlogged `SURFACE-2026-11-20-QUALITY-SETTINGS-REFRESH-WRITES-UNKNOWN-OVER-A-KNOWN-HOST`
+
+**MINOR**
+- [`remote_substrate::Drift::Behind`] It means "the two HEADs differ" (D6); the name invites WP7 to offer `pull --ff-only` to an ahead or diverged clone. → backlogged `SURFACE-2026-11-20-QUALITY-DRIFT-BEHIND-VARIANT-MEANS-DIFFERS`
+- [`RemoteHostsSettings.tsx`, the `SettingsPanel` hint] The copy says "GitHub" for any origin (D1 widened the URL). → backlogged `SURFACE-2026-11-20-QUALITY-DRIFT-COPY-SAYS-GITHUB-FOR-ANY-ORIGIN`
+- [`arch/claude-substrate.md` §R.4] Still says "the record's `origin_url` for Managed"; the D1 resync existed only as prose, not as a close-time action. → resolved at WP5 finalize (§R.4 resynced)
+
+### Assessment
+A well-built WP that leaves the codebase better than it found it. The backend splits cleanly: a constant script, a pure parser, a pure `Drift::decide`, and a thin settle function. Each layer is tested at the right level:
+- the real script against fixtures;
+- the decision table as values;
+- the IPC boundary through a registry seam and a caller guard.
+
+Each security-relevant invariant is pinned by a test that fails if it is deleted:
+- master-only exec;
+- the guarded developer-tools check before any `git`;
+- non-interactive git;
+- the quoted sandbox prefix.
+
+On the frontend:
+- the panel owns the readout;
+- the substrate comes through the shared store;
+- results that arrive after close are dropped;
+- the routed highlight scrolls into view.
+
+The main debt is `settle_refresh`'s doc versus its `Unknown` write. The rest is naming and copy that matters most once WP6/WP7 build on these types.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives the WIP.
+
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
 [AMENDED-2026-11-20] Phase 1 Observable outcomes — verify-self found an integration boundary the plan missed: the substrate lines of `parse_open_facts` moved into the shared `parse_substrate`, which `remote_open_check` consumes. I added a boundary outcome citing `remote_open_check` and drove it live in the same pass, instead of an F9b back-loop that would only have added the line.
+
+## Retrospect
+- **What changed in our understanding:**
+  - A `[ -n "$d" ]` guard after `d=$(cmd) &&` only matters when `cmd` prints nothing AND exits 0; the measured no-tools case (exit 2) is already caught by the assignment. The first test set left that arm unproven.
+  - App's routed Settings highlight had never been cleared since M10.9 (every open after the invite re-flashed). 5.2b would have made that visible on every open.
+  - React 19 drops a setState after unmount without a warning, so "the late result is dropped" is not a testable property. "No work starts after close" is.
+- **Assumptions that held:**
+  - `LinkRegistry::master_exec` already had the exact Up-only, never-connect shape §R.5 needs, so no new link API was required.
+  - The open check's probe could be reused verbatim in a second exec, and one shared parser keeps the two callers aligned.
+  - The live mini read Developer at `f8e8873` and up to date, matching an independent ssh read.
+- **Assumptions that were wrong:**
+  - The plan missed an integration boundary. The parser refactor touched `remote_open_check`, which verify-self caught and added as an outcome.
+  - The plan's Phase 2 unmount outcome promised an unobservable assertion (amended per the operator's decision).
+  - My `settle_refresh` doc claimed the cache is written only on an answer. An answerless probe still writes `Unknown` (review MAJOR, backlogged).
+- **Approach delta:**
+  - D1 revised §R.4: drift uses the clone's own `origin` rather than the record's URL (resynced in `arch/claude-substrate.md`).
+  - Codifying D8 at App level needed one file per close path (the invite is the only reachable routed open, and it is one-shot), with the reopen through the picker gear so the close path's own clear is what gets proven.
+  - Folded in two WP4 review items as planned.
+
+## Closure
+> **Feature complete:** M18 WP5 (Settings → Remote hosts) has shipped. Settings now lists every remote host account your projects run on, with its workflow-system state (Absent / Developer / Managed), the install's short HEAD, and whether it is up to date with GitHub, checked only while the panel is open and never bringing a link up; the absent-host note's Settings button lands on that group. See it by opening a remote workspace, then ⌘, → Remote hosts.
+
+Requester = operator — closure notice for self-record.
+

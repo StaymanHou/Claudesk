@@ -9,12 +9,13 @@
 
 - [Circular detector score](detector-scored-against-its-own-table-is-circular.md) — Scored against its own policy table it gets 1.000 by identity; use an independent signal.
 - [Skills are mccc symlinks](installed-skills-are-symlinks-into-the-mccc-repo.md) — Editing `~/.claude/skills/` dirties the mccc repo; `cp -RL`, check its status.
-- [No git checkout restores](git-checkout-no-ops-on-untracked-file.md) — Restore mutants by `cp` aside + `shasum`, `|| exit` if the aside copy fails.
+- [No git checkout restores](git-checkout-no-ops-on-untracked-file.md) — Restore mutants by `cp` aside + `shasum`, `|| exit` if the aside copy fails; never pipe the run into `head`.
 - [Redaction: check what remains](verify-redaction-by-what-remains.md) — Ask what is STILL unredacted across the whole artifact, not field by field.
 - [Mutation landed?](verify-the-mutation-landed.md) — Confirm the mutant changed EXECUTABLE code; require a `Tests N` line per run.
 - [projects.json re-sorted](projects-json-resorted-on-every-launch.md) — Every launch rewrites it; compare row sets, never a shasum across a launch.
 - [Live app may run a mutant](live-dev-app-may-run-a-mutant.md) — `tauri:dev` rebuilds from a Rust mutant; check PID start + binary mtime.
 - [Equivalent mutant](behavioral-test-can-still-be-an-equivalent-mutant.md) — Both paths give identical observables; find the discriminating input.
+- [React 19 unmount setState silent](react19-unmounted-setstate-is-silent.md) — A console.error spy is a false green; assert no work starts after unmount.
 - [Unreachable mutant line](mutant-survives-because-its-line-never-executes.md) — A gate short-circuits above it; check the arm is reachable first.
 - [Caller guard for plan*](extracted-machine-needs-a-live-caller-guard.md) — A pure module's tests can't see it has no callers; guard each exported `plan*`.
 - [jsdom whole-app boot](whole-app-jsdom-boot-via-tauri-mockipc.md) — Real `main.tsx` via `mockIPC` + `shouldMockEvents` + `mockWindows` (`appBoot.test.tsx`).
@@ -73,7 +74,7 @@
 - [notarytool preflight errors](notarytool-credential-unreadable-while-screen-locked.md) — "No Keychain password item" = screen locked (unlock, don't re-store); 403 "agreement missing" = Account Holder must accept.
 - [Trash via Finder](verify-trash-via-finder-not-ls.md) — `~/.Trash` is TCC-blocked; read-only Finder osascript query.
 - [Mini account](mini-remote-user-is-stayman.md) — Which account to use (never root-ops; the dev `projects.json` row is still root-ops, so never take ssh's user from it), token location, the pre-push identifier grep list. Gitignored: names real accounts.
-- [Remote verify hygiene](remote-verify-hygiene.md) — Real commands only in a scratch remote folder; check open remote workspaces before stopping the app; rebuilds and App.tsx edits are hard stops; the mini's dev account HAS the workflow skills (HTTPS origin, `git pull` works since 2026-11-18); seed a scratch WIP before a live Recycle; probe a host without Claudesk via your own `ssh -M` (socket in a short `/tmp` dir, scripts on stdin); a hand-added dev `projects.json` row needs integer timestamps (null breaks the whole list).
+- [Remote verify hygiene](remote-verify-hygiene.md) — Real commands only in a scratch remote folder; check open remote workspaces before stopping the app; rebuilds and App.tsx edits are hard stops; the mini's dev account HAS the workflow skills (HTTPS origin, `git pull` works since 2026-11-18); seed a scratch WIP before a live Recycle; probe a host without Claudesk via your own `ssh -M` (socket in a short `/tmp` dir, scripts on stdin); a hand-added dev `projects.json` row needs integer timestamps (null breaks the whole list); the open check's 20 s grace gives an Up link without spawning CC.
 - [Trust dialog exits](cc-trust-dialog-defaults-to-exit.md) — Defaults to "No, exit"; read the pane, answer ↓ then \r.
 - [Drive the real hook](drive-status-channel-with-real-hook-script.md) — Pipe a payload into the working-tree hook script at the dev socket.
 - [WKWebView perf](wp4-macos-perf-measurement.md) — How to measure CPU, RAM and frame time on macOS.
@@ -84,6 +85,7 @@
 - [el.click() fallback](mcp-bridge-interact-click-needs-el-click-fallback.md) — If `webview_interact{click}` fails; switch tiles via a pointerdown+pointerup pair on the tile.
 - [Native geometry](mcp-bridge-manage-window-reads-native-geometry.md) — `manage_window{info}` returns native frames.
 - [Hold a status via fiber](mcp-bridge-seed-held-workspace-status-via-fiber.md) — Dispatch `setStatusMap`, not `ipc_emit_event`.
+- [execute_js timeout keeps running](mcp-bridge-execute-js-timeout-keeps-running.md) — Fire-and-forget, store on `window`, read back; assume side effects happened.
 - [Drive xterm mouse/copy](drive-xterm-mouse-and-selection-via-bridge.md) — MouseEvent needs `detail: 1`; sync scripts; read Terminal via fiber; `execCommand('copy')` lies.
 - [HMR stamped URL](vite-hmr-stamped-url-is-a-separate-module-instance.md) — A bridge import must use `<path>?t=<ts>`.
 

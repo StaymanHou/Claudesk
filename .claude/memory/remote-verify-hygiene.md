@@ -103,3 +103,13 @@ rejects. Adding the row through the app's "Add remote project…" form avoids th
   `project_path` `ssh://<user>@<mini-host>/Users/<user>/claudesk-scratch-remote` and `remote: {host, path}`. Edit with the dev
   app STOPPED (every launch rewrites the file, [[projects-json-resorted-on-every-launch]]). Back up the dev `projects.json` and
   `settings.json` (e.g. a gate flip for the check) first, and `cp` both back afterwards; check the shas match the backup.
+
+**9. A link Up for a live check WITHOUT spawning a remote CC session: the open check's grace window** (M18 WP5, 2026-11-20).
+`remote_open_check` (invoked through the bridge) brings the host's link up, and on a `start` outcome the link lingers for
+`OPEN_CHECK_GRACE` (20 s) with nothing holding it. That window is enough for read-only execs that need an Up link (e.g.
+`remote_substrate_refresh`, which uses the Up-only `master_exec`), with no tmux session, no CC and no usage spent.
+- **How to apply:** run the open check and the dependent invokes in ONE launched script
+  ([[mcp-bridge-execute-js-timeout-keeps-running]]), then wait ~20 s and confirm the dev app's `ssh -M` is gone before
+  testing the link-down path. A UI-level check (a Settings readout that refreshes on mount) still needs a real open workspace,
+  because the panel open comes after the window.
+

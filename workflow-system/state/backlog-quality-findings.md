@@ -434,14 +434,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on the WP4 window `9ce4810^..d57aa15`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 7 MINOR, all auto-backlogged.)*
 
-## SURFACE-2026-11-20-QUALITY-HOST-ARG-GUARD-CHECKS-BY-INCLUDES
-- **Source:** feature-review-quality (M18 WP4, MAJOR)
-- **Type:** gap (a guard weaker than its self-tests suggest)
-- **Summary:** `workflowApplicableGuard.test.ts` → `checkHostArg` accepts any host argument that merely CONTAINS a seam call (`useHostSubstrate(` / `hostSubstrateFor(` / `hostFromOpenCheck(`). So a ternary whose other arm is NOT from the seam passes: e.g. `c ? hostSubstrateFor(p,m) : LOCAL` (an identifier holding `"local"`), or `c ? hostFromOpenCheck(x) : {state:"developer"}`. Only a literal `"local"` is caught inside a ternary.
-- **Context:** the guard exists to stop a remote workspace reading as local. The production `ProjectPicker.tsx` open-path call already IS a ternary, so this shape is real. It is the `includes`-instead-of-per-arm "green while checking nothing" form in `docs/lessons/source-text-guards.md`.
-- **Suggested action:** split conditional arms (top-level `?` / `:` in the flattened argument) and require EACH arm to be a seam call or a seam-bound identifier; add self-tests for an identifier arm and an object-literal arm; mutation-prove on the real picker call.
-- **Priority:** medium
-
 ## SURFACE-2026-11-20-QUALITY-HOST-STORE-LATCH-NEVER-RETRIES
 - **Source:** feature-review-quality (M18 WP4, MINOR)
 - **Type:** hardening
@@ -454,13 +446,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** tech-debt
 - **Summary:** `Workspace.tsx` now calls `useWorkflowFeaturesEnabled()` inline three times. Each call seeds and listens separately: one more IPC round-trip per workspace, and a brief window where the note's copy and the row's copy disagree.
 - **Suggested action:** read the gate once into a binding and feed both funnel wrappers. `workflowApplicableGuard`'s binding shape already accepts it.
-- **Priority:** low
-
-## SURFACE-2026-11-20-QUALITY-ONOPENSETTINGS-OPTIONAL-PROP
-- **Source:** feature-review-quality (M18 WP4, MINOR)
-- **Type:** hardening
-- **Summary:** `onOpenSettings` is optional on `Workspace` / `CenterStage`, and the note's Settings button renders only when it is defined. A dropped prop makes the button vanish silently; a source guard (`absentHostNoteLive.test.tsx`) stands in for what `tsc` could enforce.
-- **Suggested action:** make the prop required on `CenterStage` (and on `Workspace` where the harnesses allow), then drop the source guard.
 - **Priority:** low
 
 ## SURFACE-2026-11-20-QUALITY-SHORTHOST-CROSS-LAYER-IMPORT
@@ -482,4 +467,32 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** cosmetic
 - **Summary:** the M18 WP4 sentence added to `resolve_profile_spawn_env`'s doc comment (`cc_session/mod.rs`) runs past the file's wrap width; rustfmt does not reflow doc comments.
 - **Suggested action:** rewrap by hand.
+- **Priority:** low
+
+# m18-wp5-remote-hosts-readout — 2026-11-20
+
+*(feature-review-quality on the WP5 window `e3926dc^..9fd2c46`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 3 MINOR. The MAJOR and two MINORs are auto-backlogged here; the stale §R.4 drift-URL wording MINOR was resolved at WP5 finalize.)*
+
+## SURFACE-2026-11-20-QUALITY-SETTINGS-REFRESH-WRITES-UNKNOWN-OVER-A-KNOWN-HOST
+- **Source:** feature-review-quality (M18 WP5, MAJOR)
+- **Type:** bug (a doc that promises the opposite of the code)
+- **Summary:** `remote_link::commands::settle_refresh` says it writes the substrate cache "ONLY when the host answered (D3)". It actually writes whenever `parse_refresh` returns `Some`, and the refresh script echoes `substrate-probed` BEFORE the probe runs. So a probe that prints no `substrate:` line (no perl, a broken read) parses as `SubstrateRead::Unknown` and overwrites a known `Developer` / `Managed` value.
+- **Context:** Unknown fails CLOSED in the funnel (the host is `workflow_applicable`'s third input). Opening Settings, a read-only readout, can therefore hide the workflow surfaces of every open workspace on that host until the next open check. The open check writes `Unknown` the same way (WP4 D5), so the write is consistent with that; the doc is not.
+- **Suggested action:** decide one way and pin it. Either skip the write when the read is `Unknown` in `settle_refresh` (a passive readout should not demote a host), with a settle test that a known value survives an answerless probe; or keep the write and fix the doc to say it matches the open check. Recommendation: skip the write, since Settings is a readout.
+- **Priority:** medium
+
+## SURFACE-2026-11-20-QUALITY-DRIFT-BEHIND-VARIANT-MEANS-DIFFERS
+- **Source:** feature-review-quality (M18 WP5, MINOR)
+- **Type:** tech-debt (naming)
+- **Summary:** `remote_substrate::Drift::Behind` (wire tag `behind`) means "the two HEADs differ" (D6). Without a fetch, ahead and diverged look the same. The doc comment says so, but the type name carries the wrong meaning.
+- **Context:** WP7's Update is the obvious next consumer. Gating Update on `Behind` would offer `pull --ff-only` to a clone that is ahead or diverged, and the pull would fail.
+- **Suggested action:** rename it to `Differs` (Rust + TS + the wire tag) before WP7 reads it; keep the "Behind GitHub" copy (D6).
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-DRIFT-COPY-SAYS-GITHUB-FOR-ANY-ORIGIN
+- **Source:** feature-review-quality (M18 WP5, MINOR)
+- **Type:** cosmetic (copy)
+- **Summary:** every drift string ("Checking GitHub…", "Up to date with GitHub.", "Behind GitHub…") and the group hint say "GitHub", but D1 compares against the clone's own `origin`, which can be any server.
+- **Context:** a Developer clone whose origin is not GitHub gets a verdict naming the wrong server. Polish: today's real hosts all clone from GitHub.
+- **Suggested action:** say "its origin" (or name the origin's host) when the origin is not GitHub, or accept as-is and record that the copy assumes the published repo.
 - **Priority:** low

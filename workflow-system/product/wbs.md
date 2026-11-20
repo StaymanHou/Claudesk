@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-20  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7); WP3 shipped (0c45070); WP4 shipped (d57aa15)
+updated: 2026-11-20  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7); WP3 shipped (0c45070); WP4 shipped (d57aa15); WP5 shipped (9fd2c46)
 cycle: milestone-18-remote-workflow-substrate
 ---
 
@@ -160,7 +160,7 @@ the funnel first and finding the probe too slow for every open would put the cha
 **WP4 → WP5 rationale:** the Settings readout shows the cached `HostSubstrate`. It needs the cache and the record parse before it has
 anything to show.
 
-### WP5: Settings → "Remote hosts" (read-only readout + drift)
+### WP5: Settings → "Remote hosts" (read-only readout + drift) ✅ SHIPPED 2026-11-20 (commits 8033134, 6bd9148, 9fd2c46)
 **Description:** §R.4 + §R.5. A new Settings group, shown when at least one remote row exists, with one entry per distinct host.
 Each entry shows the state (Absent / Managed / Developer), the short HEAD, and drift (`ls-remote` from the host, run when the group is shown;
 "up to date / behind GitHub / can't check: <reason>"). A host whose link is down says so. Settings never brings a link up. No buttons yet.
@@ -168,11 +168,11 @@ Each entry shows the state (Absent / Managed / Developer), the short HEAD, and d
 **Dependencies:** WP4
 **Size:** M
 **Tasks:**
-- [ ] 5.1 Backend: an async `remote_substrate_refresh(host)` (HEAD + `ls-remote` in one exec; the URL comes from the record or a read-only `remote get-url origin`).
-- [ ] 5.2 The group (`useSettingControl` is not the right shape: it is a readout, not a setting). Lay it out with the other Settings groups and measure its geometry (lesson: a dialog 702px tall in a 599px panel).
-- [ ] 5.2b The WP4 absent-host note's button lands on this group, not just on Settings (added at WP4 plan, D8: the group did not exist yet).
-- [ ] 5.3 Refresh only while shown (the prior). A test that unmounting stops further refreshes.
-- [ ] 5.4 Live: the mini's live account reads **Developer**, `f8e8873`, and up to date (read-only). A sandbox root reads Absent.
+- [x] 5.1 Backend: an async `remote_substrate_refresh(host)` (HEAD + `ls-remote` in one exec; the URL comes from the record or a read-only `remote get-url origin`).
+- [x] 5.2 The group (`useSettingControl` is not the right shape: it is a readout, not a setting). Lay it out with the other Settings groups and measure its geometry (lesson: a dialog 702px tall in a 599px panel).
+- [x] 5.2b The WP4 absent-host note's button lands on this group, not just on Settings (added at WP4 plan, D8: the group did not exist yet).
+- [x] 5.3 Refresh only while shown (the prior). A test that unmounting stops further refreshes.
+- [x] 5.4 Live: the mini's live account reads **Developer**, `f8e8873`, and up to date (read-only). A sandbox root reads Absent.
 
 **WP5 → WP6 rationale:** Install is a button on this group's Absent entry, and its result lands back in the readout, which must already work.
 

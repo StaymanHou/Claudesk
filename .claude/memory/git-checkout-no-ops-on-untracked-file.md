@@ -93,3 +93,12 @@ single `perl` substitution by hand and re-running the suite. **The rule:** `mkdi
 the post-restore check print a failure (`|| echo "NOT RESTORED"`) rather than only a success.
 ⚠️ A stacked mutant also invalidates the later probe: M3 ran on top of M2, whose mutant already
 failed the same test, so M3 had to be re-run alone.
+
+**Corollary — never pipe a mutate→test→restore function into `head` (hit 2026-11-20, M18 WP5 Phase 1
+build).** A shell function `mut() { cp aside; mutate; run tests; cp restore; shasum check; }` was
+called as `mut … | head -0` (meant to discard its output). `head` exited at once, the function's next
+write got SIGPIPE, and it died **before the restore**: the mutant stayed in tracked
+`remote_link/commands.rs` and surfaced only as a compile error two steps later. Fixed by removing the
+inserted line by hand. **The rule:** run a mutation function with its output unpiped (or redirected to
+a file), and grep its output afterwards. Anything that can close the pipe early (`head`, `grep -m`,
+`grep -q`) can skip the restore.

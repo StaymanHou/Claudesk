@@ -1,7 +1,7 @@
 ---
 stage: arch
 state: complete
-updated: 2026-11-18  # M18 /product-arch: claude-substrate.md → "Remote hosts (M18)" PLANNED; was: 2026-11-17 M17 closed
+updated: 2026-11-20  # M18 WP5: claude-substrate.md → "R.4 + R.5 as built"; was: 2026-11-18 M18 /product-arch
 shape: index
 archive-root: workflow-system/product/archive/
 ---
@@ -22,7 +22,7 @@ subsystem you need.
 | [Session resumption & drive mode](arch/session-resumption.md) | the two signals, the unclean-exit flag, the announcement, the drive-mode signal, the picker cell, the picker row order |
 | [Right-panel surfaces](arch/right-panel-surfaces.md) | editor, diff, terminal, the gated docs panel, `fs_index`, `editor_fs`, media in the editor tab (glance viewer, review player, 4 GiB cap) |
 | [Workflow-features gate](arch/workflow-gate.md) | the `useWorkflowFeaturesEnabled` seam, the OFF-invariant guard, Settings, the invite |
-| [The `~/.claude/` substrate](arch/claude-substrate.md) | install/uninstall wizards, provenance, the compiler-enforced refuse-guard; **M18 (PLANNED): remote hosts**: the host as the funnel's third input, host detection, install/update/uninstall over the master, drift |
+| [The `~/.claude/` substrate](arch/claude-substrate.md) | install/uninstall wizards, provenance, the compiler-enforced refuse-guard; **M18: remote hosts**: the host as the funnel's third input + host detection (✅ WP4), the Settings → Remote hosts readout + drift (✅ WP5), install/update/uninstall over the master (planned) |
 | [Security & trust posture](arch/security-posture.md) | raw HTML blocked, CSP status, the M16 asset-protocol transport |
 | [Build, update & release](arch/build-update-release.md) | artifacts, self-update, signing, the release pipeline |
 | [Native app menu](arch/app-menu.md) | the menu bar, and why it carries no accelerators |

@@ -741,15 +741,15 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Source:** feature:verify-self (M17 WP7 Phase 4, live)
 - **Target level:** product:arch
 - **Type:** gap
-- **Summary (remaining open work, rewritten at M18 WP4 finalize 2026-11-20):**
-  - The DETECTION half is resolved (CHANGELOG 2026-11-20). The open check probes each host account, and a workspace on
-    a host without the workflow system shows no workflow buttons, Docs or auto `/session-restore`, only the absent-host
-    note.
-  - What remains is the INSTALL half. On such a host the operator can install the workflow system only by hand:
-    Claudesk has no Settings → Remote hosts readout, Install, Update or Uninstall yet.
+- **Summary (remaining open work, rewritten at M18 WP5 finalize 2026-11-20):**
+  - The DETECTION half (WP4) and the READOUT half (WP5) are resolved (CHANGELOG 2026-11-20). The open check probes each host
+    account, a workspace on a host without the workflow system shows only the absent-host note, and Settings → Remote hosts
+    shows each host's state, HEAD and drift.
+  - What remains is the INSTALL half. On such a host the operator can install the workflow system only by hand: Claudesk
+    has no Install, Update or Uninstall yet.
 - **Context:** M18's seed. Interim, the mini's dev account was set up by hand (`~/my-claude-code-customization`,
   `install.sh`, the 4 printed permissions); it reads as **Developer**.
-- **Suggested action:** M18 WP5 (readout + drift), WP6 (Install), WP7 (Update / Uninstall).
+- **Suggested action:** M18 WP6 (Install), WP7 (Update / Uninstall).
 - **Priority:** medium
 - **Status:** routed — the seed of Milestone 18 (`roadmap.md`); closes with M18 WP7
 
@@ -792,11 +792,19 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m18-wp4-substrate-detection-and-funnel (2026-11-20)
 
-- **Pointer:** **1 MAJOR + 6 MINOR** open from the review of the WP4 window (`9ce4810^..d57aa15`); the stale arch-wording MINOR was resolved at WP4 finalize.
-  - MAJOR: `workflowApplicableGuard`'s host-argument check matches by `includes`, so a ternary with a non-seam arm passes. Split the arms and check each one.
-  - MINOR: the host-store latch never retries after a failed `listen`; a third inline gate-hook call in `Workspace`; `onOpenSettings` is optional where `tsc` could enforce it; `shortHost` is imported across layers; the substrate sink uses a setter shape; one doc-comment line is too wide.
+- **Pointer:** **5 MINOR** open from the review of the WP4 window (`9ce4810^..d57aa15`). The stale arch-wording MINOR was resolved at WP4 finalize; the guard MAJOR and the optional-`onOpenSettings` MINOR were resolved at M18 WP5 (CHANGELOG 2026-11-20).
+  - MINOR: the host-store latch never retries after a failed `listen`; a third inline gate-hook call in `Workspace`; `shortHost` is imported across layers; the substrate sink uses a setter shape; one doc-comment line is too wide.
   - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp4-substrate-detection-and-funnel — 2026-11-20`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** paydown polish.
+
+## Code-quality findings — m18-wp5-remote-hosts-readout (2026-11-20)
+
+- **Pointer:** **1 MAJOR + 2 MINOR** open from the review of the WP5 window (`e3926dc^..9fd2c46`). The stale §R.4 drift-URL wording MINOR was resolved at WP5 finalize.
+  - MAJOR: a Settings refresh whose probe prints no answer writes `Unknown` over a known host (its doc says it never does), which hides open workspaces' workflow surfaces until the next open check.
+  - MINOR: `Drift::Behind` means "differs" (rename it before WP7 reads it); the drift copy says "GitHub" for any origin.
+  - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp5-remote-hosts-readout — 2026-11-20`.
 - **Priority:** medium (the MAJOR), low (the MINORs)
 - **Status:** pending
-- **Pickup shape:** the guard MAJOR is a small test-only change, a good first task for WP5 or a paydown. The MINORs are paydown polish.
-
+- **Pickup shape:** the MAJOR is a one-guard fix plus a settle test, small enough to fold into WP6. Do the rename before WP7.

@@ -15,6 +15,11 @@
 - **Backlog resolved:** SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD — its detection half shipped in M18 WP4 (a skill-less host shows no dead workflow buttons, only the absent-host note); the install half stays open for WP5–WP7.
 - **Backlog resolved:** SURFACE-2026-11-20-QUALITY-ARCH-NOTE-WORDING-STALE — `arch/claude-substrate.md` now quotes the note with the short host and the full `user@host` in its tooltip.
 - **Milestone:** M18 WP4 — Detection and the funnel's third input (+ the absent-host note).
+- **Feature shipped:** M18 WP5 adds Settings → Remote hosts, one entry per remote host account with its workflow-system state, the install's short HEAD and whether it is up to date with GitHub (one `ls-remote` from the host while the panel is open, never bringing a link up, every remote `git` behind the developer-tools guard), and the absent-host note's Settings button now lands on that group.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-HOST-ARG-GUARD-CHECKS-BY-INCLUDES — `workflowApplicableGuard` now checks each arm of a conditional host argument on its own, proven on the real picker call (HEAD's guard passed a non-seam arm; the new one names it).
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-ONOPENSETTINGS-OPTIONAL-PROP — `onOpenSettings` is required on `CenterStage` and `Workspace`, so a dropped prop is a type error instead of a silently missing button.
+- **Backlog resolved:** SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD (partial) — the Settings → Remote hosts readout and drift half shipped at M18 WP5; Install, Update and Uninstall remain open.
+- **Milestone:** WP5: Settings → "Remote hosts" (read-only readout + drift)
 
 ## 2026-11-18
 
