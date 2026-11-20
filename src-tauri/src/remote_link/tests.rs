@@ -1353,7 +1353,7 @@ fn live_cancel_and_folder_check() {
         crate::remote_cmd::parse_open_facts(
             &reg.exec(
                 &target,
-                &crate::remote_cmd::open_check_command(srv, "cd-wp3test", path, true),
+                &crate::remote_cmd::open_check_command(srv, "cd-wp3test", path, true, None),
                 EXEC_TIMEOUT_MS,
             )
             .unwrap(),
@@ -1373,7 +1373,7 @@ fn live_cancel_and_folder_check() {
     let none = crate::remote_cmd::parse_open_facts(
         &reg.exec(
             &target,
-            &crate::remote_cmd::open_check_command(srv, "cd-wp3test-none", "/", false),
+            &crate::remote_cmd::open_check_command(srv, "cd-wp3test-none", "/", false, None),
             EXEC_TIMEOUT_MS,
         )
         .unwrap(),
@@ -2088,6 +2088,7 @@ fn the_fire_time_trust_read_answers_a_remote_row_from_its_last_open_check() {
         }),
         clear_end_pending: false,
         notice: None,
+        substrate: None,
     };
     let settle = |d: OpenDecision| settle_open_decision(data.path(), &h.reg, key, d);
 
@@ -2138,6 +2139,7 @@ fn the_fire_time_trust_read_answers_a_remote_row_from_its_last_open_check() {
             check: check.clone(),
             clear_end_pending: false,
             notice: None,
+            substrate: None,
         });
         assert_eq!(remote_trust(key, Some(&h.reg)), Some(false), "{check:?}");
     }
@@ -2165,6 +2167,7 @@ fn the_fire_time_bypass_read_answers_a_remote_row_from_its_last_open_check() {
         }),
         clear_end_pending: false,
         notice: None,
+        substrate: None,
     };
     let settle = |d: OpenDecision| settle_open_decision(data.path(), &h.reg, key, d);
 
@@ -2202,6 +2205,7 @@ fn the_fire_time_bypass_read_answers_a_remote_row_from_its_last_open_check() {
             check: check.clone(),
             clear_end_pending: false,
             notice: None,
+            substrate: None,
         });
         assert!(!h.reg.open_bypass(key), "{check:?}");
     }
@@ -2220,6 +2224,7 @@ fn settling_an_open_decision_clears_a_stale_end_intent_and_leaves_the_notice() {
         check: OpenCheck::Start(StartSignals::default()),
         clear_end_pending: clear,
         notice: notice.map(str::to_string),
+        substrate: None,
     };
     assert!(record_state(
         data.path(),
@@ -2247,4 +2252,115 @@ fn settling_an_open_decision_clears_a_stale_end_intent_and_leaves_the_notice() {
     );
     assert_eq!(h.reg.take_open_notice(key).as_deref(), Some("it had ended"));
     assert_eq!(h.reg.take_open_notice(key), None, "taken once");
+}
+
+/// M18 WP4 (§R.2, D5) — the per-HOST substrate cache: a change is reported once, an identical
+/// write is silent, hosts are independent, and an unprobed host reads Unknown.
+#[test]
+fn the_substrate_cache_reports_each_change_once_per_host() {
+    use crate::remote_substrate::{HostSubstrate, SubstrateEvent};
+    let h = harness();
+    let seen: Arc<Mutex<Vec<SubstrateEvent>>> = Arc::default();
+    let sink_seen = Arc::clone(&seen);
+    h.reg
+        .set_substrate_sink(Arc::new(move |e| sink_seen.lock().unwrap().push(e)));
+    let dev = || HostSubstrate::Developer {
+        root: Some("/r".into()),
+        head: None,
+    };
+    assert_eq!(
+        h.reg.substrate("me@a"),
+        HostSubstrate::Unknown,
+        "never probed"
+    );
+    assert!(h.reg.set_substrate("me@a", dev()));
+    assert!(!h.reg.set_substrate("me@a", dev()), "identical: no change");
+    assert!(h.reg.set_substrate("me@b", HostSubstrate::Absent));
+    assert!(
+        h.reg.set_substrate("me@a", HostSubstrate::Unknown),
+        "Unknown is a real value"
+    );
+    assert_eq!(h.reg.substrate("me@a"), HostSubstrate::Unknown);
+    assert_eq!(h.reg.substrate("me@b"), HostSubstrate::Absent, "per host");
+    let hosts: Vec<(String, HostSubstrate)> = seen
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|e| (e.host.clone(), e.substrate.clone()))
+        .collect();
+    assert_eq!(
+        hosts,
+        vec![
+            ("me@a".to_string(), dev()),
+            ("me@b".to_string(), HostSubstrate::Absent),
+            ("me@a".to_string(), HostSubstrate::Unknown),
+        ],
+        "exactly one event per change"
+    );
+    assert_eq!(h.reg.substrates().len(), 2);
+}
+
+/// M18 WP4 (D5) — the open check writes the substrate through `settle_open_decision`, under the
+/// row's HOST; a decision with no substrate (unreachable, invalid, gate OFF) leaves it alone.
+#[test]
+fn settling_an_open_check_writes_the_hosts_substrate_only_when_it_probed() {
+    use super::commands::{settle_open_decision, OpenCheck, OpenDecision};
+    use crate::remote_substrate::HostSubstrate;
+    let h = harness();
+    let data = TempDir::new().unwrap();
+    let key = "ssh://me@mini-host/Users/me/p";
+    let decision = |substrate: Option<HostSubstrate>| OpenDecision {
+        check: OpenCheck::Unreachable {
+            message: "x".into(),
+        },
+        clear_end_pending: false,
+        notice: None,
+        substrate,
+    };
+    settle_open_decision(
+        data.path(),
+        &h.reg,
+        key,
+        decision(Some(HostSubstrate::Absent)),
+    );
+    assert_eq!(h.reg.substrate("me@mini-host"), HostSubstrate::Absent);
+    settle_open_decision(data.path(), &h.reg, key, decision(None));
+    assert_eq!(
+        h.reg.substrate("me@mini-host"),
+        HostSubstrate::Absent,
+        "no probe: the last known value stays"
+    );
+}
+
+/// M18 WP4 — `decide_open` carries the probed substrate on EVERY decision an answered check
+/// makes (start, reconnect, ask, folder-missing), and none on an unanswered one.
+#[test]
+fn every_answered_open_decision_carries_the_probed_substrate() {
+    use super::commands::decide_open;
+    use crate::remote_cmd::{ValidTarget, OPEN_SENTINEL as S};
+    use crate::remote_record::SessionRecordState;
+    use crate::remote_substrate::HostSubstrate;
+    let target = ValidTarget::new("me@mini-host", "/Users/me/p").unwrap();
+    let probed = format!("{S}substrate-probed\n{S}substrate:no\n");
+    for (out, record) in [
+        (format!("{S}dir:yes\n{S}live:no\n{probed}"), None),
+        (format!("{S}dir:no\n{S}live:no\n{probed}"), None),
+        (
+            format!("{S}dir:yes\n{S}live:yes\n{probed}"),
+            Some(SessionRecordState::Running),
+        ),
+        (format!("{S}dir:yes\n{S}live:yes\n{probed}"), None),
+    ] {
+        let d = decide_open(Ok(out.clone()), record, false, &target);
+        assert_eq!(d.substrate, Some(HostSubstrate::Absent), "{out:?}");
+    }
+    let unprobed = decide_open(
+        Ok(format!("{S}dir:yes\n{S}live:no\n")),
+        None,
+        false,
+        &target,
+    );
+    assert_eq!(unprobed.substrate, None, "gate OFF: nothing to write");
+    let dead = decide_open(Ok("noise".into()), None, false, &target);
+    assert_eq!(dead.substrate, None, "no answer: nothing to write");
 }

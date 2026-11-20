@@ -54,6 +54,7 @@ use crate::remote_cmd::preflight::{
     connect_failure, ExecResult, RemoteExec, SshExec, CONNECT_TIMEOUT_S,
 };
 use crate::remote_cmd::{hook_origin, quote, ValidTarget, TOKEN_FILE};
+use crate::remote_substrate::{HostSubstrate, SubstrateEvent};
 use crate::subprocess::{in_own_group, kill_and_reap, kill_group, run_captured, RunError};
 
 /// How long [`LinkRegistry::ensure`] waits for a link to come Up.
@@ -641,6 +642,9 @@ impl Shared {
 
 type Sink = Arc<dyn Fn(LinkEvent) + Send + Sync>;
 
+/// M18 WP4 — where [`LinkRegistry::set_substrate`] reports a change.
+pub type SubstrateSink = Arc<dyn Fn(SubstrateEvent) + Send + Sync>;
+
 /// Everything a link worker needs, fixed at start.
 struct WorkerCfg {
     host: String,
@@ -829,6 +833,13 @@ pub struct LinkRegistry {
     /// last open check found it (by row key). The fire-time read (`bypass_dialog_cleared`) answers a
     /// remote row from here: the LOCAL `settings.json` says nothing about the remote account.
     open_bypass: Mutex<HashMap<String, bool>>,
+    /// M18 WP4 (§R.2): each HOST's workflow substrate, as the last open check that probed it found
+    /// it (by host, not row: one account serves every row on it). Absent = never probed in this app
+    /// session = [`HostSubstrate::Unknown`], which the funnel reads as closed.
+    substrates: Mutex<HashMap<String, HostSubstrate>>,
+    /// Where a substrate CHANGE is reported (the app's `remote-substrate` emit, installed by
+    /// `commands::init`). `None` in a test that does not watch it.
+    substrate_sink: Mutex<Option<SubstrateSink>>,
     /// The next [`Link::gen`].
     next_gen: AtomicU64,
     transport: Arc<dyn Transport>,
@@ -861,6 +872,8 @@ impl LinkRegistry {
             open_notices: Mutex::new(HashMap::new()),
             open_trust: Mutex::new(HashMap::new()),
             open_bypass: Mutex::new(HashMap::new()),
+            substrates: Mutex::new(HashMap::new()),
+            substrate_sink: Mutex::new(None),
             next_gen: AtomicU64::new(1),
             transport,
             app_data,
@@ -1463,6 +1476,60 @@ impl LinkRegistry {
     /// Take `key`'s open notice (once). A short lock read: safe on the main thread.
     pub fn take_open_notice(&self, key: &str) -> Option<String> {
         self.open_notices.lock().ok()?.remove(key)
+    }
+
+    /// M18 WP4: report every substrate change to `sink` (the app's `remote-substrate` emit).
+    pub fn set_substrate_sink(&self, sink: SubstrateSink) {
+        if let Ok(mut s) = self.substrate_sink.lock() {
+            *s = Some(sink);
+        }
+    }
+
+    /// M18 WP4 (D5): record `host`'s substrate from an open check that probed it. Reports a CHANGE
+    /// (and only a change) to the sink, after the lock is released. Returns whether it changed.
+    pub fn set_substrate(&self, host: &str, value: HostSubstrate) -> bool {
+        let changed = match self.substrates.lock() {
+            Ok(mut m) => {
+                if m.get(host) == Some(&value) {
+                    false
+                } else {
+                    m.insert(host.to_string(), value.clone());
+                    true
+                }
+            }
+            Err(_) => false,
+        };
+        if changed {
+            let sink = self.substrate_sink.lock().ok().and_then(|s| s.clone());
+            if let Some(sink) = sink {
+                sink(SubstrateEvent {
+                    host: host.to_string(),
+                    substrate: value,
+                });
+            }
+        }
+        changed
+    }
+
+    /// M18 WP4: `host`'s substrate, or [`HostSubstrate::Unknown`] when never probed. A short lock
+    /// read: safe on the main thread.
+    // Its production readers (the spawn env, the Docs poller) arrive at M18 WP4 P2.2, the funnel's
+    // migration; until then only the tests read it. ⚠️ Remove this allow at P2.2.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn substrate(&self, host: &str) -> HostSubstrate {
+        self.substrates
+            .lock()
+            .ok()
+            .and_then(|m| m.get(host).cloned())
+            .unwrap_or(HostSubstrate::Unknown)
+    }
+
+    /// M18 WP4: every probed host's substrate (the picker's one seed). A short lock read.
+    pub fn substrates(&self) -> HashMap<String, HostSubstrate> {
+        self.substrates
+            .lock()
+            .map(|m| m.clone())
+            .unwrap_or_default()
     }
 
     /// The identifier this registry deploys under (`~/.claudesk/<identifier>/`).

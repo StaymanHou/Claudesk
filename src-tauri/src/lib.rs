@@ -57,6 +57,8 @@ mod remote_cmd;
 mod remote_fs;
 mod remote_link;
 mod remote_record;
+// M18 WP4: a remote host account's workflow substrate (the funnel's third input).
+mod remote_substrate;
 // M12 WP2: the unclean-exit flag store (`session-state.json`) — one boolean per project
 // path, DEFAULT-SET on workspace open and cleared only by a clean exit, so a power loss
 // (which runs no code) leaves it set for free. ABSENT MEANS CLEAN: clearing removes the
@@ -535,6 +537,7 @@ pub fn run() {
             remote_link::commands::remote_end_session,
             remote_link::commands::remote_hook_warning,
             remote_link::commands::remote_open_notice,
+            remote_link::commands::remote_host_substrates,
             cc_session::commands::cc_spawn_remote,
             cc_session::commands::cc_inject,
             config_store::commands::record_open,

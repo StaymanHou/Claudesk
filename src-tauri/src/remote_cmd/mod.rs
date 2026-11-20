@@ -490,17 +490,23 @@ const DRIVE_MODES: [&str; 4] = ["stepping", "orchestrated", "autopilot", "fsd"];
 /// tmux 3.8's option commands refuse the bare `=name` ("no such session"), and `-q` hides that, so
 /// the mode silently read as unset (found live at WP5 Phase 1 verify-human). An unqualified name is
 /// worse: it prefix-matches (`-t cd-1` can hit `cd-1x`).
+///
+/// M18 WP4 — `workflow` (gate ON) adds BOTH workflow reads: the remote `.session.md` and the host's
+/// substrate ([`SUBSTRATE_PROBE`], with `substrate_home` as the debug sandbox root, D2). With it
+/// `false` the command reads neither: a gate-OFF check is byte-identical to before WP4.
 pub fn open_check_command(
     server: &str,
     session: &str,
     path: &str,
-    check_session_md: bool,
+    workflow: bool,
+    substrate_home: Option<&str>,
 ) -> String {
-    let session_md = if check_session_md {
+    let session_md = if workflow {
         format!(
-            "\nif [ -f {sm} ]; then echo '{S}session-md:yes'; else echo '{S}session-md:no'; fi",
+            "\nif [ -f {sm} ]; then echo '{S}session-md:yes'; else echo '{S}session-md:no'; fi\n{probe}",
             S = OPEN_SENTINEL,
             sm = quote(&format!("{path}/workflow-system/state/.session.md")),
+            probe = substrate_probe_lines(substrate_home),
         )
     } else {
         String::new()
@@ -546,6 +552,124 @@ local $/; my $j = eval { JSON::PP->new->decode(<$h>) }; \
 exit 0 unless ref $j eq q(HASH); my $v = $j->{skipDangerousModePermissionPrompt}; \
 print qq(CLAUDESK-OPEN:bypass-accepted:yes\\n) if JSON::PP::is_bool($v) && $v' 2>/dev/null";
 
+/// M18 WP4 — the HOST-side variable [`SUBSTRATE_PROBE`] reads in place of `$HOME` when set and
+/// non-empty. Set only by a debug build's [`substrate_home_override`] (D2), as an env prefix on the
+/// probe's one command, never exported, so the rest of the open check still reads the real `$HOME`.
+pub const SUBSTRATE_HOME_ENV: &str = "CLAUDESK_SUBSTRATE_HOME";
+
+/// M18 WP4 (D2) — the MAC-side env a DEBUG build reads to point detection (and, from WP6, the
+/// install) at a sandbox root on the host instead of the account's `$HOME` (§R.3, §R.8). A release
+/// build ignores it entirely.
+pub const SUBSTRATE_ROOT_ENV: &str = "CLAUDESK_REMOTE_SUBSTRATE_ROOT";
+
+/// M18 WP4 (§R.2) — constant fragment (no interpolated value): the LOCAL
+/// `workflow_substrate::skills_dir_exists`, asked on the host. One `perl` process (already a
+/// dependency of [`TRUSTED_KEYS`]). Prints:
+/// - `substrate:yes|no`: does an entry under `<H>/.claude/skills/` resolve, through a symlink, into
+///   `<repo>/skills/<name>` where `<repo>/install.sh` holds `claude-workflow-system`? `<H>` is
+///   [`SUBSTRATE_HOME_ENV`] when set and non-empty, else `$HOME`.
+/// - `substrate-root:<repo>`, the resolved repo root, unless it contains a newline (then the root
+///   is unknown; `yes` still prints, so the answer keeps parity).
+/// - `substrate-head:<sha>`, that repo's HEAD, read from `.git` IN PERL: a ref through the loose
+///   file, then `packed-refs`; a detached HEAD as is. ⚠️ Never `git`: on a host whose Command Line
+///   Tools are missing, `/usr/bin/git` is the shim that asks for the GUI installer on the host's
+///   console (WP3 "Probe outcomes" (5); `SURFACE-2026-11-20-QUALITY-SUBSTRATE-PROBE-RUNS-THE-GIT-SHIM`).
+///   A `.git` FILE (a worktree), an unreadable ref, or a non-sha value prints no head.
+/// - `record-hex:<hex>`, `<H>/.claudesk/install-record.json` as ONE hex line (a multi-line record
+///   survives the line protocol), only when the file opens.
+///
+/// The installer is read as bytes, as Rust does (P1.4). A missing perl prints nothing, which the
+/// caller reads as unknown, never as absent. ⚠️ Held to `skills_dir_exists` by
+/// `substrate_probe_agrees_with_skills_dir_exists`: change the two together.
+pub const SUBSTRATE_PROBE: &str = r##"perl -MCwd=abs_path -MFile::Basename=dirname -e 'sub rd { open(my $x, "<", $_[0]) or return undef; my $l = <$x>; return undef unless defined $l; chomp $l; $l }
+my $h = $ENV{CLAUDESK_SUBSTRATE_HOME} || $ENV{HOME}; my $d = "$h/.claude/skills"; my $root;
+if (opendir(my $dh, $d)) { for my $n (readdir $dh) { next if $n eq "." || $n eq "..";
+  my $e = "$d/$n"; next unless -l $e; my $t = abs_path($e); next unless defined $t && -e $t;
+  my $r = dirname(dirname($t)); open(my $f, "<", "$r/install.sh") or next; binmode $f; local $/; my $b = <$f>;
+  if (defined $b && index($b, "claude-workflow-system") >= 0) { $root = $r; last } } }
+if (defined $root) { print "CLAUDESK-OPEN:substrate:yes\n";
+  if ($root !~ /\n/) { print "CLAUDESK-OPEN:substrate-root:$root\n"; my $g = "$root/.git"; my $s;
+    if (-d $g) { my $l = rd("$g/HEAD");
+      if (defined $l && $l =~ m{^ref: (refs/\S+)$} && $l !~ /\.\./) { my $f = $1; $s = rd("$g/$f");
+        if (!defined $s && open(my $p, "<", "$g/packed-refs")) { while (my $q = <$p>) { if ($q =~ /^([0-9a-f]+) \Q$f\E$/) { $s = $1; last } } } }
+      else { $s = $l } }
+    print "CLAUDESK-OPEN:substrate-head:$s\n" if defined $s && $s =~ /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/ } }
+else { print "CLAUDESK-OPEN:substrate:no\n" }
+if (open(my $j, "<", "$h/.claudesk/install-record.json")) { binmode $j; local $/; my $x = <$j>;
+  print "CLAUDESK-OPEN:record-hex:", unpack("H*", defined $x ? $x : ""), "\n" }' 2>/dev/null"##;
+
+/// M18 WP4 (D2) — the sandbox root a DEBUG build points detection at, from
+/// [`SUBSTRATE_ROOT_ENV`] on the Mac, or `None`. Always `None` in a release build.
+pub fn substrate_home_override() -> Option<String> {
+    substrate_home_from(
+        cfg!(debug_assertions),
+        std::env::var(SUBSTRATE_ROOT_ENV).ok(),
+    )
+}
+
+/// [`substrate_home_override`]'s decision, pure. Only a debug build honours the value, and only an
+/// absolute remote path already in normalized form (no `~`, no `..`, no newline): anything else is
+/// ignored with a log line, never interpolated.
+pub fn substrate_home_from(debug: bool, raw: Option<String>) -> Option<String> {
+    if !debug {
+        return None;
+    }
+    let raw = raw.filter(|v| !v.is_empty())?;
+    if is_normalized_remote_path(&raw) && !raw.contains('\n') {
+        Some(raw)
+    } else {
+        eprintln!(
+            "[claudesk] ignoring {SUBSTRATE_ROOT_ENV}={raw:?}: not an absolute normalized path"
+        );
+        None
+    }
+}
+
+/// M18 WP4 — the open check's workflow lines: `substrate-probed` (so the parser can tell "probed,
+/// nothing came back" from "not probed"), then [`SUBSTRATE_PROBE`], with the debug sandbox root
+/// as an env PREFIX on that one command when given. With `home = None` this is byte-identical in
+/// every build.
+fn substrate_probe_lines(home: Option<&str>) -> String {
+    let prefix = home
+        .map(|h| format!("{SUBSTRATE_HOME_ENV}={} ", quote(h)))
+        .unwrap_or_default();
+    format!("echo '{OPEN_SENTINEL}substrate-probed'\n{prefix}{SUBSTRATE_PROBE}")
+}
+
+/// M18 WP4 — what [`SUBSTRATE_PROBE`] found, when it answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostProbe {
+    /// `substrate:yes`: the workflow system's skills are linked for this account.
+    pub present: bool,
+    /// The resolved repo root, when it printed one in normalized form.
+    pub root: Option<String>,
+    /// That repo's HEAD sha, when it could be read from `.git` without `git`.
+    pub head: Option<String>,
+    /// The raw host install record, decoded from `record-hex`, when the file opened. Parsed by
+    /// the caller with the LOCAL provenance parser (`remote_substrate`), never here.
+    pub record: Option<Vec<u8>>,
+}
+
+/// M18 WP4 — the substrate half of an open check that ran with the workflow lines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubstrateRead {
+    /// Probed, but no `substrate:` line came back (no perl, a broken read). Fails closed.
+    Unknown,
+    /// The probe answered.
+    Known(HostProbe),
+}
+
+/// Lower-case or upper-case hex → bytes, or `None` on an odd length or a non-hex digit.
+fn decode_hex(s: &str) -> Option<Vec<u8>> {
+    if !s.len().is_multiple_of(2) {
+        return None;
+    }
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok())
+        .collect()
+}
+
 /// What the open check found on the remote.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenFacts {
@@ -565,6 +689,9 @@ pub struct OpenFacts {
     /// M18 WP2: the remote account has accepted CC's bypass-permissions warning
     /// ([`BYPASS_ACCEPTED`]). `false` when no line came back (D4).
     pub bypass_accepted: bool,
+    /// M18 WP4: the host's workflow substrate. `None` when not probed (the gate was OFF), so a
+    /// gate-OFF check carries no substrate answer at all.
+    pub substrate: Option<SubstrateRead>,
 }
 
 /// [`open_check_command`]'s answer, or `None` when the folder or liveness line is missing (no
@@ -577,6 +704,11 @@ pub fn parse_open_facts(out: &str) -> Option<OpenFacts> {
     let mut session_md = false;
     let mut trusted_keys = Vec::new();
     let mut bypass_accepted = false;
+    let mut probed = false;
+    let mut present = None;
+    let mut root = None;
+    let mut head = None;
+    let mut record = None;
     for line in out.lines() {
         let Some(rest) = line.trim_end_matches('\r').strip_prefix(OPEN_SENTINEL) else {
             continue;
@@ -588,8 +720,19 @@ pub fn parse_open_facts(out: &str) -> Option<OpenFacts> {
             "live:no" => live = Some(false),
             "session-md:yes" => session_md = true,
             "bypass-accepted:yes" => bypass_accepted = true,
+            "substrate-probed" => probed = true,
+            "substrate:yes" => present = Some(true),
+            "substrate:no" => present = Some(false),
             _ => {
-                if let Some(v) = rest.strip_prefix("mode:") {
+                if let Some(v) = rest.strip_prefix("substrate-root:") {
+                    root = is_normalized_remote_path(v).then(|| v.to_string());
+                } else if let Some(v) = rest.strip_prefix("substrate-head:") {
+                    head = (matches!(v.len(), 40 | 64)
+                        && v.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
+                    .then(|| v.to_string());
+                } else if let Some(v) = rest.strip_prefix("record-hex:") {
+                    record = decode_hex(v);
+                } else if let Some(v) = rest.strip_prefix("mode:") {
                     mode = parse_mode_value(v);
                 } else if let Some(v) = rest.strip_prefix("real:") {
                     real = is_normalized_remote_path(v).then(|| v.to_string());
@@ -608,6 +751,15 @@ pub fn parse_open_facts(out: &str) -> Option<OpenFacts> {
         session_md,
         trusted_keys,
         bypass_accepted,
+        substrate: probed.then_some(match present {
+            None => SubstrateRead::Unknown,
+            Some(present) => SubstrateRead::Known(HostProbe {
+                present,
+                root,
+                head,
+                record,
+            }),
+        }),
     })
 }
 
@@ -1146,7 +1298,7 @@ pub(crate) mod tests {
         std::fs::create_dir_all(&hostile).unwrap();
         let folder = |p: &str| {
             parse_open_facts(&run_with_fake_tmux(
-                &open_check_command("claudesk-dev", "cd-1", p, false),
+                &open_check_command("claudesk-dev", "cd-1", p, false, None),
                 false,
                 None,
             ))
@@ -1383,7 +1535,7 @@ pub(crate) mod tests {
         let here = dir.path().to_str().unwrap();
         let check = |path: &str, live: bool, mode: Option<&str>| {
             parse_open_facts(&run_with_fake_tmux(
-                &open_check_command("claudesk-dev", "cd-1234abcd", path, false),
+                &open_check_command("claudesk-dev", "cd-1234abcd", path, false, None),
                 live,
                 mode,
             ))
@@ -1435,7 +1587,7 @@ pub(crate) mod tests {
         .unwrap();
         let facts = |path: &str, check: bool| {
             parse_open_facts(&run_with_fake_tmux_home(
-                &open_check_command("claudesk-dev", "cd-1", path, check),
+                &open_check_command("claudesk-dev", "cd-1", path, check, None),
                 false,
                 None,
                 &root,
@@ -1463,6 +1615,170 @@ pub(crate) mod tests {
         assert!(facts(link.to_str().unwrap(), true).trusted_keys.is_empty());
     }
 
+    /// M18 WP4 — gate OFF reads nothing of the workflow system: no probe, no record, no sandbox
+    /// variable, not even with a sandbox root given. Gate ON carries the constant VERBATIM.
+    #[test]
+    fn the_open_check_probes_the_substrate_only_with_the_gate_on() {
+        let off = open_check_command("claudesk-dev", "cd-1", "/p", false, Some("/sandbox"));
+        for absent in [
+            "substrate",
+            "install-record",
+            SUBSTRATE_HOME_ENV,
+            "session-md",
+        ] {
+            assert!(!off.contains(absent), "gate OFF carries {absent:?}: {off}");
+        }
+        // The constant crosses one `login_shell` quoting layer; compare in the same layer.
+        let on = open_check_command("claudesk-dev", "cd-1", "/p", true, None);
+        let quoted_probe = quote(SUBSTRATE_PROBE);
+        let inner = &quoted_probe[1..quoted_probe.len() - 1];
+        assert!(
+            on.contains(inner),
+            "gate ON carries SUBSTRATE_PROBE verbatim"
+        );
+        // (The constant itself NAMES the variable; only an assignment would set it.)
+        let assign = format!("{SUBSTRATE_HOME_ENV}=");
+        assert!(!on.contains(&assign), "no sandbox root, no assignment");
+        let with = open_check_command("claudesk-dev", "cd-1", "/p", true, Some("/sb"));
+        assert!(
+            with.contains(&assign),
+            "a sandbox root is passed as an env prefix"
+        );
+    }
+
+    /// D2 — a release build ignores the Mac-side root entirely, and a debug build honours only an
+    /// absolute normalized path. With no root the command is the same bytes in every build.
+    #[test]
+    fn the_sandbox_root_is_debug_only_and_never_interpolated_unvalidated() {
+        assert_eq!(
+            substrate_home_from(false, Some("/Users/me/sb".into())),
+            None
+        );
+        assert_eq!(
+            substrate_home_from(true, Some("/Users/me/sb".into())).as_deref(),
+            Some("/Users/me/sb")
+        );
+        for bad in ["", "rel/x", "~/sb", "/a/../b", "/a/", "/a\nb", "/a//b"] {
+            assert_eq!(substrate_home_from(true, Some(bad.into())), None, "{bad:?}");
+        }
+        assert_eq!(substrate_home_from(true, None), None);
+        let none = open_check_command("s", "cd-1", "/p", true, None);
+        let ignored = open_check_command(
+            "s",
+            "cd-1",
+            "/p",
+            true,
+            substrate_home_from(false, Some("/Users/me/sb".into())).as_deref(),
+        );
+        assert_eq!(none, ignored, "a release build's command is byte-identical");
+    }
+
+    /// M18 WP4 — the whole open check, end to end under a fake tmux: the substrate is reported
+    /// from `$HOME`, or from the debug sandbox root when one is given; a gate-OFF check reports
+    /// no substrate at all.
+    #[test]
+    fn the_open_check_reports_the_hosts_substrate_and_honours_the_sandbox_root() {
+        let home = tempfile::TempDir::new().unwrap();
+        let root = home.path().canonicalize().unwrap();
+        let proj = root.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        let repo = root.join("repo");
+        std::fs::create_dir_all(repo.join("skills/feature-build")).unwrap();
+        std::fs::write(repo.join("install.sh"), "# claude-workflow-system\n").unwrap();
+        std::fs::create_dir_all(root.join(".claude/skills")).unwrap();
+        std::os::unix::fs::symlink(
+            repo.join("skills/feature-build"),
+            root.join(".claude/skills/feature-build"),
+        )
+        .unwrap();
+        let sandbox = root.join("sandbox");
+        std::fs::create_dir_all(&sandbox).unwrap();
+        let facts = |workflow: bool, home_override: Option<&str>| {
+            parse_open_facts(&run_with_fake_tmux_home(
+                &open_check_command(
+                    "claudesk-dev",
+                    "cd-1",
+                    proj.to_str().unwrap(),
+                    workflow,
+                    home_override,
+                ),
+                false,
+                None,
+                &root,
+            ))
+            .unwrap()
+            .substrate
+        };
+        assert_eq!(facts(false, None), None, "gate OFF: not probed");
+        assert_eq!(
+            facts(true, None),
+            Some(SubstrateRead::Known(HostProbe {
+                present: true,
+                root: Some(repo.to_str().unwrap().to_string()),
+                head: None,
+                record: None,
+            }))
+        );
+        assert_eq!(
+            facts(true, Some(sandbox.to_str().unwrap())),
+            Some(SubstrateRead::Known(HostProbe {
+                present: false,
+                root: None,
+                head: None,
+                record: None,
+            })),
+            "the empty sandbox root is read instead of $HOME"
+        );
+    }
+
+    /// The parse: probed + no answer → Unknown; each line read into its field; a bad root, head or
+    /// hex is dropped (never a guess); without the probed marker there is no substrate.
+    #[test]
+    fn the_substrate_lines_parse_and_fail_closed() {
+        let s = OPEN_SENTINEL;
+        let base = format!("{s}dir:yes\n{s}live:no\n");
+        assert_eq!(parse_open_facts(&base).unwrap().substrate, None);
+        assert_eq!(
+            parse_open_facts(&format!("{base}{s}substrate-probed\n"))
+                .unwrap()
+                .substrate,
+            Some(SubstrateRead::Unknown),
+            "probed, no answer: unknown, never absent"
+        );
+        let sha = "0123456789abcdef0123456789abcdef01234567";
+        assert_eq!(
+            parse_open_facts(&format!(
+                "{base}{s}substrate-probed\n{s}substrate:yes\n{s}substrate-root:/r/x\n\
+                 {s}substrate-head:{sha}\n{s}record-hex:7b2278223a317d0a\n"
+            ))
+            .unwrap()
+            .substrate,
+            Some(SubstrateRead::Known(HostProbe {
+                present: true,
+                root: Some("/r/x".into()),
+                head: Some(sha.into()),
+                record: Some(b"{\"x\":1}\n".to_vec()),
+            }))
+        );
+        let bad = parse_open_facts(&format!(
+            "{base}{s}substrate-probed\n{s}substrate:yes\n{s}substrate-root:rel/x\n\
+             {s}substrate-head:HEAD\n{s}record-hex:7b2\n"
+        ))
+        .unwrap()
+        .substrate;
+        assert_eq!(
+            bad,
+            Some(SubstrateRead::Known(HostProbe {
+                present: true,
+                root: None,
+                head: None,
+                record: None,
+            }))
+        );
+        assert_eq!(decode_hex("zz"), None);
+        assert_eq!(decode_hex("").as_deref(), Some(&b""[..]));
+    }
+
     /// M18 WP2: the same exec says whether the remote account accepted CC's bypass warning, from
     /// `~/.claude/settings.json` (INSIDE `~/.claude/`), and only a JSON `true` counts (probe fact 2).
     #[test]
@@ -1481,7 +1797,7 @@ pub(crate) mod tests {
                 }
             }
             parse_open_facts(&run_with_fake_tmux_home(
-                &open_check_command("claudesk-dev", "cd-1", proj.to_str().unwrap(), false),
+                &open_check_command("claudesk-dev", "cd-1", proj.to_str().unwrap(), false, None),
                 false,
                 None,
                 &root,
@@ -1540,7 +1856,7 @@ pub(crate) mod tests {
             .chain([format!("x'; touch {}; '", canary.display())])
         {
             let facts = parse_open_facts(&run_with_fake_tmux(
-                &open_check_command("claudesk-dev", &v, &v, true),
+                &open_check_command("claudesk-dev", &v, &v, true, None),
                 false,
                 None,
             ));
@@ -1573,6 +1889,7 @@ pub(crate) mod tests {
                 session_md: false,
                 trusted_keys: vec![],
                 bypass_accepted: false,
+                substrate: None,
             })
         );
         // `dir:yes` / `live:yes` printed by rc noise without the sentinel does not count.

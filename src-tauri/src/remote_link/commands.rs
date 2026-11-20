@@ -34,13 +34,21 @@ pub fn init(app: &AppHandle) -> Result<SharedLinks, String> {
             eprintln!("[claudesk] remote-link emit failed: {e}");
         }
     });
-    Ok(Arc::new(LinkRegistry::new(
+    let registry = Arc::new(LinkRegistry::new(
         Arc::new(SshTransport),
         app_data,
         local_socket,
         identifier,
         sink,
-    )))
+    ));
+    // M18 WP4: a host's substrate change reaches every `useHostSubstrate` as `remote-substrate`.
+    let emitter = app.clone();
+    registry.set_substrate_sink(Arc::new(move |ev| {
+        if let Err(e) = emitter.emit(crate::remote_substrate::SUBSTRATE_EVENT, &ev) {
+            eprintln!("[claudesk] remote-substrate emit failed: {e}");
+        }
+    }));
+    Ok(registry)
 }
 
 /// The validated remote target of the stored row keyed `project_path`. ⚠️ THE way a stored row
@@ -154,6 +162,11 @@ pub(crate) fn decide_open(
             },
         });
     };
+    // M18 WP4: the substrate the same exec probed (gate ON), whatever the decision below.
+    let substrate = facts
+        .substrate
+        .as_ref()
+        .map(crate::remote_substrate::HostSubstrate::from_read);
     if facts.live {
         let decision = match record {
             Some(SessionRecordState::Running) => OpenCheck::Reconnect {
@@ -171,7 +184,7 @@ pub(crate) fn decide_open(
                 ),
             },
         };
-        return OpenDecision::plain(decision);
+        return OpenDecision::plain(decision).with_substrate(substrate);
     }
     let clear = record == Some(SessionRecordState::EndPending);
     if !facts.folder {
@@ -185,6 +198,7 @@ pub(crate) fn decide_open(
             },
             clear_end_pending: clear,
             notice: None,
+            substrate,
         };
     }
     // AC-2.3: the label promised a live session (or a question) that is no longer there.
@@ -213,6 +227,7 @@ pub(crate) fn decide_open(
         }),
         clear_end_pending: clear,
         notice,
+        substrate,
     }
 }
 
@@ -225,6 +240,9 @@ pub(crate) struct OpenDecision {
     /// What the workspace should say because the picker's label (read from the local record)
     /// predicted something else (AC-2.3).
     pub notice: Option<String>,
+    /// M18 WP4 (D5): the host's substrate, when this check probed it (the gate was ON and the
+    /// exec answered). `None` leaves the per-host cache as it was.
+    pub substrate: Option<crate::remote_substrate::HostSubstrate>,
 }
 
 impl OpenDecision {
@@ -233,7 +251,14 @@ impl OpenDecision {
             check,
             clear_end_pending: false,
             notice: None,
+            substrate: None,
         }
+    }
+
+    /// The same decision, carrying the substrate the check probed.
+    fn with_substrate(mut self, substrate: Option<crate::remote_substrate::HostSubstrate>) -> Self {
+        self.substrate = substrate;
+        self
     }
 }
 
@@ -262,6 +287,13 @@ pub(crate) fn settle_open_decision(
         key,
         matches!(&decision.check, OpenCheck::Start(signals) if signals.bypass_accepted),
     );
+    // M18 WP4 (D5): only a check that probed writes the host's substrate; any other outcome
+    // (unreachable, invalid, gate OFF) leaves the last known value.
+    if let (Some(substrate), Some((host, _))) =
+        (decision.substrate, config_store::split_remote_key(key))
+    {
+        links.set_substrate(host, substrate);
+    }
     decision.check
 }
 
@@ -333,6 +365,18 @@ pub fn remote_hook_warning(links: State<'_, SharedLinks>, project_path: String) 
     links.hook_warning(host)
 }
 
+/// M18 WP4 (§R.2): every probed host's workflow substrate, by host: the one seed of the frontend's
+/// substrate store (`useHostSubstrate` / `useHostSubstrates`), which then tracks `remote-substrate`.
+/// A host never probed in this app session is absent (the frontend reads it as closed).
+///
+/// Sync on purpose: a short lock read, no I/O (`tests/sync_commands_do_not_block.rs`).
+#[tauri::command]
+pub fn remote_host_substrates(
+    links: State<'_, SharedLinks>,
+) -> std::collections::HashMap<String, crate::remote_substrate::HostSubstrate> {
+    links.substrates()
+}
+
 /// The notice the last open check left for the workspace it opened (M17 WP5, AC-2.3), taken once,
 /// or `None`. Read by the remote workspace once its spawn resolved, like `remote_hook_warning`.
 ///
@@ -383,6 +427,8 @@ pub async fn remote_open_check(
                                     .unwrap_or(false),
                                 None,
                             ),
+                            // M18 WP4 (D2): a debug build's sandbox root; `None` in release.
+                            crate::remote_cmd::substrate_home_override().as_deref(),
                         ),
                         super::EXEC_TIMEOUT_MS,
                     );
@@ -557,6 +603,7 @@ mod tests {
             &body,
             &[
                 "crate::remote_cmd::open_check_command",
+                "crate::remote_cmd::substrate_home_override",
                 "crate::remote_cmd::tmux_server",
                 "crate::remote_cmd::tmux_session",
                 "super::EXEC_TIMEOUT_MS",
@@ -607,7 +654,12 @@ mod tests {
         );
         assert_eq!(
             links_calls(&settle_body),
-            ["set_open_notice", "set_open_trust", "set_open_bypass"],
+            [
+                "set_open_notice",
+                "set_open_trust",
+                "set_open_bypass",
+                "set_substrate"
+            ],
             "{settle_body}"
         );
     }

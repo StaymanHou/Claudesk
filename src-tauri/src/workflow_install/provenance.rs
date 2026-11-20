@@ -59,7 +59,14 @@ pub fn record_path(claudesk_root: &Path) -> PathBuf {
 /// thing: Claudesk cannot prove it installed this, so it must not offer to remove it.
 pub fn read_record(claudesk_root: &Path) -> Option<InstallRecord> {
     let bytes = fs::read(record_path(claudesk_root)).ok()?;
-    serde_json::from_slice(&bytes).ok()
+    parse_record(&bytes)
+}
+
+/// Parse a record's bytes, or `None` if they are not a well-formed record — THE parser, for the
+/// local file ([`read_record`]) and for a remote host's record read over the link (M18 WP4,
+/// `remote_substrate`). Same lossy-in-one-direction posture: every failure is `None`.
+pub fn parse_record(bytes: &[u8]) -> Option<InstallRecord> {
+    serde_json::from_slice(bytes).ok()
 }
 
 /// Write the record, creating `claudesk_root` if needed.

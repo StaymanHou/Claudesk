@@ -153,8 +153,14 @@ fn entry_is_workflow_system_skill(entry: &Path) -> bool {
     let installer = repo_root.join(INSTALLER_FILENAME);
     // Filename alone is not enough (the operator's point: another skill system could ship an
     // `install.sh`), so confirm the content carries this workflow system's own marker.
-    std::fs::read_to_string(installer)
-        .map(|body| body.contains(WORKFLOW_MARKER))
+    // ⚠️ As BYTES (M18 WP4): the marker is ASCII, and the host-side `remote_cmd::SUBSTRATE_PROBE`
+    // reads bytes too. A `read_to_string` refused a non-UTF-8 installer that holds the marker, so
+    // the two answered differently (WP3 "Probe outcomes" (4)); the parity test pins that case.
+    std::fs::read(installer)
+        .map(|body| {
+            body.windows(WORKFLOW_MARKER.len())
+                .any(|w| w == WORKFLOW_MARKER.as_bytes())
+        })
         .unwrap_or(false)
 }
 

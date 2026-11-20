@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP4 — Substrate detection and the funnel's third input
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** verify-codify (phase 1 complete)
 **Created:** 2026-11-20
 **WBS:** `workflow-system/product/wbs.md` → "WP4: Detection and the funnel's third input (+ the absent-host note)"
 **Design:** `workflow-system/product/arch/claude-substrate.md` → "Remote hosts (M18)" §R.1, §R.2, §R.8
@@ -70,10 +70,13 @@ not in WP4.
 - **D6 — the TS host input.** It is `HostInput = "local" | HostSubstrate | undefined`. `undefined` and `Unknown` are
   closed.
   - `useHostSubstrate(projectPath)` returns `"local"` for a local key with **no IPC**.
-  - For a remote key it seeds by `remote_host_substrate` and listens to `remote-substrate`. It is the seam-hook shape
+  - For a remote key it reads one module store, which the first remote consumer starts: it listens to
+    `remote-substrate`, THEN seeds from `remote_host_substrates`, so no change falls in a gap. It is the seam-hook shape
     (never a one-shot read).
-  - The picker uses one `useHostSubstrates()` map hook (one seed `remote_host_substrates`, one listener), because a hook
+  - The picker reads the same store through `useHostSubstrates(active)` + `hostSubstrateFor(path, map)`, because a hook
     cannot be called per row inside `map`.
+  - `[Updated 2026-11-20 at build]` This replaces a per-hook `useTauriListen`, which subscribes (an IPC call) even for a
+    local key. The single-host command `remote_host_substrate` was dropped as unneeded.
 - **D7 — the guard extension.** `workflowApplicableGuard` also checks every production `isWorkflowApplicable(` call: it
   must have **three** top-level args, and the third must be bound from `useHostSubstrate(` / `hostSubstrateFor(`
   (never a literal `"local"`). A Rust behavioural test per backend consumer feeds a remote key whose host is
@@ -94,7 +97,7 @@ not in WP4.
 
 ## Work Tree
 
-- [ ] Phase 1: Detection — `SUBSTRATE_PROBE`, `OpenFacts.substrate`, the per-host cache, the `remote-substrate` event  <!-- status: NOT-STARTED -->
+- [x] Phase 1: Detection — `SUBSTRATE_PROBE`, `OpenFacts.substrate`, the per-host cache, the `remote-substrate` event
   **Observable outcomes:**
   - CLI: `cargo test substrate_probe_agrees_with_skills_dir_exists` passes. It runs the real `remote_cmd::SUBSTRATE_PROBE`
     under `zsh -c` with a temp `HOME` against **every** fixture shape and asserts agreement with `skills_dir_exists`
@@ -102,13 +105,15 @@ not in WP4.
     - the 12 shapes from WP3: none, no skills dir, skills is a file, empty, a user's real dir, a dangling link, a repo
       without an installer, an installer without the marker, the marker, a user dir + a marker link, a marker link
       under a dotfile name, the skills dir itself a symlink;
-    - plus a non-UTF-8 installer that holds the marker, and a repo path that contains `\n`.
+    - plus a non-UTF-8 installer that holds the marker, and a repo path that contains `\n`;
+    - `[added at P1 verify-self]` plus a real dir under a marker installer two levels up, and a link dangling into a
+      marker repo (16 in all).
     Every positive must print the canonicalized root, except the newline one, which prints none.
   - CLI: the same test file covers HEAD, asserting the printed head equals the fixture's commit sha for a loose ref, a
     packed ref (after `git pack-refs --all`) and a detached HEAD, and that no head line is printed for a `.git` file.
     A `PATH` with a failing `git` stub first in line changes nothing, which proves no `git` runs.
   - CLI: mutation-proven. Changing the marker in `SUBSTRATE_PROBE` alone turns the parity test red, and so does
-    deleting the `next unless -l $e` guard alone. Each mutant is restored by `cp` + `shasum`, each run shows a
+    deleting the `next unless -l $e` guard alone, and so does deleting the `&& -e $t` check alone. Each mutant is restored by `cp` + `shasum`, each run shows a
     `test result:` line, and the live dev app is stopped first.
   - CLI: `cargo test open_check` covers four things:
     - with the gate OFF, the command contains no `substrate`, no `install-record` and no `CLAUDESK_SUBSTRATE_HOME`;
@@ -123,7 +128,7 @@ not in WP4.
     - a failed exec or a gate-OFF check leaves the cached value as it was;
     - two hosts are cached independently.
   - CLI (live, read-only, the dev build, the gate ON, the `~/claudesk-scratch-remote` scratch row on the mini's dev
-    account): the open check runs, then the bridge `invoke('remote_host_substrate', {projectPath})` returns Developer
+    account): the open check runs, then the bridge `invoke('remote_host_substrates')` maps the mini's host to Developer
     with `root` equal to the host's `cd ~/my-claude-code-customization && pwd -P`, and `head` equal to that clone's
     `.git` HEAD, read by the agent's own ssh.
   - CLI (live, read-only, debug sandbox; the dev app relaunched with `CLAUDESK_REMOTE_SUBSTRATE_ROOT=<abs path of an
@@ -131,18 +136,44 @@ not in WP4.
     `CLAUDE.md` shasum are unchanged before and after.
   **Alignment questions:**
   - none (all checks are pass/fail; the live readings are Observable outcomes).
-  - [ ] P1.1 `remote_cmd::SUBSTRATE_PROBE`: adopt "Probe outcomes" (4)'s draft, with D1 (HEAD in perl), D3 (the newline guard) and D2's `$ENV{CLAUDESK_SUBSTRATE_HOME} // $ENV{HOME}`  <!-- status: NOT-STARTED -->
-  - [ ] P1.2 `open_check_command` (its `check_session_md` param becomes `workflow`: the `.session.md` read + the probe) + `OpenFacts.substrate` / `SubstrateRead` / `HostProbe` + parsing (hex → bytes → `provenance::parse_record`; the root through `is_normalized_remote_path`)  <!-- status: NOT-STARTED -->
-  - [ ] P1.3 D2: the debug-only `CLAUDESK_REMOTE_SUBSTRATE_ROOT` → a quoted export prefix; a pure builder that takes `Option<&str>`; the release byte-identity test  <!-- status: NOT-STARTED -->
-  - [ ] P1.4 `workflow_substrate::skills_dir_exists` reads `install.sh` as BYTES (the marker is ASCII), settling the divergence. `provenance::parse_record(&[u8])` is extracted, and `read_record` routes through it  <!-- status: NOT-STARTED -->
-  - [ ] P1.5 The parity test `substrate_probe_agrees_with_skills_dir_exists` (14 fixtures) + the HEAD fixtures + the git-stub PATH check  <!-- status: NOT-STARTED -->
-  - [ ] P1.6 `HostSubstrate` + `resolve_state` mapping; `LinkRegistry` per-host cache + `set_substrate` (emits on change through a second sink) + D5's write rule in `remote_open_check`; sync `remote_host_substrate(project_path)` + `remote_host_substrates()` commands (registered, and added to the sync-command ledger if needed); `useHostSubstrate` / `useHostSubstrates` + a TS mirror type  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P1.1 `remote_cmd::SUBSTRATE_PROBE`: adopt "Probe outcomes" (4)'s draft, with D1 (HEAD in perl), D3 (the newline guard) and D2's `$ENV{CLAUDESK_SUBSTRATE_HOME} // $ENV{HOME}`  <!-- status: done -->
+  - [x] P1.2 `open_check_command` (its `check_session_md` param becomes `workflow`: the `.session.md` read + the probe) + `OpenFacts.substrate` / `SubstrateRead` / `HostProbe` + parsing (hex → bytes → `provenance::parse_record`; the root through `is_normalized_remote_path`)  <!-- status: done -->
+  - [x] P1.3 D2: the debug-only `CLAUDESK_REMOTE_SUBSTRATE_ROOT` → a quoted export prefix; a pure builder that takes `Option<&str>`; the release byte-identity test  <!-- status: done -->
+  - [x] P1.4 `workflow_substrate::skills_dir_exists` reads `install.sh` as BYTES (the marker is ASCII), settling the divergence. `provenance::parse_record(&[u8])` is extracted, and `read_record` routes through it  <!-- status: done -->
+  - [x] P1.5 The parity test `substrate_probe_agrees_with_skills_dir_exists` (16 fixtures, 2 added at verify-self) + the HEAD fixtures + the git-stub PATH check  <!-- status: done -->
+  - [x] P1.6 `HostSubstrate` + `resolve_state` mapping; `LinkRegistry` per-host cache + `set_substrate` (emits on change through a second sink) + D5's write rule in `remote_open_check`; sync `remote_host_substrate(project_path)` + `remote_host_substrates()` commands (registered, and added to the sync-command ledger if needed); `useHostSubstrate` / `useHostSubstrates` + a TS mirror type  <!-- status: done -->
+  - [x] verify-auto  <!-- status: done -->
+    — evidence: `pnpm verify:auto` → EXIT=0 (61s). It reports vitest 322 files / 4094 tests passed (incl. the new
+    `useHostSubstrate.test.tsx`, 6, with a positive control for the listen), `cargo test` lib 1399 passed (incl.
+    `remote_substrate::parity::substrate_probe_agrees_with_skills_dir_exists` 14 fixtures, the HEAD / no-git / sandbox
+    tests, the open-check probe/parse/sandbox tests and the cache/settle/decide tests), all integration tests ok
+    (`sync_commands_do_not_block` covers the new sync `remote_host_substrates`), clippy `-D warnings` and `fmt --check`
+    clean. Two rounds were needed: Prettier on the new test, then three clippy findings (`then_some`, `is_multiple_of`,
+    and `LinkRegistry::substrate` unread outside tests, given a `cfg_attr(not(test), allow(dead_code))` that P2.2 must
+    remove). ESLint's 1 warning is pre-existing (`XtermPane.tsx:988`, unchanged since `e38cdc7`).
+  - [x] verify-self  <!-- status: done -->
+    - [x] vs.1 parity, 16 fixtures (runner)  — evidence: `cargo test --lib substrate_probe_agrees_with_skills_dir_exists` → `test result: ok. 1 passed`; the runner read `fixtures()`: per-fixture asserts local==expected, probe.present==local, probe.root==canonical root (newline fixture → None)
+    - [x] vs.2 HEAD without git (runner)  — evidence: `the_probe_reads_head_from_dot_git_without_git` → ok (loose/packed/detached = sha, `.git` file → None); `the_probe_never_runs_git` → ok (stub first on PATH after env_clear; no canary)
+    - [x] vs.3 mutation-proven (runner, re-verified by a FRESH runner after the in-place fix)  — evidence: M1 marker → FAILED on "the marker"; M2 `next unless -l $e;` deleted → FAILED on "a real dir under a marker installer two levels up"; M3 `&& -e $t` deleted → FAILED on "a link dangling into a marker repo"; each landed by grep, restored by `cp` with sha `1dce100c…dc55a16` matching; restored parity ok, `remote_substrate` 7/7. ⚠️ First run: M2 SURVIVED (no fixture separated a real dir from a link), see `[SHORTCUT-2026-11-20]`
+    - [x] vs.4 open-check probe/parse (runner)  — evidence: `cargo test --lib open_check` → 11 passed; `the_substrate_lines_parse_and_fail_closed` ok; `remote_substrate::tests` 3 passed (malformed / wrong-shape / non-UTF-8 record → Developer, never Managed)
+    - [x] vs.5 release-shape builder (runner)  — evidence: `the_sandbox_root_is_debug_only_and_never_interpolated_unvalidated` → ok (debug=false ignored, byte-identical to None; 7 invalid roots ignored)
+    - [x] vs.6 cache (runner)  — evidence: the three cache/settle/decide tests → ok each (3 events for 3 changes, none for identical; per host; no-probe decision leaves the cache; every answered decision carries the substrate)
+    - [x] vs.7 live, read-only, dev build, gate ON, scratch row `<user>@<mini-host>:~/claudesk-scratch-remote` (orchestrator, bridge)  — evidence: `remote_host_substrates` before = `{}`; `remote_open_check` → `start` in 838 ms; after = `{"<user@host>": {state: "developer", root: "/Users/<u>/my-claude-code-customization", head: "f8e8873970c0…"}}`, equal to the agent's own ssh read (`pwd -P` + `.git/refs/heads/main` = `f8e8873970c0071254f0ddb98a1d8c6e6ed8660d`); the key's account is `stayman` (not the root-ops one); gate read `true`
+    - [x] vs.8 live, debug sandbox (orchestrator, bridge; state-changing as declared: an empty `~/claudesk-m18-wp4-sandbox` on the host, removed after)  — evidence: relaunched with `CLAUDESK_REMOTE_SUBSTRATE_ROOT=/Users/<u>/claudesk-m18-wp4-sandbox` → the same row's check → `{state: "absent"}`. Live account before = after: 48 skill links, `CLAUDE.md` sha256 `539e1b954fa84d45…`, no record. Cleanup: sandbox `rmdir`'d (gone), no `claudesk-dev` tmux server, only prod's `ssh -M` (pid 6044, tank) left, dev `projects.json` / `settings.json` restored from backup (shas `b30fd5f8…` / `0fc30928…`)
+    - [x] vs.9 hook seam (runner)  — evidence: `vitest run src/state/__tests__/useHostSubstrate.test.tsx` → 6 passed (local → `calls == []` with events unmocked; positive control: a remote key's `plugin:event|listen` reaches the handler)
+    - No integration boundary reaches a user-visible surface yet: Phase 1 adds the probe to the EXISTING `remote_open_check` (consumed by the picker's remote open), and vs.7/vs.8 drive that consuming command directly. The open still answered `start` (unchanged behaviour), so the picker's path is intact.
+  - [x] verify-human  <!-- status: done --> — zero admissible leaves (F11)
+  - [x] verify-codify  <!-- status: done -->
+    Test scope: full — suite not long (`runtimes.md` → `pnpm verify:auto` Last 61s)
+    — evidence: no new tests needed. Every verified behaviour already has a regression test written at build (parity
+    ×16 fixtures killing M1/M2/M3, HEAD / no-git / sandbox-variable, open-check probe/parse/release-shape, cache / settle /
+    decide, the hook seam with its positive control). The consuming surface `remote_open_check` is pinned through
+    `decide_open` → `settle_open_decision` plus its reach guard (`substrate_home_override` in the exact allowlist,
+    `set_substrate` in settle's exact call list). `pnpm verify:auto` → EXIT=0 (60s): vitest 4094 passed, lib 1399 passed,
+    integration ok. The first run failed only `cargo fmt --check` on the new fixture's layout (a reflow, fixed by
+    `cargo fmt`); no test logic changed.
 
-- [ ] Phase 2: The funnel's third input — Rust + TS, every consumer migrated, the guard extended  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [ ] Phase 2: The funnel's third input — Rust + TS, every consumer migrated, the guard extended  <!-- status: in-progress -->
   **Observable outcomes:**
   - CLI: `cargo test workflow_applicable` shows a truth table over gate × profile × host, where host ∈
     {Local, Absent, Unknown, Developer, Managed}. Applicable is exactly gate ∧ default ∧ (Local ∨ Developer ∨ Managed).
@@ -169,7 +200,7 @@ not in WP4.
     that host has been open-checked once in this app session (fail closed). Is that acceptable, or should the picker
     row keep showing the stored cell for remote rows?
   - [ ] P2.1 Rust `workflow_applicable(gate, profile, host: HostInput)` (`Local | Remote(&HostSubstrate)`) + its truth-table test  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 Migrate the Rust consumers (spawn env, `remote_open_check`'s arm decision via `decide_open`, the poller's `gate_on`, announce) + a behavioural test each  <!-- status: NOT-STARTED -->
+  - [ ] P2.2 (also remove the temporary `allow(dead_code)` on `LinkRegistry::substrate`) Migrate the Rust consumers (spawn env, `remote_open_check`'s arm decision via `decide_open`, the poller's `gate_on`, announce) + a behavioural test each  <!-- status: NOT-STARTED -->
   - [ ] P2.3 TS `isWorkflowApplicable(gate, profile, host)` + its mirror table; migrate `Workspace.tsx` (×2), `RightPanelHost.tsx`, `ProjectPicker.tsx` (×2, via `useHostSubstrates`), `ProjectModelCell.tsx`  <!-- status: NOT-STARTED -->
   - [ ] P2.4 Extend `workflowApplicableGuard` (D7) + mutation-prove each form individually  <!-- status: NOT-STARTED -->
   - [ ] verify-auto  <!-- status: NOT-STARTED -->
@@ -227,12 +258,14 @@ not in WP4.
   and removed after (state-changing, declared).
 
 ## Current Node
-- **Path:** Feature > Phase 1 > P1.1
-- **Active scope:** P1.1 (adopt `SUBSTRATE_PROBE` with D1/D2/D3)
+- **Path:** Feature > Phase 2 > P2.1
+- **Active scope:** P2.1 (Rust `workflow_applicable(gate, profile, host)` + truth table)
 - **Blocked:** none
-- **Unvisited:** Phase 1 (P1.2–P1.6, verify), Phase 2, Phase 3
+- **Unvisited:** Phase 2 (P2.2–P2.4, verify), Phase 3
 - **Open discoveries:** none
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
+
+[SHORTCUT-2026-11-20] P1.verify-self vs.3 — mutant M2 (`next unless -l $e;` deleted) SURVIVED the 14-fixture parity test: no fixture separated a real dir from a link. In-place fix, extending P1.5's fixture list (a trivial extension of the just-built leaf): added "a real dir under a marker installer two levels up" and, for the analogous unguarded `-e $t` check, "a link dangling into a marker repo" (16 fixtures). Re-verified by a FRESH runner subagent: M1, M2 and M3 each fail on their own fixture, and every restore matched the sha.
