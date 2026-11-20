@@ -73,6 +73,14 @@ pub mod provenance;
 // reducer over its ending. Carries the module's one remote `rm -rf` (a leftover clone, guarded on
 // the host), pinned by `source_guard`.
 pub mod remote_runner;
+// M18 WP7 — the remote refuse-guard: `RemoteUninstallTarget`'s only constructor is
+// `remote_refuse_guard`, fed by the host's own record + observation. Built before the remote
+// deleting path, as `guard` was.
+pub mod remote_guard;
+// M18 WP7 — Uninstall (+ Update) on a remote host: the observe / dry-run / run scripts and their
+// reducer. Carries the remote Uninstall's `rm -rf` of a guard-approved path and its record delete,
+// pinned by `source_guard`.
+pub mod remote_ops;
 // The subprocess spawns (`git clone` → `install.sh` on the install side; `uninstall.sh`
 // [--dry-run] on the uninstall side) plus both load-bearing orderings: record written LAST on
 // install, deleted LAST on uninstall. Carries the crate's ONE deleting call, behind the

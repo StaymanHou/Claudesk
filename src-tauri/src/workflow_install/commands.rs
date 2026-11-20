@@ -26,9 +26,10 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
 
-use super::remote_runner::{self, Phase, RemoteRunState, RunLine};
+use super::remote_runner::{self, Phase, RemoteOp, RemoteRunState, RunLine};
 use super::runner::{self, OutputSink};
 use super::{provenance, terminal, InstallState};
+use super::{remote_guard, remote_ops};
 
 /// Event carrying one line of subprocess output. Payload: the line.
 pub const INSTALL_OUTPUT_EVENT: &str = "workflow-install-output";
@@ -521,7 +522,7 @@ pub const REMOTE_INSTALL_OUTPUT_EVENT: &str = "remote-install-output";
 /// `install` (ruling A: Cancel is honoured only during the clone).
 pub const REMOTE_INSTALL_PHASE_EVENT: &str = "remote-install-phase";
 
-/// Fired once when a remote install ends. Payload: [`remote_runner::RemoteInstallFinished`].
+/// Fired once when a remote install ends. Payload: [`remote_runner::RemoteRunFinished`].
 pub const REMOTE_INSTALL_FINISHED_EVENT: &str = "remote-install-finished";
 
 /// [`REMOTE_INSTALL_PHASE_EVENT`]'s payload.
@@ -559,6 +560,30 @@ pub(crate) fn begin_remote_install(
     host: &str,
     sandbox_root: Option<String>,
 ) -> Result<RemoteInstallStart, String> {
+    begin_remote_run(
+        control,
+        links,
+        projects,
+        host,
+        sandbox_root,
+        RemoteOp::Install,
+    )
+}
+
+/// [`begin_remote_install`]'s checks for any remote run (M18 WP7): the same order and the same
+/// release-by-drop, with the cached state each op acts on. Install acts on an Absent host;
+/// Uninstall (and Update) on a Managed one. The cache only gates the OFFER: the run itself
+/// re-reads the host before acting (Install's host re-check; Uninstall's guard over a fresh
+/// observation).
+pub(crate) fn begin_remote_run(
+    control: &Arc<InstallControl>,
+    links: &Arc<crate::remote_link::LinkRegistry>,
+    projects: &[crate::config_store::Project],
+    host: &str,
+    sandbox_root: Option<String>,
+    op: RemoteOp,
+) -> Result<RemoteInstallStart, String> {
+    use crate::remote_substrate::HostSubstrate;
     let lock = HeldRunLock::try_acquire(control)
         .ok_or_else(|| "a workflow-system install or uninstall is already running".to_string())?;
     if let Ok(mut r) = control.remote.lock() {
@@ -569,22 +594,33 @@ pub(crate) fn begin_remote_install(
         .find(|t| t.host() == host)
         .ok_or_else(|| format!("{host} is not the host of a remote project"))?;
     let substrate = links.substrate(host);
-    if substrate != crate::remote_substrate::HostSubstrate::Absent {
+    let (acts_on, offered_when, verb) = match op {
+        RemoteOp::Install => (
+            matches!(substrate, HostSubstrate::Absent),
+            "Install is offered only on a host that has no workflow system",
+            "installs",
+        ),
+        RemoteOp::Uninstall => (
+            matches!(substrate, HostSubstrate::Managed { .. }),
+            "Uninstall is offered only on a host where Claudesk installed the workflow system",
+            "uninstalls",
+        ),
+    };
+    if !acts_on {
         return Err(format!(
-            "Install is offered only on a host that has no workflow system; Claudesk last read \
-             this one as {}. Reopen Settings to check it again.",
+            "{offered_when}; Claudesk last read this one as {}. Reopen Settings to check it again.",
             match substrate {
-                crate::remote_substrate::HostSubstrate::Unknown => "unknown",
-                crate::remote_substrate::HostSubstrate::Developer { .. } => "Developer",
-                crate::remote_substrate::HostSubstrate::Managed { .. } => "Managed",
-                crate::remote_substrate::HostSubstrate::Absent => "Absent",
+                HostSubstrate::Unknown => "unknown",
+                HostSubstrate::Developer { .. } => "Developer",
+                HostSubstrate::Managed { .. } => "Managed",
+                HostSubstrate::Absent => "Absent",
             }
         ));
     }
     let (hold, home) = links.hold_if_up(host).ok_or_else(|| {
         format!(
             "Claudesk isn't connected to {host} right now. Open a workspace on it, then try \
-             again: Claudesk installs over that connection and never opens one by itself."
+             again: Claudesk {verb} over that connection and never opens one by itself."
         )
     })?;
     let root = sandbox_root.unwrap_or(home);
@@ -687,8 +723,9 @@ pub fn workflow_remote_install_start(
             lock: Some(lock),
             reported: false,
             terminal_event: REMOTE_INSTALL_FINISHED_EVENT,
-            panic_payload: serde_json::to_value(remote_runner::RemoteInstallFinished {
+            panic_payload: serde_json::to_value(remote_runner::RemoteRunFinished {
                 host: host.clone(),
+                op: remote_runner::RemoteOp::Install,
                 ok: false,
                 cancelled: false,
                 message: Some(REMOTE_PANIC_MESSAGE.to_string()),
@@ -804,6 +841,221 @@ fn request_remote_cancel(control: &InstallControl) -> Result<(), String> {
     r.cancel_requested = true;
     Ok(())
 }
+
+// ── M18 WP7: Uninstall over the master ──────────────────────────────────────────────────
+
+/// The Uninstall preview: the approved clone and what the host's own `uninstall.sh --dry-run`
+/// says it would remove.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RemoteUninstallPreview {
+    pub host: String,
+    /// The guard-approved clone folder, as the host resolves it.
+    pub clone_dir: String,
+    /// `uninstall.sh --dry-run`'s output.
+    pub preview: String,
+}
+
+/// How long one observe / dry-run exec may take: the master's ordinary capture window.
+const REMOTE_READ_TIMEOUT_MS: u64 = crate::remote_link::EXEC_TIMEOUT_MS;
+
+/// Run one host script over the master, under the login shell: what `remote_ops` calls `exec`.
+fn host_exec<'a>(
+    links: &'a crate::remote_link::LinkRegistry,
+    target: &'a crate::remote_cmd::ValidTarget,
+) -> impl Fn(&str) -> Result<String, String> + 'a {
+    move |script: &str| {
+        links
+            .master_exec(
+                target,
+                &crate::remote_cmd::login_shell(script),
+                REMOTE_READ_TIMEOUT_MS,
+            )
+            .map_err(|e| format!("Claudesk couldn't reach the host: {e}. Nothing was changed."))
+    }
+}
+
+/// Preview a remote Uninstall (M18 WP7, §R.3): observe the host, run the remote refuse-guard, and
+/// show the host's own `uninstall.sh --dry-run` for the approved clone. Changes nothing. `Err` is
+/// the guard's refusal (or why the host could not be read), in plain words.
+///
+/// Holds the single-run lock for its whole read (a preview must not read a tree a run is
+/// removing, as the local dry run), and the host's link (never brought up: §R.5).
+#[tauri::command]
+pub async fn workflow_remote_uninstall_preview(
+    app: AppHandle,
+    control: State<'_, Arc<InstallControl>>,
+    links: State<'_, crate::remote_link::commands::SharedLinks>,
+    host: String,
+) -> Result<RemoteUninstallPreview, String> {
+    let dir = crate::config_store::commands::resolve_data_dir(&app)?;
+    let projects = crate::config_store::read_projects(&dir).map_err(|e| e.to_string())?;
+    let start = begin_remote_run(
+        control.inner(),
+        links.inner(),
+        &projects,
+        &host,
+        crate::remote_cmd::substrate_home_override(),
+        RemoteOp::Uninstall,
+    )?;
+    let links = Arc::clone(&links);
+    crate::blocking::on_blocking_worker("the removal preview", move || {
+        let RemoteInstallStart {
+            lock: _lock,
+            hold: _hold,
+            target,
+            root,
+        } = start;
+        let exec = host_exec(&links, &target);
+        let approved = remote_ops::observe_and_guard(&root, &exec)?;
+        let preview = exec(&remote_ops::dry_run_script(&approved))?;
+        Ok(RemoteUninstallPreview {
+            host,
+            clone_dir: approved.clone_dir().to_string(),
+            preview,
+        })
+    })
+    .await
+}
+
+/// Streams a remote uninstall's output, keeping its result line for the reducer.
+struct UninstallSink {
+    app: AppHandle,
+    result: std::sync::Mutex<Option<remote_ops::UninstallResult>>,
+}
+
+impl OutputSink for UninstallSink {
+    fn line(&self, line: &str) {
+        match remote_ops::parse_uninstall_line(line) {
+            Some(r) => {
+                if let Ok(mut slot) = self.result.lock() {
+                    slot.get_or_insert(r);
+                }
+            }
+            None => {
+                let _ = self.app.emit(REMOTE_INSTALL_OUTPUT_EVENT, line);
+            }
+        }
+    }
+}
+
+/// Uninstall the workflow system from `host` (M18 WP7, §R.3). Returns at once; output arrives on
+/// [`REMOTE_INSTALL_OUTPUT_EVENT`] and the outcome on [`REMOTE_INSTALL_FINISHED_EVENT`] with
+/// `op: "uninstall"` (the events are shared until WP7 Phase 4 renames them for all three ops).
+///
+/// The worker observes the host and runs the remote refuse-guard AGAIN (the freshest state, never
+/// the preview's), then runs `remote_ops::uninstall_script` for the approved target only, then
+/// re-probes the host, whose answer decides the outcome. No Cancel (WP7 D7). ⚠️ It never touches
+/// the local workflow-features gate: a host is one of several substrates.
+#[tauri::command]
+pub fn workflow_remote_uninstall_start(
+    app: AppHandle,
+    control: State<'_, Arc<InstallControl>>,
+    links: State<'_, crate::remote_link::commands::SharedLinks>,
+    host: String,
+) -> Result<(), String> {
+    let dir = crate::config_store::commands::resolve_data_dir(&app)?;
+    let projects = crate::config_store::read_projects(&dir).map_err(|e| e.to_string())?;
+    let start = begin_remote_run(
+        control.inner(),
+        links.inner(),
+        &projects,
+        &host,
+        crate::remote_cmd::substrate_home_override(),
+        RemoteOp::Uninstall,
+    )?;
+    let links = Arc::clone(&links);
+
+    std::thread::spawn(move || {
+        let RemoteInstallStart {
+            lock,
+            hold,
+            target,
+            root,
+        } = start;
+        let mut guard = RunGuard {
+            app: app.clone(),
+            lock: Some(lock),
+            reported: false,
+            terminal_event: REMOTE_INSTALL_FINISHED_EVENT,
+            panic_payload: serde_json::to_value(remote_runner::RemoteRunFinished {
+                host: host.clone(),
+                op: RemoteOp::Uninstall,
+                ok: false,
+                cancelled: false,
+                message: Some(REMOTE_UNINSTALL_PANIC_MESSAGE.to_string()),
+            })
+            .unwrap_or_default(),
+        };
+        let exec = host_exec(&links, &target);
+        let approved: remote_guard::RemoteUninstallTarget =
+            match remote_ops::observe_and_guard(&root, &exec) {
+                Ok(t) => t,
+                Err(refusal) => {
+                    guard.finish(remote_runner::RemoteRunFinished {
+                        host: host.clone(),
+                        op: RemoteOp::Uninstall,
+                        ok: false,
+                        cancelled: false,
+                        message: Some(refusal),
+                    });
+                    drop(hold);
+                    return;
+                }
+            };
+        let argv = links.master_run_argv(
+            &host,
+            &crate::remote_cmd::login_shell(&remote_ops::uninstall_script(&approved)),
+        );
+        let sink = UninstallSink {
+            app: app.clone(),
+            result: std::sync::Mutex::new(None),
+        };
+        let exit = match runner::run_streaming_abortable(
+            &argv[0],
+            &argv[1..],
+            None,
+            &sink,
+            remote_runner::REMOTE_INSTALL_DEADLINE,
+            &|| false,
+        ) {
+            Ok((code, _)) => code,
+            Err(e) => {
+                let _ = app.emit(
+                    REMOTE_INSTALL_OUTPUT_EVENT,
+                    format!("[could not run ssh: {e}]"),
+                );
+                -1
+            }
+        };
+        let out = links.master_exec(
+            &target,
+            &crate::remote_cmd::substrate_refresh_command(
+                crate::remote_cmd::substrate_home_override().as_deref(),
+            ),
+            crate::remote_link::EXEC_TIMEOUT_MS,
+        );
+        let after = match crate::remote_link::commands::settle_refresh(&links, &host, out) {
+            crate::remote_link::commands::RefreshOutcome::Checked { substrate, .. } => {
+                Some(substrate)
+            }
+            _ => None,
+        };
+        let result = sink.result.lock().ok().and_then(|r| r.clone());
+        guard.finish(remote_ops::resolve_uninstall(
+            &host,
+            result.as_ref(),
+            exit,
+            after.as_ref(),
+        ));
+        drop(hold);
+    });
+
+    Ok(())
+}
+
+/// The message a panicked remote uninstall worker reports.
+const REMOTE_UNINSTALL_PANIC_MESSAGE: &str = "The uninstall stopped unexpectedly. Check Settings \
+     → Remote hosts before retrying: the host may or may not have been changed.";
 
 /// Current UTC time as RFC-3339, for the provenance record's `installed_at`.
 ///
@@ -995,12 +1247,13 @@ mod tests {
         // covering the uninstall worker while staying green (code review, 2026-07-31: "the one
         // guard in this WP whose failure mode is 'quietly stops checking'").
         let worker_bodies: Vec<&str> = production.split("std::thread::spawn").skip(1).collect();
-        // M18 WP6 added the third: the remote install's worker.
+        // M18 WP6 added the third: the remote install's worker; M18 WP7 the fourth, the remote
+        // uninstall's.
         assert_eq!(
             worker_bodies.len(),
-            3,
-            "expected exactly three spawned workers (install, uninstall, remote install); if \
-             another was added it must also delegate its lock release to RunGuard"
+            4,
+            "expected exactly four spawned workers (install, uninstall, remote install, remote \
+             uninstall); if another was added it must also delegate its lock release to RunGuard"
         );
         assert!(
             production.contains("terminal_event: REMOTE_INSTALL_FINISHED_EVENT"),
@@ -1068,6 +1321,37 @@ mod tests {
         );
     }
 
+    /// M18 WP7 — the wire shapes the Settings panel reads (Phase 4 binds to them): the finished
+    /// payload names its `op` in snake_case and keeps WP6's keys; the preview is `clone_dir` +
+    /// `preview`. A serde rename here would silently blank the panel.
+    #[test]
+    fn the_remote_run_payloads_keep_their_wire_keys() {
+        use crate::workflow_install::remote_runner::{RemoteOp, RemoteRunFinished};
+        let f = serde_json::to_value(RemoteRunFinished {
+            host: "h".into(),
+            op: RemoteOp::Uninstall,
+            ok: true,
+            cancelled: false,
+            message: None,
+        })
+        .unwrap();
+        assert_eq!(
+            f,
+            serde_json::json!({"host": "h", "op": "uninstall", "ok": true, "cancelled": false, "message": null})
+        );
+        assert_eq!(serde_json::to_value(RemoteOp::Install).unwrap(), "install");
+        let p = serde_json::to_value(super::RemoteUninstallPreview {
+            host: "h".into(),
+            clone_dir: "/c".into(),
+            preview: "x".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            p,
+            serde_json::json!({"host": "h", "clone_dir": "/c", "preview": "x"})
+        );
+    }
+
     /// WP7 D2 — the remote install's worker decides Cancel through `remote_runner::abort_poll`,
     /// the pure function the real-script cancel tests drive, and never re-derives it. Without this
     /// guard those tests prove the function, not that the worker calls it (memory
@@ -1096,6 +1380,46 @@ mod tests {
                 !code.contains(re_derived),
                 "the cancel decision lives in remote_runner, not here (`{re_derived}`)"
             );
+        }
+    }
+
+    /// M18 WP7 — the remote Uninstall's worker deletes only what the remote refuse-guard approved
+    /// from a FRESH observation, and neither remote uninstall command touches the local
+    /// workflow-features gate (a host is one of several substrates; §R.3).
+    #[test]
+    fn the_remote_uninstall_guards_first_and_never_touches_the_local_gate() {
+        let code =
+            crate::workflow_install::source_guard::production_code(include_str!("commands.rs"));
+        let body = |sig: &str| {
+            let at = code.find(sig).unwrap_or_else(|| panic!("{sig}"));
+            let end = code[at..].find("\n}\n").map_or(code.len(), |rel| at + rel);
+            code[at..end].to_string()
+        };
+        let start = body("pub fn workflow_remote_uninstall_start");
+        let guard_at = start
+            .find("remote_ops::observe_and_guard(")
+            .expect("the worker runs the guard");
+        let script_at = start
+            .find("remote_ops::uninstall_script(&approved)")
+            .expect("the script is built from the approved target");
+        assert!(guard_at < script_at, "the guard comes before the script");
+        assert_eq!(start.matches("uninstall_script(").count(), 1);
+        assert!(start.contains("remote_ops::resolve_uninstall("));
+        let preview = body("pub async fn workflow_remote_uninstall_preview");
+        assert!(preview.contains("remote_ops::observe_and_guard("));
+        assert!(preview.contains("remote_ops::dry_run_script(&approved)"));
+        for b in [&start, &preview] {
+            for gate in [
+                "revert_gate",
+                "workflow_gate",
+                "set_workflow_features",
+                "GateAction",
+            ] {
+                assert!(
+                    !b.contains(gate),
+                    "a remote uninstall touches the local gate: `{gate}`"
+                );
+            }
         }
     }
 
@@ -1136,9 +1460,19 @@ mod tests {
                 "pub fn workflow_remote_install_start",
                 "begin_remote_install(",
             ),
+            ("pub(crate) fn begin_remote_install(", "begin_remote_run("),
             (
-                "pub(crate) fn begin_remote_install(",
+                "pub(crate) fn begin_remote_run(",
                 "HeldRunLock::try_acquire(",
+            ),
+            // M18 WP7: the remote uninstall, its preview included (it reads a tree a run removes).
+            (
+                "pub async fn workflow_remote_uninstall_preview",
+                "begin_remote_run(",
+            ),
+            (
+                "pub fn workflow_remote_uninstall_start",
+                "begin_remote_run(",
             ),
         ] {
             assert!(

@@ -275,6 +275,16 @@ mod tests {
             include_str!("terminal.rs"),
             "fn resolve_uninstall_terminal_state",
         ),
+        (
+            "remote_guard.rs",
+            include_str!("remote_guard.rs"),
+            "pub fn remote_refuse_guard(",
+        ),
+        (
+            "remote_ops.rs",
+            include_str!("remote_ops.rs"),
+            "pub fn resolve_uninstall(",
+        ),
         ("commands.rs", include_str!("commands.rs"), "fn now_rfc3339"),
         ("guard.rs", include_str!("guard.rs"), "fn refuse_guard"),
     ];
@@ -335,6 +345,12 @@ mod tests {
             ("runner.rs", Deletion::RemoveDir, 1),
             ("provenance.rs", Deletion::RemoveFile, 1),
             ("remote_runner.rs", Deletion::RmRecursive, 1),
+            // M18 WP7: the remote Uninstall, inside `remote_ops.rs`'s UNINSTALL_TEMPLATE, which only
+            // `uninstall_script(&RemoteUninstallTarget)` fills (the type's one constructor is
+            // `remote_refuse_guard`): the `rm -rf` of the guard-approved clone, then the record's
+            // `rm -f`, LAST. The host re-checks the approval before either runs (D6).
+            ("remote_ops.rs", Deletion::RmRecursive, 1),
+            ("remote_ops.rs", Deletion::Rm, 1),
         ];
 
         for (name, src, _) in MODULE_FILES {

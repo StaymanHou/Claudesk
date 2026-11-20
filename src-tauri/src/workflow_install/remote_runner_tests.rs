@@ -14,7 +14,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 use tempfile::TempDir;
 
-const NOW: &str = "2026-11-20T00:00:00+00:00";
+pub(crate) const NOW: &str = "2026-11-20T00:00:00+00:00";
 
 // ── The pure builder ─────────────────────────────────────────────────────────────────────
 
@@ -329,7 +329,7 @@ fn no_resolve_message_carries_a_space_run() {
 /// `skills/*` dir under `$HOME/.claude/skills` and appending a block to `$HOME/.claude/CLAUDE.md`.
 /// `FIXTURE_SLEEP` (from the environment) makes it pause between links; `FIXTURE_FAIL` makes it
 /// exit with that code after the first link.
-fn fixture_repo(with_installer: bool) -> TempDir {
+pub(crate) fn fixture_repo(with_installer: bool) -> TempDir {
     let dir = TempDir::new().unwrap();
     let repo = dir.path();
     std::fs::create_dir_all(repo.join("skills/feature-build")).unwrap();
@@ -353,6 +353,34 @@ printf '# workflow block\n' >> "$HOME/.claude/CLAUDE.md"
         let path = repo.join("install.sh");
         std::fs::write(&path, script).unwrap();
         use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // WP7: the real `uninstall.sh`'s shape. It removes only links resolving into its own
+        // repo (`readlink -f` vs a logical `pwd` SOURCE_DIR, as the real one), excises the block,
+        // `--dry-run` changes nothing, and `FIXTURE_UNINSTALL_FAIL` exits with that code after the
+        // first removal.
+        let uninstall = r#"#!/bin/bash
+set -euo pipefail
+SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
+DRY=0
+[ "${1:-}" = "--dry-run" ] && DRY=1
+for l in "$HOME"/.claude/skills/*; do
+  [ -L "$l" ] || continue
+  case "$(readlink -f "$l")" in
+    "$SOURCE_DIR"/*)
+      if [ "$DRY" -eq 1 ]; then echo "  [remove] $(basename "$l") (dry-run)"
+      else rm "$l"; echo "  [remove] $(basename "$l")"
+        if [ -n "${FIXTURE_UNINSTALL_FAIL:-}" ]; then exit "$FIXTURE_UNINSTALL_FAIL"; fi
+      fi ;;
+    *) echo "  [skip] $(basename "$l") (not ours)" ;;
+  esac
+done
+if [ "$DRY" -eq 0 ] && [ -f "$HOME/.claude/CLAUDE.md" ]; then
+  grep -v '^# workflow block$' "$HOME/.claude/CLAUDE.md" > "$HOME/.claude/CLAUDE.md.tmp" || true
+  mv "$HOME/.claude/CLAUDE.md.tmp" "$HOME/.claude/CLAUDE.md"
+fi
+"#;
+        let path = repo.join("uninstall.sh");
+        std::fs::write(&path, uninstall).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
     let git = |args: &[&str]| {
@@ -383,19 +411,19 @@ printf '# workflow block\n' >> "$HOME/.claude/CLAUDE.md"
 
 /// The installer's sandbox root (`<sandbox>/home`, canonical: `/var` is `/private/var`), plus a
 /// SEPARATE decoy `$HOME` for the shell, so a write that ignores the root lands somewhere visible.
-struct Host {
-    sandbox: Sandbox,
-    decoy: TempDir,
+pub(crate) struct Host {
+    pub(crate) sandbox: Sandbox,
+    pub(crate) decoy: TempDir,
 }
 
 impl Host {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             sandbox: Sandbox::new(),
             decoy: TempDir::new().unwrap(),
         }
     }
-    fn root(&self) -> String {
+    pub(crate) fn root(&self) -> String {
         self.sandbox
             .home()
             .canonicalize()
@@ -403,13 +431,13 @@ impl Host {
             .display()
             .to_string()
     }
-    fn clone_dir(&self) -> PathBuf {
+    pub(crate) fn clone_dir(&self) -> PathBuf {
         PathBuf::from(remote_clone_path(&self.root()))
     }
-    fn record(&self) -> PathBuf {
+    pub(crate) fn record(&self) -> PathBuf {
         PathBuf::from(format!("{}/.claudesk/install-record.json", self.root()))
     }
-    fn script(&self, url: &Path) -> String {
+    pub(crate) fn script(&self, url: &Path) -> String {
         let root = self.root();
         install_script_from(
             &root,
@@ -419,7 +447,7 @@ impl Host {
         .unwrap()
     }
     /// The real script under zsh, synchronously. Returns stdout.
-    fn run(&self, script: &str, env: &[(&str, &str)]) -> String {
+    pub(crate) fn run(&self, script: &str, env: &[(&str, &str)]) -> String {
         let mut cmd = Command::new("/bin/zsh");
         cmd.arg("-c").arg(script).env("HOME", self.decoy.path());
         for (k, v) in env {
@@ -429,7 +457,7 @@ impl Host {
         String::from_utf8_lossy(&out.stdout).into_owned()
     }
     /// What the open check / Settings probe reads for this root now.
-    fn reprobe(&self) -> HostSubstrate {
+    pub(crate) fn reprobe(&self) -> HostSubstrate {
         let out = Command::new("/bin/zsh")
             .arg("-c")
             .arg(substrate_refresh_script(Some(&self.root())))
@@ -439,7 +467,7 @@ impl Host {
         let facts = parse_refresh(&String::from_utf8_lossy(&out.stdout)).expect("an answer");
         HostSubstrate::from_read(&facts.substrate)
     }
-    fn decoy_is_empty(&self) -> bool {
+    pub(crate) fn decoy_is_empty(&self) -> bool {
         std::fs::read_dir(self.decoy.path())
             .unwrap()
             .next()
@@ -451,7 +479,7 @@ fn results(out: &str) -> Vec<RunLine> {
     out.lines().filter_map(parse_run_line).collect()
 }
 
-fn result_of(out: &str) -> Option<RunResult> {
+pub(crate) fn result_of(out: &str) -> Option<RunResult> {
     results(out).into_iter().find_map(|l| match l {
         RunLine::Result(r) => Some(r),
         _ => None,
@@ -459,7 +487,7 @@ fn result_of(out: &str) -> Option<RunResult> {
 }
 
 /// Every path under `dir`, recursively, without following symlinks.
-fn walk(dir: &Path) -> Vec<PathBuf> {
+pub(crate) fn walk(dir: &Path) -> Vec<PathBuf> {
     let mut all = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {

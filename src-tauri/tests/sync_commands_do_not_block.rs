@@ -139,6 +139,11 @@ const ASYNC_COMMANDS: &[(&str, &str)] = &[
          `spawn_blocking`",
     ),
     (
+        "workflow_remote_uninstall_preview",
+        "M18 WP7: two observe execs + `uninstall.sh --dry-run` over the host's master, each up to \
+         `EXEC_TIMEOUT_MS`; the work runs on `spawn_blocking` (`on_blocking_worker`)",
+    ),
+    (
         "clipboard_write",
         "M18 WP2.5: waits on `pbcopy` up to `WRITE_TIMEOUT_MS` (5 s) via `run_captured`; the work \
          runs on `spawn_blocking` (`on_blocking_worker`)",

@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP7 — Update and Uninstall (the remote refuse-guard)
 
 **Workflow:** feature
-**State:** verify-codify (phase 1 complete)
+**State:** verify-codify (phase 2 complete)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -139,7 +139,13 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
     — new: the late-TERM test now asserts the "Cancel came after install.sh had started…" text (runner's note).
     — consuming surface: the live dev-app Cancel over the real master (P1.verify-self) + the caller guard above; an automated run of `workflow_remote_install_start` needs a running app and a host, so the guard is the CI-reachable half.
 
-- [ ] Phase 2: Uninstall backend — the remote refuse-guard, the preview, and the run  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [x] Phase 2: Uninstall backend — the remote refuse-guard, the preview, and the run  <!-- status: done 2026-11-20 -->
+  **Relevance check (before Phase 2):**
+  - Requester still needs this: yes — M18 cannot close with Install alone (prior `paired-actions-need-paired-affordances`)
+  - Requirements unchanged: yes — §R.3 Uninstall as planned
+  - Solution still feasible: yes — Phase 1 proved the run shape live; `uninstall.sh` is non-interactive with `--dry-run`
+  - No superior alternative discovered: yes
+  **Verdict:** proceed
   **Observable outcomes:**
   - CLI: `cargo test --lib workflow_install::remote_guard` exits 0. The pure guard has one test per refusal arm, plus the approve arm:
     - no record;
@@ -168,25 +174,84 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
   - CLI (verify-self, declared state change in a throwaway copy of the source tree only): a mutant constructing `RemoteUninstallTarget { … }` from `commands.rs` fails `cargo build` with `error[E0451]` (D10). The mutant is restored and the restore is `shasum`-checked.
   - CLI: the begin step refuses a non-row host, a non-Managed cached state, a link that is not Up, and a bad root, each before any worker runs (the lock is released, as `begin_remote_install`'s tests do).
   - CLI: `source_guard`'s allowlist has `remote_ops.rs` → recursive `rm`: 1, and the guard still passes. A second `rm -rf` in `remote_ops.rs` fails it.
-  - CLI (state-changing, the mini, a sandbox dir only, over the agent's OWN `ssh -M` in a short `/tmp` socket dir, never a Claudesk master or the live account):
-    - the observe + uninstall scripts printed by a throwaway test (not retyped) run against a sandbox root that a WP6-built install script made Managed;
+  - Browser/IPC (consuming surface, amended at P2.verify-self: the phase changed `workflow_remote_install_start`'s begin step and its finished payload; state-changing, the dev app, the mini, a sandbox root only, the P1 recipe: scratch row in the DEV `projects.json`, `CLAUDESK_REMOTE_SUBSTRATE_ROOT`, restored after):
+    - `workflow_remote_install_start` makes the sandbox Managed (`op: "install"` in its finished payload); `workflow_remote_uninstall_preview` returns the approved clone path + the host's dry-run lines; `workflow_remote_uninstall_start` ends `op: "uninstall"`, `ok: true`;
     - the result is `result:ok`, then a re-probe reads `substrate:no` with no record;
     - the live account's baseline (54 links, `CLAUDE.md` / `settings.json` shasums, the live clone's HEAD + status) is byte-identical before and after;
     - the sandbox is removed with a `cd -P` path check against `$HOME`.
   - CLI: `pnpm verify:auto` exits 0.
   **Alignment questions:**
   - none (backend only; the operator sees it in Phase 4)
-  - [ ] P2.1 `remote_guard.rs`: `HostObservation`, `RemoteUninstallTarget` (private field, `clone_dir()` getter), the pure `remote_refuse_guard`, protected roots per D5, `RefusalReason` reused (and a new arm only if no existing one means the same thing). It joins `MODULE_FILES` with a tail anchor and gets the ambient-root guard.  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 `remote_ops.rs`: the observe script (sentinels, record hex, the `pwd -P` facts) + its parser; the dry-run preview script (`HOME=<root> ./uninstall.sh --dry-run` in the approved clone); the uninstall script (pgid, trap, host re-check D6, `uninstall.sh` → `rm -rf -- <approved>` → record deleted LAST, log printed, `result:<arm>`), built from a `&RemoteUninstallTarget`; a pure `resolve_uninstall` (the re-probe decides: `ok` only when the host reads Absent; every arm says what was and was not removed).  <!-- status: NOT-STARTED -->
-  - [ ] P2.3 Commands:
+  - [x] P2.1 `remote_guard.rs`: `HostObservation`, `RemoteUninstallTarget` (private field, `clone_dir()` getter), the pure `remote_refuse_guard`, protected roots per D5, `RefusalReason` reused (and a new arm only if no existing one means the same thing). It joins `MODULE_FILES` with a tail anchor and gets the ambient-root guard.  <!-- status: done 2026-11-20 -->
+  - [x] P2.2 `remote_ops.rs`: the observe script (sentinels, record hex, the `pwd -P` facts) + its parser; the dry-run preview script (`HOME=<root> ./uninstall.sh --dry-run` in the approved clone); the uninstall script (pgid, trap, host re-check D6, `uninstall.sh` → `rm -rf -- <approved>` → record deleted LAST, log printed, `result:<arm>`), built from a `&RemoteUninstallTarget`; a pure `resolve_uninstall` (the re-probe decides: `ok` only when the host reads Absent; every arm says what was and was not removed).  <!-- status: done 2026-11-20 -->
+  - [x] P2.3 Commands:
     - `workflow_remote_uninstall_preview(host)` (async, under the lock, on a blocking worker): observe → guard → dry-run. It returns the preview text + the approved path, or the refusal's plain words.
     - `workflow_remote_uninstall_start(host)`: begin (lock, Managed, link held Up, root) → worker → observe → guard (the record is re-read in the worker, freshest) → run → re-probe through `settle_refresh` → `resolve_uninstall` → the finished event.
-    - The local gate is untouched, pinned by a test.  <!-- status: NOT-STARTED -->
-  - [ ] P2.4 The tests above: fixture `uninstall.sh`, guard arms, real-script runs, the containment walk, the D6 re-check, the `syn` constructor test, and the allowlist entry.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+    - The local gate is untouched, pinned by a test.  <!-- status: done 2026-11-20 -->
+  - [x] P2.4 The tests above: fixture `uninstall.sh`, guard arms, real-script runs, the containment walk, the D6 re-check, the `syn` constructor test, and the allowlist entry.  <!-- status: done 2026-11-20 -->
+  - Build notes:
+    - `begin_remote_install` → `begin_remote_run(…, RemoteOp)`; Install acts on Absent, Uninstall on Managed.
+    - `RemoteInstallFinished` → `RemoteRunFinished`, with `op`.
+    - Uninstall reports on the install's event pair (`op: "uninstall"`) until P4.1 renames them for all three ops, D11.
+    - `remote_cmd::decode_hex` is now `pub(crate)`.
+    - WP6's real-script fixture is shared as `pub(crate)`, and its repo gained an `uninstall.sh` of the real one's shape.
+    - The worker-count guard now expects 4 `RunGuard` workers.
+  - [x] verify-auto  <!-- status: done 2026-11-20 -->
+    — evidence: `cargo fmt` then `pnpm verify:auto` on the final tree → EXIT=0, 77 s (lint 0 errors + the 1 pre-existing XtermPane warning; tsc; check:link; vitest `4172 passed`; clippy --all-targets -D warnings; cargo test `1492 passed; 0 failed; 4 ignored` + integration suites)
+    — evidence: scoped `cargo test --lib -- workflow_install::remote_guard workflow_install::remote_ops workflow_install::source_guard workflow_install::commands remote_link::tests::begin_remote` → `52 passed; 0 failed`
+    — evidence: `cargo test --test sync_commands_do_not_block` → `16 passed` (the async preview is listed in ASYNC_COMMANDS with its reason)
+  - [x] verify-self  <!-- status: done 2026-11-20 (runner: 10 CLI PASS; orchestrator: the live consuming-surface outcome PASS) -->
+    - [x] Guard: one test per refusal arm, plus the approve arm — evidence: `cargo test --lib workflow_install::remote_guard` → `13 passed`. Each of 9 checks was disabled alone and made its named test(s) fail; each restore `shasum -c` OK (runner logs `runner2/G{1,2,3,3b,4,4b,5,6,7}.log`):
+      - G1: no record;
+      - G2: unresolvable;
+      - G3: is-root/home;
+      - G3b: the `obs.home` member;
+      - G4: in-`.claude`;
+      - G4b: the home `.claude` member;
+      - G5: ancestor;
+      - G6: not a dir;
+      - G7: no `uninstall.sh`.
+    - [x] The observe script + parser, run for real against fixture roots: approved = the clone's physical path; a link into `.claude`, the root and the real home are each refused; a missing `uninstall.sh` and a missing clone are refused; a corrupt or absent record reads as no record — evidence: `remote_ops` tests → `25 passed` (runner)
+    - [x] Real uninstall run:
+      - `Ok`, links 2→0, clone and record gone, re-probe Absent;
+      - the decoy home stays empty, and the only new path is `.claudesk/uninstall.log`;
+      - injected failures: `RmFailed` (vendor 0555) keeps the record; `UninstallFailed(7)` keeps the clone and the record; `RecordDeleteFailed` is reported.
+
+      — evidence: runner, 4 named tests ok. (Exit 7, not 1: any non-zero meets the intent.)
+    - [x] D6 host re-check — evidence: changed record bytes → `Changed`, links stay 2; clone swapped for a link to a decoy → `Changed`, `decoy/keep` intact, record kept (runner)
+    - [x] `syn` constructor/signature test — evidence: passes; the mutant (a second `pub fn forged()` constructor in `remote_guard.rs`) → FAILED `left: ["remote_refuse_guard", "forged"]`; restore OK (runner `SYN.log`)
+    - [x] E0451 (D10) — evidence: in a throwaway rsync copy of `src-tauri` (own target), a struct literal in `workflow_remote_uninstall_start` → `error[E0451]: fields clone_dir, root and record_hex of struct RemoteUninstallTarget are private --> src/workflow_install/commands.rs:990:61`; the restored copy builds rc=0 (control) (runner `E0451.log`)
+    - [x] Begin step — evidence: `begin_remote_run_for_uninstall_acts_only_on_a_managed_host` + WP6's begin tests (non-row, connecting, bad root run through the same `begin_remote_run`) ok (runner)
+    - [x] Allowlist — evidence: `remote_ops.rs` RmRecursive 1 + Rm 1 pass; a second `rm -rf` → `found 2 RmRecursive deletion(s), 1 permitted` FAILED; restore OK (runner `ALLOW.log`)
+    - [x] `pnpm verify:auto` — evidence: rc=0, vitest `4172 passed`, cargo `1492 passed; 0 failed; 4 ignored`, after every restore (runner)
+    - [x] Consuming surface, live (orchestrator, tauri bridge). Setup: the dev app with `CLAUDESK_REMOTE_SUBSTRATE_ROOT=/Users/<user>/claudesk-m18-wp7-sandbox` (empty), and the scratch row in the dev `projects.json`. In fired scripts:
+      1. `remote_open_check` → `remote_substrate_refresh` → `absent`;
+      2. `workflow_remote_install_start` → finished `{op:"install", ok:true, message:null}`;
+      3. `workflow_remote_uninstall_preview` → `clone_dir` `/Users/<user>/claudesk-m18-wp7-sandbox/.claudesk/vendor/my-claude-code-customization` (the sandbox clone's physical path), and `preview` = the real `uninstall.sh --dry-run` (49 skills + 6 agents `[remove] … (dry-run)`, the `CLAUDE.md` block, the 4 printed permissions, "Done (dry-run). Nothing was changed");
+      4. `workflow_remote_uninstall_start` (cache `managed`) → finished `{op:"uninstall", ok:true, message:null}` at 1.4 s, the streamed log ending "Done. Workflow symlinks and the CLAUDE.md block have been removed."
+
+      — evidence (host, the agent's own `ssh -M`):
+        - the sandbox has no record, no clone and 0 skill/agent links, with the workflow block gone from `CLAUDE.md`;
+        - what remains is `uninstall.sh`'s own residue (empty `CLAUDE.md` + `.bak`, empty `skills/` + `agents/`, as WP3 measured) + Claudesk's `install.log` / `uninstall.log`;
+        - 0 processes;
+        - the live baseline (54 links, `CLAUDE.md` / `settings.json` shas, `f8e8873` clean, no record) is identical before and after.
+
+      — harness note: the first fired script's Uninstall start was refused "Claudesk isn't connected … Claudesk uninstalls over that connection…". No workspace held the link, so it closed when the preview's hold dropped. That is the designed refusal, not a defect: in use, an open workspace holds the link. A fresh open check right before the start passed. Phase 4's live run opens a real workspace on the scratch row, or calls the open check per step.
+
+      — cleanup: the dev app was stopped; the dev `projects.json` / `settings.json` were restored to `38ee76dd…` / `72bfef1c…`; there is no `claudesk-dev` tmux server; the sandbox was removed after its `cd -P` check; the scratch folder is unchanged; the master was closed and no `ssh -M` is left.
+  - [x] verify-human  <!-- status: done 2026-11-20 --> — zero admissible leaves (F11); digest printed. Assumed: Claudesk's `install.log` / `uninstall.log` + an empty `vendor/` stay in `~/.claudesk/` after an Uninstall (with `uninstall.sh`'s own residue); the uninstall copy is judged in Phase 4's UI
+  - [x] verify-codify  <!-- status: done 2026-11-20 -->
+    Test scope: full — suite not long (runtimes.md `pnpm verify:auto` Last 87 s; no CLAUDE.md declaration)
+    — evidence: `cargo fmt` + `pnpm verify:auto` → EXIT=0, 69 s; vitest `4172 passed`; cargo `1493 passed; 0 failed; 4 ignored`
+    — new: `the_remote_run_payloads_keep_their_wire_keys` (the finished payload's `op` in snake_case with WP6's keys kept; the preview's `clone_dir` / `preview`). Phase 4 binds to these, so a serde rename would blank the panel.
+    — already committed at build, and each mutation-proven at verify-self:
+      - the guard arms;
+      - the real-script observe, run, failure, D6 and containment tests;
+      - the `syn` fence;
+      - the begin-step test;
+      - the caller guard `the_remote_uninstall_guards_first_and_never_touches_the_local_gate`;
+      - the 4-worker `RunGuard` count.
+    — consuming surface: the live dev-app run (P2.verify-self) + `the_remote_uninstall_guards_first_…` and WP6's begin tests over `begin_remote_run`; an automated end-to-end of the commands needs a running app and a host.
 
 - [ ] Phase 3: Update backend — fetch, ff-only, re-install, record `updated_at`  <!-- status: NOT-STARTED; depends on Phase 2 -->
   **Observable outcomes:**
@@ -276,10 +341,10 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 2 > P2.1
-- **Active scope:** P2.1 (the remote refuse-guard)
+- **Path:** Feature > Phase 3 > P3.1
+- **Active scope:** P3.1 (`InstallRecord.updated_at`)
 - **Blocked:** none
-- **Unvisited:** Phase 3 (Update backend), Phase 4 (Settings UI + live 7.5)
+- **Unvisited:** Phase 4 (Settings UI + live 7.5)
 - **Open discoveries:** D-P1-a (fixed in P1.1: `install.sh` ran in a zsh subshell, which resets the ignored trap)
 
 ## Discoveries

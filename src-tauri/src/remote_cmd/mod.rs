@@ -801,7 +801,7 @@ pub enum SubstrateRead {
 }
 
 /// Lower-case or upper-case hex → bytes, or `None` on an odd length or a non-hex digit.
-fn decode_hex(s: &str) -> Option<Vec<u8>> {
+pub(crate) fn decode_hex(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) {
         return None;
     }

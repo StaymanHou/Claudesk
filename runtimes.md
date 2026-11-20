@@ -31,7 +31,9 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 87s (2026-11-20, M18 WP7 Phase 1 verify-codify (full), EXIT=0)
+- **Last:** 69s (2026-11-20, M18 WP7 Phase 2 verify-codify (full), EXIT=0)
+- **Prior:** 77s (2026-11-20, M18 WP7 Phase 2 build, EXIT=0)
+- **Prior:** 87s (2026-11-20, M18 WP7 Phase 1 verify-codify (full), EXIT=0)
 - **Prior:** 56s (2026-11-20, M18 WP7 Phase 1 verify-auto, EXIT=0)
 - **Prior:** 57s (2026-11-20, M18 WP6 Phase 3 verify-codify (full, last phase), EXIT=0)
 - **Prior:** 55s (2026-11-20, M18 WP6 Phase 3 verify-auto, EXIT=0)

@@ -175,7 +175,7 @@ pub fn install_script_from(
 /// itself contains `__JSON__` had the quoted JSON spliced INTO its quotes, leaving the JSON (and
 /// a `$(…)` in the root) unquoted, and the `$(…)` ran (caught at Phase 2 verify-self). A
 /// placeholder in the template with no value is an `Err`, never left in the script.
-fn fill(template: &str, values: &[(&str, &str)]) -> Result<String, String> {
+pub(crate) fn fill(template: &str, values: &[(&str, &str)]) -> Result<String, String> {
     let mut out = String::with_capacity(template.len() * 2);
     let mut rest = template;
     while let Some(at) = rest.find("__") {
@@ -361,11 +361,22 @@ pub fn parse_run_line(line: &str) -> Option<RunLine> {
     })
 }
 
-/// What a finished remote install MEANS, for the frontend. Built only by [`resolve`].
+/// Which substrate operation a remote run is (WP7): the finished payload names it, so one event
+/// serves all three.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteOp {
+    Install,
+    Uninstall,
+}
+
+/// What a finished remote run MEANS, for the frontend. Built only by the reducers: [`resolve`]
+/// (install) and `remote_ops::resolve_uninstall`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct RemoteInstallFinished {
+pub struct RemoteRunFinished {
     pub host: String,
-    /// True when the host now reads as installed by Claudesk (Managed).
+    pub op: RemoteOp,
+    /// True when the run did what it was for (install: Managed; uninstall: Absent).
     pub ok: bool,
     /// True when a Cancel stopped the run before anything was installed.
     pub cancelled: bool,
@@ -395,10 +406,11 @@ pub fn resolve(
     exit: i32,
     cancel_requested: bool,
     after: Option<&HostSubstrate>,
-) -> RemoteInstallFinished {
+) -> RemoteRunFinished {
     let managed = matches!(after, Some(HostSubstrate::Managed { .. }));
-    let done = |ok: bool, cancelled: bool, message: Option<String>| RemoteInstallFinished {
+    let done = |ok: bool, cancelled: bool, message: Option<String>| RemoteRunFinished {
         host: host.to_string(),
+        op: RemoteOp::Install,
         ok,
         cancelled,
         message,
@@ -536,4 +548,4 @@ pub fn resolve(
 
 #[cfg(test)]
 #[path = "remote_runner_tests.rs"]
-mod tests;
+pub(crate) mod tests;

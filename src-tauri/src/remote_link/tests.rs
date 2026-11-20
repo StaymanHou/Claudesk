@@ -2645,6 +2645,74 @@ fn begin_remote_install_refuses_each_unsafe_start_and_leaves_the_lock_free() {
     drop(session);
 }
 
+/// M18 WP7 — Uninstall's synchronous half: the same order as Install's, but it acts only on a
+/// host the cache reads as Managed (Absent, Unknown and Developer are refused in plain words, and
+/// Developer — the live account's state — never gets a destructive start); a link that is not Up
+/// is refused without bringing one up; the lock is free after every refusal.
+#[test]
+fn begin_remote_run_for_uninstall_acts_only_on_a_managed_host() {
+    use crate::remote_substrate::HostSubstrate;
+    use crate::workflow_install::commands::{begin_remote_run, InstallControl};
+    use crate::workflow_install::remote_runner::{remote_record, RemoteOp};
+    let h = harness();
+    let ctl = Arc::new(InstallControl::default());
+    let rows = [remote_row(HOST)];
+    let begin = |host: &str| begin_remote_run(&ctl, &h.reg, &rows, host, None, RemoteOp::Uninstall);
+    let managed = HostSubstrate::Managed {
+        root: None,
+        head: None,
+        record: remote_record("/Users/me", "t"),
+    };
+
+    // No link: refused, nothing brought up.
+    h.reg.set_substrate(HOST, managed.clone());
+    let e = begin(HOST).err().expect("no link");
+    assert!(
+        e.contains("isn't connected") && e.contains("uninstalls over"),
+        "{e}"
+    );
+    assert!(!e.contains("  "), "{e:?}");
+    assert!(
+        h.reg.state(HOST).is_none(),
+        "Uninstall never brings a link up"
+    );
+
+    let (_, session) = up(&h.reg, &target());
+    for not_managed in [
+        HostSubstrate::Unknown,
+        HostSubstrate::Absent,
+        HostSubstrate::Developer {
+            root: None,
+            head: None,
+        },
+    ] {
+        h.reg.set_substrate(HOST, not_managed.clone());
+        let e = begin(HOST).err().expect("not managed");
+        assert!(
+            e.contains("only on a host where Claudesk installed"),
+            "{not_managed:?}: {e}"
+        );
+        assert!(!e.contains("  "), "{e:?}");
+    }
+    assert_eq!(h.reg.refs(HOST), 1, "a refusal drops its hold");
+    h.reg.set_substrate(HOST, managed);
+    let run = begin(HOST).expect("a Managed host with an Up link starts");
+    assert_eq!(run.root, "/Users/me");
+    let e = begin(HOST).err().expect("locked");
+    assert!(e.contains("already running"), "{e}");
+    drop(run);
+    assert_eq!(h.reg.refs(HOST), 1);
+    // Install is still refused on a Managed host, through the same checks.
+    let e = begin_remote_run(&ctl, &h.reg, &rows, HOST, None, RemoteOp::Install)
+        .err()
+        .expect("install on managed");
+    assert!(
+        e.contains("only on a host that has no workflow system"),
+        "{e}"
+    );
+    drop(session);
+}
+
 /// M18 WP6 — a link that EXISTS but is not Up (still connecting) is not held, and Install refuses
 /// on it rather than waiting: `hold_if_up` matches only Up-with-a-home.
 #[test]
