@@ -614,16 +614,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
-## SURFACE-2026-11-20-REMOTE-INSTALL-REOPENED-SETTINGS-HIDES-THE-RUNNING-INSTALL
-- **Source:** feature:verify-self (M18 WP6 Phase 3; runner review), accepted at P3.verify-human.6 (operator, 2026-11-20: "accept + backlog")
-- **Target level:** feature (frontend, Settings → Remote hosts)
-- **Type:** gap (UX)
-- **Summary:** `RemoteInstallPanel` keeps its run state in the component. Close Settings during a remote install and reopen it: the entry remounts `closed`, shows "Install…" again with no sign a run is going, and clicking it gets the backend's "already running" refusal in the consent step. The run itself is unaffected: it finishes, and the per-host cache (`remote-substrate`) still flips the entry to Managed.
-- **Context:** rare (an install takes ~5 s); the refusal explains it. WP7's Update / Uninstall will reuse the same panel shape, so the gap would grow with them.
-- **Suggested action:** a small backend read (`workflow_remote_run_state` → `{ host, phase } | null`, a lock read on `InstallControl.remote` + the host) seeded on the panel's mount, so a reopened entry shows "Installing on this host…" and re-attaches to the run's events. Do it with WP7 if the panel grows Update / Uninstall.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN
 - **Source:** feature:verify-self (M17 WP3 Phase 4; a `window` `unhandledrejection` tap in the agent-launched dev app)
 - **Target level:** feature (frontend, `useTauriListen`)
@@ -809,13 +799,16 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** pending
 - **Pickup shape:** copy polish.
 
-## Code-quality findings — m18-wp6-remote-install (2026-11-20)
+## Code-quality findings — m18-wp7-remote-update-uninstall (2026-11-20)
 
-- **Pointer:** **2 MAJOR + 5 MINOR** open from the review of the WP6 window (`ea0c1be^..d89e24b`).
-  - MAJOR: a Cancel whose remote kill fails or lands after the clone can report "Cancelled. Nothing was installed." while the host goes on to Managed; the delete guard misses other `rm` spellings and strips `*)` lines inside raw-string templates.
-  - MINOR: space runs in four Rust messages (lost `\` continuations); `REMOTE_CLONE_PATH` duplicated in TS; the template hardcodes the record name and calls a mkdir failure "no root"; the Cancel doc + a missing late-cancel sentence; a consent comment claiming a link drop closes it.
-  - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp6-remote-install — 2026-11-20`.
-- **Priority:** medium (the 2 MAJORs, both before WP7), low (the MINORs)
+- **Pointer:** **4 MAJOR + 7 MINOR** open from the review of the WP7 window (`a33f7ba^..753f5cf`).
+  - MAJOR:
+    - `remote_ops.rs`'s source-guard tail anchor stayed behind Phase 3's code;
+    - the Settings re-attach can lose a `remote-run-finished` that lands before its run-state read;
+    - an Update shows the guard's removal-worded refusals;
+    - the Uninstall template's trap / direct-child window has no test.
+  - MINOR: the uninstall consent isn't bound to the previewed path; the delete classifier misses `Command::new("rm")` / `git clean`; the syn fence splits on `#[cfg(test)]`; a `fill` failure reads as "changed"; duplicated `state_words` / sink; install-era names; a stale Phase 4 doc reference.
+  - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp7-remote-update-uninstall — 2026-11-20`.
+- **Priority:** medium (the 4 MAJORs; the tail anchor and the Uninstall window before WP8's release), low (the MINORs)
 - **Status:** pending
-- **Pickup shape:** both MAJORs belong at the front of WP7 (it reuses the run shape and adds the second remote delete); the MINORs are small and can ride along.
-
+- **Pickup shape:** the four MAJORs are small and test-heavy, and they belong ahead of WP8's `/release`: the Uninstall window pin and the re-attach race touch what the installed build exercises. The MINORs can ride along.

@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-20  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7); WP3 shipped (0c45070); WP4 shipped (d57aa15); WP5 shipped (9fd2c46); WP6 shipped (d89e24b)
+updated: 2026-11-20  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7); WP3 shipped (0c45070); WP4 shipped (d57aa15); WP5 shipped (9fd2c46); WP6 shipped (d89e24b); WP7 shipped (753f5cf)
 cycle: milestone-18-remote-workflow-substrate
 ---
 
@@ -197,7 +197,7 @@ Each entry shows the state (Absent / Managed / Developer), the short HEAD, and d
 
 **WP6 → WP7 rationale:** Update and Uninstall act only on a **Managed** install, and only WP6 can create one.
 
-### WP7: Update and Uninstall (the remote refuse-guard)
+### WP7: Update and Uninstall (the remote refuse-guard) ✅ SHIPPED 2026-11-20 (commits a397414, 2846d20, 5c65707, 753f5cf)
 **Description:** §R.3.
 - **Update:** `pull --ff-only` → `install.sh` → record `updated_at`, Managed and behind only. Its shape depends on WP3's answer (2).
 - **Uninstall:** through `RemoteUninstallTarget`, whose only constructor is `remote_refuse_guard`, plus an `E0451` test. The preview is
@@ -207,12 +207,12 @@ Each entry shows the state (Absent / Managed / Developer), the short HEAD, and d
 **Dependencies:** WP6
 **Size:** M–L
 **Tasks:**
-- [ ] 7.0 FIRST, the two WP6-review MAJORs this WP builds on (added at WP6 finalize): a Cancel whose remote kill fails or lands after the clone can report "Nothing was installed" while the host becomes Managed (`SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-CAN-REPORT-NOTHING-INSTALLED-WRONGLY`: when the pgid is known, let the stream end by itself); the delete guard misses other `rm` spellings and `*)` lines inside script templates (`SURFACE-2026-11-20-QUALITY-DELETE-GUARD-MISSES-SHELL-SPELLINGS-AND-STAR-LINES`), and 7.2 adds the second remote delete.
-- [ ] 7.1 The remote refuse-guard + its pure path checks (`$HOME`, `~/.claude`, ancestors, not-a-dir, no `uninstall.sh`), fed only by the record + a host `pwd -P`. Every refusal arm mutation-proven on its own.
-- [ ] 7.2 The `E0451` compile-fail test for `RemoteUninstallTarget`. A test asserts the `rm -rf` builder takes only that type.
-- [ ] 7.3 Uninstall: dry-run preview → confirm → run. A failure never clears the record (a test).
-- [ ] 7.4 Update: the ff-only pull + re-install + record update. A dirty or non-ff clone stops before `install.sh` with a plain message.
-- [ ] 7.5 Live, sandbox root: Managed → Update (after a sandbox-only commit makes it behind) → Uninstall → Absent. The live account's buttons are absent (Developer).
+- [x] 7.0 FIRST, the two WP6-review MAJORs this WP builds on (added at WP6 finalize): a Cancel whose remote kill fails or lands after the clone can report "Nothing was installed" while the host becomes Managed (`SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-CAN-REPORT-NOTHING-INSTALLED-WRONGLY`: when the pgid is known, let the stream end by itself); the delete guard misses other `rm` spellings and `*)` lines inside script templates (`SURFACE-2026-11-20-QUALITY-DELETE-GUARD-MISSES-SHELL-SPELLINGS-AND-STAR-LINES`), and 7.2 adds the second remote delete.
+- [x] 7.1 The remote refuse-guard + its pure path checks (`$HOME`, `~/.claude`, ancestors, not-a-dir, no `uninstall.sh`), fed only by the record + a host `pwd -P`. Every refusal arm mutation-proven on its own.
+- [x] 7.2 The `E0451` compile-fail test for `RemoteUninstallTarget`. A test asserts the `rm -rf` builder takes only that type.
+- [x] 7.3 Uninstall: dry-run preview → confirm → run. A failure never clears the record (a test).
+- [x] 7.4 Update: the ff-only pull + re-install + record update. A dirty or non-ff clone stops before `install.sh` with a plain message.
+- [x] 7.5 Live, sandbox root: Managed → Update (after a sandbox-only commit makes it behind) → Uninstall → Absent. The live account's buttons are absent (Developer).
 
 **WP7 → WP8 rationale:** acceptance needs the whole paired set (prior `paired-actions-need-paired-affordances`).
 

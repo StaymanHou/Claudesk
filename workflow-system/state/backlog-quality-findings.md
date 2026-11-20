@@ -437,57 +437,87 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** say "its origin" (or name the origin's host) when the origin is not GitHub, or accept as-is and record that the copy assumes the published repo.
 - **Priority:** low
 
-# m18-wp6-remote-install — 2026-11-20
+# m18-wp7-remote-update-uninstall — 2026-11-20
 
-*(feature-review-quality on the WP6 window `ea0c1be^..d89e24b`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 5 MINOR, all auto-backlogged.)*
+*(feature-review-quality on the WP7 window `a33f7ba^..753f5cf`; drive_mode=autopilot. 0 CRITICAL, 4 MAJOR, 7 MINOR, all auto-backlogged.)*
 
-## SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-CAN-REPORT-NOTHING-INSTALLED-WRONGLY
-- **Source:** feature-review-quality (M18 WP6, MAJOR)
-- **Type:** bug (a confident wrong outcome)
-- **Summary:** once the pgid is known, Cancel sends the remote group kill (`let _ = links.master_exec(...)`, result discarded) and then ALWAYS stops the local ssh. If the kill failed or timed out (2 s), or the TERM reached the host after the clone ended and `trap '' HUP PIPE TERM INT` was already set (the phase is polled every 20 ms; the kill takes ~0.13 s), the host run carries on unread: a non-tty `git clone` writes little, and the trap comes before the `phase:install` echo, so the dead stream does not stop it. The worker then re-probes at once, reads Absent (no record yet), and `resolve`'s `None if cancel_requested && Absent` arm says "Cancelled. Nothing was installed." Moments later the host is Managed.
-- **Context:** the one place the operator is told nothing changed on the host, and it can be wrong. WP7's Update / Uninstall reuse this run shape.
-- **Suggested action:** when the pgid is known, do NOT stop the local side: let the stream end by itself (it does if the TERM landed during the clone; it reports `result:ok` if it landed too late). Keep `StopLocal` only for "no pgid yet". Or have the script check the stream is still alive before setting the trap. Add a test that drives the late-TERM arm.
-- **Priority:** medium (fix before WP7)
-
-## SURFACE-2026-11-20-QUALITY-DELETE-GUARD-MISSES-SHELL-SPELLINGS-AND-STAR-LINES
-- **Source:** feature-review-quality (M18 WP6, MAJOR)
+## SURFACE-2026-11-20-QUALITY-REMOTE-OPS-TAIL-ANCHOR-STALE
+- **Source:** feature-review-quality (M18 WP7, MAJOR)
 - **Type:** gap (a guard that can pass while checking nothing)
-- **Summary:** `source_guard`'s delete guard lists the shell spellings `"rm -rf"` / `"rm -r "`, so `rm -fr`, `rm -Rf`, `rm -R`, `find … -delete` and `rmdir` pass it. And `strip_comments` drops every line whose trimmed text starts with `*` (block-comment continuation), which includes `case` arms inside a raw-string template (`  *) rm -rf -- "$x" ;;` is stripped before the scan; checked).
-- **Context:** WP7 adds the next remote delete (Uninstall) into the same template style.
-- **Suggested action:** before WP7: scan with a regex over `\brm\b` with any recursive flag, plus `-delete` and `rmdir`; do not strip `*` lines inside raw strings (or scan raw-string templates separately). Mutation-prove each spelling (`docs/lessons/source-text-guards.md`).
-- **Priority:** medium (fix before WP7)
+- **Summary:** In `source_guard.rs` → `MODULE_FILES`, `remote_ops.rs`'s tail anchor is still `"pub fn resolve_uninstall("` (Phase 2). Phase 3 appended `updated_record`, `UPDATE_TEMPLATE`, `update_script`, `parse_update_line` and `resolve_update` after it. An extractor that truncated after `resolve_uninstall` would hide the Update script from the delete scan, and `the_extractor_reaches_every_files_tail` would stay green.
+- **Suggested action:** set the anchor to `"pub fn resolve_update("`. Better: derive "the last production item" so an append cannot outrun it (e.g. assert that the anchor is the last `pub fn` before `mod tests`).
+- **Priority:** medium
 
-## SURFACE-2026-11-20-QUALITY-REMOTE-INSTALL-STRINGS-CARRY-SPACE-RUNS
-- **Source:** feature-review-quality (M18 WP6, MINOR)
-- **Type:** copy (lost `\` continuations)
-- **Summary:** four user-facing Rust strings in `workflow_install/commands.rs` (the not-Absent refusal, the not-connected refusal, `REMOTE_PANIC_MESSAGE`, the too-late Cancel) carry runs of 6–14 spaces (`last read              this one`). Cause: the strings were written through a Python heredoc whose `\`-newline was consumed as a Python line continuation, so Rust never saw its own. Invisible in a `<p>` (HTML collapses spaces); visible in any `<pre>`, log or exact-match test.
-- **Suggested action:** restore the `\` continuations (or single-line strings); a test that no remote-install message contains two consecutive spaces.
+## SURFACE-2026-11-20-QUALITY-REATTACH-RACES-ITS-LISTENERS
+- **Source:** feature-review-quality (M18 WP7, MAJOR)
+- **Type:** bug (a narrow race on the surface D11 built)
+- **Summary:** `RemoteRunPanel`'s mount-time `getRemoteRunState()` is not ordered after the event listeners subscribe. While it is pending, `mine()` (keyed on `runningOp`) drops every event, so a run that finishes between the backend's state read and the panel switching to `running` loses its `remote-run-finished`. The panel then shows "Installing on this host…" with an enabled Cancel until Settings is reopened.
+- **Suggested action:** query from `useTauriListen`'s `onSubscribed` (`src/useTauriListen.ts`, "subscribe, then query"), then re-query once seeded. Or, while the seed is pending, accept a host-matching `remote-run-finished` as final. Add a jsdom test that fires the finished event before the run-state promise resolves.
+- **Priority:** medium
+
+## SURFACE-2026-11-20-QUALITY-UPDATE-SHOWS-REMOVAL-WORDED-REFUSALS
+- **Source:** feature-review-quality (M18 WP7, MAJOR)
+- **Type:** copy on the safety surface
+- **Summary:** `workflow_remote_update_start` passes `observe_and_guard`'s refusal straight through, and that text is `RefusalReason::user_message()`, which is worded for removal. An Update on a host whose record vanished reads "…so it will not remove it. If you installed it yourself, remove it the same way you installed it." `guard.rs` calls these messages part of the safety surface ("every message states what was (not) done").
+- **Suggested action:** give `observe_and_guard` the op (or map the refusal per op) so an Update's refusal says what was not updated. Add a test on the Update refusal's words.
+- **Priority:** medium
+
+## SURFACE-2026-11-20-QUALITY-UNINSTALL-WINDOW-UNPINNED
+- **Source:** feature-review-quality (M18 WP7, MAJOR)
+- **Type:** gap (an invariant with no test; the same class shipped broken in WP6)
+- **Summary:** `UNINSTALL_TEMPLATE`'s D7 invariant (the `trap '' HUP PIPE TERM INT` on line 1, and `uninstall.sh` as a DIRECT child, never inside `( … )`) is pinned by no test. Install has a builder assertion, and Update has the real-signal window test. The uninstall template prints no pgid, so `run_and_group_kill_at` cannot drive it as written. A HUP between `rm -rf` and the record delete would leave a record pointing at a missing clone; the guard then refuses every Uninstall as unresolvable, and the host is stuck until fixed by hand.
+- **Suggested action:**
+  - a builder assertion: `trap` is the first line, there is no `( cd`, and `rm -rf` comes before the record `rm -f`;
+  - plus a real-signal test that runs the script in its own process group and sends HUP/TERM while a slowed fixture `uninstall.sh` runs, then asserts the result is `ok` and the record is gone.
+
+  Mutation-prove both (put the subshell back; move the trap).
+- **Priority:** medium
+
+## SURFACE-2026-11-20-QUALITY-UNINSTALL-CONSENT-NOT-BOUND-TO-PREVIEW
+- **Source:** feature-review-quality (M18 WP7, MINOR)
+- **Type:** gap (consent vs action)
+- **Summary:** The operator confirms the preview's `clone_dir`, but `workflow_remote_uninstall_start` deletes whatever the guard approves at start time. The roots stay protected, but the folder deleted could differ from the one shown if the record changed in between.
+- **Suggested action:** pass the previewed `clone_dir` + record hex to the start command, and refuse on a mismatch.
 - **Priority:** low
 
-## SURFACE-2026-11-20-QUALITY-REMOTE-CLONE-PATH-DUPLICATED-IN-TS
-- **Source:** feature-review-quality (M18 WP6, MINOR)
-- **Type:** tech-debt (a cross-language copy)
-- **Summary:** `src/state/remoteInstall.ts` → `REMOTE_CLONE_PATH` hardcodes `my-claude-code-customization`, a copy of Rust's `CLONE_DIR_NAME`, re-opening the drift channel `SURFACE-2026-07-29-QUALITY-WP3.5A-CLONE-DIR-NAME-DUPLICATED` closed for the local wizard.
-- **Suggested action:** derive it from the backend (the local wizard's `workflow_install_default_location` pattern), or a test reading both sources.
+## SURFACE-2026-11-20-QUALITY-DELETE-CLASSIFIER-MISSES-COMMAND-FORMS
+- **Source:** feature-review-quality (M18 WP7, MINOR)
+- **Type:** gap (guard coverage)
+- **Summary:** In `source_guard::deletions`, `rm_any` needs whitespace or end-of-text after `rm`, so `Command::new("rm")` / `.arg("/bin/rm")` count as nothing, and `git clean -fdx` is not a kind. The doc says "ANY spelling".
+- **Suggested action:** add a quoted `"rm"` / `/bin/rm` form and a `git clean` kind, each with a one-spelling meta-test; or narrow the doc.
 - **Priority:** low
 
-## SURFACE-2026-11-20-QUALITY-REMOTE-TEMPLATE-HARDCODES-RECORD-NAME-AND-MISNAMES-MKDIR-FAILURE
-- **Source:** feature-review-quality (M18 WP6, MINOR)
-- **Type:** tech-debt + copy
-- **Summary:** the run template hardcodes `.claudesk` and `install-record.json` while `__NAME__` comes from `CLONE_DIR_NAME` (and `provenance::RECORD_FILENAME` exists); `mkdir -p … || result:no-root` reports a permissions failure as "The install folder doesn't exist".
-- **Suggested action:** fill the record name from the provenance constant; a distinct `result:no-write` arm.
+## SURFACE-2026-11-20-QUALITY-SYN-FENCE-SPLITS-ON-CFG-TEST
+- **Source:** feature-review-quality (M18 WP7, MINOR)
+- **Type:** tech-debt (a known-bad split)
+- **Summary:** `the_deleting_builders_take_only_an_approved_target` cuts `remote_guard.rs` at `src.find("#[cfg(test)]")`, the split `source_guard::production_code`'s doc names as the bug that once truncated a slice to seven lines. It is correct only because the first `#[cfg(test)]` there is the test module.
+- **Suggested action:** parse the whole file with `syn` and skip `#[cfg(test)]` items, or split on `mod tests`.
 - **Priority:** low
 
-## SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-DOC-AND-LATE-CANCEL-MESSAGE
-- **Source:** feature-review-quality (M18 WP6, MINOR)
-- **Type:** doc + copy gap
-- **Summary:** `workflow_remote_install_cancel`'s doc says it does nothing with no run in flight, but it sets `cancel_requested` (harmless: the next start resets it). And a Cancel accepted during the clone that loses the race to `phase:install` resolves through `Some(Ok) if managed` with no message: "Cancelling…" → "Installed" without saying the cancel came too late (the `None` arms have that sentence).
-- **Suggested action:** fix the doc; in `resolve`, `Some(Ok) if managed && cancel_requested` → "Cancel came after install.sh had started, so the install finished."
+## SURFACE-2026-11-20-QUALITY-UNINSTALL-SCRIPT-FILL-FAILURE-MISLABELLED
+- **Source:** feature-review-quality (M18 WP7, MINOR)
+- **Type:** copy (a hidden cause)
+- **Summary:** If `fill` fails in `remote_ops::uninstall_script`, the fallback script reports `result:changed`, telling the operator "the host changed after Claudesk checked it" for a builder bug.
+- **Suggested action:** return a `Result` as `update_script` does, and surface the builder error.
 - **Priority:** low
 
-## SURFACE-2026-11-20-QUALITY-CONSENT-COMMENT-CLAIMS-A-LINK-DROP-CLOSES-IT
-- **Source:** feature-review-quality (M18 WP6, MINOR)
-- **Type:** doc (a comment describing behaviour that does not exist)
-- **Summary:** `RemoteInstallPanel`'s comment says `offered` turns false when "its link went down", but `entry.link_up` is read once from `getRemoteHosts` at mount and never updates, so a dropped link never closes an open consent step (only the backend refusal catches it).
-- **Suggested action:** fix the comment, or make `link_up` live (the `remote-link` event) if WP7 needs it.
+## SURFACE-2026-11-20-QUALITY-REMOTE-OPS-DUPLICATES-STATE-WORDS-AND-SINK
+- **Source:** feature-review-quality (M18 WP7, MINOR)
+- **Type:** tech-debt (duplication)
+- **Summary:** `remote_ops::state_words` copies `remote_runner::state_words` verbatim, and `commands::UninstallSink` re-implements `RemoteSink<R>` without the pgid/phase arms.
+- **Suggested action:** make one `state_words` `pub(crate)`, and use `RemoteSink<UninstallResult>` (its pgid/phase arms are inert when no such line arrives).
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-INSTALL-ERA-NAMES-SERVE-ALL-OPS
+- **Source:** feature-review-quality (M18 WP7, MINOR)
+- **Type:** naming
+- **Summary:** These install-era names now serve all three ops: `RemoteInstallStart`, the `begin_remote_install` wrapper (one caller + tests), `REMOTE_INSTALL_DEADLINE` (Update and Uninstall), `RemoteUninstallTarget` as Update's input, and the lock refusal "a workflow-system install or uninstall is already running" shown during an Update.
+- **Suggested action:** rename them to `RemoteRunStart`, `REMOTE_RUN_DEADLINE` and `ApprovedRemoteClone` (or similar); drop the wrapper; word the lock refusal generically.
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-STALE-PHASE-4-DOC-REFERENCE
+- **Source:** feature-review-quality (M18 WP7, MINOR)
+- **Type:** doc
+- **Summary:** `workflow_remote_uninstall_start`'s doc says "(the events are shared until WP7 Phase 4 renames them for all three ops)", but Phase 4 shipped.
+- **Suggested action:** drop the parenthetical.
 - **Priority:** low

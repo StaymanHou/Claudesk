@@ -30,6 +30,16 @@
 - **Backlog resolved:** SURFACE-2026-11-20-QUALITY-INSTALL-SH-WINDOW-UNGUARDED-AGAINST-STREAM-DEATH — the remote run ignores HUP/PIPE/TERM/INT from `phase:install` on and logs `install.sh` to a file, so a late group kill or a dead stream cannot split the links from the record (tested both ways).
 - **Backlog resolved:** SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD (partial) — the Install half is done; the entry now holds only Update and Uninstall (WP7).
 - **Milestone:** M18 WP6 — Install over the master.
+- **Feature shipped:** M18 WP7 added Update and Uninstall for a Claudesk-installed workflow system on a remote host. Uninstall goes through a compiler-enforced remote refuse-guard fed by the host's own record and path observations, and its confirm shows the host's own dry run. Update is fetch → fast-forward → install.sh → `updated_at`, offered only when the host is behind GitHub. Settings re-attaches to a run in flight. WP6's Cancel now reads the stream to its end, WP6's install window can no longer be split (zsh reset the trap in a subshell), and the delete guard classifies every deletion spelling.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-CAN-REPORT-NOTHING-INSTALLED-WRONGLY — once the pgid is known, Cancel sends the remote group kill once and reads the stream to its end, so a late or failed kill reports the real outcome.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-DELETE-GUARD-MISSES-SHELL-SPELLINGS-AND-STAR-LINES — the delete guard counts deletions by kind with a pattern each, over a raw-string-aware comment lexer; each spelling is mutation-proven.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-REMOTE-INSTALL-STRINGS-CARRY-SPACE-RUNS — the four messages are restored, and tests forbid double spaces in every remote run message.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-REMOTE-CLONE-PATH-DUPLICATED-IN-TS — `REMOTE_CLONE_PATH` is pinned to Rust's `DEFAULT_VENDOR_SUBPATH` + `CLONE_DIR_NAME` by a test.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-REMOTE-TEMPLATE-HARDCODES-RECORD-NAME-AND-MISNAMES-MKDIR-FAILURE — the run script's names come from the shared constants, and a failed `mkdir` reports a distinct `no-write` result.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-DOC-AND-LATE-CANCEL-MESSAGE — the Cancel doc is corrected, and a too-late Cancel on a finished install says so.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-CONSENT-COMMENT-CLAIMS-A-LINK-DROP-CLOSES-IT — the comment now says the link state is a mount-time read.
+- **Backlog resolved:** SURFACE-2026-11-20-REMOTE-INSTALL-REOPENED-SETTINGS-HIDES-THE-RUNNING-INSTALL — a Settings entry seeds from `workflow_remote_run_state` and re-attaches to the run in flight.
+- **Milestone:** WP7: Update and Uninstall (the remote refuse-guard)
 
 ## 2026-11-18
 

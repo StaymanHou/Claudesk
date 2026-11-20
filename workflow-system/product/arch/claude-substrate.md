@@ -99,7 +99,7 @@ Also as-built:
 
 ---
 
-## Remote hosts (M18) — 📐 PLANNED 2026-11-18 (`/product-arch`); §R.1–R.2 ✅ BUILT at WP4, §R.4–R.5 (readout) ✅ BUILT at WP5, §R.3 Install + §R.6 preflight ✅ BUILT at WP6 (2026-11-20)
+## Remote hosts (M18) — 📐 PLANNED 2026-11-18 (`/product-arch`); §R.1–R.2 ✅ BUILT at WP4, §R.4–R.5 (readout) ✅ BUILT at WP5, §R.3 Install + §R.6 preflight ✅ BUILT at WP6, §R.3 Update + Uninstall ✅ BUILT at WP7 (2026-11-20)
 
 **Milestone 18, the remote workflow substrate.** Scope was settled at the entry grill
 (`roadmap.md` → "### Milestone 18" → "Scope, settled at the entry grill"). In short: detect the workflow system
@@ -238,7 +238,10 @@ What the build settled (the WP6 WIP's D1–D11, archived as `m18-wp6-remote-inst
   the record): anything but `substrate:no` with no record is `already-present`, so a stale readout never acts → a leftover clone
   with no record is removed only when it is a real folder whose physical path is EXACTLY `<physical root>/.claudesk/vendor/<name>`
   (the module's one `rm -rf`, sanctioned in `source_guard`) → `phase:clone` + `git clone` of the public HTTPS URL with the
-  developer dir's own `git` → `trap '' HUP PIPE TERM INT` → `phase:install` → `install.sh` with `HOME=<root>`, output to
+  developer dir's own `git` → `trap '' HUP PIPE TERM INT` → `phase:install` → `install.sh` with `HOME=<root>` as a DIRECT child of
+  the script's shell (⚠️ never inside `( … )`: zsh resets an ignored trap in a subshell, so WP6's `( cd … && ./install.sh )` let a
+  TERM/HUP kill it between two links; found and fixed at WP7 Phase 1, where WP6's test had passed only because its kill landed
+  ~2 ms in, before the subshell forked), output to
   `<root>/.claudesk/install.log` (it is `set -e`: an echo into a dead pipe would end it) → the record LAST (Rust's JSON, a
   constant-format `printf` to a tmp file, then `mv`) → the log printed → `result:`.
 - **Values enter quoted, in one pass.** `fill` substitutes the template's placeholders in ONE pass over the template; a chain of
@@ -249,20 +252,53 @@ What the build settled (the WP6 WIP's D1–D11, archived as `m18-wp6-remote-inst
 - **The outcome comes from the host.** After every ending the worker re-probes over the master through `settle_refresh` (which
   writes only a KNOWN answer, WP6 Phase 1) and the pure `remote_runner::resolve` decides: `ok` only when the host reads Managed;
   a run that never reported (late Cancel, dropped connection) is judged by what the host now is.
-- **Cancel (ruling A):** honoured until `phase:install`; the worker's abort poll sends `kill -TERM -- -<pgid>` over the master
-  (2 s), then stops the local ssh. ⚠️ Open (WP6 review MAJOR): a failed or late kill can yield a false "Nothing was installed"
-  (`SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-CAN-REPORT-NOTHING-INSTALLED-WRONGLY`, before WP7).
-- **Commands:** `workflow_remote_install_start(host)` (sync: `begin_remote_install` takes the shared `HeldRunLock`, then
-  refuses a non-row host, a non-Absent cached state, a link that is not Up, a bad root) and `workflow_remote_install_cancel`
-  (a lock write; refused as too late in the install phase). Events: `remote-install-output` / `-phase` / `-finished`; the
-  local wizard's events are untouched. The local gate is never touched.
+- **Cancel (ruling A):** honoured until `phase:install`. ⚠️ Revised at WP7 Phase 1 (D2): once the run's pgid is known, the
+  worker sends `kill -TERM -- -<pgid>` over the master ONCE and then reads the stream to its END (`remote_runner::abort_poll`,
+  behind `commands::stream_with_cancel`); it stops the local ssh only before the pgid arrives. A local stop does not stop the
+  host's run, so the WP6 shape (kill, then stop locally) could report "Nothing was installed" while the host went on to Managed.
+  A kill the host did not confirm prints `CANCEL_UNCONFIRMED_NOTE` and still waits; a late kill is ignored by the trap and the
+  run reports `result:ok` ("Cancel came after install.sh had started…").
+- **Commands:** `workflow_remote_install_start(host)` (sync: `begin_remote_run(…, Install)` takes the shared `HeldRunLock`, then
+  refuses a non-row host, a non-Absent cached state, a link that is not Up, a bad root) and `workflow_remote_run_cancel` (renamed
+  from `workflow_remote_install_cancel` at WP7; a lock write; refused as too late in the install phase). Events: since WP7 the one
+  `remote-run-*` triple below. The local gate is never touched.
 - **The UI:** `RemoteInstallPanel` in each Settings → Remote hosts entry: "Install…" only on an Absent entry whose link is Up;
   consent (operator-approved copy, pinned by literal) → the streamed log + Cancel gated on the phase → the result. The entry's
   state comes through `useHostSubstrates`, so it (and every open workspace on the host) flips without a reopen; a success
   re-checks the host for HEAD + drift. A consent step closes whenever `offered` changes and renders only while offered.
 - ⚠️ Known, backlogged: dev builds show every streamed line twice (the `useTauriListen` StrictMode leak,
-  `SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN`, medium); a Settings reopened mid-run shows Install again
-  (`SURFACE-2026-11-20-REMOTE-INSTALL-REOPENED-SETTINGS-HIDES-THE-RUNNING-INSTALL`).
+  `SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN`, medium; seen again on WP7's Update log). The reopened-Settings gap
+  was closed at WP7 (re-attach, below).
+
+### R.3 Update + Uninstall as built — ✅ WP7 (2026-11-20)
+
+What the build settled (the WP7 WIP's D1–D12, archived as `m18-wp7-remote-update-uninstall.md`):
+- **The remote refuse-guard** (`workflow_install/remote_guard.rs`): `RemoteUninstallTarget` (private fields; its only constructor is
+  `remote_refuse_guard`, so a struct literal elsewhere fails with `E0451`, proven by a verify-self mutation; a `syn` test pins the
+  builders' signatures and the one constructor). Its inputs are the record AS THE HOST HOLDS IT NOW and a `HostObservation` (one
+  read-only `perl` exec: the physical forms of the root, the account's REAL `$HOME`, both `.claude`s and the record's clone path,
+  every value hex-encoded). It refuses: no record, unresolvable, the root or the real home, anything inside either `.claude`, an
+  ancestor of a protected root, a non-directory, no `uninstall.sh`. ⚠️ Both the root AND the real `$HOME` are protected, so the
+  debug sandbox override cannot weaken it. The observation is read twice and the record must not change in between.
+- **Uninstall** (`workflow_install/remote_ops.rs`): preview = the host's own `uninstall.sh --dry-run` in the approved clone; the run
+  script is built from the approved target ONLY and, under `trap '' HUP PIPE TERM INT` from line 1 (no Cancel, D7), the host
+  RE-CHECKS the record's bytes and the clone's physical path (`result:changed`, nothing touched) → `uninstall.sh` (direct child) →
+  `rm -rf` of the approved path → the record deleted LAST. A failure at any step keeps the record; the re-probe decides (`ok` only
+  when Absent). The delete allowlist sanctions `remote_ops.rs`: one recursive `rm`, one `rm`.
+- **Update**: the same guard and host re-check, then refuse a dirty clone / no upstream → `phase:fetch` (Cancel honoured; a stalled
+  transfer gives up after 30 s under 1 KB/s) → the untrappable window: `merge --ff-only` (`not-ff` stops before `install.sh`),
+  `install.sh` (direct child), the record rewritten LAST with `updated_at` (`InstallRecord.updated_at`, optional and skipped when
+  `None`, so existing records serialize byte-identically). Probe outcome (2) held: `install.sh` re-runs content-idempotently.
+- **One event triple for all three ops** (D11): `remote-run-output` `{host, op, line}`, `remote-run-phase` `{host, op, phase}`,
+  `remote-run-finished` (`RemoteRunFinished` with `op`). `workflow_remote_run_state` → `{host, op, phase} | null`, read only
+  while the lock is held; every begin, local included, resets the remote state.
+- **The UI** (`RemoteRunPanel`, `remoteRunOffers`, D12, operator-approved at P4.verify-human): Install on Absent; Update on Managed +
+  drift `differs`; Uninstall on Managed; every button only with the link Up; ⚠️ a Developer host (the live account) is offered
+  nothing. Update has a short confirm; Uninstall's confirm IS the approved clone path + the host's dry run; Uninstall has no Cancel;
+  Update cancels only while fetching. A Settings reopened mid-run re-attaches to the run (mount-time `workflow_remote_run_state`).
+- ⚠️ Backlogged from the WP7 review (MAJOR, before WP8's release): the delete-scan tail anchor for `remote_ops.rs`, the re-attach's
+  listener race, Update showing removal-worded guard refusals, and no test pinning the Uninstall template's signal window
+  (`backlog-quality-findings.md` → `# m18-wp7-remote-update-uninstall`).
 
 ### R.4 Drift (Settings only)
 

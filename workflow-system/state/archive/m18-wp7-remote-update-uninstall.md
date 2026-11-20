@@ -5,7 +5,8 @@ drive_mode: autopilot
 # Feature: M18 WP7 — Update and Uninstall (the remote refuse-guard)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** finalize (complete)
+**Completed:** 2026-11-20
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -449,11 +450,69 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
     — consuming surface: the live 7.5 run through Settings → Remote hosts (P4.verify-self) + the jsdom mounts of the REAL `SettingsPanel` (Update, Uninstall, refused preview, re-attach).
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** none — all four phases complete; next is `/feature-ship`
+- **Path:** Feature > done (archived 2026-11-20)
+- **Active scope:** none
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** D-P1-a (fixed in P1.1: `install.sh` ran in a zsh subshell, which resets the ignored trap)
+
+## Code-Quality Review
+
+*(feature-review-quality on the WP7 window `a33f7ba^..753f5cf`, 2026-11-20; drive_mode=autopilot: 0 CRITICAL, 4 MAJOR, 7 MINOR, all auto-backlogged to `backlog-quality-findings.md` → `# m18-wp7-remote-update-uninstall — 2026-11-20`.)*
+
+### Strengths
+- **The remote refuse-guard is enforced by the compiler, not review.** `RemoteUninstallTarget` has private fields and one constructor; the deleting and dry-run builders take only `&RemoteUninstallTarget`; a `syn` test plus a proven E0451 mutation pin it. The protected set covers both the root and the real `$HOME`, each with its `.claude`, and containment is compared per path component.
+- **The host-side delete script is careful.** The trap is on line 1, the host re-checks the record bytes and the physical path, the order is `uninstall.sh` → `rm -rf` → record LAST, every failure arm is honest, and the re-probe decides the outcome.
+- **The Cancel fix is well factored.** A pure `abort_step` / `abort_poll` sits behind one `stream_with_cancel`, pinned by a caller guard. The zsh subshell-trap reset was found by measurement and fixed with real-signal tests.
+- **The guard machinery holds up.** The lexer-based `strip_comments` and the kind classifier are mutation-proven per spelling, and the `#[path]` scanner fix comes with a positive control.
+- **The IPC rename migrated every consumer in one phase.** `remoteRunOffers` is a pure value, so the offer matrix is testable without mounting anything.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`source_guard.rs` MODULE_FILES] `remote_ops.rs`'s tail anchor is still `pub fn resolve_uninstall(`. Phase 3 added the Update builders after it, so a truncation there would hide the Update template from the delete scan while both meta-tests stay green. Fix: anchor on `pub fn resolve_update(`.
+- [`RemoteRunPanel.tsx` re-attach] `getRemoteRunState()` races the listeners. While it is pending, `mine()` drops events, so a run that finishes in that gap loses its `remote-run-finished` event and the panel stays "running" until reopened. Fix: query from `useTauriListen`'s `onSubscribed`, or accept a host-matching finished event while the seed is pending.
+- [`commands.rs` update worker + `guard.rs` `RefusalReason::user_message`] Update shows the guard's removal-worded refusals ("…so it will not remove it…") during a non-destructive Update. These messages are part of the safety surface, so map them per op.
+- [`remote_ops.rs` UNINSTALL_TEMPLATE] No test pins Uninstall's D7 invariant: the trap on line 1, and `uninstall.sh` as a direct child, never `( … )`. Install has a builder assertion and Update a real-signal test. A HUP between `rm -rf` and the record delete would leave the host stuck (the guard refuses it as unresolvable).
+
+**MINOR**
+- [`RemoteRunPanel.tsx` + `workflow_remote_uninstall_start`] Nothing binds the previewed `clone_dir` / record to the run; the confirmed path could differ if the record changed in between.
+- [`source_guard.rs` `rm_any`] `Command::new("rm")`, `.arg("/bin/rm")` and `git clean -fdx` are not counted, although the doc says "ANY spelling".
+- [`remote_ops_tests.rs` syn fence] It splits `remote_guard.rs` at `src.find("#[cfg(test)]")`, the very split `production_code` warns once truncated a slice.
+- [`remote_ops.rs` `uninstall_script`] A `fill` failure reports `result:changed` ("the host changed"), which hides a builder bug.
+- [`remote_ops.rs` `state_words` + `commands.rs` `UninstallSink`] Duplicates of `remote_runner::state_words` and `RemoteSink<R>`.
+- [`commands.rs`] Install-era names now serve all three ops: `RemoteInstallStart`, the `begin_remote_install` wrapper, `REMOTE_INSTALL_DEADLINE`, `RemoteUninstallTarget` as Update's input, and the lock refusal "install or uninstall is already running".
+- [`commands.rs` uninstall start doc] "(the events are shared until WP7 Phase 4 renames them…)" is stale; Phase 4 shipped.
+
+### Assessment
+The implementation is well built and moves the codebase forward. The remote delete follows the local guard's shape, and its safety rests on structure: a type only the guard can construct, a host re-check, and the record deleted last. Each of these is pinned by mutation-proven tests. The weak spots are where guards follow the code: the delete scan's tail anchor stayed behind, the Uninstall template has no pin for its signal window, and the re-attach can lose the event it exists for. None makes the shipped behaviour unsafe today; each is a place a later edit could break silently.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:**
+  - **zsh resets an ignored trap inside a `( … )` subshell.** So WP6's "untrappable" install window could be split: a TERM or HUP 5 ms+ into `install.sh` killed it between two links. The WP6 test passed only because its kill landed ~2 ms in, before the subshell forked. Every host-side window now runs its child directly, and the kill tests wait 300 ms.
+  - **A local ssh stop does not stop the host's run**, so the only honest Cancel is "kill once, then read the stream to its end".
+  - **`tests/sync_commands_do_not_block.rs` had never honoured `#[path]`** test modules, which it read as production code.
+- **Assumptions that held:**
+  - Update stays "pull → install.sh → stamp" (Probe outcome (2)), and `install.sh` re-runs content-idempotently.
+  - The local guard's shape transfers to a remote guard over host observations.
+  - The live sandbox recipe (own `ssh -M`, `CLAUDESK_REMOTE_SUBSTRATE_ROOT`, the scratch row, a baseline before and after) caught nothing it shouldn't, and left the live account byte-identical in every run.
+- **Assumptions that were wrong:**
+  - The WBS's "E0451 test" couldn't be a committed doctest (the module is private, so it would fail with E0603); it became a verify-self mutation plus a committed `syn` fence (D10).
+  - "Pull --ff-only" had to be split into `fetch` (cancellable) and `merge --ff-only` inside the window (D8).
+  - WP6's install test proved less than it claimed (above).
+  - The open check's 20 s grace was not enough for a preview → start sequence with no workspace holding the link (P2 harness note).
+- **Approach delta:**
+  - Phase 3 refactored the install worker into `stream_with_cancel` / `reprobe_host`, shared with Update.
+  - The planned HEAD-copy reproduction was first substituted by a mutation control, then also run by the runner.
+  - The Phase 4 live run went through the real panel rather than the IPC alone.
+  - The operator paused mid-Phase 3 (turn-level), and the session resumed after an `/exit` with all live state already undone.
+
+**Communicate:** **Feature complete:** M18 WP7 has shipped. Settings → Remote hosts can now Update a Claudesk-installed workflow system on a host that is behind GitHub, and Uninstall it behind a remote refuse-guard whose confirm shows the host's own dry run. A Developer host (the live account) is never offered either. It can be seen on a dev build with `CLAUDESK_REMOTE_SUBSTRATE_ROOT` pointing at an empty host folder: Install → Behind → Update → Uninstall. Requester = operator — closure notice for self-record.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

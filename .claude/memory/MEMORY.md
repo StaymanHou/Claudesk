@@ -15,6 +15,7 @@
 - [projects.json re-sorted](projects-json-resorted-on-every-launch.md) — Every launch rewrites it; compare row sets, never a shasum across a launch.
 - [Live app may run a mutant](live-dev-app-may-run-a-mutant.md) — `tauri:dev` rebuilds from a Rust mutant; check PID start + binary mtime.
 - [Equivalent mutant](behavioral-test-can-still-be-an-equivalent-mutant.md) — Both paths give identical observables; find the discriminating input.
+- [Kill before the fork](signal-test-kill-can-land-before-the-fork.md) — A kill on the sentinel line can precede the child: delay it inside the step; zsh resets an ignored trap in `( … )`.
 - [React 19 unmount setState silent](react19-unmounted-setstate-is-silent.md) — A console.error spy is a false green; assert no work starts after unmount.
 - [Unreachable mutant line](mutant-survives-because-its-line-never-executes.md) — A gate short-circuits above it; check the arm is reachable first.
 - [Caller guard for plan*](extracted-machine-needs-a-live-caller-guard.md) — A pure module's tests can't see it has no callers; guard each exported `plan*`.
