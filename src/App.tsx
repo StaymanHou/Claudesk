@@ -950,6 +950,7 @@ function App() {
               focusedId={focusedId}
               onSessionId={setSessionId}
               noticeFor={(id) => workspaceNotices[id]}
+              onOpenSettings={() => setShowSettings(true)}
               statusFor={stateFor}
               displayStatusFor={displayStateFor}
               snippetFor={snippetFor}

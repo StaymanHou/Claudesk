@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP4 — Substrate detection and the funnel's third input
 
 **Workflow:** feature
-**State:** verify-codify (phase 2 complete)
+**State:** ship (complete)
 **Created:** 2026-11-20
 **WBS:** `workflow-system/product/wbs.md` → "WP4: Detection and the funnel's third input (+ the absent-host note)"
 **Design:** `workflow-system/product/arch/claude-substrate.md` → "Remote hosts (M18)" §R.1, §R.2, §R.8
@@ -26,6 +26,9 @@ Detection rides the open check's existing single exec, as a constant `SUBSTRATE_
 `remote-substrate`. With the gate ON and the substrate absent, the workspace gets one plain-words note in the skill-row
 slot (a new OFF-invariant subject, which moves the pin to 6 arms / 11 subjects). With the gate OFF nothing is probed
 and nothing changes.
+
+Problem statement unchanged (P3.verify-human.1 back-loop, 2026-11-20): the operator approved the note, its place and
+Docs-absent. Only its host label changes, to the picker's short-host form.
 
 **Folded in** (WP3 review, `backlog-quality-findings.md` → `# m18-wp3-remote-substrate-probe — 2026-11-20`; all
 resolved by this WP):
@@ -250,7 +253,7 @@ not in WP4.
     Consuming surfaces: `remote_open_check` (restore arm), the picker rows/open, `Workspace` / `RightPanelHost`, the
     spawn env, the poller. `pnpm verify:auto` → EXIT=0 (64s): vitest 4127 passed, lib 1401 passed.
 
-- [ ] Phase 3: The absent-host note, the OFF-invariant pin 6/11, the count sweep, and the live skill-less check  <!-- status: in-progress -->
+- [x] Phase 3: The absent-host note, the OFF-invariant pin 6/11, the count sweep, and the live skill-less check
   **Observable outcomes:**
   - CLI: `pnpm vitest run offInvariantGuard`. Arm 5 now lists `showAbsentHostNote` as its own subject; the pin asserts
     **6 arms / 11 subjects**. Mutation-proven on its own: making the note's predicate ignore the gate turns arm 5 red
@@ -279,14 +282,64 @@ not in WP4.
     see it, still what you want?
   - (decision) The Unknown wording ("Claudesk couldn't check whether the workflow system is installed for
     `<user@host>`.") instead of silence or the Absent text. Keep it?
-  - [ ] P3.1 `isWorkflowHostBlocked` + `showAbsentHostNote` (pure) + the note's render in the skill-row slot (`clearButton` keeps its place)  <!-- status: NOT-STARTED -->
-  - [ ] P3.2 OFF-invariant guard: arm 5's new subject, pin → 6 / 11, the guard's header; mutation-prove the subject on its own  <!-- status: NOT-STARTED -->
-  - [ ] P3.3 Docs in the same change: `workflow-gate.md`, `arch.md`, `arch/claude-substrate.md` §R.1/§R.2 (PLANNED → as built for WP4's part), `workspaceSurfaces.ts` header  <!-- status: NOT-STARTED -->
-  - [ ] P3.4 WBS 4.7: a repo-wide grep sweep for "10 subjects" / "6 arms / 10" and correct every live (non-archive) hit  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P3.1 `isWorkflowHostBlocked` + `showAbsentHostNote` (pure) + the note's render in the skill-row slot (`clearButton` keeps its place)  <!-- status: done -->
+    — as built: `absentHostNote({hostBlocked, host, authority})` returns text or `null` (an unseeded host → `null`, no
+    flash). `Workspace` feeds it `isWorkflowHostBlocked(useWorkflowFeaturesEnabled(), profile, host)`, which
+    `workflowApplicableGuard` accepts as the second wrapper; its host argument is held to the same seam rule.
+    `onOpenSettings` is threaded App → `CenterStage` → `Workspace`. CSS: `.workspace-absent-host-note` (it clips, never
+    wraps, with a tooltip). There is a live test, `absentHostNoteLive.test.tsx` (6 cases).
+  - [x] P3.2 OFF-invariant guard: arm 5's new subject, pin → 6 / 11, the guard's header; mutation-prove the subject on its own  <!-- status: done -->
+    — build evidence: the mutant (`absentHostNote` ignoring `hostBlocked`) fails EXACTLY "renders no ABSENT-HOST NOTE
+    while the gate is OFF" (`Tests 1 failed | 41 passed`). Restored with a matching sha → 42/42. The source-derived
+    title count (11) equals `armSubjects` (11).
+  - [x] P3.3 Docs in the same change: `workflow-gate.md`, `arch.md`, `arch/claude-substrate.md` §R.1/§R.2 (PLANNED → as built for WP4's part), `workspaceSurfaces.ts` header  <!-- status: done -->
+  - [x] P3.4 WBS 4.7: a repo-wide grep sweep for "10 subjects" / "6 arms / 10" and correct every live (non-archive) hit  <!-- status: done -->
+    — build evidence: swept by the claim's NOUN ("subjects"), not by the number. That found a further stale claim the
+    number-grep could not: `arch.md`'s "**9 subjects**", stale since paydown WP13b, now corrected to 11 with a note.
+    Present-tense claims were corrected to 11 in `CLAUDE.md`, `arch.md`, `arch/workflow-gate.md` (text + the arm-5 table
+    row), `arch/workflow-supervisor.md`, `src/state/workspaceSurfaces.ts`, `docs/lessons/closed-cycles-m13-m13-5.md`
+    and `docs/lessons/closed-cycles-m14-m16-5.md` (×2). `arch/profiles.md` gained "11 since M18 WP4". Left as
+    history: `arch/remote-workspaces.md:508` (M17's "passed unedited") and the WBS task's own text.
+  - [x] verify-auto  <!-- status: done -->
+    — evidence: `pnpm verify:auto` → EXIT=0 (54s), after `prettier --write`. It reports vitest 323 files / 4135 tests
+    passed, which includes:
+    - `absentHostNoteLive.test.tsx` 6/6;
+    - `offInvariantGuard` 42/42 (pin 11; the source-derived title count is 11);
+    - `workflowApplicableGuard` 6/6 (both wrappers' hosts checked).
+    Also lib 1401 passed, integration ok, clippy + fmt clean. ESLint's 1 warning is pre-existing.
+    — re-run after the P3.verify-human.1 fix (short host): `pnpm verify:auto` → EXIT=0 (54s), vitest 4135 passed (incl.
+    the updated `absentHostNoteLive` and the OFF guard), lib 1401; `check:link` green (the new `shortHost` import resolves).
+  - [x] verify-self  <!-- status: done -->
+    - [x] vs.1 OFF-invariant arm 5 third subject, pin 11, mutation-proven alone (runner)  — evidence: `armSubjects` 11 (incl. "5 ABSENT-HOST-NOTE"), `.toBe(11)`, 11 source-derived OFF titles. Mutant (`absentHostNote` ignoring `hostBlocked`) → `Tests 1 failed | 41 passed`, failing EXACTLY "renders no ABSENT-HOST NOTE while the gate is OFF"; restored with a matching sha (947ff976…) → 42/42
+    - [x] vs.2 render test, real `Workspace` (runner)  — evidence: `absentHostNoteLive.test.tsx` 6/6. Absent → note names `me@mini-host` + "Settings → Remote hosts", no row, the button calls `onOpenSettings` once. Unknown → couldn't-check wording. Not seeded → nothing. Developer → row, no note. Gate OFF → nothing. Local → row, no note
+    - [x] vs.3 count sweep (runner)  — evidence: 5 remaining hits, each classified as history or annotated with 11; `CLAUDE.md`, `arch.md`, `arch/workflow-gate.md` and `workspaceSurfaces.ts` state 11 for the current pin
+    - [x] vs.4 `workflowApplicableGuard` holds the note's wrapper (runner)  — evidence: 6/6; FUNNELS covers `isWorkflowHostBlocked(`; the literal-"local" self-test bites; the one production call's host is `useHostSubstrate`-bound
+    - [x] vs.5 `pnpm verify:auto` (runner, after the restore)  — evidence: EXIT=0 (54s), vitest 4135, lib 1401
+    - [x] vs.6 CONSUMING SURFACE live, dev build relaunched with `CLAUDESK_REMOTE_SUBSTRATE_ROOT=<empty host dir>`, gate ON, scratch row `<user>@<mini-host>:~/claudesk-scratch-remote` (orchestrator, bridge; state-changing as declared: an empty sandbox dir + a `.session.md` SEEDED in the scratch folder's existing empty `workflow-system/state/`)  — evidence: picker click → workspace. Visible: `workspace-skill-row` 0, Session-Start 0, Recycle 0, `panel-tab-docs` 0; `workspace-absent-host-note` 1 = "The workflow system isn't installed for `<user@host>`. Install it in Settings → Remote hosts." with a Settings button; the ungated `clear` button and the Prompt tab kept. The note's button → `settings-panel` opened. NO `/session-restore`: the seeded `.session.md` was still present, the remote pane showed an empty prompt, and 0 `session-restore` lines were in its scrollback. Screenshot `scratchpad/wp4/p3-absent-note.jpg`
+    - [x] vs.7 positive control live, relaunched WITHOUT the override, same row (orchestrator)  — evidence: skill row 1, Session-Start 1, Recycle 1, Docs 1, note 0; the auto `/session-restore` FIRED (`❯ /session-restore` in the pane, then its "Drive mode" question). So vs.6's no-fire is the funnel's doing, not a blocked arm. Closed through the UI (the close guard's "Close Anyway")
+    - Cleanup: the dev app (pnpm 76394, app 76653, vite 76558: all mine) stopped by PID; no `claudesk-dev` tmux server; only prod's `ssh -M` (6044, tank). The seed was consumed by the restore skill itself; the scratch `state/` dir is empty as before; the sandbox was `rmdir`'d. Live account: 48 links, `CLAUDE.md` `539e1b95…`, no record (unchanged). Dev files restored (`b30fd5f8…` / `0fc30928…`)
+    - [x] vs.8 RE-VERIFY of the P3.verify-human.1 fix (short host)  — evidence: a FRESH runner read `absentHostNote.ts` (text from the imported picker `shortHost(authority)`, tooltip from the full authority) and `Workspace.tsx` (`title={hostNote.tooltip}`, `{hostNote.text}`); vitest 48/48. Mutant `text = sentence(authority)` → `Tests 2 failed | 4 passed` (absent + unknown cases); restored by sha. LIVE (orchestrator, dev build with the sandbox root, scratch row): the note text reads "The workflow system isn't installed for <mini-host>. Install it in Settings → Remote hosts." (no `@` in the text); its `title` is the same sentence with the full `<user>@<full-host>`; no skill row. Screenshot `scratchpad/wp4/p3-absent-note-short.jpg`. Cleanup: workspace closed through the UI, dev app stopped (TaskStop), no vite / tmux left, only tank's `ssh -M`, sandbox `rmdir`'d, live account unchanged (48 / `539e1b95…` / no record), scratch `state/` empty, dev files restored
+    - [x] align: D8 in action — the note's wording, place and Settings button  — evidence (CAPTURED): `scratchpad/wp4/p3-absent-note.jpg`. The header reads `claudesk-scratch-remote · clear · The workflow system isn't installed for <user>@<full MagicDNS host>. Install it in Settings → Remote hosts. · [Settings]`, in the skill-row slot, with the right half on the Prompt tab. NOTE for the operator: the note prints the FULL `user@host`, while the picker shows the SHORT host (M17 WP2 operator ruling) with `user@host` in a tooltip
+    - [x] align: (decision) the Unknown wording  — evidence (CAPTURED, runner): absent → "The workflow system isn't installed for ${authority}. Install it in Settings → Remote hosts."; unknown → "Claudesk couldn't check whether the workflow system is installed for ${authority}." (no install instruction; the Settings button still shows); not seeded / local → no note. The render test asserts both strings
+  - [x] verify-human  <!-- status: done -->
+    - [x] P3.verify-human.1 (a+b) a skill-less host, end to end: the note (wording, place, Settings button, FULL user@host vs the picker's short host) + Docs absent there (the arch's revision of the grill default) — still what you want? — **operator 2026-11-20: ok (after the short-host fix, re-verified live)**
+      — operator 2026-11-20: "ok, short host". The note, its place, its button and Docs-absent are approved. CHANGE: print
+      the SHORT host (as the picker row does, M17 WP2 ruling), with the full `user@host` in its tooltip.
+      — fixed at build (F12): `absentHostNote` returns `{text, tooltip}`, with the text through the picker's own
+      `shortHost` and the tooltip carrying the full `user@host`; `Workspace` renders `title={tooltip}`. The live test now
+      uses a MagicDNS host and asserts the text says `mini-host`, does NOT contain the full host, and that the title is
+      the full sentence. 54/54 across `absentHostNoteLive` + both guards.
+    - [x] P3.verify-human.2 (decision) the Unknown wording ("Claudesk couldn't check…") vs silence vs the Absent text — **operator ruling 2026-11-20: A (keep the distinct couldn't-check wording)**
+  - [x] verify-codify  <!-- status: done -->
+    Test scope: full — last phase
+    — evidence: ONE new test, for the one verified behaviour with no regression test: the REAL wiring of the note's
+    Settings button (App → `CenterStage` → `Workspace`). It is a source guard in `absentHostNoteLive.test.tsx`, anchored
+    INSIDE the `<CenterStage … />` element. ⚠️ The first version was VACUOUS: App passes the same prop to
+    `ProjectPicker`, so a whole-file `toContain` passed with the CenterStage wiring deleted. The first mutant even hit
+    the picker's line, and the grep count (2 → 1) exposed it. Anchored now, deleting only the CenterStage prop FAILS
+    it (`Tests 1 failed | 6 passed`); restored with a matching sha. Everything else is already pinned (vs.1–vs.8, with
+    the render test asserting short host + tooltip). `pnpm verify:auto` → EXIT=0 (56s): vitest 4136 passed, lib 1401
+    passed, integration ok.
 
 ## Verification constraints (from §R.8 + memory `remote-verify-hygiene`)
 
@@ -300,10 +353,10 @@ not in WP4.
   and removed after (state-changing, declared).
 
 ## Current Node
-- **Path:** Feature > Phase 3 > P3.1
-- **Active scope:** P3.1 (`isWorkflowHostBlocked` + `showAbsentHostNote` + the note's render)
+- **Path:** Feature > review-quality
+- **Active scope:** review-quality (against the ship commit)
 - **Blocked:** none
-- **Unvisited:** Phase 3 (P3.2–P3.4, verify)
+- **Unvisited:** review-quality → finalize
 - **Open discoveries:** none
 
 ## Discoveries
@@ -311,3 +364,5 @@ not in WP4.
      Each entry is also logged to workflow-system/state/backlog.md -->
 
 [SHORTCUT-2026-11-20] P1.verify-self vs.3 — mutant M2 (`next unless -l $e;` deleted) SURVIVED the 14-fixture parity test: no fixture separated a real dir from a link. In-place fix, extending P1.5's fixture list (a trivial extension of the just-built leaf): added "a real dir under a marker installer two levels up" and, for the analogous unguarded `-e $t` check, "a link dangling into a marker repo" (16 fixtures). Re-verified by a FRESH runner subagent: M1, M2 and M3 each fail on their own fixture, and every restore matched the sha.
+
+[SHIP-2026-11-20] Full suite: reused the last-phase codify run (`Test scope: full — last phase`, `pnpm verify:auto` EXIT=0, 56s, vitest 4136 / lib 1401). Nothing but this WIP and runtimes.md changed since. Fast checks re-run at ship: eslint on the changed files clean, `tsc --noEmit` ok, `cargo fmt --check` ok. No TODO/debug leftovers.

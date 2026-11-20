@@ -22,6 +22,7 @@
 //   vi.mock("../RightPanelHost", async () => (await import("./liveWorkspace")).rightPanelModule);
 //   vi.mock("../../../state/useWorkflowFeaturesEnabled", async () =>
 //     (await import("./liveWorkspace")).gateModule);
+import { resetHostSubstrateStoreForTests } from "../../../state/useHostSubstrate";
 import {
   act,
   forwardRef,
@@ -231,6 +232,8 @@ export async function teardownIpc(r: Root | null, h: HTMLElement | null) {
   await settle();
   h?.remove();
   window.removeEventListener("error", onError);
+  // M18 WP4: the host-substrate store is module state; it must not leak into the next test.
+  resetHostSubstrateStoreForTests();
   clearMocks();
 }
 
@@ -260,6 +263,8 @@ export interface MountOptions {
   projectPath?: string;
   /** M17 WP5 — the app's notice for this workspace (a failed Detach). */
   notice?: { text: string; seq: number };
+  /** M18 WP4 — App's "open Settings" (the absent-host note's button). */
+  onOpenSettings?: () => void;
 }
 
 let root: Root | null = null;
@@ -312,6 +317,7 @@ export async function mountWorkspace(opts: MountOptions) {
         statusDisplayState={opts.statusDisplayState}
         statusLink={opts.statusLink}
         notice={opts.notice}
+        onOpenSettings={opts.onOpenSettings}
       />,
     ),
   );

@@ -78,7 +78,10 @@ const callers = files.filter((f) => callSites(f.flat).length > 0);
  */
 function checkCall(flat: string, i: number): string | null {
   const before = flat.slice(0, i);
+  // M18 WP4 (D8): the funnel module's second wrapper, for the absent-host note (it reads the gate
+  // through the same profile + host inputs; it is never a workflow surface itself).
   if (before.endsWith("isWorkflowApplicable(")) return null;
+  if (before.endsWith("isWorkflowHostBlocked(")) return null;
   const m = /const([A-Za-z_$][\w$]*)(?::[A-Za-z_$][\w$<>.]*)?=$/.exec(before);
   if (!m)
     return `…${flat.slice(Math.max(0, i - 40), i + CALL.length)} (not wrapped, not bound)`;
@@ -123,6 +126,8 @@ function checkCall(flat: string, i: number): string | null {
 // the string `"local"` anywhere in that argument.
 
 const FUNNEL = "isWorkflowApplicable(";
+/** The funnel module's two wrappers of the raw gate; both take the host as their third input. */
+const FUNNELS = [FUNNEL, "isWorkflowHostBlocked("];
 const HOST_SOURCES = [
   "useHostSubstrate(",
   "hostSubstrateFor(",
@@ -180,29 +185,31 @@ export function funnelCalls(
   flat: string,
 ): { host: string; violation: string | null }[] {
   const out: { host: string; violation: string | null }[] = [];
-  for (
-    let i = flat.indexOf(FUNNEL);
-    i !== -1;
-    i = flat.indexOf(FUNNEL, i + 1)
-  ) {
-    if (flat.slice(Math.max(0, i - 8), i) === "function") continue;
-    if (flat.slice(Math.max(0, i - 6), i) === "export") continue;
-    const args = topLevelArgs(flat, i + FUNNEL.length - 1);
-    const host = args?.[2];
-    out.push({
-      host: host ?? "",
-      violation:
-        args === null || args.length !== 3
-          ? `${args?.length ?? "?"} arguments, not 3`
-          : checkHostArg(flat, host),
-    });
+  for (const name of FUNNELS) {
+    for (let i = flat.indexOf(name); i !== -1; i = flat.indexOf(name, i + 1)) {
+      if (flat.slice(Math.max(0, i - 8), i) === "function") continue;
+      if (flat.slice(Math.max(0, i - 6), i) === "export") continue;
+      // `isWorkflowApplicable(` is not a substring of `isWorkflowHostBlocked(`, nor the
+      // reverse, so each call is counted under exactly one name.
+      const args = topLevelArgs(flat, i + name.length - 1);
+      const host = args?.[2];
+      out.push({
+        host: host ?? "",
+        violation:
+          args === null || args.length !== 3
+            ? `${args?.length ?? "?"} arguments, not 3`
+            : checkHostArg(flat, host),
+      });
+    }
   }
   return out;
 }
 
 describe("workflow-applicability funnel — every call passes a seam host (M18 WP4)", () => {
   const funnelFiles = files.filter(
-    (f) => f.rel !== "state/workflowApplicable.ts" && f.flat.includes(FUNNEL),
+    (f) =>
+      f.rel !== "state/workflowApplicable.ts" &&
+      FUNNELS.some((n) => f.flat.includes(n)),
   );
 
   it("every production funnel call passes three arguments, the third from the seam", () => {
@@ -240,6 +247,11 @@ describe("workflow-applicability funnel — every call passes a seam host (M18 W
     expect(call(',"local"')).toMatch(/literal/);
     expect(call(',x?"local":hostSubstrateFor(p,map)')).toMatch(/literal/);
     expect(call(",someHost")).toMatch(/not bound/);
+    // The note's wrapper is held to the same host rule.
+    expect(
+      funnelCalls(`${hook}isWorkflowHostBlocked(g,profile,"local")`)[0]
+        .violation,
+    ).toMatch(/literal/);
     expect(call(',{state:"developer"}')).toMatch(/not from the seam/);
   });
 });

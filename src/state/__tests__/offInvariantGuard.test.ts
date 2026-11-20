@@ -20,6 +20,10 @@ import {
 } from "../../components/workspace/skillButtons";
 // ARM 5 extension (M13 WP3) — imported from production, not stubbed, same as the row above.
 import { showRecycleButton } from "../../components/workspace/recycleButton";
+// ARM 5's THIRD subject (M18 WP4) — the absent-host note, rendered in the same slot. Imported
+// from production with the funnel wrapper that feeds it, never stubbed.
+import { absentHostNote } from "../../components/workspace/absentHostNote";
+import { isWorkflowHostBlocked } from "../workflowApplicable";
 import type { AnnounceMap } from "../predictAction";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -64,9 +68,11 @@ import type { AnnounceMap } from "../predictAction";
 //   5. SKILL-ROW  — the workspace header's skill-button row: `showSkillButtons(…, false)`
 //                   plus `SKILL_BUTTONS`, AND `showRecycleButton(…, false)` as its own second
 //                   subject (M13 WP3's Recycle extension — a SEPARATE predicate, not a member of
-//                   the array). ⚠️ So arms 4 and 5 own TWO subjects each and arm 6 owns THREE
-//                   (the turn mark joined it at paydown 2026-11-04 WP13b), which is why the
-//                   arm-count pin below reconciles TEN subjects against SIX registries.
+//                   the array), AND the absent-host note `absentHostNote(…)` as its THIRD
+//                   subject (M18 WP4: shown in the same slot when a remote host has no workflow
+//                   system). ⚠️ So arm 4 owns TWO subjects, arms 5 and 6 own THREE each (the turn
+//                   mark joined arm 6 at paydown 2026-11-04 WP13b), which is why the arm-count
+//                   pin below reconciles ELEVEN subjects against SIX registries.
 //                   ⚠️ CORRECTED 2026-09-18 (M14 WP4): this header said "SEVEN subjects against
 //                   FIVE registries" — true only before arm 6 landed (M13.5 WP4) and gained its
 //                   second subject (M14 WP0). The CODE was always right; only this prose lied,
@@ -582,6 +588,49 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
     ).toBe(false);
   });
 
+  // ── ARM 5, THIRD SUBJECT: THE ABSENT-HOST NOTE (M18 WP4) ─────────────────
+  // A remote workspace whose host has no workflow system (or did not answer) shows ONE line in the
+  // skill-row slot saying why the row is absent. It names the workflow system and points at its
+  // install, so it is a workflow surface: with the gate OFF it must not exist, whatever the host.
+  const NOTE_HOSTS = [
+    { state: "absent" },
+    { state: "unknown" },
+    undefined,
+    "local",
+  ] as const;
+
+  it("renders no ABSENT-HOST NOTE while the gate is OFF", () => {
+    for (const host of NOTE_HOSTS) {
+      expect(
+        absentHostNote({
+          hostBlocked: isWorkflowHostBlocked(false, null, host),
+          host,
+          authority: "u@h",
+        }),
+        `the absent-host note must not exist while the gate is OFF (host=${JSON.stringify(host)})`,
+      ).toBeNull();
+    }
+  });
+
+  it("the absent-host note genuinely READS the gate (anti-vacuity)", () => {
+    // Gate ON + an absent host: the note EXISTS, so the OFF assertion above is evidence.
+    expect(
+      absentHostNote({
+        hostBlocked: isWorkflowHostBlocked(true, null, { state: "absent" }),
+        host: { state: "absent" },
+        authority: "u@h",
+      })?.text,
+    ).toContain("h");
+    // ...and a LOCAL workspace never gets one, gate ON or not.
+    expect(
+      absentHostNote({
+        hostBlocked: isWorkflowHostBlocked(true, null, "local"),
+        host: "local",
+        authority: null,
+      }),
+    ).toBeNull();
+  });
+
   it("renders no skill button while the gate is OFF", () => {
     // The row is all-or-nothing: `showSkillButtons` is the single source of truth for whether
     // ANY of it exists. Asserted as the COMPUTED value (the row-cell arm's discipline), over
@@ -1046,6 +1095,18 @@ describe("the guard is not vacuous", () => {
         "5 RECYCLE",
         () => showRecycleButton({ workflowEnabled: false, ccSessionId: null }),
       ],
+      // M18 WP4 — arm 5's THIRD subject, the absent-host note (same slot, same arm).
+      [
+        "5 ABSENT-HOST-NOTE",
+        () =>
+          absentHostNote({
+            hostBlocked: isWorkflowHostBlocked(false, null, {
+              state: "absent",
+            }),
+            host: { state: "absent" },
+            authority: "u@h",
+          }),
+      ],
       [
         "6 WORKSPACE-DRIVEMODE",
         () => workspaceDriveModeReadout(null, null, false, false),
@@ -1063,16 +1124,17 @@ describe("the guard is not vacuous", () => {
       ],
     ];
 
-    // ⚠️ TEN subjects, not six: arm 4 owns TWO derivations, arm 5 owns TWO predicates
+    // ⚠️ ELEVEN subjects, not six: arm 4 owns TWO derivations, arm 5 owns THREE predicates
     // (`showSkillButtons` and `showRecycleButton` are separate functions with identical
     // bodies — a mutation to one does not exercise the other, which is the "the set is not
-    // the caller" shape arm 5 was written to catch). Arm 6 owns THREE — the drive-mode
-    // readout (M13.5 WP4), the supervisor toggle (M14 WP0) and the turn mark (paydown WP13b).
+    // the caller" shape arm 5 was written to catch — and M18 WP4's `absentHostNote`). Arm 6
+    // owns THREE — the drive-mode readout (M13.5 WP4), the supervisor toggle (M14 WP0) and the
+    // turn mark (paydown WP13b).
     expect(
       armSubjects.length,
       "an OFF-state arm subject was removed — every registry this app surfaces UI through " +
         "must stay policed; see the registry table at the top of this file",
-    ).toBe(10);
+    ).toBe(11);
 
     // Each subject must be really callable and really defined — a subject that threw or
     // resolved to undefined would make its arm's assertions vacuous rather than absent.

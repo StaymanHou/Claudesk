@@ -542,7 +542,7 @@ and the supervisor did not fire, it asks the backend for the display overlay
 | Detector vs. the real corpus | `verdictReplay.test.ts` — the real `decideVerdict` over the frozen 2,284-record fixture, **34/36** on the non-circular set, both misses pinned as correct, non-vacuity guard |
 | Negative arm | `verdict.test.ts` — PAUSE, `ESCALATE`, unmapped edge, no-stored-mode, already-chained, and the **verify-human GATE** |
 | Recycle conditions | `verdict.test.ts` — all four FIRE-not-recycle arms (on F15) + the edge-membership population guard + strictly-greater threshold |
-| Gate OFF | `offInvariantGuard.test.ts` (6 arms / 10 subjects) + Rust-side fail-closed `resolve_gate_enabled` |
+| Gate OFF | `offInvariantGuard.test.ts` (6 arms / 11 subjects since M18 WP4; 10 at M15) + Rust-side fail-closed `resolve_gate_enabled` |
 
 ⚠️ **SCORING AGAINST THE FULL FIXTURE WOULD BE CIRCULAR** — its 2,284 labels were produced by the
 **same policy table** the detector uses, so a 1.000 there is an arithmetic identity, not evidence.

@@ -12,7 +12,7 @@
 // workspace's KIND, not because of the workflow system, so this module never reads
 // `useWorkflowFeaturesEnabled` / `isWorkflowApplicable`, and the gate never reads this. A surface
 // that is both gated and kind-dependent (the supervisor) ANDs the two at its call site. That
-// separation is what keeps `offInvariantGuard` (6 arms / 10 subjects) and `workflowApplicableGuard`
+// separation is what keeps `offInvariantGuard` (6 arms / 11 subjects since M18 WP4) and `workflowApplicableGuard`
 // green with no edit.
 //
 // ⚠️ It keys on the project KEY, not a `remote` field: no component carries the project row

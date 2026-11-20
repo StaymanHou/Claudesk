@@ -99,7 +99,7 @@ Also as-built:
 
 ---
 
-## Remote hosts (M18) — 📐 PLANNED 2026-11-18 (`/product-arch`; not built)
+## Remote hosts (M18) — 📐 PLANNED 2026-11-18 (`/product-arch`); §R.1–R.2 ✅ BUILT at WP4 (2026-11-20)
 
 **Milestone 18, the remote workflow substrate.** Scope was settled at the entry grill
 (`roadmap.md` → "### Milestone 18" → "Scope, settled at the entry grill"). In short: detect the workflow system
@@ -141,6 +141,33 @@ behaviour is unchanged) or `Remote(HostSubstrate)`, which is applicable only whe
   that group (prior `a-silent-non-action-must-not-read-as-done`). It is a **gated surface**, so it joins
   the OFF-invariant guard as a new **subject of arm 5 (SKILL-ROW)**. ⚠️ That raises the pin from **6 arms / 10 subjects to 6 arms / 11 subjects**, and
   `workflow-gate.md` must be updated in the same change (that file was missed by two count sweeps already).
+
+### R.1 + R.2 as built — ✅ WP4 (2026-11-20)
+
+What the build settled that the design above left open (the WP4 WIP's D1–D10; the design text below is kept as written):
+- **HEAD is read in perl from `.git`, never with `git`** (loose ref → `packed-refs` → detached; a `.git` FILE prints no
+  head). On a host without the Command Line Tools, `/usr/bin/git` is the shim that asks for the GUI installer.
+- **The debug sandbox root** is the Mac-side `CLAUDESK_REMOTE_SUBSTRATE_ROOT`. A debug build passes it as an env prefix
+  (`CLAUDESK_SUBSTRATE_HOME=<quoted>`) on the probe's one command, and the constant reads that before `$HOME`. A release
+  build's command is byte-identical with or without it, which a test pins.
+- **The wire:** a `substrate-probed` line, then the probe. That lets the parser tell "not probed" (gate OFF → `None`)
+  from "probed, no answer" (`Unknown`). The root line is withheld when the root contains a newline. Parity with
+  `skills_dir_exists` is pinned over **16** fixture shapes, and three mutants of the constant are each killed by
+  their own fixture. `skills_dir_exists` now reads `install.sh` as bytes.
+- **Two funnels, one control.** Consumers read `workflow_applicable(gate, profile, host)`. The open check PRODUCES the
+  host input, so it decides "probe at all?" with `workflow_applicable_before_host_probe`, then applies the full funnel
+  to what it probed for the restore arm.
+- **A remote OPEN takes its host input from the check's answer** (`StartSignals.hostSubstrate` → `hostFromOpenCheck`),
+  not from the frontend cache. That cache is the last render's value, and the event is not ordered against the
+  command's response.
+- **The frontend store** is one module store: the first REMOTE consumer starts it by listening, then seeding. A local
+  key never touches it, so it makes no IPC.
+- **Picker remote rows** (operator ruling A, 2026-11-20): the drive-mode cell is absent until the row's host has been
+  open-checked once in the app session (fail closed).
+- **The note** (D8): Absent → "The workflow system isn't installed for `<user@host>`. Install it in Settings → Remote
+  hosts.". Unknown → "Claudesk couldn't check whether the workflow system is installed for `<user@host>`.". Not yet
+  seeded → no note (it would flash). Its button opens Settings; WP5 task 5.2b makes it land on the group. The OFF
+  pin is **6 arms / 11 subjects**.
 
 ### R.2 Detection: the local predicate, run on the host, in the open check's one exec
 

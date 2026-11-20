@@ -10,8 +10,9 @@ The milestone's own shape, distinct from the wizards above. Recorded at cycle cl
 ⚠️ **CORRECTED 2026-09-18 (M14 WP4).** This file is the authority `arch.md` designates for the
 OFF-invariant guard, and it had drifted to the **pre-M13.5** shape: it said *"FIVE registries"*,
 its registry table stopped at arm 5, and it said *"All **seven** subjects"*. Arm 6 landed at
-M13.5 WP4, gained its second subject at M14 WP0 and its third at paydown 2026-11-04 WP13b.
-Current truth: **6 arms / 10 subjects**,
+M13.5 WP4, gained its second subject at M14 WP0 and its third at paydown 2026-11-04 WP13b. Arm 5
+gained its third subject at M18 WP4 (2026-11-20): the absent-host note (`absentHostNote`).
+Current truth: **6 arms / 11 subjects**,
 pinned by `armSubjects` in `offInvariantGuard.test.ts` → `it("still polices all six registries")`.
 ⚠️ **It was missed by two prior correction sweeps** because both searched for the value they were
 correcting *away from* (**8**) while this file was stale at **seven** — a sweep must match the
@@ -29,7 +30,7 @@ claim's nouns, not a known-wrong number.
    | 2 | MENU ID | `MENU_IDS` | M10.9 WP2 |
    | 3 | CHORD | modules exporting a `*Chord*` identifier — selected by **exported identifier** since M11.5 WP4, **not** by filename | M10.9 WP2 |
    | 4 | ROW-CELL | `cellLines(…, false, …)` **and** `rowAffordances(…, false)` | M12 WP5 |
-   | 5 | SKILL-ROW | `showSkillButtons({workflowEnabled: false, …})` + `SKILL_BUTTONS`, **plus** `showRecycleButton(…)` as its own predicate | M13 WP2 (Recycle extension WP3) |
+   | 5 | SKILL-ROW | `showSkillButtons({workflowEnabled: false, …})` + `SKILL_BUTTONS`, **plus** `showRecycleButton(…)` as its own predicate, **plus** `absentHostNote({hostBlocked: isWorkflowHostBlocked(false, …), …})` — three subjects | M13 WP2 (Recycle extension WP3; absent-host note M18 WP4) |
    | 6 | WORKSPACE-HEADER | `workspaceDriveModeReadout(…)`, `workspaceSupervisorReadout(…)` **and** `supervisorTurnBadge(…)` — three subjects | M13.5 WP4 (supervisor toggle M14 WP0; turn mark paydown 2026-11-04 WP13b) |
 
    ⚠️ **`showRecycleButton` is a SEPARATE probe from `showSkillButtons`, not a formality.** The two are byte-identical one-liners, so a guard checking only the array would report the row clean while a live Recycle button sat beside it. **Mutation-proven independent** at M13 WP4: bypassing either left the other's assertions green. ⚠️ **At the render site, though, the row's gate strictly DOMINATES** — Recycle is nested inside the `showSkillButtons(…) &&` block, so a future divergence between the two predicates could only ever *remove* Recycle, never show it when the row is hidden. The documented independence is half-realized (WP3 review MINOR (a)).

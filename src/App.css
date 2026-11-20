@@ -1022,6 +1022,26 @@ body,
   overflow: hidden;
 }
 
+/* M18 WP4 — the absent-host note, in the skill-row slot of a remote workspace whose host has no
+   workflow system (or did not answer). Quiet, like the row it replaces; it clips, never wraps,
+   so the header keeps one line. */
+.workspace-absent-host-note {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+
+.workspace-absent-host-note-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workspace-skill-btn {
   flex-shrink: 0;
   padding: 0.1rem 0.4rem;

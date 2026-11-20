@@ -103,14 +103,21 @@ import { useSupervisor } from "../../state/supervisor/useSupervisor";
 import { UnsentInputWatermark } from "../../state/supervisor/unsentInput";
 import { SupervisorHeaderControl } from "./SupervisorHeaderControl";
 import { supervisorTurnBadge } from "../../cc/workspaceSupervisor";
-import { workspaceSurfaces } from "../../state/workspaceSurfaces";
+import {
+  remoteAuthority,
+  workspaceSurfaces,
+} from "../../state/workspaceSurfaces";
 import {
   getProjectSupervisorEnabled,
   setProjectSupervisorEnabled,
 } from "../../cc/supervisorToggleIpc";
 import { supervisorToggleAction } from "../../cc/supervisorToggleAction";
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
-import { isWorkflowApplicable } from "../../state/workflowApplicable";
+import {
+  isWorkflowApplicable,
+  isWorkflowHostBlocked,
+} from "../../state/workflowApplicable";
+import { ABSENT_HOST_NOTE_TESTID, absentHostNote } from "./absentHostNote";
 import { useWorkspaceProfile } from "../../state/useWorkspaceProfile";
 import { useHostSubstrate } from "../../state/useHostSubstrate";
 // The nav state the prev/next controls render from. ⚠️ The old `inertAfter` inert-state machine
@@ -125,6 +132,8 @@ import {
 } from "./recycleButton";
 
 interface WorkspaceProps {
+  /** M18 WP4 — open the Settings panel (the absent-host note's button). */
+  onOpenSettings?: () => void;
   workspace: WorkspaceModel;
   visible: boolean;
   /** Store the backend CC session id once cc_spawn resolves (WP7). */
@@ -163,6 +172,7 @@ interface WorkspaceProps {
 }
 
 export function Workspace({
+  onOpenSettings,
   workspace,
   visible,
   onSessionId,
@@ -263,6 +273,17 @@ export function Workspace({
     workspaceProfile,
     workspaceHost,
   );
+  // M18 WP4 (D8) — the absent-host note: the workflow layer WOULD apply here but this remote
+  // workspace's host does not have it (or did not answer). Absent with the gate OFF (arm 5).
+  const hostNote = absentHostNote({
+    hostBlocked: isWorkflowHostBlocked(
+      useWorkflowFeaturesEnabled(),
+      workspaceProfile,
+      workspaceHost,
+    ),
+    host: workspaceHost,
+    authority: remoteAuthority(workspace.project_path),
+  });
   // What this workspace WOULD fire if reopened now. Re-read on every `visible` edge rather than
   // once on mount, because the whole point is to reflect a flag the ⏸ may have set *since* —
   // and workspaces stay mounted forever (the standing invariant), so a mount-only read would go
@@ -1156,6 +1177,31 @@ export function Workspace({
             button is PLACED in it (before `restore`) but is not a member; see `clearButton.ts`. */}
         {/* The ungated `clear` button, alone, when the gated row below is absent. */}
         {!skillRowShown && clearButton}
+        {/* M18 WP4 (D8) — in the skill-row slot, where the absent row would be: why it is absent. */}
+        {hostNote !== null && (
+          <div
+            className="workspace-absent-host-note"
+            data-testid={ABSENT_HOST_NOTE_TESTID}
+            role="note"
+          >
+            <span
+              className="workspace-absent-host-note-text"
+              title={hostNote.tooltip}
+            >
+              {hostNote.text}
+            </span>
+            {onOpenSettings !== undefined && (
+              <button
+                type="button"
+                className="workspace-skill-btn"
+                data-testid={`${ABSENT_HOST_NOTE_TESTID}-settings`}
+                onClick={onOpenSettings}
+              >
+                Settings
+              </button>
+            )}
+          </div>
+        )}
         {skillRowShown && (
           <div
             className="workspace-skill-row"
