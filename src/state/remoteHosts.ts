@@ -20,14 +20,18 @@ export interface RemoteHostEntry {
   readonly substrate: HostSubstrate;
 }
 
-/** The host clone against GitHub. `behind` means the two HEADs differ (no fetch, §R.4). */
+/** The host clone against GitHub. `differs`: the two HEADs differ (no fetch, §R.4). */
 export type Drift =
   | {
       readonly drift: "up_to_date";
       readonly head: string;
       readonly remote: string;
     }
-  | { readonly drift: "behind"; readonly head: string; readonly remote: string }
+  | {
+      readonly drift: "differs";
+      readonly head: string;
+      readonly remote: string;
+    }
   | { readonly drift: "cant_check"; readonly reason: string };
 
 /** What one refresh of a host found (`remote_substrate_refresh`). */

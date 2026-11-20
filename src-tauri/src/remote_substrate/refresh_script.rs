@@ -114,7 +114,7 @@ fn a_clone_whose_origin_moved_on_is_behind_and_nothing_is_fetched() {
     let facts = run(home.path(), None, None);
     assert_eq!(
         verdict(&facts),
-        Some(Drift::Behind {
+        Some(Drift::Differs {
             head: sha,
             remote: newer
         })

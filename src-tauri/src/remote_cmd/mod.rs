@@ -96,13 +96,16 @@ claude auth status --json 2>/dev/null | grep -q '\"loggedIn\": *true' \
 
 /// The one preflight check script (arch §H), run under [`login_shell`]. `path` is the only
 /// variable value and enters through [`quote`]. Prints one `ok:<check>` line per passing check
-/// and stops at the first `fail:<check>[:<detail>]` line. Always exits 0, so a non-zero exit
+/// and stops at the first `fail:<check>[:<detail>]` line. Just before `ok:tools` it prints
+/// `claude-at:<where claude resolved>`, so a token failure can name a fix that works over a plain
+/// `ssh -t` (M18 WP6: `claude` may be reachable only through [`CLAUDE_PATH_FALLBACK`]). Always exits 0, so a non-zero exit
 /// means ssh (255) or the shell itself failed, never a check.
 pub fn preflight_script(path: &str) -> String {
     format!(
         "p={path}\n\
 {CLAUDE_PATH_FALLBACK}\n\
 for t in tmux claude perl; do command -v \"$t\" >/dev/null 2>&1 || {{ echo \"fail:tools:$t\"; exit 0; }}; done\n\
+echo \"claude-at:$(command -v claude)\"\n\
 echo ok:tools\n\
 [ -d \"$p\" ] || {{ echo fail:path; exit 0; }}\n\
 echo ok:path\n\
@@ -551,6 +554,32 @@ const BYPASS_ACCEPTED: &str =
 local $/; my $j = eval { JSON::PP->new->decode(<$h>) }; \
 exit 0 unless ref $j eq q(HASH); my $v = $j->{skipDangerousModePermissionPrompt}; \
 print qq(CLAUDESK-OPEN:bypass-accepted:yes\\n) if JSON::PP::is_bool($v) && $v' 2>/dev/null";
+
+/// M18 WP6 — re-read ONLY the bypass answer for a Recycle respawn, which runs no open check
+/// (`SURFACE-2026-11-18-QUALITY-REMOTE-BYPASS-ANSWER-STALE-ACROSS-RECYCLE`). The `bypass-probed`
+/// marker comes first, so the parser can tell "the host answered: not accepted" from "nothing came
+/// back" ([`parse_bypass_refresh`]). Constant text: no value is interpolated.
+pub fn bypass_refresh_command() -> String {
+    login_shell(&format!(
+        "echo '{OPEN_SENTINEL}bypass-probed'\n{BYPASS_ACCEPTED}"
+    ))
+}
+
+/// [`bypass_refresh_command`]'s output → `Some(accepted)` when the host ran the read, `None` when
+/// the marker never came back (the caller then keeps what it had). A read that printed nothing
+/// after the marker is `Some(false)`: not accepted, the safe side (D4), as in the open check.
+pub fn parse_bypass_refresh(out: &str) -> Option<bool> {
+    let mut probed = false;
+    let mut accepted = false;
+    for line in out.lines() {
+        match line.trim().strip_prefix(OPEN_SENTINEL) {
+            Some("bypass-probed") => probed = true,
+            Some("bypass-accepted:yes") => accepted = true,
+            _ => {}
+        }
+    }
+    probed.then_some(accepted)
+}
 
 /// M18 WP4 — the HOST-side variable [`SUBSTRATE_PROBE`] reads in place of `$HOME` when set and
 /// non-empty. Set only by a debug build's [`substrate_home_override`] (D2), as an env prefix on the
@@ -1225,10 +1254,8 @@ pub(crate) mod tests {
             .arg(&missing)
             .output()
             .unwrap();
-        assert_eq!(
-            String::from_utf8_lossy(&out.stdout),
-            "ok:tools\nfail:path\n"
-        );
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(stdout.ends_with("ok:tools\nfail:path\n"), "{stdout}");
     }
 
     /// M18 WP2 — the real preflight script in real zsh, with `claude` only at `$HOME/.local/bin` and
@@ -1261,7 +1288,15 @@ pub(crate) mod tests {
                 .unwrap();
             String::from_utf8_lossy(&out.stdout).into_owned()
         };
-        assert_eq!(run(), "ok:tools\nok:path\nok:token\nok:auth\n");
+        // M18 WP6: the script names where claude resolved (the fallback's `~/.local/bin`),
+        // which a token failure's fix then uses.
+        assert_eq!(
+            run(),
+            format!(
+                "claude-at:{}\nok:tools\nok:path\nok:token\nok:auth\n",
+                fake.display()
+            )
+        );
         std::fs::remove_file(&fake).unwrap();
         assert_eq!(run(), "fail:tools:claude\n");
     }
@@ -1956,6 +1991,34 @@ pub(crate) mod tests {
         )
         .unwrap();
         assert!(!accepted(None), "the key in ~/.claude.json does not count");
+    }
+
+    /// M18 WP6 — the Recycle re-read: no marker → `None` (keep the cached answer); the marker
+    /// alone → `Some(false)`; the marker + the sentinel'd yes → `Some(true)`; an unsentinel'd yes
+    /// is noise.
+    #[test]
+    fn the_bypass_refresh_parses_marker_and_answer() {
+        let s = OPEN_SENTINEL;
+        assert_eq!(parse_bypass_refresh(""), None);
+        assert_eq!(
+            parse_bypass_refresh(&format!("{s}bypass-accepted:yes\n")),
+            None
+        );
+        assert_eq!(
+            parse_bypass_refresh(&format!("{s}bypass-probed\n")),
+            Some(false)
+        );
+        assert_eq!(
+            parse_bypass_refresh(&format!("banner\n{s}bypass-probed\nbypass-accepted:yes\n")),
+            Some(false)
+        );
+        assert_eq!(
+            parse_bypass_refresh(&format!("{s}bypass-probed\n{s}bypass-accepted:yes\n")),
+            Some(true)
+        );
+        let cmd = bypass_refresh_command();
+        assert!(cmd.starts_with("zsh -lc '"), "{cmd}");
+        assert!(cmd.contains("skipDangerousModePermissionPrompt"), "{cmd}");
     }
 
     #[test]

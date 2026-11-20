@@ -10,6 +10,7 @@ const listenMock = vi.fn();
 const injectCommandMock = vi.fn();
 const markSessionCleanMock = vi.fn();
 const readBypassMock = vi.fn();
+const refreshBypassMock = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (cmd: string, args?: unknown) => invokeMock(cmd, args),
@@ -21,6 +22,8 @@ vi.mock("../autoResumeFire", () => ({
   injectCommand: (...args: unknown[]) => injectCommandMock(...args),
   // M18 WP2 — the production default of `RecycleInputs.readBypass`.
   readBypassCleared: (...args: unknown[]) => readBypassMock(...args),
+  // M18 WP6 — the production default of `RecycleInputs.refreshBypass`.
+  refreshRemoteBypass: (...args: unknown[]) => refreshBypassMock(...args),
 }));
 vi.mock("../../../state/cleanExit", () => ({
   markSessionClean: (...args: unknown[]) => markSessionCleanMock(...args),
@@ -150,6 +153,7 @@ beforeEach(() => {
   });
   // M18 WP2: the bypass warning is clear unless a test says otherwise.
   readBypassMock.mockResolvedValue(true);
+  refreshBypassMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -1344,10 +1348,70 @@ describe("the restore waits for CC's bypass-permissions warning (M18 WP2)", () =
     expect(readBypassMock).not.toHaveBeenCalled();
   });
 
+  // M18 WP6 — the cached remote answer is the last OPEN's, and a Recycle runs no open check:
+  // the host is re-read first, and only then does the decision read the (now fresh) answer.
+  it("re-reads the host's bypass answer BEFORE deciding, through the real default seam", async () => {
+    refreshBypassMock.mockImplementation(async () => {
+      effects.push("refreshBypass");
+    });
+    readBypassMock.mockImplementation(async () => {
+      effects.push("readBypass");
+      return true;
+    });
+    const { promise } = driveToRestore();
+    expect(await finish(promise)).toEqual({ ok: true });
+    expect(refreshBypassMock).toHaveBeenCalledWith(PROJECT);
+    expect(effects.slice(-4)).toEqual([
+      "settle",
+      "refreshBypass",
+      "readBypass",
+      `inject:${RESTORE_COMMAND}`,
+    ]);
+  });
+
+  it("a refresh that settles the answer to accepted lets the restore through; one that kept it withholds", async () => {
+    // The refresh writes the backend cache; the read that follows sees it. Modelled here as a
+    // shared flag the injected refresh flips, and the injected read returns.
+    for (const [hostAccepted, injected] of [
+      [true, true],
+      [false, false],
+    ] as const) {
+      effects.length = 0;
+      let cached = false;
+      const { promise, failures } = driveToRestore({
+        refreshBypass: async () => {
+          cached = hostAccepted;
+        },
+        readBypass: async () => cached,
+      });
+      const outcome = (await finish(promise)) as { ok: boolean };
+      expect(outcome.ok).toBe(injected);
+      expect(effects.includes(`inject:${RESTORE_COMMAND}`)).toBe(injected);
+      expect(failures.length).toBe(injected ? 0 : 1);
+    }
+    expect(refreshBypassMock).not.toHaveBeenCalled();
+  });
+
+  it("aborted during the refresh: nothing is read or typed", async () => {
+    const ac = new AbortController();
+    const { promise } = driveToRestore({
+      signal: ac.signal,
+      refreshBypass: async () => {
+        ac.abort();
+      },
+    });
+    expect(await finish(promise)).toEqual({ ok: false, reason: "aborted" });
+    expect(readBypassMock).not.toHaveBeenCalled();
+    expect(effects).not.toContain(`inject:${RESTORE_COMMAND}`);
+  });
+
   it("the reported reason renders as a restore-by-hand toast naming the fix", () => {
     const toast = recycleInjectFailure("restore", RESTORE_WITHHELD_FOR_BYPASS);
     expect(toast).toContain("Recycled, but /session-restore was not sent");
     expect(toast).toContain('pick "Yes, I accept" first');
+    // M18 WP2 review (MINOR, folded in at WP6): a prediction, not a screen read.
+    expect(toast).toContain("has not been accepted");
+    expect(toast).not.toContain("is showing");
     expect(toast).toContain("Run /session-restore yourself.");
   });
 });

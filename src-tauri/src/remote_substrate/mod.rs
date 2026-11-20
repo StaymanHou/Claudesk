@@ -73,8 +73,11 @@ impl HostSubstrate {
 /// M18 WP5 (§R.4) — the host clone against GitHub, as Settings → Remote hosts shows it. Compared
 /// on the full HEADs; the readout prints them short.
 ///
-/// ⚠️ `Behind` means "the two HEADs differ" (D6). Without a `fetch` (a write into a clone Claudesk
-/// may not own) a host that is ahead or has diverged cannot be told apart from one that is behind.
+/// ⚠️ `Differs` means "the two HEADs differ" (D6). Without a `fetch` (a write into a clone Claudesk
+/// may not own) a host that is ahead or has diverged cannot be told apart from one that is behind,
+/// so the variant does not claim "behind" (renamed from `Behind` at M18 WP6: WP7 gates
+/// Update on it, and `pull --ff-only` fails on an ahead or diverged clone). The readout still says
+/// "Behind GitHub" (D6).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "drift", rename_all = "snake_case")]
 pub enum Drift {
@@ -82,7 +85,7 @@ pub enum Drift {
         head: String,
         remote: String,
     },
-    Behind {
+    Differs {
         head: String,
         remote: String,
     },
@@ -128,7 +131,7 @@ impl Drift {
                     head: head.clone(),
                     remote: remote.clone(),
                 }),
-                Some(head) => Some(Self::Behind {
+                Some(head) => Some(Self::Differs {
                     head: head.clone(),
                     remote: remote.clone(),
                 }),
@@ -240,7 +243,7 @@ mod tests {
         );
         assert_eq!(
             Drift::decide(&developer(Some(B)), Some(&remote)),
-            Some(Drift::Behind {
+            Some(Drift::Differs {
                 head: B.into(),
                 remote: A.into()
             })
@@ -253,7 +256,7 @@ mod tests {
         ));
         assert!(matches!(
             Drift::decide(&managed, Some(&DriftLine::Remote(B.into()))),
-            Some(Drift::Behind { .. })
+            Some(Drift::Differs { .. })
         ));
     }
 
@@ -296,12 +299,12 @@ mod tests {
     #[test]
     fn the_drift_wire_shape_is_tagged() {
         assert_eq!(
-            serde_json::to_value(Drift::Behind {
+            serde_json::to_value(Drift::Differs {
                 head: A.into(),
                 remote: B.into()
             })
             .unwrap(),
-            serde_json::json!({"drift": "behind", "head": A, "remote": B})
+            serde_json::json!({"drift": "differs", "head": A, "remote": B})
         );
         assert_eq!(
             serde_json::to_value(Drift::CantCheck { reason: "x".into() }).unwrap(),

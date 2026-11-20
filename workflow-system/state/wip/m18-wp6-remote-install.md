@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP6 — Install over the master
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** verify-codify (phase 1 complete)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -43,7 +43,7 @@ Phase 1 first pays down the review findings the handoff marked "due before WP6",
 
 ## Work Tree
 
-- [ ] Phase 1: Carry-ins — pay down the review findings due before WP6  <!-- status: NOT-STARTED -->
+- [x] Phase 1: Carry-ins — pay down the review findings due before WP6  <!-- status: done -->
   **Observable outcomes:**
   - CLI: `cargo test settle_refresh` passes a new test: a known `Developer` host stays `Developer` after a refresh whose probe printed `substrate-probed` and no `substrate:` line. The outcome is `Checked` with the cached substrate, or `Failed`, never an `Unknown` write. Mutation: restore the unconditional `set_substrate` → that test fails.
   - CLI: `grep -rn "Behind" src-tauri/src/remote_substrate src/state src/components/settings` finds no `Drift::Behind` / `"behind"` wire tag. `Differs` / `"differs"` is used in Rust + TS + tests, and the readout copy still says "Behind GitHub" (`remoteHostsSettings.test.tsx` passes).
@@ -56,15 +56,36 @@ Phase 1 first pays down the review findings the handoff marked "due before WP6",
   **Alignment questions:**
   - Recycle copy, "has not been accepted" in place of "is showing": still what you want?
   - (decision) The token hint now names the absolute claude path the preflight found, e.g. `ssh -t <host> ~/.local/bin/claude setup-token`, rather than wrapping a login shell. OK?
-  - [ ] P1.1 `settle_refresh`: skip the cache write when the read is `Unknown`. Fix its doc; add the settle test + mutation proof (`SURFACE-2026-11-20-QUALITY-SETTINGS-REFRESH-WRITES-UNKNOWN-OVER-A-KNOWN-HOST`)  <!-- status: NOT-STARTED -->
-  - [ ] P1.2 Rename `Drift::Behind` → `Differs`, wire tag included (Rust, TS, tests). The copy stays (`SURFACE-2026-11-20-QUALITY-DRIFT-BEHIND-VARIANT-MEANS-DIFFERS`)  <!-- status: NOT-STARTED -->
-  - [ ] P1.3 `token_fix` names the resolved claude path (`SURFACE-2026-11-18-QUALITY-TOKEN-FIX-HINT-ASSUMES-CLAUDE-ON-NONLOGIN-PATH`)  <!-- status: NOT-STARTED -->
-  - [ ] P1.4 Remote Recycle refreshes the bypass answer before deciding, plus the "has not been accepted" copy (`SURFACE-2026-11-18-QUALITY-REMOTE-BYPASS-ANSWER-STALE-ACROSS-RECYCLE`, `…-RECYCLE-BYPASS-REASON-OVERCLAIMS`)  <!-- status: NOT-STARTED -->
-  - [ ] P1.5 `security-posture.md` → "Terminal clipboard": record the displayed-bytes vector as an accepted risk (`SURFACE-2026-11-18-QUALITY-OSC52-PASTEJACK-VECTOR-UNRECORDED`)  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P1.1 `settle_refresh`: skip the cache write when the read is `Unknown`. Fix its doc; add the settle test + mutation proof (`SURFACE-2026-11-20-QUALITY-SETTINGS-REFRESH-WRITES-UNKNOWN-OVER-A-KNOWN-HOST`)  <!-- status: done -->
+  - [x] P1.2 Rename `Drift::Behind` → `Differs`, wire tag included (Rust, TS, tests). The copy stays (`SURFACE-2026-11-20-QUALITY-DRIFT-BEHIND-VARIANT-MEANS-DIFFERS`)  <!-- status: done -->
+  - [x] P1.3 `token_fix` names the resolved claude path (`SURFACE-2026-11-18-QUALITY-TOKEN-FIX-HINT-ASSUMES-CLAUDE-ON-NONLOGIN-PATH`)  <!-- status: done -->
+  - [x] P1.4 Remote Recycle refreshes the bypass answer before deciding, plus the "has not been accepted" copy (`SURFACE-2026-11-18-QUALITY-REMOTE-BYPASS-ANSWER-STALE-ACROSS-RECYCLE`, `…-RECYCLE-BYPASS-REASON-OVERCLAIMS`)  <!-- status: done -->
+  - [x] P1.5 `security-posture.md` → "Terminal clipboard": record the displayed-bytes vector as an accepted risk (`SURFACE-2026-11-18-QUALITY-OSC52-PASTEJACK-VECTOR-UNRECORDED`)  <!-- status: done -->
+  - [x] verify-auto  <!-- status: done -->
+    — evidence: `pnpm verify:auto` → EXIT=0, 64 s (lint 0 errors, 1 pre-existing warning in `XtermPane.tsx`, untouched; prettier clean; tsc; check:link; vitest `Tests 4154 passed (4154)`; cargo fmt; clippy -D warnings; cargo test lib `1424 passed; 0 failed` + every integration binary ok, `sync_commands_do_not_block` 16 passed).
+    — evidence: two first-run failures, fixed in build scope: Prettier on `remoteHosts.ts`, and `singleAuthority.test.ts` refusing WIP-local labels (`P1.4`) in the Recycle modules (labels dropped; the SURFACE IDs carry the trail).
+    — evidence: `grep -rn 'Drift::Behind\|"behind"' src-tauri/src src/state src/components/settings` → one hit, the rename's own doc prose; no variant or wire tag.
+    — evidence: P1.1 mutation (`if false && substrate == …Unknown`) → `a_refresh_that_answered_writes_the_cache_once` FAILED; restored byte-exact (shasum match).
+  - [x] verify-self  <!-- status: done -->
+    - [x] settle_refresh keeps a known host — evidence: `cargo test --lib a_refresh_that_answered_writes_the_cache_once` → ok; the `Unknown` guard sits before `set_substrate` (runner read); mutation run at build → FAILED as required.
+    - [x] Differs rename — evidence: `grep -rn '"behind"\|Drift::Behind' src-tauri/src src` → the rename's doc prose only; "Behind GitHub" copy kept; vitest `remoteHostsSettings` + `recycleSession` → 65 passed.
+    - [x] token hint — evidence: `cargo test --lib preflight` → 15 passed; `claude-at:` prints after `CLAUDE_PATH_FALLBACK`; the real-zsh test asserts `claude-at:<fake ~/.local/bin/claude>`.
+    - [x] bypass re-read command + settle + two-writer guard — evidence: `cargo test --lib bypass` → 17 passed; registered `lib.rs`, listed in `ASYNC_COMMANDS`.
+    - [x] Recycle awaits the re-read before deciding — evidence: vitest order `settle → refreshBypass → readBypass → inject`; accepted → injected, kept-false → withheld; toast asserts "has not been accepted". Gap (runner): no vitest pins `refreshRemoteBypass`'s local-key no-IPC branch → codify.
+    - [x] LIVE (dev build, scratch row, read-only on the host; orchestrator, bridge) — evidence: `remote_open_check` → `start` (link Up, grace); `remote_bypass_refresh(<scratch key>)` → `true` in 52 ms (dev `ssh -M` pid present); local key → `null`; after the 20 s grace (dev `ssh -M` gone per `ps`) → `null` in 2 ms (no ssh). Teardown: no `claudesk-dev` tmux server on the host, scratch folder unchanged, dev app stopped, dev `projects.json` / `settings.json` shas = backups (38ee76dd…, 72bfef1c…). `UNVERIFIED: undrivable` half: `bypass_dialog_cleared` → `true` needs a SPAWNED session's recorded permission (no session → `false` by D4); spawning remote CC was not worth the account's usage. Covered by `remote_cleared`'s unit tests reading the same cache.
+    - [x] security-posture displayed-bytes risk — evidence: `grep -n displayed security-posture.md` → line 133, inside "Terminal clipboard"; follow-ups at 142–146.
+    - [x] `pnpm verify:auto` → EXIT=0 (verify-auto).
+    - [x] align: Recycle copy — evidence: toast = `Recycled, but /session-restore was not sent: Claude Code's Bypass Permissions warning has not been accepted, and its default "No, exit" would close the session (pick "Yes, I accept" first). Run /session-restore yourself.`
+    - [x] align: token hint form — evidence: `the token in ~/.claudesk/cc-oauth-token on mini is missing or empty. Fix: run `ssh -t mini '/Users/u/.local/bin/claude' setup-token` and save the token it prints to that file (chmod 600)` (absolute, single-quoted; not a `~/` form).
+  - [x] verify-human  <!-- status: done -->
+    - [x] P1.verify-human.1 (a) Recycle copy "has not been accepted" in place of "is showing": still what you want? — operator 2026-11-20: ok.
+    - [x] P1.verify-human.2 (c, decision) token hint names the host's absolute, quoted claude path — operator: A (keep it).
+    - [x] P1.verify-human.3 (c, evidence gap) `bypass_dialog_cleared` → true after a live re-read — operator: A (accept the unit-test coverage; no live CC spawn).
+  - [x] verify-codify  <!-- status: done -->
+    Test scope: full — suite not long (`runtimes.md` → `pnpm verify:auto` Last 64s < 300s)
+    — evidence: new `readFolderTrust.test.ts` → `refreshRemoteBypass` (local key → no IPC; remote key → one `remote_bypass_refresh` with that key; a rejected IPC resolves) → 12 passed.
+    — evidence: mutations, each alone, each restored byte-exact (shasum): drop the local-key guard → "makes NO IPC for a local key" FAILED; drop Recycle's refresh call → 3 Recycle tests FAILED; refresh moved AFTER the read → the same 3 FAILED; a direct `set_open_bypass` in `remote_bypass_refresh` → `the_bypass_answer_has_two_writers_each_a_settle` FAILED; settle writes without the marker (`unwrap_or(false)`) → `a_bypass_refresh_writes_the_cache_only_when_the_host_answered` FAILED. (P1.1's mutation was run at build.)
+    — evidence: `pnpm verify:auto` → EXIT=0, 60 s (vitest `Tests 4157 passed (4157)`; cargo test lib ok; clippy, fmt clean).
 
 - [ ] Phase 2: The remote install run (backend: script, transport, cancel, reducer)  <!-- status: NOT-STARTED; depends on Phase 1 -->
   **Observable outcomes:**
@@ -152,10 +173,10 @@ Phase 1 first pays down the review findings the handoff marked "due before WP6",
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > P1.1
-- **Active scope:** P1.1 (first task)
+- **Path:** Feature > Phase 2 > P2.1
+- **Active scope:** P2.1 (`run_streaming` abort predicate)
 - **Blocked:** none
-- **Unvisited:** Phase 2, Phase 3
+- **Unvisited:** Phase 3
 - **Open discoveries:** none
 
 ## Verification hygiene (from memory; read before any live step)

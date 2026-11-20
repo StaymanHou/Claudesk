@@ -130,6 +130,22 @@ pane's tmux copy (a drag) and remote CC's `/copy` reach the Mac.
 - **What a pane CAN do:** replace the clipboard's contents by printing OSC 52. A local program
   could already do this with `pbcopy`. For a remote pane it is the point of the feature, so it adds
   no reach worth gating (decision R-d, operator 2026-11-18).
+- ⚠️ **Accepted risk: displayed bytes, not just programs** (recorded at M18 WP6 P1.5,
+  `SURFACE-2026-11-18-QUALITY-OSC52-PASTEJACK-VECTOR-UNRECORDED`). The `pbcopy` comparison above covers
+  only a program that RUNS. An OSC 52 sequence can also arrive as text a pane merely displays:
+  `cat` of a hostile file, `git log`, `curl` output, a log tail. tmux passes in-pane OSC 52 through
+  under `set-clipboard on`, so it can come from any session on the host. Displaying such text
+  silently replaces the Mac clipboard, with nothing running `pbcopy`. That is the paste-jacking
+  setup: a command waits on the clipboard for the operator to paste it into a terminal. It is why
+  some terminals prompt on, or gate, OSC 52 writes. **It is accepted** under R-d. Claudesk's panes
+  show the operator's own sessions on their own hosts, and the copy feature needs the
+  ungated write. **Follow-up options if the call changes:**
+  - a per-write toast ("Copied N chars from <workspace>");
+  - remote panes only;
+  - a size or newline heuristic, holding back a multi-line or trailing-newline write until the
+    operator confirms it.
+
+  Re-ask the operator only if this recorded risk changes their call.
 - **tmux answers in-pane reads itself** under `set-clipboard on`, from ITS OWN buffer on the host
   (measured). That buffer holds what was copied in any Claudesk session on that `-L` server. The
   same account could already read it with `tmux show-buffer`. It never involves the Mac.

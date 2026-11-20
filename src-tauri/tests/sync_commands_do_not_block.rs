@@ -178,6 +178,11 @@ const ASYNC_COMMANDS: &[(&str, &str)] = &[
          `EXEC_TIMEOUT_MS`; it never brings a link up); the work runs on `spawn_blocking`",
     ),
     (
+        "remote_bypass_refresh",
+        "M18 WP6 Recycle: one exec over an already-Up master (up to `EXEC_TIMEOUT_MS`; it \
+         never brings a link up); the work runs on `spawn_blocking`",
+    ),
+    (
         "remote_end_session",
         "M17 WP5 dialogs: brings up the host link and ends the tmux session over it (up to \
          `LINK_UP_TIMEOUT` + the end's polls); the work runs on `spawn_blocking`",

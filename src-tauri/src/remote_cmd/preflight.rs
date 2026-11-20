@@ -200,7 +200,13 @@ pub fn run_preflight(exec: &dyn RemoteExec, host: &str, path: &str) -> Preflight
 
 /// Read the check script's `ok:` / `fail:` lines into `checks`. True only when all four passed.
 fn parse_check_lines(out: &str, host: &str, path: &str, checks: &mut Vec<CheckResult>) -> bool {
+    // Where `claude` resolved on the host, when the script said (an absolute path only).
+    let mut claude_at: Option<String> = None;
     for line in out.lines() {
+        if let Some(at) = line.trim().strip_prefix("claude-at:") {
+            claude_at = Some(at.to_string()).filter(|p| p.starts_with('/'));
+            continue;
+        }
         match line.trim() {
             "ok:tools" => checks.push(pass("tools", "tmux, claude and perl are installed")),
             "ok:path" => checks.push(pass("path", format!("{path} exists"))),
@@ -214,13 +220,20 @@ fn parse_check_lines(out: &str, host: &str, path: &str, checks: &mut Vec<CheckRe
                 return false;
             }
             "fail:token" => {
-                checks.push(fail("token", token_fix(host, "is missing or empty")));
+                checks.push(fail(
+                    "token",
+                    token_fix(host, claude_at.as_deref(), "is missing or empty"),
+                ));
                 return false;
             }
             "fail:auth" => {
                 checks.push(fail(
                     "auth",
-                    token_fix(host, "did not log Claude Code in (expired or revoked?)"),
+                    token_fix(
+                        host,
+                        claude_at.as_deref(),
+                        "did not log Claude Code in (expired or revoked?)",
+                    ),
                 ));
                 return false;
             }
@@ -255,9 +268,16 @@ fn missing_tool(tool: &str, host: &str) -> String {
     }
 }
 
-fn token_fix(host: &str, what: &str) -> String {
+/// The plain-words fix for a missing or rejected token. `claude_at` is where `claude` resolved on
+/// the host (the script's `claude-at:` line). It is named in the command because `ssh host cmd`
+/// runs a NON-login shell: on an account whose PATH line for `~/.local/bin` lives only in
+/// `~/.zshrc` (the shape M18 WP2 hardened), a bare `claude` there is "command not found"
+/// (`SURFACE-2026-11-18-QUALITY-TOKEN-FIX-HINT-ASSUMES-CLAUDE-ON-NONLOGIN-PATH`). The path is
+/// quoted for the remote shell. Without one, the bare name is the best we can say.
+fn token_fix(host: &str, claude_at: Option<&str>, what: &str) -> String {
+    let claude = claude_at.map_or_else(|| "claude".to_string(), super::quote);
     format!(
-        "the token in {} on {host} {what}. Fix: run `ssh -t {host} claude setup-token` and save \
+        "the token in {} on {host} {what}. Fix: run `ssh -t {host} {claude} setup-token` and save \
          the token it prints to that file (chmod 600)",
         super::TOKEN_FILE
     )
@@ -461,6 +481,38 @@ mod tests {
             let last = r.checks.last().unwrap();
             assert_eq!(last.name, name, "{out:?}");
             assert!(!last.ok);
+            assert!(last.message.contains(want), "{out:?} → {:?}", last.message);
+        }
+    }
+
+    /// M18 WP6 — a token failure names the `claude` the host resolved, quoted for the remote
+    /// shell, because `ssh -t host claude …` runs a non-login shell that may not find a bare
+    /// `claude`. No `claude-at:` line (or a non-absolute one) → the bare name, as before.
+    #[test]
+    fn the_token_fix_names_the_claude_the_host_resolved() {
+        let at = "claude-at:/Users/u/.local/bin/claude\n";
+        for (out, want) in [
+            (
+                format!("{at}ok:tools\nok:path\nfail:token\n"),
+                "`ssh -t mini '/Users/u/.local/bin/claude' setup-token`",
+            ),
+            (
+                format!("{at}ok:tools\nok:path\nok:token\nfail:auth\n"),
+                "`ssh -t mini '/Users/u/.local/bin/claude' setup-token`",
+            ),
+            (
+                "ok:tools\nok:path\nfail:token\n".to_string(),
+                "`ssh -t mini claude setup-token`",
+            ),
+            (
+                "claude-at:claude\nok:tools\nok:path\nfail:token\n".to_string(),
+                "`ssh -t mini claude setup-token`",
+            ),
+        ] {
+            let fake = Fake::new(vec![ok("/Users/u"), ok(&out)]);
+            let r = run_preflight(&fake, "mini", "/p");
+            let last = r.checks.last().unwrap();
+            assert!(!last.ok, "{out:?}");
             assert!(last.message.contains(want), "{out:?} → {:?}", last.message);
         }
     }

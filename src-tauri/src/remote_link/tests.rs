@@ -2449,7 +2449,7 @@ fn a_refresh_that_answered_writes_the_cache_once() {
         settle_refresh(&h.reg, "me@mini-host", Ok(out)),
         RefreshOutcome::Checked {
             substrate: dev.clone(),
-            drift: Some(Drift::Behind { head: a, remote: b }),
+            drift: Some(Drift::Differs { head: a, remote: b }),
         }
     );
     assert_eq!(h.reg.substrate("me@mini-host"), dev);
@@ -2459,7 +2459,21 @@ fn a_refresh_that_answered_writes_the_cache_once() {
         .iter()
         .map(|e| (e.host.clone(), e.substrate.clone()))
         .collect();
-    assert_eq!(events, vec![("me@mini-host".to_string(), dev)]);
+    assert_eq!(events, vec![("me@mini-host".to_string(), dev.clone())]);
+
+    // M18 WP6 — the exec answered but the PROBE did not (the script echoes `substrate-probed`
+    // before the probe runs): a known host must stay known, with no event.
+    seen.lock().unwrap().clear();
+    assert!(matches!(
+        settle_refresh(&h.reg, "me@mini-host", Ok(format!("{s}substrate-probed\n"))),
+        RefreshOutcome::Failed { .. }
+    ));
+    assert_eq!(
+        h.reg.substrate("me@mini-host"),
+        dev,
+        "an answerless probe must not demote a known host to Unknown"
+    );
+    assert!(seen.lock().unwrap().is_empty(), "and it sends no event");
 
     // An Absent host: cached, and no drift to report.
     assert_eq!(
@@ -2473,4 +2487,48 @@ fn a_refresh_that_answered_writes_the_cache_once() {
             drift: None
         }
     );
+}
+
+/// M18 WP6 — a Recycle's bypass re-read writes the cached answer only when the HOST answered
+/// (the `bypass-probed` marker came back): `false` → `true` flips it, and a link that is not Up, a
+/// failed exec or an answerless one leaves it as it was.
+#[test]
+fn a_bypass_refresh_writes_the_cache_only_when_the_host_answered() {
+    use super::commands::settle_bypass_refresh;
+    use crate::subprocess::RunError;
+    let h = harness();
+    let key = "ssh://me@mini-host/Users/me/p";
+    let s = crate::remote_cmd::OPEN_SENTINEL;
+    h.reg.set_open_bypass(key, false);
+
+    for kept in [
+        Err(CloseExecError::LinkNotUp),
+        Err(CloseExecError::Run(RunError::TimedOut(10_000))),
+        Ok(String::new()),
+        Ok(format!("{s}bypass-accepted:yes\n")),
+    ] {
+        assert_eq!(settle_bypass_refresh(&h.reg, key, kept), None);
+        assert!(!h.reg.open_bypass(key), "an unanswered read keeps `false`");
+    }
+
+    let yes = format!("{s}bypass-probed\n{s}bypass-accepted:yes\n");
+    assert_eq!(settle_bypass_refresh(&h.reg, key, Ok(yes)), Some(true));
+    assert!(
+        h.reg.open_bypass(key),
+        "accepted since the open check: now true"
+    );
+
+    // And back: the host answered, without the yes line.
+    assert_eq!(
+        settle_bypass_refresh(&h.reg, key, Ok(format!("{s}bypass-probed\n"))),
+        Some(false)
+    );
+    assert!(!h.reg.open_bypass(key));
+    // An unanswered read after a `false` keeps `false`; after a `true` it keeps `true`.
+    h.reg.set_open_bypass(key, true);
+    assert_eq!(
+        settle_bypass_refresh(&h.reg, key, Err(CloseExecError::LinkNotUp)),
+        None
+    );
+    assert!(h.reg.open_bypass(key));
 }

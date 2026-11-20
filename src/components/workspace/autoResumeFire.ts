@@ -58,7 +58,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { encodeBase64 } from "../../cc/bridge";
-import { remoteAuthority } from "../../state/workspaceSurfaces";
+import { isRemoteKey, remoteAuthority } from "../../state/workspaceSurfaces";
 import { shortHost } from "../picker/remoteRow";
 import {
   INJECT_SETTLE_MS,
@@ -139,6 +139,28 @@ export async function readFolderTrust(
       e,
     );
     return false;
+  }
+}
+
+/**
+ * M18 WP6 — re-read a REMOTE row's bypass-warning answer from its host before a decision
+ * that would otherwise use the last open check's answer (the Rust `remote_bypass_refresh`). A
+ * Recycle runs no open check, so an operator who accepted the warning since the open would keep
+ * being told it was not accepted
+ * (`SURFACE-2026-11-18-QUALITY-REMOTE-BYPASS-ANSWER-STALE-ACROSS-RECYCLE`).
+ *
+ * A local key costs nothing (no IPC). Never rejects: a failure keeps the cached answer, which
+ * withholds (fails safe).
+ */
+export async function refreshRemoteBypass(projectPath: string): Promise<void> {
+  if (!isRemoteKey(projectPath)) return;
+  try {
+    await invoke("remote_bypass_refresh", { projectPath });
+  } catch (e) {
+    console.warn(
+      `recycle: re-reading the bypass-warning state for ${projectPath} failed`,
+      e,
+    );
   }
 }
 

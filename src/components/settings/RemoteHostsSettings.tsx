@@ -130,7 +130,7 @@ function driftLine(
       const d = check.drift;
       if (d === null) return null;
       if (d.drift === "up_to_date") return "Up to date with GitHub.";
-      if (d.drift === "behind") {
+      if (d.drift === "differs") {
         return `Behind GitHub: this host is at ${shortSha(d.head)}, GitHub at ${shortSha(d.remote)}.`;
       }
       return `Can't check: ${d.reason}`;

@@ -43,12 +43,12 @@ describe("hostReadoutLines — the readout's words, as values", () => {
     });
   });
 
-  it("behind: both short SHAs, the host's first", () => {
+  it("differs: both short SHAs, the host's first", () => {
     expect(
       hostReadoutLines(DEV, true, {
         outcome: "checked",
         substrate: DEV,
-        drift: { drift: "behind", head: A, remote: B },
+        drift: { drift: "differs", head: A, remote: B },
       }).drift,
     ).toBe("Behind GitHub: this host is at aaaaaaa, GitHub at bbbbbbb.");
   });
@@ -202,7 +202,7 @@ describe("the Remote hosts group, on the real panel", () => {
       refresh: () => ({
         outcome: "checked",
         substrate: DEV,
-        drift: { drift: "behind", head: A, remote: B },
+        drift: { drift: "differs", head: A, remote: B },
       }),
     });
     const group = panel.querySelector(GROUP);

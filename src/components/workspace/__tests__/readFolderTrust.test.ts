@@ -9,8 +9,12 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
-const { fireAutoResume, readFolderTrust, readBypassCleared } =
-  await import("../autoResumeFire");
+const {
+  fireAutoResume,
+  readFolderTrust,
+  readBypassCleared,
+  refreshRemoteBypass,
+} = await import("../autoResumeFire");
 
 beforeEach(() => {
   invokeMock.mockReset();
@@ -138,6 +142,35 @@ describe("readBypassCleared", () => {
       "folder_trusted",
       "bypass_dialog_cleared",
     ]);
+    warn.mockRestore();
+  });
+});
+
+// M18 WP6 — Recycle's re-read of a REMOTE row's bypass answer before it decides
+// (`SURFACE-2026-11-18-QUALITY-REMOTE-BYPASS-ANSWER-STALE-ACROSS-RECYCLE`). A local key must cost
+// nothing, and no failure may reject: Recycle awaits it on the restore path.
+describe("refreshRemoteBypass", () => {
+  const REMOTE = "ssh://me@mini-host/Users/me/p";
+
+  it("makes NO IPC for a local key", async () => {
+    await refreshRemoteBypass("/u/proj");
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("asks the host about THIS remote row", async () => {
+    invokeMock.mockResolvedValue(true);
+    await refreshRemoteBypass(REMOTE);
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith("remote_bypass_refresh", {
+      projectPath: REMOTE,
+    });
+  });
+
+  it("resolves — never rejects — when the IPC fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    invokeMock.mockRejectedValue(new Error("link down"));
+    await expect(refreshRemoteBypass(REMOTE)).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
 });

@@ -491,6 +491,15 @@ pub async fn remote_substrate_refresh(
 
 /// A refresh exec's result → the outcome, writing the cache ONLY when the host answered (D3): the
 /// same `set_substrate` the open check uses, so every `useHostSubstrate` hears the change.
+///
+/// ⚠️ "Answered" means the PROBE answered, not just the exec. The refresh script prints
+/// `substrate-probed` before the probe runs, so a probe that printed nothing (no perl, a broken
+/// read) still parses, as `Unknown`. Settings is a read-only readout: an `Unknown` from it must
+/// never demote a known host, because Unknown fails CLOSED in the funnel and would hide the
+/// workflow surfaces of every open workspace on that host (M18 WP6,
+/// `SURFACE-2026-11-20-QUALITY-SETTINGS-REFRESH-WRITES-UNKNOWN-OVER-A-KNOWN-HOST`). It answers
+/// `Failed` and leaves the cache as it was. The open check is different: it writes `Unknown` (WP4
+/// D5), because it is deciding a fresh open.
 pub(crate) fn settle_refresh(
     links: &LinkRegistry,
     host: &str,
@@ -511,11 +520,62 @@ pub(crate) fn settle_refresh(
         };
     };
     let substrate = crate::remote_substrate::HostSubstrate::from_read(&facts.substrate);
+    if substrate == crate::remote_substrate::HostSubstrate::Unknown {
+        return RefreshOutcome::Failed {
+            reason: "the host's substrate probe printed no answer".to_string(),
+        };
+    }
     links.set_substrate(host, substrate.clone());
     RefreshOutcome::Checked {
         drift: crate::remote_substrate::Drift::decide(&substrate, facts.drift.as_ref()),
         substrate,
     }
+}
+
+/// M18 WP6 — re-read the remote account's bypass-warning answer for `project_path`, so a
+/// Recycle respawn decides on today's answer, not the last open check's
+/// (`SURFACE-2026-11-18-QUALITY-REMOTE-BYPASS-ANSWER-STALE-ACROSS-RECYCLE`: accepting the warning
+/// wrote the key on the host, but every later Recycle still withheld `/session-restore`).
+///
+/// Answers `Some(accepted)` when the host answered (now cached), `None` when nothing could be read:
+/// a local key, a row that is gone, a link that is not Up, or a failed exec. `None` keeps the cached
+/// answer, which fails safe (one typed command, never a lost session). Up-only and master-only
+/// (`master_exec`): it never brings a link up.
+#[tauri::command]
+pub async fn remote_bypass_refresh(
+    app: AppHandle,
+    links: State<'_, SharedLinks>,
+    project_path: String,
+) -> Result<Option<bool>, String> {
+    if config_store::split_remote_key(&project_path).is_none() {
+        return Ok(None);
+    }
+    let dir = resolve_data_dir(&app)?;
+    let links = Arc::clone(&links);
+    crate::blocking::on_blocking_worker("re-reading the bypass warning", move || {
+        let Ok(target) = target_for(&dir, &project_path) else {
+            return Ok(None);
+        };
+        let out = links.master_exec(
+            &target,
+            &crate::remote_cmd::bypass_refresh_command(),
+            super::EXEC_TIMEOUT_MS,
+        );
+        Ok(settle_bypass_refresh(&links, &project_path, out))
+    })
+    .await
+}
+
+/// A bypass re-read's result → the cached answer. Writes ONLY when the host answered (the
+/// `bypass-probed` marker came back); every other outcome leaves the cache as it was.
+pub(crate) fn settle_bypass_refresh(
+    links: &super::LinkRegistry,
+    key: &str,
+    out: Result<String, super::CloseExecError>,
+) -> Option<bool> {
+    let accepted = crate::remote_cmd::parse_bypass_refresh(&out.ok()?)?;
+    links.set_open_bypass(key, accepted);
+    Some(accepted)
 }
 
 /// The notice the last open check left for the workspace it opened (M17 WP5, AC-2.3), taken once,
@@ -806,6 +866,39 @@ mod tests {
             ],
             "{settle_body}"
         );
+    }
+
+    /// M18 WP6 — the cached bypass answer has exactly TWO writers: the open check's settle and
+    /// the Recycle re-read's settle. `remote_bypass_refresh` reaches the cache only through its
+    /// settle, and nothing else in the crate writes it.
+    #[test]
+    fn the_bypass_answer_has_two_writers_each_a_settle() {
+        let code =
+            crate::workflow_install::source_guard::production_code(include_str!("commands.rs"));
+        assert_eq!(code.matches("set_open_bypass(").count(), 2, "{code}");
+        for settle in [
+            "pub(crate) fn settle_open_decision(",
+            "pub(crate) fn settle_bypass_refresh(",
+        ] {
+            assert!(
+                dense_body(include_str!("commands.rs"), settle).contains("set_open_bypass("),
+                "{settle} writes it"
+            );
+        }
+        let cmd = dense_body(
+            include_str!("commands.rs"),
+            "pub async fn remote_bypass_refresh(",
+        );
+        assert!(!cmd.contains("set_open_bypass("), "{cmd}");
+        assert!(
+            cmd.contains("Ok(settle_bypass_refresh(&links,&project_path,out))"),
+            "{cmd}"
+        );
+        assert!(
+            cmd.contains("links.master_exec("),
+            "Up-only, never a link bring-up: {cmd}"
+        );
+        assert!(!cmd.contains("ensure_and_hold("), "{cmd}");
     }
 
     /// M17 WP5 caller guard: the FIRST thing `folder_trusted` does is answer a remote row through

@@ -67,7 +67,11 @@ import {
 } from "../../state/workspaceStatus";
 import { markSessionClean } from "../../state/cleanExit";
 import { INJECT_SETTLE_MS } from "../../state/predictAction";
-import { injectCommand, readBypassCleared } from "./autoResumeFire";
+import {
+  injectCommand,
+  readBypassCleared,
+  refreshRemoteBypass,
+} from "./autoResumeFire";
 import { workspaceSurfaces } from "../../state/workspaceSurfaces";
 
 /** `.session.md`, project-relative. Mirrors Rust's `announce::SESSION_MD_REL`. */
@@ -266,6 +270,12 @@ export interface RecycleInputs {
     projectPath: string,
     ptySessionId: string,
   ) => Promise<boolean>;
+  /**
+   * M18 WP6 — re-read a REMOTE row's bypass answer from its host before {@link readBypass}
+   * decides (a Recycle runs no open check, so the cached answer is the last OPEN's). Defaults to
+   * `refreshRemoteBypass` (a no-op for a local key); injectable for tests. It never rejects.
+   */
+  readonly refreshBypass?: (projectPath: string) => Promise<void>;
 }
 
 /**
@@ -572,6 +582,11 @@ export async function recycleSession(
   // ⚠️ M18 WP2 — the fresh session may be sitting on CC's bypass-permissions warning, whose default
   // is "No, exit". Read AFTER the settle (the fire-time rule), and a withheld restore takes the
   // same reported path as a refused one: "recycled, now restore by hand".
+  // ⚠️ M18 WP6 — a REMOTE row's answer is cached from the last open check, and a Recycle runs
+  // none: re-read it from the host first, so an operator who accepted the warning since the open
+  // is not told otherwise. A failed re-read keeps the cached answer (withholds: fails safe).
+  await (inputs.refreshBypass ?? refreshRemoteBypass)(projectPath);
+  if (inputs.signal?.aborted) return { ok: false, reason: "aborted" };
   const bypassCleared = await (inputs.readBypass ?? readBypassCleared)(
     projectPath,
     freshSessionId,
@@ -618,7 +633,7 @@ async function injectRefusal(
  * sent: <this>. Run /session-restore yourself.").
  */
 export const RESTORE_WITHHELD_FOR_BYPASS =
-  'Claude Code is showing its Bypass Permissions warning, whose default "No, exit" would close it (pick "Yes, I accept" first)';
+  'Claude Code\'s Bypass Permissions warning has not been accepted, and its default "No, exit" would close the session (pick "Yes, I accept" first)';
 
 /**
  * How long to wait for the respawn to publish a new session id.

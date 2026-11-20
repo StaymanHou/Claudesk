@@ -540,6 +540,7 @@ pub fn run() {
             remote_link::commands::remote_host_substrates,
             remote_link::commands::remote_hosts,
             remote_link::commands::remote_substrate_refresh,
+            remote_link::commands::remote_bypass_refresh,
             cc_session::commands::cc_spawn_remote,
             cc_session::commands::cc_inject,
             config_store::commands::record_open,

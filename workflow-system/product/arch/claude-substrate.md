@@ -259,7 +259,7 @@ What the build settled (the WP5 WIP's D1–D9, archived as `m18-wp5-remote-hosts
   ⚠️ The `-n` test only bites for empty output with exit 0 (the assignment's own status catches exit 2); a test drives that arm.
   WP6's preflight reuses the constant.
 - **The drift line:** `drift-remote:<sha>`, or `drift-error:no-devtools | no-origin | git:<last line>`. `remote_substrate::Drift`
-  (`up_to_date | behind | cant_check`) compares FULL heads; `behind` means "differs" (no fetch, D6). Absent / Unknown → no drift at all.
+  (`up_to_date | differs | cant_check`; `differs` was `behind` until M18 WP6 P1.2) compares FULL heads; `differs` means only that they differ (no fetch, D6). Absent / Unknown → no drift at all.
 - **Commands:** `remote_hosts` (sync: the distinct hosts of the VALID remote rows, each with `link_up` + its cached substrate) and async
   `remote_substrate_refresh(host)` over `LinkRegistry::master_exec` (Up-only, master-only; a caller guard pins it as the only `links.`
   call). A down link answers `link_down` and sends nothing; a host that is not a row's host is refused before any exec. An answer writes
@@ -272,9 +272,8 @@ What the build settled (the WP5 WIP's D1–D9, archived as `m18-wp5-remote-hosts
 - **5.2b:** the absent-host note's button calls `onOpenSettings("remote-hosts")` (required on `CenterStage` / `Workspace`); App's
   `openSettingsAt` sets the highlight, and `SettingsGroup` scrolls a highlighted group into view. **D8:** every close (button, Esc, the ⌘,
   toggle) clears App's `settingsHighlight`; before WP5 nothing did, so every open after the invite re-flashed Workflow features.
-- ⚠️ Open (backlogged at WP5 review): an answerless refresh writes `Unknown` over a known host
-  (`SURFACE-2026-11-20-QUALITY-SETTINGS-REFRESH-WRITES-UNKNOWN-OVER-A-KNOWN-HOST`), and `Drift::Behind` should become `Differs` before
-  WP7 reads it.
+- ✅ Fixed at M18 WP6 Phase 1: a refresh whose PROBE printed no answer leaves the cache as it was and answers `Failed` (a read-only
+  readout never demotes a known host; the open check still writes `Unknown`, WP4 D5), and `Drift::Behind` is now `Differs`.
 
 ### R.6 Preflight, for a fresh host account (what an install actually meets next)
 
