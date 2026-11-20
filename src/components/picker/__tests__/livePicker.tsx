@@ -11,6 +11,7 @@
 // ⚠️ The gate moves through the seam's BROADCAST (`setGate`), never by answering its seed command
 // by name: the OFF-invariant guard allows exactly one door to the gate setting.
 import { act, type ReactNode } from "react";
+import { resetHostSubstrateStoreForTests } from "../../../state/useHostSubstrate";
 import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
@@ -79,6 +80,8 @@ export async function teardownLive(): Promise<void> {
   host?.remove();
   root = null;
   host = null;
+  // M18 WP4: the host-substrate store is module state; it must not leak into the next test.
+  resetHostSubstrateStoreForTests();
   clearMocks();
 }
 

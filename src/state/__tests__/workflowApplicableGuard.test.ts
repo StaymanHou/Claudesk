@@ -113,6 +113,137 @@ function checkCall(flat: string, i: number): string | null {
     : `binding \`${x}\` read bare: ${bare.map((j) => flat.slice(Math.max(0, j - 30), j + x.length + 10)).join(" | ")}`;
 }
 
+// ── M18 WP4 (D7) — the funnel's THIRD input, at every call site ────────────────────────────────
+//
+// A consumer that drops the host, or passes a literal `"local"`, would make a REMOTE workspace on a
+// skill-less host read as applicable. `tsc` catches a dropped argument; it cannot catch a literal
+// (a widened argument breaks no type). So every production `isWorkflowApplicable(` call must pass
+// a host that comes from the seam: a hook-bound identifier (`const x = useHostSubstrate(…)`), or
+// an inline `hostSubstrateFor(` / `hostFromOpenCheck(` / `useHostSubstrate(` call — and never
+// the string `"local"` anywhere in that argument.
+
+const FUNNEL = "isWorkflowApplicable(";
+const HOST_SOURCES = [
+  "useHostSubstrate(",
+  "hostSubstrateFor(",
+  "hostFromOpenCheck(",
+];
+
+/** The top-level arguments of the call whose `(` is at `open` (flattened text). */
+export function topLevelArgs(flat: string, open: number): string[] | null {
+  const args: string[] = [];
+  let depth = 0;
+  let start = open + 1;
+  for (let i = open; i < flat.length; i++) {
+    const c = flat[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") {
+      depth--;
+      if (depth === 0) {
+        const last = flat.slice(start, i);
+        // A trailing comma (Prettier's) is not an argument.
+        if (last !== "" || args.length === 0) args.push(last);
+        return args;
+      }
+    } else if (c === "," && depth === 1) {
+      args.push(flat.slice(start, i));
+      start = i + 1;
+    }
+  }
+  return null;
+}
+
+/** A violation for one funnel call's host argument, or null. */
+export function checkHostArg(
+  flat: string,
+  host: string | undefined,
+): string | null {
+  if (host === undefined || host === "") return "no host argument";
+  if (host.includes('"local"') || host.includes("'local'"))
+    return `a literal "local" host: ${host}`;
+  if (HOST_SOURCES.some((src) => host.includes(src))) return null;
+  if (/^[A-Za-z_$][\w$]*$/.test(host)) {
+    const bound = new RegExp(
+      `const${host.replace(/\$/g, "\\$")}(?::[A-Za-z_$][\\w$<>.|]*)?=(${HOST_SOURCES.map(
+        (x) => x.replace("(", "\\("),
+      ).join("|")})`,
+    );
+    return bound.test(flat)
+      ? null
+      : `host \`${host}\` is not bound from the seam`;
+  }
+  return `host argument not from the seam: ${host}`;
+}
+
+/** Every production funnel call in `flat` with its host-argument violation (or null). */
+export function funnelCalls(
+  flat: string,
+): { host: string; violation: string | null }[] {
+  const out: { host: string; violation: string | null }[] = [];
+  for (
+    let i = flat.indexOf(FUNNEL);
+    i !== -1;
+    i = flat.indexOf(FUNNEL, i + 1)
+  ) {
+    if (flat.slice(Math.max(0, i - 8), i) === "function") continue;
+    if (flat.slice(Math.max(0, i - 6), i) === "export") continue;
+    const args = topLevelArgs(flat, i + FUNNEL.length - 1);
+    const host = args?.[2];
+    out.push({
+      host: host ?? "",
+      violation:
+        args === null || args.length !== 3
+          ? `${args?.length ?? "?"} arguments, not 3`
+          : checkHostArg(flat, host),
+    });
+  }
+  return out;
+}
+
+describe("workflow-applicability funnel — every call passes a seam host (M18 WP4)", () => {
+  const funnelFiles = files.filter(
+    (f) => f.rel !== "state/workflowApplicable.ts" && f.flat.includes(FUNNEL),
+  );
+
+  it("every production funnel call passes three arguments, the third from the seam", () => {
+    const violations = funnelFiles.flatMap((f) =>
+      funnelCalls(f.flat)
+        .filter((c) => c.violation !== null)
+        .map((c) => `${f.rel}: ${c.violation}`),
+    );
+    expect(violations).toEqual([]);
+  });
+
+  it("REVERSE: every known router makes at least one seam-host funnel call (not vacuous)", () => {
+    for (const rel of KNOWN_ROUTED) {
+      const f = funnelFiles.find((x) => x.rel === rel);
+      expect(f, `${rel} no longer calls the funnel`).toBeDefined();
+      const calls = funnelCalls(f!.flat);
+      expect(calls.length, rel).toBeGreaterThan(0);
+      expect(
+        calls.every((c) => c.violation === null),
+        rel,
+      ).toBe(true);
+    }
+  });
+
+  it("the host check itself bites (each form, on its own)", () => {
+    const hook = "constwsHost=useHostSubstrate(p);";
+    const call = (host: string) =>
+      funnelCalls(`${hook}isWorkflowApplicable(g,profile${host})`)[0].violation;
+    expect(call(",wsHost")).toBeNull();
+    expect(call(",hostSubstrateFor(p,map)")).toBeNull();
+    expect(call(",x?hostFromOpenCheck(x):hostSubstrateFor(p,map)")).toBeNull();
+    // A dropped host, a literal, a literal hidden in a ternary arm, an unbound identifier.
+    expect(call("")).toMatch(/2 arguments/);
+    expect(call(",wsHost,")).toBeNull(); // a trailing comma is not a fourth argument
+    expect(call(',"local"')).toMatch(/literal/);
+    expect(call(',x?"local":hostSubstrateFor(p,map)')).toMatch(/literal/);
+    expect(call(",someHost")).toMatch(/not bound/);
+    expect(call(',{state:"developer"}')).toMatch(/not from the seam/);
+  });
+});
+
 describe("workflow-applicability funnel — every caller routes (F-b ruling 4)", () => {
   it("every non-allowlisted call is wrapped, or bound and routed at every read", () => {
     const violations: string[] = [];

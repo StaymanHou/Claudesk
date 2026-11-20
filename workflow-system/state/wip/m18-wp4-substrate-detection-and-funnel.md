@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP4 — Substrate detection and the funnel's third input
 
 **Workflow:** feature
-**State:** verify-codify (phase 1 complete)
+**State:** verify-codify (phase 2 complete)
 **Created:** 2026-11-20
 **WBS:** `workflow-system/product/wbs.md` → "WP4: Detection and the funnel's third input (+ the absent-host note)"
 **Design:** `workflow-system/product/arch/claude-substrate.md` → "Remote hosts (M18)" §R.1, §R.2, §R.8
@@ -95,6 +95,18 @@ not in WP4.
   This is fail closed, per §R.1. It is a visible change for the tank row until its first open, so it is an Alignment
   question.
 
+- **D10 — the open check's restore arm and the picker's open (added at P2 build, 2026-11-20).**
+  - **The open check** produces the host input, so it cannot read it before probing. It decides "probe at all?" with
+    `workflow_applicable_before_host_probe` (gate ∧ default profile). It then applies the full funnel to what it
+    probed: restore = `.session.md` ∧ `workflow_applicable(probed, None, Remote(substrate))`. That is ONE control,
+    because "it probed" IS the pre-host gate as the exec observed it. A second gate param would mask the first (the
+    redundant-controls pattern).
+  - **The picker's remote START** takes its host input from the check's own answer: the new
+    `StartSignals.hostSubstrate`, read through `hostFromOpenCheck`. The cached map is not used there. Found at build:
+    the map is the last render's value, from before this check wrote the cache, and the `remote-substrate` event is not
+    ordered against the command's response. With the map, the first remote open after a launch would have dropped
+    `/session-restore` on a host that has the workflow system.
+
 ## Work Tree
 
 - [x] Phase 1: Detection — `SUBSTRATE_PROBE`, `OpenFacts.substrate`, the per-host cache, the `remote-substrate` event
@@ -173,7 +185,7 @@ not in WP4.
     integration ok. The first run failed only `cargo fmt --check` on the new fixture's layout (a reflow, fixed by
     `cargo fmt`); no test logic changed.
 
-- [ ] Phase 2: The funnel's third input — Rust + TS, every consumer migrated, the guard extended  <!-- status: in-progress -->
+- [x] Phase 2: The funnel's third input — Rust + TS, every consumer migrated, the guard extended
   **Observable outcomes:**
   - CLI: `cargo test workflow_applicable` shows a truth table over gate × profile × host, where host ∈
     {Local, Absent, Unknown, Developer, Managed}. Applicable is exactly gate ∧ default ∧ (Local ∨ Developer ∨ Managed).
@@ -199,16 +211,46 @@ not in WP4.
   - (decision) D9 in action: after a fresh app launch, the tank/scratch remote rows show **no drive-mode cell** until
     that host has been open-checked once in this app session (fail closed). Is that acceptable, or should the picker
     row keep showing the stored cell for remote rows?
-  - [ ] P2.1 Rust `workflow_applicable(gate, profile, host: HostInput)` (`Local | Remote(&HostSubstrate)`) + its truth-table test  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 (also remove the temporary `allow(dead_code)` on `LinkRegistry::substrate`) Migrate the Rust consumers (spawn env, `remote_open_check`'s arm decision via `decide_open`, the poller's `gate_on`, announce) + a behavioural test each  <!-- status: NOT-STARTED -->
-  - [ ] P2.3 TS `isWorkflowApplicable(gate, profile, host)` + its mirror table; migrate `Workspace.tsx` (×2), `RightPanelHost.tsx`, `ProjectPicker.tsx` (×2, via `useHostSubstrates`), `ProjectModelCell.tsx`  <!-- status: NOT-STARTED -->
-  - [ ] P2.4 Extend `workflowApplicableGuard` (D7) + mutation-prove each form individually  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P2.1 Rust `workflow_applicable(gate, profile, host: HostInput)` (`Local | Remote(&HostSubstrate)`) + its truth-table test  <!-- status: done -->
+  - [x] P2.2 (also remove the temporary `allow(dead_code)` on `LinkRegistry::substrate`) Migrate the Rust consumers (spawn env, `remote_open_check`'s arm decision via `decide_open`, the poller's `gate_on`, announce) + a behavioural test each  <!-- status: done -->
+  - [x] P2.3 TS `isWorkflowApplicable(gate, profile, host)` + its mirror table; migrate `Workspace.tsx` (×2), `RightPanelHost.tsx`, `ProjectPicker.tsx` (×2, via `useHostSubstrates`), `ProjectModelCell.tsx`  <!-- status: done -->
+  - [x] P2.4 Extend `workflowApplicableGuard` (D7) + mutation-prove each form individually  <!-- status: done -->
+    — build evidence: 4 forms, each alone on a real consumer, each turning the guard red (`Tests 2 failed | 4 passed`)
+    and each restored with a matching sha: `Workspace.tsx` given a literal `"local"`, `RightPanelHost.tsx` with the
+    host dropped, `ProjectPicker.tsx` passing `undefined` (not from the seam), and `ProjectModelCell.tsx` with an unbound
+    identifier.
+  - [x] P2.5 (added at build, D10) `StartSignals.host_substrate` → the picker's remote start uses `hostFromOpenCheck`; the live-picker test adds the host-absent and not-probed cases  <!-- status: done -->
+  - [x] verify-auto  <!-- status: done -->
+    — evidence: `pnpm verify:auto` → EXIT=0 (65s), after `prettier --write` + `cargo fmt`. It reports vitest 322 files /
+    4126 tests passed (incl. the 30-row TS truth table, the extended `workflowApplicableGuard` 6/6, `remoteRightPanelLive`
+    with its 2 new host-absent / not-probed cases, `pickerRemoteLive` with its 2 new cases), lib 1401 passed (incl.
+    the 30-row Rust truth table + pre-probe rows, `a_remote_spawn_withholds_the_drive_mode_unless_its_host_has_the_substrate`,
+    `the_poll_gate_reads_the_hosts_substrate_through_the_funnel`, the open check's absent / unknown / not-probed restore
+    cases, the announce absent / unknown host cases), integration ok, clippy `-D warnings` + `fmt --check` clean.
+    ESLint's 1 warning is pre-existing (`XtermPane.tsx:988`).
+  - [x] verify-self  <!-- status: done -->
+    - [x] vs.1 Rust truth table (runner)  — evidence: `cargo test --lib profile_workflow_applicable_truth_table` → ok; read: 6 profile rows × 5 hosts, expected `gate && profile_ok && host_ok`; `workflow_applicable_before_host_probe` = `gate && profile_ok`
+    - [x] vs.2 per-consumer behaviour, Absent + Unknown closed with a Developer positive control (runner)  — evidence: spawn env `a_remote_spawn_withholds_the_drive_mode_unless_its_host_has_the_substrate` ok; open check `a_dead_session_starts_with_the_remote_resume_signals` ok (absent / unknown / not probed → no restore); Docs poller `the_poll_gate_reads_the_hosts_substrate_through_the_funnel` ok (real `AppEnv` + `LinkRegistry`); announce `a_remote_row_is_announced_from_its_local_record_and_flag` ok (reconnect@fsd only with Developer; lookup asked about the row's own host)
+    - [x] vs.3 TS mirror + hook (runner)  — evidence: `vitest run workflowApplicable.test.ts useHostSubstrate.test.tsx` → 42 passed; the TS table equals Rust's row for row; local key → `calls == []` with events unmocked, plus the remote positive control; seed then own-host event flips, other host's ignored
+    - [x] vs.4 guard mutation-proven per form (runner, independent of the build's 4 forms)  — evidence: M-a `Workspace.tsx` first call's host → `"local"` → `Tests 2 failed | 4 passed`; M-b `ProjectPicker.tsx` PickerRow call's host dropped → `Tests 2 failed | 4 passed`; each restored by sha (05ff2bf3…, f9dbb7f0…); restored tree 6/6; a REVERSE check over `KNOWN_ROUTED` exists
+    - [x] vs.5 picker start takes the check's host; Docs closed on an absent / unprobed host (runner)  — evidence: `vitest run pickerRemoteLive remoteRightPanelLive` → 48 passed; read the absent / not-probed cases and their Developer positive controls
+    - [x] vs.6 `pnpm verify:auto` (runner, after the restores)  — evidence: EXIT=0; vitest 4126 passed; lib 1401 passed + 10 more `test result: ok.`
+    - [x] vs.7 CONSUMING SURFACES live, dev build, gate ON, scratch row `<user>@<mini-host>:~/claudesk-scratch-remote` (orchestrator, bridge; a real CC session in the scratch folder, closed after)  — evidence: picker click → open check → workspace `ws-1`. Visible: `workspace-skill-row` 1, `workspace-skill-session-start` 1, `workspace-skill-session-restore` 1, `workspace-recycle` 1, `panel-tab-docs` 1. `remote_host_substrates` → `{<user>: "developer"}`. Screenshot `scratchpad/wp4/p2-remote-developer.jpg`: skill row start·clear·restore·capture·prune·paydown·recycle, Docs tab, remote CC in `~/claudesk-scratch-remote`. LOCAL positive control: `scratch-c` (default profile) opened → skill row, Session-Start, Recycle and Docs present. Both closed through `filmstrip-close-*`. Sweep: no `claudesk-dev` tmux server, only prod's `ssh -M` (tank), live account 48 links + `CLAUDE.md` `539e1b95…` unchanged, dev files restored (`b30fd5f8…` / `0fc30928…`)
+    - [x] align: (decision) D9 — remote rows have no drive-mode cell until their host is open-checked once in the app session  — evidence (CAPTURED): fresh launch, gate ON. BEFORE any check, both remote rows lack `picker-recent-mode-line`, while the default-profile local rows (scratch-c, yitang-copy, claudesk, my-claude-code-customization, areo-test-proty-1) have it. AFTER opening the scratch row (its host → developer), that row has `picker-recent-mode-line` = true. The other remote row (a different account, never probed) still has none. Screenshot `scratchpad/wp4/p2-picker-d9.jpg`: the unprobed remote row reads "Model: Default" with no "Drive Mode" line; local rows read "Drive Mode: None".
+  - [x] verify-human  <!-- status: done -->
+    - [x] P2.verify-human.1 (decision, D9) remote rows show no drive-mode cell until their host has been open-checked once in this app session — **operator ruling 2026-11-20: A (keep: fail closed)**; the cell appears once the host is known
+  - [x] verify-codify  <!-- status: done -->
+    Test scope: full — suite not long (`runtimes.md` → `pnpm verify:auto` Last 65s)
+    — evidence: ONE new test, for the one verified behaviour with no regression test:
+    `pickerRemoteLive.test.tsx` → "a remote row's drive-mode line appears only once its host is known to have the
+    workflow system". It is the D9 ruling A, picker-level: unknown → absent, a Developer event → present, an absent
+    event → absent, another host's event ignored, with the local row as positive control. It KILLS a mutant giving
+    `ProjectModelCell` a `"local"` host (`Tests 1 failed`; file restored, sha matched). `livePicker.teardownLive` now
+    resets the host-substrate store, which is module state. Everything else is already pinned (see verify-self vs.1–vs.6).
+    Consuming surfaces: `remote_open_check` (restore arm), the picker rows/open, `Workspace` / `RightPanelHost`, the
+    spawn env, the poller. `pnpm verify:auto` → EXIT=0 (64s): vitest 4127 passed, lib 1401 passed.
 
-- [ ] Phase 3: The absent-host note, the OFF-invariant pin 6/11, the count sweep, and the live skill-less check  <!-- status: NOT-STARTED; depends on Phase 2 -->
+- [ ] Phase 3: The absent-host note, the OFF-invariant pin 6/11, the count sweep, and the live skill-less check  <!-- status: in-progress -->
   **Observable outcomes:**
   - CLI: `pnpm vitest run offInvariantGuard`. Arm 5 now lists `showAbsentHostNote` as its own subject; the pin asserts
     **6 arms / 11 subjects**. Mutation-proven on its own: making the note's predicate ignore the gate turns arm 5 red
@@ -258,10 +300,10 @@ not in WP4.
   and removed after (state-changing, declared).
 
 ## Current Node
-- **Path:** Feature > Phase 2 > P2.1
-- **Active scope:** P2.1 (Rust `workflow_applicable(gate, profile, host)` + truth table)
+- **Path:** Feature > Phase 3 > P3.1
+- **Active scope:** P3.1 (`isWorkflowHostBlocked` + `showAbsentHostNote` + the note's render)
 - **Blocked:** none
-- **Unvisited:** Phase 2 (P2.2–P2.4, verify), Phase 3
+- **Unvisited:** Phase 3 (P3.2–P3.4, verify)
 - **Open discoveries:** none
 
 ## Discoveries

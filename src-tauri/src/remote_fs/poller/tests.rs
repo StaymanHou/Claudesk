@@ -67,6 +67,8 @@ impl RemoteExec for Scripted {
 struct Env {
     gate: AtomicBool,
     up: AtomicBool,
+    /// M18 WP4: every host the poller asked the funnel about.
+    gate_hosts: Mutex<Vec<String>>,
 }
 
 impl Env {
@@ -74,12 +76,14 @@ impl Env {
         Arc::new(Self {
             gate: AtomicBool::new(gate),
             up: AtomicBool::new(up),
+            gate_hosts: Mutex::new(Vec::new()),
         })
     }
 }
 
 impl PollEnv for Env {
-    fn gate_on(&self) -> bool {
+    fn gate_on(&self, host: &str) -> bool {
+        self.gate_hosts.lock().unwrap().push(host.to_string());
         self.gate.load(Ordering::SeqCst)
     }
     fn link_up(&self, _host: &str) -> bool {
@@ -253,6 +257,12 @@ fn gate_off_or_link_down_runs_no_exec_and_the_first_up_tick_emits_what_changed_m
         exec.count(),
         1,
         "gate OFF and link down each cost zero execs"
+    );
+    // M18 WP4: the funnel is asked about THIS tick's host (its substrate is the third input).
+    assert!(
+        env.gate_hosts.lock().unwrap().iter().all(|h| h == HOST),
+        "{:?}",
+        env.gate_hosts.lock().unwrap()
     );
     assert!(got.lock().unwrap().is_empty());
 

@@ -250,7 +250,11 @@ fn remote_announcement(
 /// Every degraded read (unreadable `projects.json`, missing `session-state.json`) yields
 /// *fewer* predictions rather than an error: the failure direction is "no auto-fire", which
 /// costs a click, versus a spurious fire that acts on the user's session unasked.
-pub fn announce_actions(data_dir: &Path, gate_enabled: bool) -> AnnounceMap {
+pub fn announce_actions(
+    data_dir: &Path,
+    gate_enabled: bool,
+    host_substrate: &dyn Fn(&str) -> crate::remote_substrate::HostSubstrate,
+) -> AnnounceMap {
     // ⚠️ NO EARLY RETURN ON `!gate_enabled` — deliberately removed 2026-08-05, and this is
     // the single most likely thing here to be "fixed" back. The unclean-flag arm is
     // UNGATED (see [`arm_available`]), so returning early would suppress an arm that is
@@ -275,17 +279,25 @@ pub fn announce_actions(data_dir: &Path, gate_enabled: bool) -> AnnounceMap {
         if project.is_remote() {
             let key = project.path.to_string_lossy().to_string();
             let unclean = session_state::is_unclean_keyed(&flags, &key);
-            let stored_mode = gate_enabled
+            // M18 WP4 — the row's drive mode is a workflow surface, so it reads THE funnel with
+            // the row's host as the third input (no workflow system there, or not yet probed →
+            // no mode to speak of; `reconnect` itself is ungated and stays).
+            let substrate = config_store::split_remote_key(&key)
+                .map(|(host, _)| host_substrate(host))
+                .unwrap_or(crate::remote_substrate::HostSubstrate::Unknown);
+            let row_gate = config_store::profiles::workflow_applicable(
+                gate_enabled,
+                None,
+                config_store::profiles::HostInput::Remote(&substrate),
+            );
+            let stored_mode = row_gate
                 .then_some(project.default_drive_mode)
                 .flatten()
                 .and_then(|m| serde_json::to_value(m).ok())
                 .and_then(|v| v.as_str().map(str::to_string));
-            if let Some(action) = remote_announcement(
-                records.get(&key),
-                unclean,
-                stored_mode.as_deref(),
-                gate_enabled,
-            ) {
+            if let Some(action) =
+                remote_announcement(records.get(&key), unclean, stored_mode.as_deref(), row_gate)
+            {
                 out.insert(key, action);
             }
             continue;
@@ -298,8 +310,11 @@ pub fn announce_actions(data_dir: &Path, gate_enabled: bool) -> AnnounceMap {
         // F-b ruling 4 — the gate is PER PROJECT. A row on a non-default profile has no workflow
         // layer, so the `/session-restore` arm is unavailable for it even with the gate ON; the
         // ungated `--continue` arm is unaffected. Read through the one predicate, never raw.
-        let project_gate =
-            config_store::profiles::workflow_applicable(gate_enabled, project.profile.as_deref());
+        let project_gate = config_store::profiles::workflow_applicable(
+            gate_enabled,
+            project.profile.as_deref(),
+            config_store::profiles::HostInput::Local,
+        );
         // ⚠️ THE STAT IS SKIPPED AS A *CONSEQUENCE* OF THE ARM BEING UNAVAILABLE — not by a
         // second, independent gate check. That distinction was found by mutation testing
         // and it matters:
@@ -370,6 +385,12 @@ pub fn apply_trust(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::remote_substrate::HostSubstrate;
+
+    /// The host lookup for a test whose rows are all local (it is never asked).
+    fn no_host(_: &str) -> HostSubstrate {
+        HostSubstrate::Unknown
+    }
     // M13 WP3 — the recycle round-trip test parses the wire string the frontend sends.
     use crate::session_state::CleanExitRoute;
     use std::fs;
@@ -404,13 +425,16 @@ mod tests {
         let data = data_dir_with(&[proj.path()]);
         let key = proj.path().to_string_lossy().to_string();
         assert_eq!(
-            announce_actions(data.path(), true)
+            announce_actions(data.path(), true, &no_host)
                 .get(&key)
                 .map(String::as_str),
             Some(ACTION_RESTORE)
         );
         config_store::set_project_profile(data.path(), proj.path(), Some("neo".into())).unwrap();
-        assert_eq!(announce_actions(data.path(), true).get(&key), None);
+        assert_eq!(
+            announce_actions(data.path(), true, &no_host).get(&key),
+            None
+        );
     }
 
     #[test]
@@ -421,7 +445,7 @@ mod tests {
         session_state::set_and_persist(data.path(), &proj.path().to_string_lossy());
         let key = proj.path().to_string_lossy().to_string();
         assert_eq!(
-            announce_actions(data.path(), true)
+            announce_actions(data.path(), true, &no_host)
                 .get(&key)
                 .map(String::as_str),
             Some(ACTION_CONTINUE)
@@ -443,7 +467,7 @@ mod tests {
         let proj = project_with_session_md();
         let data = data_dir_with(&[proj.path()]);
         assert!(
-            announce_actions(data.path(), false).is_empty(),
+            announce_actions(data.path(), false, &no_host).is_empty(),
             "gate OFF must suppress the RESTORE arm (this project has only .session.md); \
              the CONTINUE arm is deliberately ungated — see arm_available"
         );
@@ -465,7 +489,7 @@ mod tests {
         let data = TempDir::new().unwrap();
         fs::write(data.path().join("projects.json"), b"{ not json").unwrap();
         assert!(
-            announce_actions(data.path(), false).is_empty(),
+            announce_actions(data.path(), false, &no_host).is_empty(),
             "a corrupt store must fail toward 'no auto-fire' on the OFF path too"
         );
     }
@@ -490,13 +514,13 @@ mod tests {
         // below is not vacuous (a broken fixture would otherwise "pass" by predicting
         // nothing at all).
         assert_eq!(
-            announce_actions(data.path(), true).len(),
+            announce_actions(data.path(), true, &no_host).len(),
             2,
             "setup: both projects must predict with the gate ON, else the OFF assertions \
              below prove nothing"
         );
 
-        let off = announce_actions(data.path(), false);
+        let off = announce_actions(data.path(), false, &no_host);
         assert_eq!(
             off.get(&flagged.path().to_string_lossy().to_string())
                 .map(String::as_str),
@@ -539,7 +563,7 @@ mod tests {
         let data = data_dir_with(&[gone]);
         session_state::set_and_persist(data.path(), &gone.to_string_lossy());
 
-        let off = announce_actions(data.path(), false);
+        let off = announce_actions(data.path(), false, &no_host);
         assert_eq!(
             off.get(&gone.to_string_lossy().to_string())
                 .map(String::as_str),
@@ -619,7 +643,7 @@ mod tests {
     #[test]
     fn gate_on_with_no_projects_is_empty_not_an_error() {
         let data = TempDir::new().unwrap();
-        assert!(announce_actions(data.path(), true).is_empty());
+        assert!(announce_actions(data.path(), true, &no_host).is_empty());
     }
 
     // ── The three arms, end to end through the real store ────────────────────────
@@ -628,7 +652,7 @@ mod tests {
     fn a_project_with_only_session_md_announces_restore() {
         let proj = project_with_session_md();
         let data = data_dir_with(&[proj.path()]);
-        let map = announce_actions(data.path(), true);
+        let map = announce_actions(data.path(), true, &no_host);
         assert_eq!(
             map.get(&proj.path().to_string_lossy().to_string())
                 .map(String::as_str),
@@ -665,7 +689,7 @@ mod tests {
 
         // Precondition — without this the "silenced" assertion below could pass vacuously
         // (a project that never announced cannot stop announcing).
-        let before = announce_actions(data.path(), true);
+        let before = announce_actions(data.path(), true, &no_host);
         assert_eq!(
             before.get(&recycled_key).map(String::as_str),
             Some(ACTION_CONTINUE),
@@ -680,7 +704,7 @@ mod tests {
         assert_eq!(route, CleanExitRoute::RecycleSession);
         assert!(session_state::clear_and_persist(data.path(), &recycled_key));
 
-        let after = announce_actions(data.path(), true);
+        let after = announce_actions(data.path(), true, &no_host);
         assert_eq!(
             after.get(&recycled_key),
             None,
@@ -702,7 +726,7 @@ mod tests {
         let data = data_dir_with(&[proj.path()]);
         session_state::set_and_persist(data.path(), &proj.path().to_string_lossy());
 
-        let map = announce_actions(data.path(), true);
+        let map = announce_actions(data.path(), true, &no_host);
         assert_eq!(
             map.get(&proj.path().to_string_lossy().to_string())
                 .map(String::as_str),
@@ -716,7 +740,7 @@ mod tests {
     fn a_project_with_neither_signal_is_absent_from_the_map() {
         let proj = TempDir::new().unwrap();
         let data = data_dir_with(&[proj.path()]);
-        let map = announce_actions(data.path(), true);
+        let map = announce_actions(data.path(), true, &no_host);
         assert!(
             !map.contains_key(&proj.path().to_string_lossy().to_string()),
             "absent key means 'no prediction' — do not invent a third sentinel value"
@@ -737,7 +761,7 @@ mod tests {
         let data = data_dir_with(&[proj.path()]);
         session_state::set_and_persist(data.path(), &proj.path().to_string_lossy());
 
-        let map = announce_actions(data.path(), true);
+        let map = announce_actions(data.path(), true, &no_host);
         assert_eq!(
             map.get(&proj.path().to_string_lossy().to_string())
                 .map(String::as_str),
@@ -769,7 +793,7 @@ mod tests {
         ]);
         session_state::set_and_persist(data.path(), &continue_proj.path().to_string_lossy());
 
-        let map = announce_actions(data.path(), true);
+        let map = announce_actions(data.path(), true, &no_host);
         assert_eq!(
             map.len(),
             2,
@@ -794,7 +818,7 @@ mod tests {
         let data = TempDir::new().unwrap();
         fs::write(data.path().join("projects.json"), b"{ not json").unwrap();
         assert!(
-            announce_actions(data.path(), true).is_empty(),
+            announce_actions(data.path(), true, &no_host).is_empty(),
             "a corrupt store must degrade to 'no auto-fire', the safe direction"
         );
     }
@@ -803,7 +827,7 @@ mod tests {
     fn a_project_whose_directory_is_gone_announces_nothing() {
         // `prune_missing_projects` normally removes these, but the window exists.
         let data = data_dir_with(&[Path::new("/nonexistent/gone/project")]);
-        let map = announce_actions(data.path(), true);
+        let map = announce_actions(data.path(), true, &no_host);
         assert!(
             map.is_empty(),
             "a vanished project dir has no .session.md to find"
@@ -840,7 +864,7 @@ mod tests {
 
         // Non-vacuity: nothing announces before the producer runs.
         assert!(
-            announce_actions(data.path(), false).is_empty(),
+            announce_actions(data.path(), false, &no_host).is_empty(),
             "setup: a clean project must announce nothing, or the assertion below is vacuous"
         );
 
@@ -849,7 +873,7 @@ mod tests {
 
         // CONSUME via the real reader.
         assert_eq!(
-            announce_actions(data.path(), false)
+            announce_actions(data.path(), false, &no_host)
                 .get(&key)
                 .map(String::as_str),
             Some(ACTION_CONTINUE),
@@ -869,14 +893,14 @@ mod tests {
 
         session_state::set_and_persist(data.path(), &key);
         assert!(
-            !announce_actions(data.path(), false).is_empty(),
+            !announce_actions(data.path(), false, &no_host).is_empty(),
             "setup: the project must be announcing before the clean exit clears it"
         );
 
         session_state::clear_and_persist(data.path(), &key);
 
         assert!(
-            announce_actions(data.path(), false).is_empty(),
+            announce_actions(data.path(), false, &no_host).is_empty(),
             "a clean exit must silence the announcement — × clears, ⏸ declines to clear"
         );
     }
@@ -915,12 +939,12 @@ mod tests {
             let key = proj.path().to_string_lossy().to_string();
             session_state::set_and_persist(data.path(), &key);
             assert!(
-                !announce_actions(data.path(), false).is_empty(),
+                !announce_actions(data.path(), false, &no_host).is_empty(),
                 "{wire}: setup"
             );
             session_state::clear_and_persist(data.path(), &key);
             assert!(
-                announce_actions(data.path(), false).is_empty(),
+                announce_actions(data.path(), false, &no_host).is_empty(),
                 "{wire}: clearing must silence the announcement"
             );
         }
@@ -935,7 +959,7 @@ mod tests {
         let data = data_dir_with(&[flagged.path(), pointered.path()]);
         session_state::set_and_persist(data.path(), &flagged.path().to_string_lossy());
 
-        let off = announce_actions(data.path(), false);
+        let off = announce_actions(data.path(), false, &no_host);
         assert_eq!(
             off.get(&flagged.path().to_string_lossy().to_string())
                 .map(String::as_str),
@@ -1079,7 +1103,7 @@ mod tests {
         let proj = project_with_session_md();
         let data = data_dir_with(&[proj.path()]);
         let mut reads = 0;
-        apply_trust(announce_actions(data.path(), true), || {
+        apply_trust(announce_actions(data.path(), true, &no_host), || {
             reads += 1;
             None
         });
@@ -1087,11 +1111,11 @@ mod tests {
             reads, 1,
             "positive control: a default restore row reads trust"
         );
-        apply_trust(announce_actions(data.path(), false), || {
+        apply_trust(announce_actions(data.path(), false, &no_host), || {
             panic!("gate OFF must do no trust IO")
         });
         config_store::set_project_profile(data.path(), proj.path(), Some("neo".into())).unwrap();
-        apply_trust(announce_actions(data.path(), true), || {
+        apply_trust(announce_actions(data.path(), true, &no_host), || {
             panic!("a profile row must do no trust IO")
         });
     }
@@ -1112,7 +1136,13 @@ mod tests {
         )
         .unwrap();
         let key = remote.path.to_string_lossy().to_string();
-        let get = |gate: bool| announce_actions(data.path(), gate).get(&key).cloned();
+        // M18 WP4: the row's host has the workflow system (Developer), so the funnel's host
+        // input is open; the absent / unknown host is pinned below.
+        let dev = |_: &str| HostSubstrate::Developer {
+            root: None,
+            head: None,
+        };
+        let get = |gate: bool| announce_actions(data.path(), gate, &dev).get(&key).cloned();
 
         // No record, no flag: nothing. ⚠️ No `.session.md` stat either (it is remote).
         assert_eq!(get(true), None);
@@ -1125,6 +1155,21 @@ mod tests {
         // ...and says the session keeps its own mode when the row's stored one differs.
         record_running(data.path(), &key, Some("fsd"));
         assert_eq!(get(true).as_deref(), Some("reconnect@fsd"));
+        // M18 WP4: a host without the workflow system (or never probed) has no drive mode to
+        // speak of either, gate ON or not: the funnel's third input closes it; reconnect stays.
+        for host in [HostSubstrate::Absent, HostSubstrate::Unknown] {
+            let lookup = |h: &str| {
+                assert_eq!(h, "u@h", "asked about the row's own host");
+                host.clone()
+            };
+            assert_eq!(
+                announce_actions(data.path(), true, &lookup)
+                    .get(&key)
+                    .map(String::as_str),
+                Some(ACTION_RECONNECT),
+                "{host:?}"
+            );
+        }
         // Gate OFF: there is no drive mode to speak of, but reconnect stays (ungated).
         assert_eq!(get(false).as_deref(), Some(ACTION_RECONNECT));
         config_store::set_default_drive_mode(

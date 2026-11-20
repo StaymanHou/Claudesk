@@ -48,6 +48,7 @@ describe("remote rows (M17 WP2)", () => {
         uncleanFlag: false,
         sessionMd: false,
         trusted: true,
+        hostSubstrate: null,
       }),
     ).toEqual({ open: "start", announce: {} });
     expect(remoteOpenPlan(K, { kind: "reconnect", mode: "fsd" })).toEqual({
@@ -124,7 +125,7 @@ describe("remote rows (M17 WP2)", () => {
   // check's REMOTE signals: the flag wins; then the remote `.session.md`, manual when untrusted.
   it("a remote start resolves the two-signal rule from the check's signals", () => {
     const s = (uncleanFlag: boolean, sessionMd: boolean, trusted: boolean) =>
-      startAnnounced({ uncleanFlag, sessionMd, trusted });
+      startAnnounced({ uncleanFlag, sessionMd, trusted, hostSubstrate: null });
     expect(s(true, true, true)).toBe("continue");
     expect(s(true, false, false)).toBe("continue");
     expect(s(false, true, true)).toBe("restore");
@@ -138,6 +139,7 @@ describe("remote rows (M17 WP2)", () => {
         uncleanFlag: false,
         sessionMd: true,
         trusted: true,
+        hostSubstrate: null,
       }),
     ).toEqual({
       open: "start",

@@ -129,13 +129,47 @@ pub fn is_default_reference(reference: Option<&str>) -> bool {
     )
 }
 
-/// F-b ruling 4 — **the workflow layer exists only for the default profile.** Gate ON ∧ default
-/// profile. ⚠️ **Every backend consumer of the workflow gate that is scoped to one project or
-/// session must read this, never the raw gate** — the spawn env (`CLAUDESK_DRIVE_MODE`) and the
-/// picker's `/session-restore` announce arm. A non-default profile has no workflow skills (the
-/// `original` profile says so outright), so anything fired into it is a slash command the
-/// session cannot run. Mirrored by `isWorkflowApplicable` in `src/state/workflowApplicable.ts`.
-pub fn workflow_applicable(gate_enabled: bool, profile_reference: Option<&str>) -> bool {
+/// M18 WP4 (§R.1) — the funnel's THIRD input: where the session runs. `Local` is always
+/// applicable (local behaviour is unchanged); `Remote` is applicable only when that host
+/// account's workflow substrate is present (Managed or Developer). ⚠️ An unprobed host is
+/// `Remote(&HostSubstrate::Unknown)`, which is NOT present: it fails closed.
+#[derive(Debug, Clone, Copy)]
+pub enum HostInput<'a> {
+    Local,
+    Remote(&'a crate::remote_substrate::HostSubstrate),
+}
+
+/// F-b ruling 4 + M18 WP4 — **the workflow layer exists only for the default profile, on a host
+/// that has the workflow system.** Gate ON ∧ default profile ∧ (local ∨ the host's substrate
+/// present). ⚠️ **Every backend consumer of the workflow gate that is scoped to one project or
+/// session must read this, never the raw gate** — the spawn env (`CLAUDESK_DRIVE_MODE`), the
+/// picker's `/session-restore` announce arm and a remote row's drive-mode decoration, the open
+/// check's restore arm, the Docs poller. A non-default profile has no workflow skills (the
+/// `original` profile says so outright), and neither has a skill-less host account, so anything
+/// fired into either is a slash command the session cannot run. Mirrored by
+/// `isWorkflowApplicable` in `src/state/workflowApplicable.ts`.
+pub fn workflow_applicable(
+    gate_enabled: bool,
+    profile_reference: Option<&str>,
+    host: HostInput<'_>,
+) -> bool {
+    gate_enabled
+        && is_default_reference(profile_reference)
+        && match host {
+            HostInput::Local => true,
+            HostInput::Remote(substrate) => substrate.is_present(),
+        }
+}
+
+/// M18 WP4 — the funnel WITHOUT its host input, for the ONE caller that cannot have it yet: the
+/// remote open check, which PRODUCES the host input (`SUBSTRATE_PROBE`) in the same exec that
+/// reads the remote `.session.md`. It decides only whether to probe at all (gate ON ∧ default
+/// profile), and the check then applies [`workflow_applicable`] to what it probed. ⚠️ Never a
+/// consumer's answer: a consumer that read this would ignore the host.
+pub fn workflow_applicable_before_host_probe(
+    gate_enabled: bool,
+    profile_reference: Option<&str>,
+) -> bool {
     gate_enabled && is_default_reference(profile_reference)
 }
 
@@ -387,9 +421,30 @@ mod tests {
 
     #[test]
     fn profile_workflow_applicable_truth_table() {
-        // (gate, reference) → applicable. Mirrored row-for-row by the TS test of
+        use crate::remote_substrate::HostSubstrate;
+        // (gate, reference, host) → applicable. Mirrored row-for-row by the TS test of
         // `isWorkflowApplicable` — change both or neither.
-        for (gate, reference, want) in [
+        let dev = HostSubstrate::Developer {
+            root: None,
+            head: None,
+        };
+        let managed = HostSubstrate::Managed {
+            root: None,
+            head: None,
+            record: crate::workflow_install::provenance::InstallRecord {
+                clone_path: "/r".into(),
+                installed_at: "t".into(),
+                origin_url: "u".into(),
+            },
+        };
+        let hosts: [(&str, HostInput<'_>, bool); 5] = [
+            ("local", HostInput::Local, true),
+            ("developer", HostInput::Remote(&dev), true),
+            ("managed", HostInput::Remote(&managed), true),
+            ("absent", HostInput::Remote(&HostSubstrate::Absent), false),
+            ("unknown", HostInput::Remote(&HostSubstrate::Unknown), false),
+        ];
+        for (gate, reference, profile_ok) in [
             (true, None, true),
             (true, Some(""), true),
             (true, Some(" default "), true),
@@ -397,10 +452,17 @@ mod tests {
             (false, None, false),
             (false, Some("neo"), false),
         ] {
+            for (name, host, host_ok) in hosts {
+                assert_eq!(
+                    workflow_applicable(gate, reference, host),
+                    gate && profile_ok && host_ok,
+                    "{gate} {reference:?} {name}"
+                );
+            }
             assert_eq!(
-                workflow_applicable(gate, reference),
-                want,
-                "{gate} {reference:?}"
+                workflow_applicable_before_host_probe(gate, reference),
+                gate && profile_ok,
+                "before the probe: {gate} {reference:?}"
             );
         }
     }

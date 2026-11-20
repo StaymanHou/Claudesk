@@ -12,9 +12,11 @@
 // (the invite, Settings) are on that test's allowlist, and the allowlist is checked in reverse.
 //
 // Mirrors `config_store::profiles::{is_default_reference, workflow_applicable}` in Rust, row for
-// row — the two truth tables are asserted separately and must be changed together.
+// row — the two truth tables are asserted separately and must be changed together. M18 WP4: the
+// third input is the HOST (`HostInput`, ./hostSubstrate.ts): local, or a remote host's substrate.
 
 import { invoke } from "@tauri-apps/api/core";
+import type { HostInput } from "./hostSubstrate";
 
 /** The built-in profile's name (Rust `profiles::DEFAULT_PROFILE`). */
 export const DEFAULT_PROFILE = "default";
@@ -42,16 +44,49 @@ export function isDefaultProfile(reference: ProfileReference): boolean {
 }
 
 /**
- * Gate ON ∧ default profile. ⚠️ **An UNKNOWN profile (`undefined`) is NOT applicable** — fail
- * closed, the same direction the gate itself pre-seeds (`WORKFLOW_FEATURES_PRE_SEED_DEFAULT` is
- * `false`). A default workspace pays one IPC round-trip before its workflow surfaces appear; a
- * profile workspace never shows them at all, not even for a frame.
+ * Gate ON ∧ default profile ∧ (local ∨ the host has the workflow system) — M18 WP4 adds the
+ * third input (`arch/claude-substrate.md` §R.1). ⚠️ **An UNKNOWN profile (`undefined`) is NOT
+ * applicable**, and neither is an unknown host (`undefined`, or a substrate in state `unknown`)
+ * — fail closed, the same direction the gate itself pre-seeds
+ * (`WORKFLOW_FEATURES_PRE_SEED_DEFAULT` is `false`). A default local workspace pays one IPC
+ * round-trip before its workflow surfaces appear; a profile workspace, or one on a skill-less
+ * host, never shows them at all, not even for a frame.
+ *
+ * ⚠️ `host` comes ONLY from `useHostSubstrate(path)` / `hostSubstrateFor(path, map)`, never a
+ * literal `"local"` at a consumer (`workflowApplicableGuard.test.ts`): a literal would make a
+ * remote workspace read as local, which is exactly the hole this input closes.
  */
 export function isWorkflowApplicable(
   gateOn: boolean,
   reference: ProfileReference,
+  host: HostInput,
 ): boolean {
-  return gateOn && isDefaultProfile(reference);
+  return gateOn && isDefaultProfile(reference) && isHostApplicable(host);
+}
+
+/** The host half of the funnel: local, or a substrate that is present (Managed / Developer). */
+function isHostApplicable(host: HostInput): boolean {
+  if (host === "local") return true;
+  if (host === undefined) return false;
+  return host.state === "developer" || host.state === "managed";
+}
+
+/**
+ * M18 WP4 (D8) — the ONE other accepted wrapper of the raw gate: the workflow layer WOULD apply
+ * here (gate ON, default profile) but the workspace's REMOTE host does not have it, or has not
+ * answered. Drives the absent-host note — never a workflow surface itself.
+ */
+export function isWorkflowHostBlocked(
+  gateOn: boolean,
+  reference: ProfileReference,
+  host: HostInput,
+): boolean {
+  return (
+    gateOn &&
+    isDefaultProfile(reference) &&
+    host !== "local" &&
+    !isHostApplicable(host)
+  );
 }
 
 /** A project row's STORED profile reference (`null` = default, or no record). */

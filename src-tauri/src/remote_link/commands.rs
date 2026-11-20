@@ -125,6 +125,11 @@ pub struct StartSignals {
     /// (`bypass_dialog_cleared`), not a resume signal, so it is not sent to the picker.
     #[serde(skip)]
     pub bypass_accepted: bool,
+    /// M18 WP4: the host's workflow substrate AS THIS CHECK OBSERVED IT (`None` = not probed: the
+    /// gate was OFF). The picker's open reads its funnel host input from HERE, not from its cached
+    /// map: that map is the value from the last render, before this check wrote the cache, and the
+    /// `remote-substrate` event is not ordered against this command's response.
+    pub host_substrate: Option<crate::remote_substrate::HostSubstrate>,
 }
 
 /// The open decision (M17 WP5, AC-3), from the open check's exec and the LOCAL record. Pure, so
@@ -213,17 +218,30 @@ pub(crate) fn decide_open(
         )),
         _ => None,
     };
+    // M18 WP4 (§R.1) — the restore arm goes through THE funnel with the host's substrate as its
+    // third input. ONE control: the exec carries the workflow lines (`.session.md` + the probe)
+    // only when `workflow_applicable_before_host_probe` was ON, so "it probed" IS that gate, as
+    // the exec observed it; a second, independent gate check here would mask the first (the
+    // redundant-controls pattern, `announce::announce_actions`). Absent / unknown → no restore.
+    let restore_applicable = substrate.as_ref().is_some_and(|s| {
+        crate::config_store::profiles::workflow_applicable(
+            true,
+            None,
+            crate::config_store::profiles::HostInput::Remote(s),
+        )
+    });
     let physical = facts.real.as_deref().unwrap_or(target.path());
     let trusted_keys: Vec<&str> = facts.trusted_keys.iter().map(String::as_str).collect();
     OpenDecision {
         check: OpenCheck::Start(StartSignals {
             unclean_flag,
-            session_md: facts.session_md,
+            session_md: facts.session_md && restore_applicable,
             trusted: crate::folder_trust::trust_covers(
                 &trusted_keys,
                 std::path::Path::new(physical),
             ),
             bypass_accepted: facts.bypass_accepted,
+            host_substrate: substrate.clone(),
         }),
         clear_end_pending: clear,
         notice,
@@ -421,8 +439,11 @@ pub async fn remote_open_check(
                             &crate::remote_cmd::tmux_session(&project_path),
                             target.path(),
                             // The `/session-restore` arm is gated (a remote row has no profile):
-                            // with the gate OFF the remote project folder is not read at all.
-                            crate::config_store::profiles::workflow_applicable(
+                            // with the gate OFF the remote project folder is not read at all, and
+                            // neither is the host's substrate. M18 WP4: this check PRODUCES the
+                            // funnel's host input, so it decides only whether to probe;
+                            // `decide_open` applies the full funnel to what it probed.
+                            crate::config_store::profiles::workflow_applicable_before_host_probe(
                                 crate::config_store::settings::read_workflow_features_enabled(&dir)
                                     .unwrap_or(false),
                                 None,
@@ -886,15 +907,41 @@ mod tests {
             other => panic!("{other:?}"),
         };
         let trusted_real = format!("{s}real:/Users/me/real\n{s}trusted:/Users/me/real\n");
+        let probed = |answer: &str| format!("{s}substrate-probed\n{answer}");
+        let present = probed(&format!("{s}substrate:yes\n"));
         assert_eq!(
-            signals(out(&format!("{trusted_real}{s}session-md:yes\n")), true),
+            signals(
+                out(&format!("{trusted_real}{s}session-md:yes\n{present}")),
+                true
+            ),
             StartSignals {
                 unclean_flag: true,
                 session_md: true,
                 trusted: true,
                 bypass_accepted: false,
+                host_substrate: Some(crate::remote_substrate::HostSubstrate::Developer {
+                    root: None,
+                    head: None,
+                }),
             }
         );
+        // M18 WP4: the restore arm goes through the funnel with the host as its third input. A
+        // host without the workflow system, or one the probe could not answer for, has no
+        // restore arm even with a `.session.md` there; nor does a check that did not probe.
+        for (case, substrate) in [
+            ("absent", probed(&format!("{s}substrate:no\n"))),
+            ("unknown", probed("")),
+            ("not probed", String::new()),
+        ] {
+            assert!(
+                !signals(
+                    out(&format!("{trusted_real}{s}session-md:yes\n{substrate}")),
+                    false
+                )
+                .session_md,
+                "{case}"
+            );
+        }
         // M18 WP2: the remote account's bypass acceptance rides the start (and only its line).
         assert!(signals(out(&format!("{s}bypass-accepted:yes\n")), false).bypass_accepted);
         // Trust on the STORED (symlink) path does not count: CC keys trust by the physical path.
@@ -939,10 +986,13 @@ mod tests {
             session_md: false,
             trusted: true,
             bypass_accepted: true,
+            host_substrate: None,
         }));
         assert_eq!(start["kind"], "start");
         // M18 WP2: a fire-time input, not a resume signal: never sent to the picker.
         assert!(start.get("bypassAccepted").is_none(), "{start}");
+        // M18 WP4: the host as the check observed it IS sent (the open's funnel host input).
+        assert_eq!(start["hostSubstrate"], serde_json::Value::Null, "{start}");
         assert_eq!(
             (
                 &start["uncleanFlag"],

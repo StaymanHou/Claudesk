@@ -71,6 +71,7 @@ import {
 } from "../../cc/driveMode";
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 import { isWorkflowApplicable } from "../../state/workflowApplicable";
+import { useHostSubstrate } from "../../state/useHostSubstrate";
 import { commitCellValue } from "./commitCellValue";
 import {
   profileLineText,
@@ -153,9 +154,12 @@ export function ProjectModelCell({
   const [profileValue, setProfileValue] = useState<string | null>(profile);
   // F-b ruling 4 — a non-default profile row has no drive-mode line, gate ON or not.
   const gateOn: WorkflowGateValue = useWorkflowFeaturesEnabled();
+  // M18 WP4 — and the row's host (local → "local", no IPC; a remote row → its host's substrate,
+  // closed until that host has been open-checked once in this app session: D9).
+  const rowHost = useHostSubstrate(projectPath);
   const gateEnabled = useMemo(
-    () => isWorkflowApplicable(gateOn, profileValue),
-    [gateOn, profileValue],
+    () => isWorkflowApplicable(gateOn, profileValue, rowHost),
+    [gateOn, profileValue, rowHost],
   );
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileFailed, setProfileFailed] = useState(false);

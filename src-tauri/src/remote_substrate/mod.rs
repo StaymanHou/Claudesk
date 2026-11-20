@@ -61,6 +61,12 @@ impl HostSubstrate {
             }
         }
     }
+
+    /// Whether the workflow system is there (Managed or Developer). ⚠️ Unknown is NOT present:
+    /// the funnel's host input fails closed (`config_store::profiles::workflow_applicable`).
+    pub fn is_present(&self) -> bool {
+        matches!(self, Self::Developer { .. } | Self::Managed { .. })
+    }
 }
 
 /// The `remote-substrate` event: one host's substrate changed.

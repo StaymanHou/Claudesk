@@ -46,6 +46,8 @@ import {
 } from "./announceRow";
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 import { isWorkflowApplicable } from "../../state/workflowApplicable";
+import { useHostSubstrates } from "../../state/useHostSubstrate";
+import { hostFromOpenCheck, hostSubstrateFor } from "../../state/hostSubstrate";
 import type { AnnounceMap, AutoResumeAction } from "../../state/predictAction";
 import { NO_TEXT_ASSIST } from "../noTextAssist";
 import { PickerRow } from "./PickerRow";
@@ -58,6 +60,7 @@ import {
   type RemoteAskChoice,
   type RemoteAskKind,
   type RemoteOpenCheck,
+  type RemoteStartSignals,
 } from "./remoteRow";
 import { ConfirmModal } from "../workspace/editor/ConfirmModal";
 import { orderPickerRows } from "./pickerOrder";
@@ -249,6 +252,10 @@ export function ProjectPicker({
   // cannot wrap the hook directly. Every read goes through `isWorkflowApplicable(gateOn, <row>)`,
   // and `workflowApplicableGuard.test.ts` fails on any bare use of `gateOn`.
   const gateOn = useWorkflowFeaturesEnabled();
+  // M18 WP4 — the funnel's host input for every row: one store read for the whole list
+  // (`hostSubstrateFor(path, hostMap)` per row: local → "local", remote → its host's substrate,
+  // or undefined = not yet probed → closed). A list with no remote row starts nothing.
+  const hostMap = useHostSubstrates(recents.some((p) => p.remote != null));
   // NOTE (M10.9 WP2 Phase 4): the three app-global settings states that used to live here
   // (ccPermissionMode / timeTrackingEnabled / updateNotificationsEnabled), together with
   // their seed+listen effects and optimistic-set handlers, MOVED to the Settings panel —
@@ -373,6 +380,8 @@ export function ProjectPicker({
     // over the link at click time), never from the picker's map, whose remote entry is a label
     // from the LOCAL record and cannot know the remote `.session.md`.
     let announce: AnnounceMap = announceMap;
+    // M18 WP4 — a remote START's funnel host input is the substrate its check just observed.
+    let remoteStart: RemoteStartSignals | null = null;
     if (row?.remote != null) {
       setToast({ kind: "info", message: `Connecting to ${row.remote.host}…` });
       let check: RemoteOpenCheck;
@@ -427,6 +436,7 @@ export function ProjectPicker({
       }
       if (plan.open === "reconnect") reconnect = true;
       else announce = plan.announce;
+      if (check.kind === "start") remoteStart = check;
     }
     // F-b A.6 — a row naming an unlisted profile opens NOTHING. The backend would refuse the
     // spawn anyway; refusing here means no empty workspace is minted for it.
@@ -444,7 +454,13 @@ export function ProjectPicker({
     const { action } = rowAffordances(
       projectPath,
       announce,
-      isWorkflowApplicable(gateOn, row?.profile ?? null),
+      isWorkflowApplicable(
+        gateOn,
+        row?.profile ?? null,
+        remoteStart !== null
+          ? hostFromOpenCheck(remoteStart)
+          : hostSubstrateFor(projectPath, hostMap),
+      ),
     );
     // Stamp recency before handing off so the next list_projects reflects it. A
     // rejection surfaces as an error toast (P4.2) — never dropped as an unhandled
@@ -731,6 +747,7 @@ export function ProjectPicker({
               workflowApplicable={isWorkflowApplicable(
                 gateOn,
                 r.profile ?? null,
+                hostSubstrateFor(r.project_path, hostMap),
               )}
               profiles={profiles}
               onOpenRecent={handleOpenRecent}

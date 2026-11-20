@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { RightPanelHost } from "../RightPanelHost";
+import { resetHostSubstrateStoreForTests } from "../../../state/useHostSubstrate";
 import "../../../test-support/cm6JsdomShims";
 import {
   CATCH_UP_TOAST_MS,
@@ -78,7 +79,16 @@ async function settle(ms = 30) {
   });
 }
 
-async function mount(projectPath: string, gateOn: boolean, visible = true) {
+/** M18 WP4 — the remote host's substrate the store is seeded with (the funnel's third input). */
+type Substrate = { state: string; root?: null; head?: null };
+const DEVELOPER: Substrate = { state: "developer", root: null, head: null };
+
+async function mount(
+  projectPath: string,
+  gateOn: boolean,
+  visible = true,
+  substrate: Substrate | null = DEVELOPER,
+) {
   gate.enabled = gateOn;
   calls.length = 0;
   notices.length = 0;
@@ -98,6 +108,8 @@ async function mount(projectPath: string, gateOn: boolean, visible = true) {
           return [];
         case "remote_poll_catch_up":
           return { kind: "unchanged" };
+        case "remote_host_substrates":
+          return substrate === null ? {} : { "me@mini-host": substrate };
         case "git_changed_files":
         case "git_recent_commits":
           return [];
@@ -152,6 +164,7 @@ afterEach(async () => {
   host?.remove();
   root = null;
   host = null;
+  resetHostSubstrateStoreForTests();
   clearMocks();
 });
 
@@ -206,6 +219,23 @@ describe("a remote workspace's right half", () => {
     expect(byId(el, "docs-panel")).not.toBeNull();
     expect(calls).toContain("docs_list");
   });
+
+  // M18 WP4 (§R.1) — the funnel's third input: gate ON is not enough on a host without the
+  // workflow system (absent) or one never probed (no entry): no Docs tab, no read, no poll.
+  for (const [name, substrate] of [
+    ["absent", { state: "absent" }],
+    ["not yet probed", null],
+  ] as const) {
+    it(`with the gate ON but the host ${name}, a remote workspace reads no docs`, async () => {
+      const el = await mount(REMOTE, true, true, substrate);
+      expect(byId(el, "panel-tab-docs")).toBeNull();
+      expect(byId(el, "docs-panel")).toBeNull();
+      expect(calls).not.toContain("docs_list");
+      expect(calls).not.toContain("remote_poll_catch_up");
+      // The store WAS asked (so the absence is the funnel's answer, not a missing seed).
+      expect(calls).toContain("remote_host_substrates");
+    });
+  }
 
   it("with the gate OFF a remote workspace reads no docs (no Docs tab, no docs_list)", async () => {
     const el = await mount(REMOTE, false);

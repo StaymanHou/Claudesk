@@ -7,6 +7,8 @@
 // row's `ssh://` key.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
+import { emit } from "@tauri-apps/api/event";
+import { HOST_SUBSTRATE_EVENT } from "../../../state/hostSubstrate";
 import {
   calls,
   mountPicker,
@@ -23,6 +25,8 @@ const REMOTE = {
   remote: { host: "user@mini-host.tail0000.ts.net", path: "/Users/user/tank" },
 };
 const LOCAL = { project_path: "/tmp/scratch/local", display_name: "local" };
+/** M18 WP4 — a host that has the workflow system (the open check's observed substrate). */
+const DEV = { state: "developer", root: null, head: null } as const;
 
 afterEach(async () => {
   await teardownLive();
@@ -131,28 +135,74 @@ describe("remote rows on the live picker (M17 WP2)", () => {
     {
       name: "the flag → continue, though the row was labelled reconnect",
       label: "reconnect",
-      signals: { uncleanFlag: true, sessionMd: true, trusted: true },
+      signals: {
+        uncleanFlag: true,
+        sessionMd: true,
+        trusted: true,
+        hostSubstrate: DEV,
+      },
       gateOn: true,
       action: { kind: "argv", flag: "--continue" },
     },
     {
       name: "remote .session.md, trusted, gate ON → /session-restore, though the row had no label",
       label: undefined,
-      signals: { uncleanFlag: false, sessionMd: true, trusted: true },
+      signals: {
+        uncleanFlag: false,
+        sessionMd: true,
+        trusted: true,
+        hostSubstrate: DEV,
+      },
       gateOn: true,
       action: { kind: "inject", command: "/session-restore" },
     },
     {
       name: "remote .session.md with the gate OFF → nothing (the restore arm is gated)",
       label: undefined,
-      signals: { uncleanFlag: false, sessionMd: true, trusted: true },
+      signals: {
+        uncleanFlag: false,
+        sessionMd: true,
+        trusted: true,
+        hostSubstrate: DEV,
+      },
       gateOn: false,
+      action: null,
+    },
+    // M18 WP4 — the funnel's host input is the substrate the CHECK observed (`hostFromOpenCheck`),
+    // not the picker's cached map (empty here: no host was ever probed in this picker).
+    {
+      name: "remote .session.md, gate ON, but the check found the host ABSENT → nothing",
+      label: undefined,
+      signals: {
+        uncleanFlag: false,
+        sessionMd: true,
+        trusted: true,
+        hostSubstrate: { state: "absent" },
+      },
+      gateOn: true,
+      action: null,
+    },
+    {
+      name: "remote .session.md, gate ON, the check did not probe → nothing (closed)",
+      label: undefined,
+      signals: {
+        uncleanFlag: false,
+        sessionMd: true,
+        trusted: true,
+        hostSubstrate: null,
+      },
+      gateOn: true,
       action: null,
     },
     {
       name: "no signal → nothing, though the row was labelled continue",
       label: "continue",
-      signals: { uncleanFlag: false, sessionMd: false, trusted: true },
+      signals: {
+        uncleanFlag: false,
+        sessionMd: false,
+        trusted: true,
+        hostSubstrate: DEV,
+      },
       gateOn: true,
       action: null,
     },
@@ -175,6 +225,41 @@ describe("remote rows on the live picker (M17 WP2)", () => {
     },
   );
 
+  // M18 WP4 — D9, operator ruling A (2026-11-20): a remote row's drive-mode line is a workflow
+  // surface, so it follows the funnel's host input. Until the row's host has been open-checked in
+  // this app session it is unknown, so the line is ABSENT (fail closed); it appears when the host
+  // reads present and goes again when it reads absent. The local row is the positive control.
+  it("a remote row's drive-mode line appears only once its host is known to have the workflow system", async () => {
+    const { el } = await mountPicker({
+      projects: [REMOTE, LOCAL],
+      gateOn: true,
+      ipc: (cmd) => (cmd === "remote_host_substrates" ? {} : undefined),
+    });
+    const modeLine = (name: string) =>
+      q(pickerRow(el, name), "picker-recent-mode-line");
+    expect(modeLine("local")).not.toBeNull();
+    expect(modeLine("tank")).toBeNull();
+    const hostIs = async (substrate: unknown) => {
+      await act(async () => {
+        await emit(HOST_SUBSTRATE_EVENT, {
+          host: REMOTE.remote.host,
+          substrate,
+        });
+      });
+      await settle();
+    };
+    await hostIs(DEV);
+    expect(modeLine("tank")).not.toBeNull();
+    await hostIs({ state: "absent" });
+    expect(modeLine("tank")).toBeNull();
+    // Another host's answer is not this row's.
+    await act(async () => {
+      await emit(HOST_SUBSTRATE_EVENT, { host: "x@elsewhere", substrate: DEV });
+    });
+    await settle();
+    expect(modeLine("tank")).toBeNull();
+  });
+
   // An untrusted remote folder: the action is still the inject arm (the fire-time trust read,
   // answered for a remote key from this same check, is what withholds it), as for a local row.
   it("a remote start into an untrusted folder carries the inject arm for the fire-time read to withhold", async () => {
@@ -190,6 +275,7 @@ describe("remote rows on the live picker (M17 WP2)", () => {
               uncleanFlag: false,
               sessionMd: true,
               trusted: false,
+              hostSubstrate: DEV,
             }
           : undefined,
     });

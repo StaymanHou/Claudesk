@@ -77,6 +77,8 @@ export function useHostSubstrate(projectPath: string): HostInput {
   const map = useSyncExternalStore(
     host === null ? noSubscribe : subscribe,
     host === null ? emptySnapshot : snapshot,
+    // A static render (`renderToStaticMarkup` in the render tests) reads the same store.
+    host === null ? emptySnapshot : snapshot,
   );
   if (host === null) return "local";
   return map[host];
@@ -89,6 +91,7 @@ export function useHostSubstrate(projectPath: string): HostInput {
 export function useHostSubstrates(active: boolean): ByHost {
   return useSyncExternalStore(
     active ? subscribe : noSubscribe,
+    active ? snapshot : emptySnapshot,
     active ? snapshot : emptySnapshot,
   );
 }

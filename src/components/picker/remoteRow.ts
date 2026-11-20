@@ -9,6 +9,7 @@
 // with the full `user@host` in its tooltip. The first version showed `user@host:path` on the path
 // line, and a Tailscale MagicDNS host then truncated the path, which is the part that tells
 // projects apart, so it never showed.
+import type { HostSubstrate } from "../../state/hostSubstrate";
 import type { RecentProject } from "./ProjectPicker";
 import {
   predictAction,
@@ -74,6 +75,12 @@ export type RemoteStartSignals = {
   sessionMd: boolean;
   /** The remote Claude Code has trusted the folder (its physical path or an ancestor). */
   trusted: boolean;
+  /**
+   * M18 WP4 — the host's workflow substrate as THIS check observed it (`null` = not probed: the
+   * gate was OFF). The open's funnel host input comes from here (`hostFromOpenCheck`), never from
+   * the picker's cached map, which predates this check.
+   */
+  hostSubstrate: HostSubstrate | null;
 };
 
 /**

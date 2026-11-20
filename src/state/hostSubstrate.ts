@@ -74,3 +74,14 @@ export function hostSubstrateFor(
   if (host === null) return "local";
   return byHost[host];
 }
+
+/**
+ * The host input for a remote OPEN, from the open check's own answer: the substrate the check
+ * just observed (`null` = not probed → closed). ⚠️ Use this, not `hostSubstrateFor(path, map)`, on
+ * the open path: the map is the last render's value, from before this check wrote the cache.
+ */
+export function hostFromOpenCheck(signals: {
+  readonly hostSubstrate: HostSubstrate | null;
+}): HostInput {
+  return signals.hostSubstrate ?? undefined;
+}

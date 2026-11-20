@@ -112,6 +112,7 @@ import { supervisorToggleAction } from "../../cc/supervisorToggleAction";
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 import { isWorkflowApplicable } from "../../state/workflowApplicable";
 import { useWorkspaceProfile } from "../../state/useWorkspaceProfile";
+import { useHostSubstrate } from "../../state/useHostSubstrate";
 // The nav state the prev/next controls render from. ⚠️ The old `inertAfter` inert-state machine
 // is DELETED; do not reintroduce it (`App.css`, above `.workspace-turn-nav-btn`, says why).
 import type { TurnNavView } from "./XtermPane";
@@ -249,6 +250,10 @@ export function Workspace({
     workspace.project_path,
     workspace.cc_session_id,
   );
+  // M18 WP4 — the funnel's THIRD input: where this workspace's session runs. `"local"` for a local
+  // workspace (no IPC); a remote one reads its host's substrate (no workflow system there, or not
+  // yet known → every workflow surface below is absent, and the absent-host note shows instead).
+  const workspaceHost = useHostSubstrate(workspace.project_path);
   // M17 WP6 — the workspace-KIND funnel (`state/workspaceSurfaces.ts`), BESIDE the gate below and
   // never inside it. On a remote workspace the supervisor (it reads the local WIP + transcript) and
   // the turn-marker jump (it reads xterm's buffer, empty under tmux) are absent.
@@ -256,6 +261,7 @@ export function Workspace({
   const workflowEnabled = isWorkflowApplicable(
     useWorkflowFeaturesEnabled(),
     workspaceProfile,
+    workspaceHost,
   );
   // What this workspace WOULD fire if reopened now. Re-read on every `visible` edge rather than
   // once on mount, because the whole point is to reflect a flag the ⏸ may have set *since* —
@@ -667,6 +673,7 @@ export function Workspace({
   const workflowFeaturesEnabled = isWorkflowApplicable(
     useWorkflowFeaturesEnabled(),
     workspaceProfile,
+    workspaceHost,
   );
   // M14 WP0 Phase 2 — flip the supervisor toggle for this project.
   //

@@ -340,10 +340,11 @@ mod tests {
         // (only default rows reach the restore arm, F-b ruling 4).
         let an = flat_production(include_str!("../announce/commands.rs"));
         assert!(
-            an.contains("super::apply_trust(super::announce_actions(&dir,gate_enabled),")
-                && an.contains(
-                    "claude_json_path(&home,&crate::config_store::profiles::ConfigTarget::Default)"
-                ),
+            an.contains(
+                "super::apply_trust(super::announce_actions(&dir,gate_enabled,&host_substrate),"
+            ) && an.contains(
+                "claude_json_path(&home,&crate::config_store::profiles::ConfigTarget::Default)"
+            ),
             "picker_announce_actions no longer applies the default profile's trust record"
         );
         assert!(

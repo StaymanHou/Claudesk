@@ -28,12 +28,14 @@ struct AppEnv {
 }
 
 impl PollEnv for AppEnv {
-    /// As WP5's open check reads it: a remote row has no profile, so the gate alone decides.
-    fn gate_on(&self) -> bool {
+    /// The funnel for `host`'s rows: a remote row has no profile, and M18 WP4 adds the host's
+    /// cached substrate (no workflow system there, or not yet probed → no Docs, so no listing).
+    fn gate_on(&self, host: &str) -> bool {
         crate::config_store::profiles::workflow_applicable(
             crate::config_store::settings::read_workflow_features_enabled(&self.data_dir)
                 .unwrap_or(false),
             None,
+            crate::config_store::profiles::HostInput::Remote(&self.links.substrate(host)),
         )
     }
 
@@ -136,5 +138,44 @@ pub async fn remote_poll_catch_up(
 pub fn remote_poll_pause(app: AppHandle, workspace_id: String) {
     if let Some(poller) = app.try_state::<RemotePoller>() {
         poller.pause(&workspace_id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::remote_substrate::HostSubstrate;
+
+    /// M18 WP4 — the REAL poll gate: gate ON is not enough; the host's cached substrate decides
+    /// (absent / never probed → no Docs listing), per host. Positive control: Developer → on.
+    #[test]
+    fn the_poll_gate_reads_the_hosts_substrate_through_the_funnel() {
+        let dir = tempfile::TempDir::new().unwrap();
+        crate::config_store::settings::write_workflow_features_enabled(dir.path(), true).unwrap();
+        let links: SharedLinks = Arc::new(crate::remote_link::LinkRegistry::new(
+            Arc::new(crate::remote_link::SshTransport),
+            dir.path().to_path_buf(),
+            dir.path().join("hook.sock"),
+            "com.claudesk.app.test".into(),
+            Arc::new(|_| {}),
+        ));
+        let env = AppEnv {
+            data_dir: dir.path().to_path_buf(),
+            links: Arc::clone(&links),
+        };
+        assert!(!env.gate_on("me@a"), "never probed: closed");
+        links.set_substrate("me@a", HostSubstrate::Absent);
+        assert!(!env.gate_on("me@a"), "absent: closed");
+        links.set_substrate(
+            "me@b",
+            HostSubstrate::Developer {
+                root: None,
+                head: None,
+            },
+        );
+        assert!(env.gate_on("me@b"), "developer: open");
+        assert!(!env.gate_on("me@a"), "per host");
+        crate::config_store::settings::write_workflow_features_enabled(dir.path(), false).unwrap();
+        assert!(!env.gate_on("me@b"), "gate OFF: closed whatever the host");
     }
 }

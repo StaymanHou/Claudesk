@@ -636,7 +636,8 @@ fn resolve_spawn_profile(
 ///
 /// ⚠️ **Ruling 4 — the gate is passed through `workflow_applicable` BEFORE it reaches the
 /// drive-mode resolution**, so a profile spawn gets no `CLAUDESK_DRIVE_MODE` (and reports no
-/// effective mode) even with the gate ON. A read ERROR is preserved as an error — the existing
+/// effective mode) even with the gate ON. M18 WP4: so does a remote spawn whose host has no
+/// workflow substrate (`host`, the funnel's third input; unknown fails closed). A read ERROR is preserved as an error — the existing
 /// fail-closed handling downstream still owns it.
 fn resolve_profile_spawn_env(
     gate_read: Option<Result<bool, crate::config_store::ConfigError>>,
@@ -644,10 +645,11 @@ fn resolve_profile_spawn_env(
         Result<Option<crate::config_store::DriveMode>, crate::config_store::ConfigError>,
     >,
     profile: Option<&SpawnProfile>,
+    host: crate::config_store::profiles::HostInput<'_>,
 ) -> ResolvedCcSpawnEnv {
     let reference = profile.map(|p| p.name.as_str());
     let gate_read = gate_read.map(|read| {
-        read.map(|gate| crate::config_store::profiles::workflow_applicable(gate, reference))
+        read.map(|gate| crate::config_store::profiles::workflow_applicable(gate, reference, host))
     });
     let mut resolved = resolve_cc_spawn_env(gate_read, mode_read);
     if let Some(p) = profile {
@@ -1842,6 +1844,16 @@ impl SessionRegistry {
         // into the workflow layer is the failure that matters. Drive mode is on the GATED side
         // of WP3's per-arm split — `--continue` is a stock CC flag and stays ungated, but this
         // arm names a companion-workflow concept.
+        // M18 WP4 — the funnel's host input: a remote spawn reads its host's cached substrate
+        // (the open check that preceded this spawn wrote it); unknown fails closed.
+        let host_substrate = match &target {
+            SpawnTarget::Local => None,
+            SpawnTarget::Remote(r) => Some(r.links.substrate(r.target.host())),
+        };
+        let host = match &host_substrate {
+            None => crate::config_store::profiles::HostInput::Local,
+            Some(s) => crate::config_store::profiles::HostInput::Remote(s),
+        };
         let resolved_env = resolve_profile_spawn_env(
             data_dir
                 .as_deref()
@@ -1850,6 +1862,7 @@ impl SessionRegistry {
                 crate::config_store::read_default_drive_mode(dir, Path::new(project_path))
             }),
             profile.as_ref(),
+            host,
         );
         // M13.5 WP4 P1.2 — retain the EFFECTIVE mode this session is about to spawn under, so
         // a workspace-side readout can answer "stored ≠ running" truthfully. Read back via
@@ -2161,6 +2174,7 @@ impl Default for SessionRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config_store::profiles::HostInput;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
@@ -2795,7 +2809,8 @@ mod tests {
     #[test]
     fn profile_spawn_env_carries_config_dir_only_for_a_profile() {
         let key = crate::config_store::profiles::CONFIG_DIR_ENV;
-        let default = resolve_profile_spawn_env(Some(Ok(false)), Some(Ok(None)), None);
+        let default =
+            resolve_profile_spawn_env(Some(Ok(false)), Some(Ok(None)), None, HostInput::Local);
         assert!(
             !default.env.iter().any(|(k, _)| k == key),
             "{:?}",
@@ -2805,7 +2820,12 @@ mod tests {
             name: "neo".to_string(),
             dir: PathBuf::from("/u/.config/claude-neo"),
         };
-        let profile = resolve_profile_spawn_env(Some(Ok(false)), Some(Ok(None)), Some(&neo));
+        let profile = resolve_profile_spawn_env(
+            Some(Ok(false)),
+            Some(Ok(None)),
+            Some(&neo),
+            HostInput::Local,
+        );
         assert!(
             profile
                 .env
@@ -2825,7 +2845,7 @@ mod tests {
         };
         let on = || Some(Ok(true));
         let mode = || Some(Ok(Some(crate::config_store::DriveMode::Autopilot)));
-        let profile = resolve_profile_spawn_env(on(), mode(), Some(&neo));
+        let profile = resolve_profile_spawn_env(on(), mode(), Some(&neo), HostInput::Local);
         assert!(
             !profile.env.iter().any(|(k, _)| k == DRIVE_MODE_ENV),
             "{:?}",
@@ -2836,10 +2856,39 @@ mod tests {
             "a profile session reports no effective mode"
         );
         // Positive control: the default profile under the same inputs DOES carry it.
-        let default = resolve_profile_spawn_env(on(), mode(), None);
+        let default = resolve_profile_spawn_env(on(), mode(), None, HostInput::Local);
         assert!(default.env.iter().any(|(k, _)| k == DRIVE_MODE_ENV));
         assert_eq!(
             default.drive_mode,
+            Some(crate::config_store::DriveMode::Autopilot)
+        );
+    }
+
+    /// M18 WP4 — a REMOTE spawn whose host has no workflow substrate (absent, or never probed)
+    /// gets no `CLAUDESK_DRIVE_MODE` even with the gate ON; a host that has it does.
+    #[test]
+    fn a_remote_spawn_withholds_the_drive_mode_unless_its_host_has_the_substrate() {
+        use crate::remote_substrate::HostSubstrate;
+        let on = || Some(Ok(true));
+        let mode = || Some(Ok(Some(crate::config_store::DriveMode::Autopilot)));
+        for host in [HostSubstrate::Absent, HostSubstrate::Unknown] {
+            let env = resolve_profile_spawn_env(on(), mode(), None, HostInput::Remote(&host));
+            assert!(
+                !env.env.iter().any(|(k, _)| k == DRIVE_MODE_ENV),
+                "{host:?}: {:?}",
+                env.env
+            );
+            assert_eq!(env.drive_mode, None, "{host:?}");
+        }
+        // Positive control: a Developer host under the same inputs carries it.
+        let dev = HostSubstrate::Developer {
+            root: None,
+            head: None,
+        };
+        let env = resolve_profile_spawn_env(on(), mode(), None, HostInput::Remote(&dev));
+        assert!(env.env.iter().any(|(k, _)| k == DRIVE_MODE_ENV));
+        assert_eq!(
+            env.drive_mode,
             Some(crate::config_store::DriveMode::Autopilot)
         );
     }
@@ -3019,6 +3068,12 @@ mod tests {
         let env_call = &code[at("resolve_profile_spawn_env(")..];
         let env_call = &env_call[..env_call.find(");").unwrap()];
         assert!(env_call.contains("profile.as_ref()"), "{env_call}");
+        // M18 WP4: and the host input, bound from the target's cached substrate.
+        assert!(env_call.contains("host,"), "{env_call}");
+        assert!(
+            code.contains("SpawnTarget::Remote(r) => Some(r.links.substrate(r.target.host())),"),
+            "a remote spawn reads its host's cached substrate"
+        );
         assert!(code.contains("profile: profile.map(|p| p.name),"));
         // M18 WP2: ONE binding of the profile-aware mode feeds BOTH the argv and the recorded
         // `SpawnPermission`, so the bypass-warning read sees exactly what CC was started with.
@@ -4946,6 +5001,7 @@ mod tests {
                 session_md: false,
                 trusted: false,
                 bypass_accepted: false,
+                host_substrate: None,
             })
         );
         assert_eq!(

@@ -1513,9 +1513,6 @@ impl LinkRegistry {
 
     /// M18 WP4: `host`'s substrate, or [`HostSubstrate::Unknown`] when never probed. A short lock
     /// read: safe on the main thread.
-    // Its production readers (the spawn env, the Docs poller) arrive at M18 WP4 P2.2, the funnel's
-    // migration; until then only the tests read it. ⚠️ Remove this allow at P2.2.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn substrate(&self, host: &str) -> HostSubstrate {
         self.substrates
             .lock()

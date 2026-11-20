@@ -118,8 +118,9 @@ pub fn diff(workspace_id: &str, prev: &Snapshot, next: &Snapshot) -> Option<FsCh
 /// What a tick reads before it may exec. Production: the workflow gate from `settings.json` and the
 /// host link's state; tests: a double.
 pub trait PollEnv: Send + Sync {
-    /// The workflow-features gate (read fresh, every tick).
-    fn gate_on(&self) -> bool;
+    /// The workflow funnel for `host`'s rows: the gate AND the host's substrate (M18 WP4), read
+    /// fresh every tick.
+    fn gate_on(&self, host: &str) -> bool;
     /// `host`'s link is Up right now.
     fn link_up(&self, host: &str) -> bool;
 }
@@ -167,7 +168,7 @@ pub fn poll_tick(
         return Vec::new();
     };
     let all = |c: CatchUp| vec![c; subs.len()];
-    if !env.gate_on() {
+    if !env.gate_on(host) {
         return all(CatchUp::GateOff);
     }
     if !env.link_up(host) {

@@ -65,6 +65,7 @@ import {
   isWorkflowApplicable,
   type ProfileReference,
 } from "../../state/workflowApplicable";
+import { useHostSubstrate } from "../../state/useHostSubstrate";
 import { usePipMode, setPipModeOptimistic } from "../../state/usePipMode";
 // M11 WP3 — LAZY, for the same reason as DiffPanel/ProjectSearch above
 // (SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD). WP2 imported this statically when the
@@ -493,9 +494,12 @@ export function RightPanelHost({
   // a second call site would be a second source of truth that never re-syncs on the
   // broadcast (the M10.9 contract, enforced by the OFF-invariant guard's bypass scan).
   // Defaults `false` until the async seed resolves, so the Docs tab never flashes on.
+  // M18 WP4 — and the funnel's host input (the same store `Workspace` reads; local = no IPC).
+  const workspaceHost = useHostSubstrate(projectPath);
   const workflowFeaturesEnabled = isWorkflowApplicable(
     useWorkflowFeaturesEnabled(),
     workspaceProfile,
+    workspaceHost,
   );
 
   // Latest-ref so the capture-phase keydown listener — registered once on [visible] with
