@@ -94,3 +94,12 @@ every hazard above: orphaned masters, tmux leftovers, rebuild/App.tsx hard stops
   `/Applications/Claudesk.app` is the installed app's (a live workspace such as tank): leave it alone.
 - Writes still go only in a scratch dir on the host (a sandbox root such as `~/claudesk-m18-sandbox`, removed after, path-checked
   with `cd -P` against `$HOME` before `rm -rf`). The live account stays read-only: take a baseline before and `cmp` it after.
+
+**8. Hand-adding the scratch remote row to the dev `projects.json`: the timestamps must be INTEGERS** (M18 WP4, 2026-11-20).
+A row with `"last_opened_at": null` (or `last_closed_at: null`) fails the WHOLE `list_projects` read ("config parse error:
+invalid type: null, expected i64"): the picker shows nothing, not just the bad row, and a bridge `invoke('list_projects')`
+rejects. Adding the row through the app's "Add remote project…" form avoids this; hand-editing is faster for a scripted check.
+- **How to apply:** copy `last_opened_at` / `last_closed_at` (integer epoch ms) from an existing row, with
+  `project_path` `ssh://<user>@<mini-host>/Users/<user>/claudesk-scratch-remote` and `remote: {host, path}`. Edit with the dev
+  app STOPPED (every launch rewrites the file, [[projects-json-resorted-on-every-launch]]). Back up the dev `projects.json` and
+  `settings.json` (e.g. a gate flip for the check) first, and `cp` both back afterwards; check the shas match the backup.

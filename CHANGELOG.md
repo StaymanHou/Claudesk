@@ -8,6 +8,13 @@
 - **Backlog resolved:** SURFACE-2026-11-20-QUALITY-RUNTIMES-PRIOR-LAST-OVERWRITTEN — the overwritten `**Last:**` lines were restored as `**Prior:**` and the History bullets labelled.
 - **Backlog resolved:** SURFACE-2026-11-20-QUALITY-NO-CLT-XCODE-SELECT-CLAIM-UNLABELLED — the claim is now marked cited and stub-measured.
 - **Milestone:** WP3: Probe — remote substrate behaviour on the mini
+- **Feature shipped:** M18 WP4 makes the remote host the third input of the workflow funnel. The open check's existing exec probes each host account for the workflow system (`SUBSTRATE_PROBE`, held to the local predicate by a 16-fixture parity test) and caches the answer per host, and a workspace on a host without it shows no skill row, Recycle, Session-Start, Docs or auto `/session-restore`, only a plain note pointing to Settings → Remote hosts (the OFF-invariant pin is now 6 arms / 11 subjects).
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-SUBSTRATE-PROBE-RUNS-THE-GIT-SHIM — the shipped probe reads `HEAD` from `.git` in perl and never runs `git`, pinned by a test with a failing `git` stub first on PATH.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-SUBSTRATE-PROBE-HAS-NO-SANDBOX-ROOT-SEAM — a debug build passes `CLAUDESK_REMOTE_SUBSTRATE_ROOT` as an env prefix on the probe's one command, and the release command is byte-identical with or without it.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-SUBSTRATE-ROOT-LINE-NO-NEWLINE-GUARD — the probe withholds a root that contains a newline (the answer keeps parity), and Rust takes the root through the remote-path normalization.
+- **Backlog resolved:** SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD — its detection half shipped in M18 WP4 (a skill-less host shows no dead workflow buttons, only the absent-host note); the install half stays open for WP5–WP7.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-ARCH-NOTE-WORDING-STALE — `arch/claude-substrate.md` now quotes the note with the short host and the full `user@host` in its tooltip.
+- **Milestone:** M18 WP4 — Detection and the funnel's third input (+ the absent-host note).
 
 ## 2026-11-18
 

@@ -741,12 +741,17 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Source:** feature:verify-self (M17 WP7 Phase 4, live)
 - **Target level:** product:arch
 - **Type:** gap
-- **Summary:** With the workflow gate ON, a remote workspace shows the skill buttons, Session-Start and Recycle, but nothing checks that the companion workflow skills exist on the REMOTE account. The mini's dev account has no `~/.claude/skills/` at all, so `/session-handoff` there is an unknown command: Recycle injects it, nothing writes `.session.md`, and the operation ends in `failed`; the skill buttons inject commands CC does not know.
-- **Context:** The gate is LOCAL (`settings.json` on this Mac) and WP5's open check gates the `/session-restore` arm on it alone. Locally the workflow layer is opt-in because the skills may be absent (M10.9: "no dead affordances"); a remote host is the same question asked again per host, and today it is never asked. Found while preparing the remote Recycle check; verification used project-local STUB skills in the scratch remote folder instead (`~/claudesk-scratch-remote/.claude/skills/`).
-- **Suggested action:** Decide at arch level: probe the remote account for the workflow skills (e.g. in the open check's one exec, or once per link) and treat "gate ON + skills absent on that host" like gate OFF for that workspace (workflow surfaces absent, plain-words note), or document that remote workflow use requires installing the skills on the host. Prior `gate-substrate-dependent-feature-class-behind-default-off-opt-in` applies.
+- **Summary (remaining open work, rewritten at M18 WP4 finalize 2026-11-20):**
+  - The DETECTION half is resolved (CHANGELOG 2026-11-20). The open check probes each host account, and a workspace on
+    a host without the workflow system shows no workflow buttons, Docs or auto `/session-restore`, only the absent-host
+    note.
+  - What remains is the INSTALL half. On such a host the operator can install the workflow system only by hand:
+    Claudesk has no Settings → Remote hosts readout, Install, Update or Uninstall yet.
+- **Context:** M18's seed. Interim, the mini's dev account was set up by hand (`~/my-claude-code-customization`,
+  `install.sh`, the 4 printed permissions); it reads as **Developer**.
+- **Suggested action:** M18 WP5 (readout + drift), WP6 (Install), WP7 (Update / Uninstall).
 - **Priority:** medium
-- **Routed (2026-11-17):** scheduled as **Milestone 18 (remote workflow substrate)** in `roadmap.md`, by operator ruling during M17 WP8; this entry is its seed and closes with M18. Interim: the mini's dev account was set up by hand (a git bundle of the mccc repo at `~/my-claude-code-customization`, `install.sh`, the 4 printed permissions; backup `settings.json.bak-mccc-install-2026-11-17`). That account has no GitHub access, so its copy cannot `git pull` until it gets one.
-- **Status:** routed — the seed of Milestone 18 (`roadmap.md`); closes with M18
+- **Status:** routed — the seed of Milestone 18 (`roadmap.md`); closes with M18 WP7
 
 ## SURFACE-2026-11-18-PICKER-SEARCH-BOX-NOT-AUTOFOCUSED
 - **Source:** operator request (2026-11-18)
@@ -780,7 +785,18 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m18-wp3-remote-substrate-probe (2026-11-20)
 
-- **Pointer:** **3 MAJOR + 1 MINOR** open from the review of the WP3 probe ship commit (`0c45070`); the doc-drift MAJOR and 3 record MINORs were resolved at WP3 finalize. MAJOR: the drafted `SUBSTRATE_PROBE` runs the `git` shim on every open (read `HEAD` in perl instead); the draft has no seam for the debug sandbox root that WP4.6 and WP6.6 need; ruling A's `install.sh` window is unguarded against stream death and an in-flight cancel (guard it on the host; now WBS task 6.3b). MINOR: a newline guard for the root line. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp3-remote-substrate-probe — 2026-11-20`.
-- **Priority:** medium (the MAJORs), low (the MINOR)
+- **Pointer:** **1 MAJOR** open from the review of the WP3 probe ship commit (`0c45070`). Ruling A's `install.sh` window is unguarded against stream death and an in-flight cancel; guard it on the host (WBS task 6.3b). The probe-constant MAJORs and the newline-guard MINOR were resolved at WP4 (see CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp3-remote-substrate-probe — 2026-11-20`.
+- **Priority:** medium
 - **Status:** pending
-- **Pickup shape:** the two probe-constant MAJORs and the newline guard belong to WP4.1; the `install.sh` window MAJOR belongs to WP6 (task 6.3b).
+- **Pickup shape:** belongs to WP6 (task 6.3b).
+
+## Code-quality findings — m18-wp4-substrate-detection-and-funnel (2026-11-20)
+
+- **Pointer:** **1 MAJOR + 6 MINOR** open from the review of the WP4 window (`9ce4810^..d57aa15`); the stale arch-wording MINOR was resolved at WP4 finalize.
+  - MAJOR: `workflowApplicableGuard`'s host-argument check matches by `includes`, so a ternary with a non-seam arm passes. Split the arms and check each one.
+  - MINOR: the host-store latch never retries after a failed `listen`; a third inline gate-hook call in `Workspace`; `onOpenSettings` is optional where `tsc` could enforce it; `shortHost` is imported across layers; the substrate sink uses a setter shape; one doc-comment line is too wide.
+  - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp4-substrate-detection-and-funnel — 2026-11-20`.
+- **Priority:** medium (the MAJOR), low (the MINORs)
+- **Status:** pending
+- **Pickup shape:** the guard MAJOR is a small test-only change, a good first task for WP5 or a paydown. The MINORs are paydown polish.
+

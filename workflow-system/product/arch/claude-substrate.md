@@ -164,10 +164,11 @@ What the build settled that the design above left open (the WP4 WIP's D1–D10; 
   key never touches it, so it makes no IPC.
 - **Picker remote rows** (operator ruling A, 2026-11-20): the drive-mode cell is absent until the row's host has been
   open-checked once in the app session (fail closed).
-- **The note** (D8): Absent → "The workflow system isn't installed for `<user@host>`. Install it in Settings → Remote
-  hosts.". Unknown → "Claudesk couldn't check whether the workflow system is installed for `<user@host>`.". Not yet
-  seeded → no note (it would flash). Its button opens Settings; WP5 task 5.2b makes it land on the group. The OFF
-  pin is **6 arms / 11 subjects**.
+- **The note** (D8): Absent → "The workflow system isn't installed for `<host>`. Install it in Settings → Remote
+  hosts.". Unknown → "Claudesk couldn't check whether the workflow system is installed for `<host>`." (operator ruling
+  A). `<host>` is the SHORT host (the picker row's `shortHost`), and the full `user@host` is in the tooltip (operator,
+  P3.verify-human.1). Not yet seeded → no note (it would flash). Its button opens Settings; WP5 task 5.2b makes it land
+  on the group. The OFF pin is **6 arms / 11 subjects**.
 
 ### R.2 Detection: the local predicate, run on the host, in the open check's one exec
 

@@ -5,7 +5,8 @@ drive_mode: autopilot
 # Feature: M18 WP4 — Substrate detection and the funnel's third input
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete)
+**Completed:** 2026-11-20
 **Created:** 2026-11-20
 **WBS:** `workflow-system/product/wbs.md` → "WP4: Detection and the funnel's third input (+ the absent-host note)"
 **Design:** `workflow-system/product/arch/claude-substrate.md` → "Remote hosts (M18)" §R.1, §R.2, §R.8
@@ -352,11 +353,64 @@ not in WP4.
 - `CLAUDESK_REMOTE_SUBSTRATE_ROOT` is debug-only. The sandbox dir is an **empty** dir created by the agent on the host
   and removed after (state-changing, declared).
 
+## Code-Quality Review
+
+*(feature-review-quality on `9ce4810^..d57aa15`, drive_mode=autopilot: 0 CRITICAL, 1 MAJOR, 7 MINOR, all auto-backlogged to
+`backlog-quality-findings.md` → `# m18-wp4-substrate-detection-and-funnel — 2026-11-20`, with a pointer in `backlog.md`.)*
+
+### Strengths
+- The host is a third parameter of the ONE existing funnel (Rust + TS), not a per-site flag. Local is a typed variant,
+  and Unknown / undefined fail closed. The truth tables cover all 5 hosts and mirror each other.
+- The parity test runs the real `SUBSTRATE_PROBE` through the real `parse_open_facts` against 16 fixtures, and each
+  guard in the constant is killed by its own fixture.
+- The non-UTF-8 divergence is closed at the source (local reads bytes), and `provenance::parse_record` is one shared
+  parser.
+- D10: the pre-probe funnel is named separately, with a "never a consumer's answer" warning, and the picker's start
+  takes the check's own host (the ordering bug was found at build).
+- D5 lives in one place (`settle_open_decision`, its exact call list pinned). Each backend consumer has a behavioural
+  Absent/Unknown test with a Developer positive control.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`src/state/__tests__/workflowApplicableGuard.test.ts` → `checkHostArg`] The host-argument check is an `includes` match,
+  so a ternary with a non-seam arm (an identifier holding `"local"`, an object literal) passes; only a literal
+  `"local"` is caught. The production `ProjectPicker.tsx` call is a ternary, so the shape is real. Split the arms and
+  check each one. → `SURFACE-2026-11-20-QUALITY-HOST-ARG-GUARD-CHECKS-BY-INCLUDES`
+
+**MINOR**
+- [`useHostSubstrate.ts`] The `started` latch never resets on a failed `listen`, so remote hosts stay `undefined` and the
+  workspace loses its row with no note. → `…-HOST-STORE-LATCH-NEVER-RETRIES`
+- [`Workspace.tsx`] A third inline `useWorkflowFeaturesEnabled()` (separate seed + listener). →
+  `…-WORKSPACE-THIRD-GATE-HOOK-CALL`
+- [`Workspace.tsx` / `CenterStage.tsx`] `onOpenSettings` is optional, and a source guard stands in for `tsc`. →
+  `…-ONOPENSETTINGS-OPTIONAL-PROP`
+- [`absentHostNote.ts`] `shortHost` is imported from a picker module (a layering inversion). →
+  `…-SHORTHOST-CROSS-LAYER-IMPORT`
+- [`arch/claude-substrate.md` → "R.1 + R.2 as built"] The note wording still shows the full `<user@host>`. →
+  `…-ARCH-NOTE-WORDING-STALE` (fix at finalize)
+- [`remote_link/mod.rs`] The substrate sink is installed by a post-construction setter, while the link sink is a
+  constructor argument. → `…-SUBSTRATE-SINK-SETTER-SHAPE`
+- [`cc_session/mod.rs`] One doc-comment line is past the wrap width. → `…-CC-SESSION-DOC-LINE-WIDTH`
+
+### Assessment
+The feature is well built. The input goes through the existing funnel; the one caller that cannot have the host yet gets
+a named pre-probe funnel; parity is held by a mutation-proven behavioural test. The Rust side is clean: no `unwrap()`
+outside tests, short main-thread-safe lock reads, the gate-OFF command pinned byte-identical, and the debug seam
+unreachable in release. The main debt is the TS guard's `includes` match, which is weaker than its self-tests suggest
+and should be tightened before more consumers rely on it. The rest is small cleanup. Net: forward motion with modest
+debt.
+
+### If you disagree
+Dismiss any finding by marking its line `[DISMISSED]` here before `feature-finalize` archives the WIP.
+
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality (against the ship commit)
+- **Path:** Feature > finalize
+- **Active scope:** finalize
 - **Blocked:** none
-- **Unvisited:** review-quality → finalize
+- **Unvisited:** finalize
 - **Open discoveries:** none
 
 ## Discoveries
@@ -366,3 +420,39 @@ not in WP4.
 [SHORTCUT-2026-11-20] P1.verify-self vs.3 — mutant M2 (`next unless -l $e;` deleted) SURVIVED the 14-fixture parity test: no fixture separated a real dir from a link. In-place fix, extending P1.5's fixture list (a trivial extension of the just-built leaf): added "a real dir under a marker installer two levels up" and, for the analogous unguarded `-e $t` check, "a link dangling into a marker repo" (16 fixtures). Re-verified by a FRESH runner subagent: M1, M2 and M3 each fail on their own fixture, and every restore matched the sha.
 
 [SHIP-2026-11-20] Full suite: reused the last-phase codify run (`Test scope: full — last phase`, `pnpm verify:auto` EXIT=0, 56s, vitest 4136 / lib 1401). Nothing but this WIP and runtimes.md changed since. Fast checks re-run at ship: eslint on the changed files clean, `tsc --noEmit` ok, `cargo fmt --check` ok. No TODO/debug leftovers.
+
+## Retrospect
+- **What changed in our understanding:**
+  - A cache written by a command and read through an event has an ordering hole for the SAME action's next step. The
+    picker's open read the host map from the last render, before its own check wrote the cache, and Tauri does not
+    order the event against the command's response. The consumer that acts on a check must take the answer from the
+    check (`StartSignals.hostSubstrate`), not from the cache it fills.
+  - "Local costs no IPC" ruled out the obvious `useTauriListen`-per-hook shape, because `listen` is itself an IPC call.
+    A lazily started module store (`useSyncExternalStore`) was the right shape for a per-host value read by many
+    consumers.
+- **Assumptions that held:**
+  - The host as a THIRD input of the one funnel (§R.1) worked without any consumer learning about hosts.
+  - The probe's +16 ms cost.
+  - The WP3 draft constant, once its three review findings were folded in.
+  - Fail closed for an unknown host (the operator kept it at D9, ruling A).
+- **Assumptions that were wrong:**
+  - The 14-fixture parity set was "every shape". Mutant M2 survived it, because no fixture separated a real dir from
+    a symlink; the analogous `-e $t` guard was equally unguarded. 16 fixtures now, each guard killed by its own.
+  - The plan's count sweep was keyed on the number "10". The stale `arch.md` claim said "9 subjects", which only a
+    sweep by the claim's noun found.
+  - The first App-wiring guard was vacuous: the same prop is passed twice in `App.tsx`. The mutant's grep count
+    (2 → 1) exposed it.
+- **Approach delta:**
+  - Added at build: D10 (the pre-probe funnel + the check-carried host) and `StartSignals.hostSubstrate`.
+  - One store hook in place of two `useTauriListen` hooks, and the single-host command dropped.
+  - The note's short-host label came from the operator at verify-human (one F12 back-loop).
+  - Otherwise the 3-phase plan held.
+
+## Closure
+> **Feature complete:** M18 WP4 (substrate detection and the funnel's third input) has shipped. Claudesk now checks
+> each remote host account for the workflow system in the open check's existing exec, and a workspace on a host
+> without it shows no workflow buttons, no Docs tab and no auto `/session-restore`, just one line pointing to
+> Settings → Remote hosts. Seen live on the mini with the debug sandbox root (`CLAUDESK_REMOTE_SUBSTRATE_ROOT`) and
+> on the real account (unchanged).
+
+Requester = operator — closure notice for self-record.

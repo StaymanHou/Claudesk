@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-20  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7); WP3 shipped (0c45070)
+updated: 2026-11-20  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7); WP3 shipped (0c45070); WP4 shipped (d57aa15)
 cycle: milestone-18-remote-workflow-substrate
 ---
 
@@ -138,7 +138,7 @@ Uninstall + Install.
 **WP3 → WP4 rationale:** detection is built on the probe's measured exec cost and the shell probe's behaviour on the real host. Building
 the funnel first and finding the probe too slow for every open would put the change in the wrong place.
 
-### WP4: Detection and the funnel's third input (+ the absent-host note)
+### WP4: Detection and the funnel's third input (+ the absent-host note) ✅ SHIPPED 2026-11-20 (commits 9ce4810, 15d0e7b, d57aa15)
 **Description:** §R.1 + §R.2.
 - **Detection:** `SUBSTRATE_PROBE` in the open-check exec, with its **parity guard** against `skills_dir_exists`. `OpenFacts.substrate`
   and the host-record read through the local `provenance` parser.
@@ -149,13 +149,13 @@ the funnel first and finding the probe too slow for every open would put the cha
 **Dependencies:** WP3
 **Size:** L
 **Tasks:**
-- [ ] 4.1 `SUBSTRATE_PROBE` constant + the parity test (`substrate_probe_agrees_with_skills_dir_exists`, run under a temp HOME, every fixture shape).
-- [ ] 4.2 `OpenFacts.substrate` + the host-record parse. Gate OFF → not probed (a test pins that the gate-OFF open-check command carries no probe).
-- [ ] 4.3 `HostSubstrate` cache + `remote-substrate` broadcast. `useHostSubstrate` (seed + listen; local keys return `Local` with no IPC).
-- [ ] 4.4 The funnel's third input, Rust + TS. Migrate every consumer. Extend `workflowApplicableGuard` so a consumer that drops the host input fails.
-- [ ] 4.5 The absent-host note + its OFF-invariant subject. Move the pin to 6 / 11, and mutation-prove the new subject on its own.
-- [ ] 4.6 Live: the gate ON, a scratch remote row whose HOME override lacks the substrate → skill row, Session-Start, Recycle and Docs absent, the note present; the auto `/session-restore` not fired. The live account → all present.
-- [ ] 4.7 Fix the stale counts: grep for "10 subjects" and "6 arms / 10" repo-wide (`CLAUDE.md`, `arch.md`, `workflow-gate.md`, lessons) and correct every one.
+- [x] 4.1 `SUBSTRATE_PROBE` constant + the parity test (`substrate_probe_agrees_with_skills_dir_exists`, run under a temp HOME, every fixture shape).
+- [x] 4.2 `OpenFacts.substrate` + the host-record parse. Gate OFF → not probed (a test pins that the gate-OFF open-check command carries no probe).
+- [x] 4.3 `HostSubstrate` cache + `remote-substrate` broadcast. `useHostSubstrate` (seed + listen; local keys return `Local` with no IPC).
+- [x] 4.4 The funnel's third input, Rust + TS. Migrate every consumer. Extend `workflowApplicableGuard` so a consumer that drops the host input fails.
+- [x] 4.5 The absent-host note + its OFF-invariant subject. Move the pin to 6 / 11, and mutation-prove the new subject on its own.
+- [x] 4.6 Live: the gate ON, a scratch remote row whose HOME override lacks the substrate → skill row, Session-Start, Recycle and Docs absent, the note present; the auto `/session-restore` not fired. The live account → all present.
+- [x] 4.7 Fix the stale counts: grep for "10 subjects" and "6 arms / 10" repo-wide (`CLAUDE.md`, `arch.md`, `workflow-gate.md`, lessons) and correct every one.
 
 **WP4 → WP5 rationale:** the Settings readout shows the cached `HostSubstrate`. It needs the cache and the record parse before it has
 anything to show.

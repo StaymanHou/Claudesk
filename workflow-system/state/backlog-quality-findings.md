@@ -420,22 +420,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit `0c45070`, window `0c45070^..0c45070`; drive_mode=autopilot. 0 CRITICAL, 4 MAJOR, 4 MINOR, all auto-backlogged; 1 MAJOR + 3 MINOR resolved at WP3 finalize, see CHANGELOG 2026-11-20. A probe: no app code; the findings are about how the probe's answers carry into WP4–WP7.)*
 
-## SURFACE-2026-11-20-QUALITY-SUBSTRATE-PROBE-RUNS-THE-GIT-SHIM
-- **Source:** feature-review-quality (M18 WP3, MAJOR)
-- **Type:** bug (in a drafted constant WP4.1 is told to adopt)
-- **Summary:** the drafted `SUBSTRATE_PROBE` (`wbs.md` → "Probe outcomes" (4)) runs `git -C $root rev-parse HEAD` through PATH on every gate-ON remote open. On a host whose Command Line Tools are missing or broken (common after a macOS upgrade), that `git` is the `/usr/bin/git` shim, which (5) says asks for the GUI installer on the host's console, the side effect the WP6 preflight is built to avoid.
-- **Context:** WP4.1 would put the shim on the open path of a Developer install whose CLT later broke, repeatedly.
-- **Suggested action:** at WP4.1, read `HEAD` without git: in the same perl, read `<root>/.git/HEAD`; if it is `ref: <r>`, read `<root>/.git/<r>`, else `packed-refs`. Or gate the `git` call with the guarded `xcode-select -p` test. Add a parity/fixture test for a loose ref and a packed ref.
-- **Priority:** medium
-
-## SURFACE-2026-11-20-QUALITY-SUBSTRATE-PROBE-HAS-NO-SANDBOX-ROOT-SEAM
-- **Source:** feature-review-quality (M18 WP3, MAJOR)
-- **Type:** gap (design)
-- **Summary:** the draft reads `$ENV{HOME}` and, per §R.2, has no interpolated value. But WP4.6 (a scratch row "whose HOME override lacks the substrate") and WP6.6 (a workspace "whose probe reads the sandbox") need the open check to read the debug `CLAUDESK_REMOTE_SUBSTRATE_ROOT`. The probe's own sandbox reads used `HOME=<root>` on the command line, and the outcomes never say how WP4 should do that.
-- **Context:** prefixing `HOME=<root>` inside the fragment breaks the "constant, no interpolated value" rule the parity guard relies on.
-- **Suggested action:** decide at WP4.1: e.g. a debug-only, quoted `CLAUDESK_SUBSTRATE_HOME=<root>` export ahead of the constant (outside the fragment), with the fragment reading `$ENV{CLAUDESK_SUBSTRATE_HOME} // $ENV{HOME}`. Keep the release build's command byte-identical (a test).
-- **Priority:** medium
-
 ## SURFACE-2026-11-20-QUALITY-INSTALL-SH-WINDOW-UNGUARDED-AGAINST-STREAM-DEATH
 - **Source:** feature-review-quality (M18 WP3, MAJOR)
 - **Type:** gap (design: the operator-ruled cancel shape A)
@@ -446,9 +430,56 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** at WP6, enforce the boundary on the HOST. Run `install.sh` (and the record write) under `trap '' HUP PIPE TERM`, with its output going to a remote log that the stream tails, or `nohup`'d. Have the script print a phase sentinel (`CLAUDESK-RUN:phase:install`) before it, which the UI uses to disable Cancel. Test that a group kill sent after the sentinel does not interrupt `install.sh`.
 - **Priority:** medium
 
-## SURFACE-2026-11-20-QUALITY-SUBSTRATE-ROOT-LINE-NO-NEWLINE-GUARD
-- **Source:** feature-review-quality (M18 WP3, MINOR)
+# m18-wp4-substrate-detection-and-funnel — 2026-11-20
+
+*(feature-review-quality on the WP4 window `9ce4810^..d57aa15`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 7 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-20-QUALITY-HOST-ARG-GUARD-CHECKS-BY-INCLUDES
+- **Source:** feature-review-quality (M18 WP4, MAJOR)
+- **Type:** gap (a guard weaker than its self-tests suggest)
+- **Summary:** `workflowApplicableGuard.test.ts` → `checkHostArg` accepts any host argument that merely CONTAINS a seam call (`useHostSubstrate(` / `hostSubstrateFor(` / `hostFromOpenCheck(`). So a ternary whose other arm is NOT from the seam passes: e.g. `c ? hostSubstrateFor(p,m) : LOCAL` (an identifier holding `"local"`), or `c ? hostFromOpenCheck(x) : {state:"developer"}`. Only a literal `"local"` is caught inside a ternary.
+- **Context:** the guard exists to stop a remote workspace reading as local. The production `ProjectPicker.tsx` open-path call already IS a ternary, so this shape is real. It is the `includes`-instead-of-per-arm "green while checking nothing" form in `docs/lessons/source-text-guards.md`.
+- **Suggested action:** split conditional arms (top-level `?` / `:` in the flattened argument) and require EACH arm to be a seam call or a seam-bound identifier; add self-tests for an identifier arm and an object-literal arm; mutation-prove on the real picker call.
+- **Priority:** medium
+
+## SURFACE-2026-11-20-QUALITY-HOST-STORE-LATCH-NEVER-RETRIES
+- **Source:** feature-review-quality (M18 WP4, MINOR)
 - **Type:** hardening
-- **Summary:** the draft prints `substrate-root:$root` without the newline guard `TRUSTED_KEYS` applies (`next if $k =~ /\n/`), so a pathological root path could inject a sentinel line. The Rust side should also take it through the existing remote-path normalization.
-- **Suggested action:** at WP4.1/4.2, add the guard and the normalization, plus a fixture with a newline in the repo path.
+- **Summary:** `useHostSubstrate.ts` sets `started = true` before `listen` resolves and never resets it. A rejected `listen` leaves every remote host `undefined` for the session, and `absentHostNote` shows nothing for `undefined`, so the skill row silently vanishes with no note.
+- **Suggested action:** reset `started` in the `catch` (retry on the next subscriber), or surface the failed state distinctly.
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-WORKSPACE-THIRD-GATE-HOOK-CALL
+- **Source:** feature-review-quality (M18 WP4, MINOR)
+- **Type:** tech-debt
+- **Summary:** `Workspace.tsx` now calls `useWorkflowFeaturesEnabled()` inline three times. Each call seeds and listens separately: one more IPC round-trip per workspace, and a brief window where the note's copy and the row's copy disagree.
+- **Suggested action:** read the gate once into a binding and feed both funnel wrappers. `workflowApplicableGuard`'s binding shape already accepts it.
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-ONOPENSETTINGS-OPTIONAL-PROP
+- **Source:** feature-review-quality (M18 WP4, MINOR)
+- **Type:** hardening
+- **Summary:** `onOpenSettings` is optional on `Workspace` / `CenterStage`, and the note's Settings button renders only when it is defined. A dropped prop makes the button vanish silently; a source guard (`absentHostNoteLive.test.tsx`) stands in for what `tsc` could enforce.
+- **Suggested action:** make the prop required on `CenterStage` (and on `Workspace` where the harnesses allow), then drop the source guard.
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-SHORTHOST-CROSS-LAYER-IMPORT
+- **Source:** feature-review-quality (M18 WP4, MINOR)
+- **Type:** tech-debt
+- **Summary:** `components/workspace/absentHostNote.ts` imports `shortHost` from `components/picker/remoteRow.ts`, a picker module with its own runtime imports. That is a layering inversion.
+- **Suggested action:** move `shortHost` beside `remoteAuthority` in `state/workspaceSurfaces.ts` and import it from there in both the picker and the workspace (`autoResumeFire.ts` imports it the same way).
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-SUBSTRATE-SINK-SETTER-SHAPE
+- **Source:** feature-review-quality (M18 WP4, MINOR)
+- **Type:** tech-debt
+- **Summary:** `LinkRegistry` takes its link sink as a constructor argument but its substrate sink through a post-construction `set_substrate_sink` (a second `Mutex<Option<…>>`). A `set_substrate` before installation drops its event silently. Harmless today (`init` is synchronous), but it is two shapes for one kind of dependency.
+- **Suggested action:** fold it into the constructor (5 call sites, tests pass a no-op), or document the ordering invariant on the setter.
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-CC-SESSION-DOC-LINE-WIDTH
+- **Source:** feature-review-quality (M18 WP4, MINOR)
+- **Type:** cosmetic
+- **Summary:** the M18 WP4 sentence added to `resolve_profile_spawn_env`'s doc comment (`cc_session/mod.rs`) runs past the file's wrap width; rustfmt does not reflow doc comments.
+- **Suggested action:** rewrap by hand.
 - **Priority:** low
