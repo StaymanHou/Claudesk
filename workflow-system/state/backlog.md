@@ -614,6 +614,16 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
+## SURFACE-2026-11-20-REMOTE-INSTALL-REOPENED-SETTINGS-HIDES-THE-RUNNING-INSTALL
+- **Source:** feature:verify-self (M18 WP6 Phase 3; runner review), accepted at P3.verify-human.6 (operator, 2026-11-20: "accept + backlog")
+- **Target level:** feature (frontend, Settings → Remote hosts)
+- **Type:** gap (UX)
+- **Summary:** `RemoteInstallPanel` keeps its run state in the component. Close Settings during a remote install and reopen it: the entry remounts `closed`, shows "Install…" again with no sign a run is going, and clicking it gets the backend's "already running" refusal in the consent step. The run itself is unaffected: it finishes, and the per-host cache (`remote-substrate`) still flips the entry to Managed.
+- **Context:** rare (an install takes ~5 s); the refusal explains it. WP7's Update / Uninstall will reuse the same panel shape, so the gap would grow with them.
+- **Suggested action:** a small backend read (`workflow_remote_run_state` → `{ host, phase } | null`, a lock read on `InstallControl.remote` + the host) seeded on the panel's mount, so a reopened entry shows "Installing on this host…" and re-attaches to the run's events. Do it with WP7 if the panel grows Update / Uninstall.
+- **Priority:** low
+- **Status:** pending
+
 ## SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN
 - **Source:** feature:verify-self (M17 WP3 Phase 4; a `window` `unhandledrejection` tap in the agent-launched dev app)
 - **Target level:** feature (frontend, `useTauriListen`)
@@ -621,7 +631,9 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Summary:** Opening a workspace, LOCAL as well as remote, raises several unhandled rejections `TypeError: undefined is not an object (evaluating 'listeners[eventId].handlerId')` (≈5–6 per open; 23 over one session). Stack: Tauri's injected `unregisterListener` (a user-script) ← `@tauri-apps/api/event` `_unlisten` ← `src/useTauriListen.ts` (the `cancelled` branch's `fn()`, i.e. the StrictMode first-mount cleanup unlistening after `listen` resolves). Closing a workspace raised none.
 - **Context:** Not WP3's: `useTauriListen.ts` is untouched since 2026-06-30, the `tauri` crate (2.11.2) and `@tauri-apps/api` are unchanged by WP3 (it added only `sha2`), and a local scratch-c open reproduces it. Odd: the identical tap read `[]` across WP3 Phase 3's session, so either the tap missed them there or the trigger is newer; not established. Behavior looked unaffected (sends, status, closes all worked).
 - **Suggested action:** Reproduce in a HEAD build with the same tap (positive control), check whether a prod build (no StrictMode) raises it, and look upstream for the Tauri unlisten-twice race. If confirmed, swallow the double-unlisten in `useTauriListen` (or guard it) so real rejections stay visible.
-- **Priority:** low
+- **Update 2026-11-20 (M18 WP6 Phase 3 verify-self): it is not just noise, it DUPLICATES event delivery in dev.** The remote install panel's streamed log showed every line exactly twice (158 lines, 73 unique, 73 adjacent duplicates), on a freshly reloaded webview too (so not HMR residue). The fit: StrictMode's first-mount cleanup runs `fn()` in `useTauriListen`'s `cancelled` branch, that unlisten throws the `handlerId` rejection, the listener stays attached, and both listeners call the same instance's `handlerRef` (StrictMode keeps state and refs across the double mount). Expected in dev only (React does not double-invoke effects in a production build), but every `useTauriListen` consumer (13 files) is exposed: anything that APPENDS per event (the local and remote install logs) doubles, and anything that is not idempotent per event acts twice. Not verified on an installed build yet.
+- **Suggested action (revised):** (1) a positive control on an installed `.app` (WP8's release) to confirm prod is single-delivery; (2) fix `useTauriListen`: catch the unlisten failure AND guard the handler with the effect's own `cancelled` flag, so a leaked listener calls nothing; a jsdom test under `<StrictMode>` counting handler calls per emitted event.
+- **Priority:** medium *(raised from low 2026-11-20: duplicate delivery, not just a console rejection)*
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
 ## Code-quality findings — m17-wp3-remote-terminal (2026-11-16)

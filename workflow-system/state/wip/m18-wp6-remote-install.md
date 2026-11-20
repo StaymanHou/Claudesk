@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP6 — Install over the master
 
 **Workflow:** feature
-**State:** verify-codify (phase 2 complete)
+**State:** verify-codify (all phases complete)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -158,7 +158,7 @@ Phase 1 first pays down the review findings the handoff marked "due before WP6",
     — evidence: the live-only composition (first result → `settle_refresh` → `resolve`) stays covered by the Phase 2 live run; Phase 3's live run repeats it through the UI.
     — evidence: `pnpm verify:auto` → EXIT=0, 69 s (vitest `Tests 4157 passed (4157)`; cargo test lib `1452 passed; 0 failed`; clippy, fmt clean).
 
-- [ ] Phase 3: The Install button, its output, and the live result  <!-- status: NOT-STARTED; depends on Phase 2 -->
+- [x] Phase 3: The Install button, its output, and the live result  <!-- status: done -->
   **Observable outcomes:**
   - CLI: `remoteHostsSettings.test.tsx` (jsdom render) shows:
     - an **Absent** entry with its link Up renders an Install button;
@@ -183,21 +183,47 @@ Phase 1 first pays down the review findings the handoff marked "due before WP6",
   - (decision) The consent step before a remote install (D11): keep it, or start the run on one click?
   - (decision) Cancel is disabled with "finishing the install…" once `install.sh` starts (ruling A, as built). Is that wording right?
   - (decision) What the result shows in the entry: success = the re-probed readout itself (no extra banner); failure = the script's last error line + "Nothing was recorded; you can retry." Want a persistent banner instead?
-  - [ ] P3.1 TS: `remoteInstall` state module (start, cancel, the event listeners) + the `RemoteHostEntry` install affordance (Absent + link Up only)  <!-- status: NOT-STARTED -->
-  - [ ] P3.2 The consent step + the output panel (reuse the local wizard's presentational output/tail pieces; extract them if needed, with the local wizard unchanged in behaviour) + Cancel gated on phase  <!-- status: NOT-STARTED -->
-  - [ ] P3.3 The result in the entry. The substrate comes through `useHostSubstrates` (the re-probe's event), never a local copy (6.5)  <!-- status: NOT-STARTED -->
-  - [ ] P3.4 Geometry measurement + the jsdom render tests  <!-- status: NOT-STARTED -->
-  - [ ] P3.5 Live: Absent → Install → Managed with a gate-ON workspace updating live; then remove the sandbox (6.6)  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P3.1 TS: `remoteInstall` state module (start, cancel, the event listeners) + the `RemoteHostEntry` install affordance (Absent + link Up only)  <!-- status: done -->
+  - [x] P3.2 The consent step + the output panel (reuse the local wizard's presentational output/tail pieces; extract them if needed, with the local wizard unchanged in behaviour) + Cancel gated on phase  <!-- status: done -->
+  - [x] P3.3 The result in the entry. The substrate comes through `useHostSubstrates` (the re-probe's event), never a local copy (6.5)  <!-- status: done -->
+  - [x] P3.4 Geometry measurement + the jsdom render tests  <!-- status: done -->
+  - [x] P3.5 Live: Absent → Install → Managed with a gate-ON workspace updating live; then remove the sandbox (6.6)  <!-- status: done (as P3.verify-self's live outcomes) -->
+  - [x] verify-auto  <!-- status: done -->
+    — evidence: `pnpm verify:auto` → EXIT=0, 55 s (lint 0 errors + the 1 pre-existing `XtermPane.tsx` warning; prettier; tsc; check:link; vitest `Tests 4164 passed (4164)` (+7 new); cargo fmt; clippy clean; cargo test lib `1452 passed; 0 failed`).
+    — evidence (build-time, scoped): `vitest run src/components/settings` → 23 files, 279 passed; `remoteHostsSettings.test.tsx` → 18 passed (7 new Install tests on the real SettingsPanel).
+  - [x] verify-self  <!-- status: done -->
+    - [x] jsdom render — evidence (runner): every clause of the outcome has an assertion in the new `describe` (offered only on Absent + Up; consent lists host + every `REMOTE_CONSENT_ITEMS` line incl. the clone path and "offer Uninstall later"; Confirm → `workflow_remote_install_start {host}`; output streams; Cancel enabled in the clone, disabled "Finishing the install…" in install; finished → result). Gaps it named and codify fills: the consent wording is pinned only by the constant itself; "Managed from the start" now has its own test (added in this verify-self).
+    - [x] local wizard unchanged (D7) — evidence: `git diff --stat` of the wizard + its copy → empty; `vitest run src/components/settings` → 23 files, 279 passed; the remote panel listens only to `remote-install-*`.
+    - [x] LIVE geometry (dev build, bridge) — evidence: consent step buttons top 792 / bottom 818 inside the Settings body's visible rect 230–829 (panel 327 px tall); the result's Close 787–813, inside.
+    - [x] LIVE Absent → Install → Managed through the UI, gate ON, a scratch workspace open on the host (`CLAUDESK_REMOTE_SUBSTRATE_ROOT=<abs sandbox on the mini>`) — evidence: the workspace showed the absent-host note and no skill row; its Settings button opened Settings on Remote hosts (scratch host Absent + Install offered; the old admin-account row Unknown, link down, no button). UI timeline: consent @0.47 s → running "Cancel" @0.60 s → "Finishing the install…" (disabled) @3.51 s → "Installed" @4.50 s; entry → Managed, "installed by Claudesk · HEAD f8e8873", "Up to date with GitHub." (the post-success recheck); message none; no `CLAUDESK-RUN:` in the log; the open workspace's note gone and its skill row (start/clear/restore/capture/prune/paydown/recycle) + Docs tab present WITHOUT a reopen. The reverse also live: after a sandbox reset + refresh the workspace went back to the note, no reopen. Screenshots: scratchpad `p3-1-absent-note.png`, `p3-2-consent.png`, `p3-3-installed.png`.
+    - [x] LIVE lock refusal in the entry — evidence: a run started through IPC held the lock, then the open consent step's Install → "a workflow-system install or uninstall is already running" in the entry; that run then finished (record present, host Managed).
+    - [x] Console — evidence: a `window` error + `unhandledrejection` tap through the opens and runs: only the known `listeners[eventId].handlerId` rejections (`SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN`, on every workspace open and Settings mount); nothing else.
+    - [ ] Finding A (live, FAILED-cosmetic, dev builds): the run's log shows EVERY line twice (158 lines, 73 unique, 73 adjacent duplicates), reproduced on a freshly reloaded webview (not HMR residue). Cause, by fit: the pre-existing `useTauriListen` StrictMode unlisten leak (the `handlerId` rejection leaves the first-mount listener attached, both call the same handler). Not WP6's code; affects every `useTauriListen` consumer in dev; prod expected single (React does not double-invoke effects in production), unverified until an installed build. Backlog entry updated with the evidence and raised to medium.  <!-- status: FAILED-cosmetic -->
+    - [x] Finding B (live, BLOCKING-small → SHORTCUT): an open consent step stayed (Install button included) after another run made the host Managed. Fixed in place: React's "adjust state when a prop changes" (`wasOffered`) closes a consent step when `offered` turns false; test "an open consent step closes when the host stops being Absent"; mutation (the close removed) → that test FAILED. Fresh re-verify subagent → PASS (and it found Finding C).
+    - [x] Finding C (re-verify, small → SHORTCUT, two rounds): a start refused AFTER the host stopped being Absent reopened consent; the first fix (render gate) hid it but it came back by itself on re-offer with a stale refusal; the final rule closes a consent step on ANY `offered` change + renders consent only while offered. Tests "a start refused AFTER the host stopped being Absent does not reopen the consent step" and "a consent step hidden by a late refusal does not come back by itself when the host is offered again", each mutation-proven; fresh re-verify fuzz PASS (see Discoveries).
+    - [x] Teardown — evidence: the scratch workspace closed through the UI (no `claudesk-dev` tmux session left), sandbox removed (path-checked), scratch folder unchanged, live account baseline IDENTICAL, dev app stopped, dev `projects.json` / `settings.json` shas = backups, only the installed app's `ssh -M` remains.
+    - [x] align: Absent → Install → Managed (screenshots) — evidence: `p3-1-absent-note.png`, `p3-2-consent.png`, `p3-3-installed.png` (scratchpad) + the timeline above.
+    - [x] align (decision): the consent step — evidence: heading "Install the workflow system on this host"; intro "Claudesk will run the companion repository's own installer on <host>, over its open connection. Here is everything it changes there:"; the 5 `REMOTE_CONSENT_ITEMS`; buttons Cancel / Install.
+    - [x] align (decision): Cancel wording — evidence: during the clone "Cancel" (→ "Cancelling…"), hint "Closing Settings leaves the install running."; in install: disabled "Finishing the install…", hint "install.sh is running; stopping it halfway would leave the host half-installed, so it finishes."
+    - [x] align (decision): the result — evidence: success = "Installed", no message, the log, Close; the entry itself flips to Managed + HEAD + drift. Failure = "Install failed" + the backend's sentence (a clone failure: "git clone failed (exit N); its output is above. Nothing was recorded, so you can retry.") + the log + Close; Close offers Install again. Cancel = "Cancelled" + "Cancelled. Nothing was installed."
+    - [ ] Note (runner, minor UX): Settings closed mid-run and reopened shows the entry's Install again with no sign a run is going; clicking it gets the "already running" refusal.  <!-- status: noted for verify-human -->
+  - [x] verify-human  <!-- status: done -->
+    - [x] P3.verify-human.1 (a) Absent → Install → Managed, as built (screenshots + timeline): what you meant? — operator 2026-11-20: ok.
+    - [x] P3.verify-human.2 (c) keep the consent step, or start on one click? — operator: A (keep the consent step).
+    - [x] P3.verify-human.3 (c) Cancel wording during and after the clone — operator: A (keep the wording).
+    - [x] P3.verify-human.4 (c) the result's shape (no success banner; the backend's sentence on failure) — operator: A (keep: no success banner; the backend's sentence on failure).
+    - [x] P3.verify-human.5 (c, FAILED-cosmetic) doubled log lines in dev builds (pre-existing `useTauriListen` leak): accept + backlog, or fix the hook in WP6 — operator: A (accept for WP6; the hook fix stays on the backlog, medium).
+    - [x] P3.verify-human.6 (c) Settings reopened mid-run shows Install with no sign a run is going: accept (refusal explains) + backlog, or fix now — operator: A (accept; backlogged as SURFACE-2026-11-20-REMOTE-INSTALL-REOPENED-SETTINGS-HIDES-THE-RUNNING-INSTALL).
+  - [x] verify-codify  <!-- status: done -->
+    Test scope: full — last phase
+    — evidence: the copy the operator approved at P3.verify-human.2–4 pinned by LITERAL (`REMOTE_CONSENT_ITEMS`, `FINISHING_LABEL`, `resultTitle`'s three headings); mutation (one consent item reworded) → only the literal test FAILED (the render tests passed it, as the runner predicted); restored byte-exact. The verify-self additions stay as codified coverage: the stale-consent tests (×2, each mutation-proven), "Managed from the start", the refused-start-after-flip test.
+    — evidence: `pnpm verify:auto` → EXIT=0, 57 s (vitest `Tests 4171 passed (4171)`; cargo test lib `1452 passed; 0 failed`; clippy, fmt clean; the 1 pre-existing lint warning).
 
 ## Current Node
-- **Path:** Feature > Phase 3 > P3.1
-- **Active scope:** P3.1 (the `remoteInstall` state module + the Absent-entry affordance)
+- **Path:** Feature > ship
+- **Active scope:** ship (all three phases complete)
 - **Blocked:** none
-- **Unvisited:** none (Phase 3 is the last)
+- **Unvisited:** ship → review-quality → finalize
 - **Open discoveries:** none
 
 ## Verification hygiene (from memory; read before any live step)
@@ -215,4 +241,7 @@ Phase 1 first pays down the review findings the handoff marked "due before WP6",
      Each entry is also logged to workflow-system/state/backlog.md -->
 - [2026-11-20] P2.2 (fixed in build, no backlog entry) — the run script's first draft negated `DEV_TOOLS_GUARD` bare (`if ! d=$(…) && … ; then`), which negates only the first command of the `&&` chain: a no-tools host sailed past the refusal into `git`. Caught by the stub-`xcode-select` arm; fixed as `if ! { GUARD; }; then`, pinned by a builder assertion, and the warning now sits on the constant's doc.
 - [SHORTCUT-2026-11-20] P2.verify-self findings 1+2 — fixed in place (a one-pass template `fill` replacing the `str::replace` chain; the lock guard's two remote entries + whole-body slicing), each mutation-proven; re-verified by a FRESH runner subagent (8 hostile roots + a hostile URL against `fill`, positive control with the old chain; every table entry's body end named) → both PASS. Then the live checks ran on a clean relaunch.
+- [SHORTCUT-2026-11-20] P3.verify-self Finding B — an open consent step on a host that stopped being Absent closes (`wasOffered`, React's prop-change pattern; the effect form was refused by `react-hooks/set-state-in-effect`); test + mutation; re-verified by a FRESH runner subagent → PASS (4 outcomes; it also mutated the condition wider and saw the running-panel test fail).
+- [SHORTCUT-2026-11-20] P3.verify-self Finding C — consent renders only while `offered`, so a refused start cannot reopen it on a non-Absent host; test + mutation. Fresh re-verify → FAIL (BLOCKING): the hidden consent came back BY ITSELF, with a stale refusal, once the host was offered again (link drops mid-start → refused "isn't connected" → link returns). Third fix: ANY change of `offered` closes a consent step (both directions); test "a consent step hidden by a late refusal does not come back by itself when the host is offered again"; mutation (the one-direction form back) → that test FAILED. Fresh re-verify of the whole lifecycle → PASS: the reoffer scenario now renders only "Install…" (no stale reason on reopen); a breadth-first fuzz of every sequence ≤ 9 actions over 15 actions (open, confirm held/resolved, consent Cancel, run Cancel accepted/refused, Close, resolve, reject oldest/newest, finished ok/failed/cancelled, offered false/true), with and without StrictMode (2,669 replays, 548 states per mode) found no realizable consent-not-opened / hidden-result / stale-refusal / render-loop; its 10 findings all need a start that REJECTS AFTER its own run's finished event, which the backend cannot produce (every refusal returns before the worker spawns; only the worker emits finished). Positive control: both mutants (no prop-change close; no render gate) caught. Harness: scratchpad `fuzz/fuzz.test.tsx`.
+- [SURFACED-2026-11-20] P3.verify-self — the dev-build duplicate event delivery is the pre-existing `useTauriListen` leak; logged as an update to `SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN` (priority low → medium), not a new entry.
 - [SURFACED-2026-11-20] feature-plan — wbs.md exceeds size guard (360 lines); read the first 44 lines + headings, plus the WP3–WP8, dependency-map, exit-criteria and "Probe outcomes" sections in full (WP6's own inputs). Consider summarizing the shipped WPs at WP6 finalize.

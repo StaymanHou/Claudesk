@@ -2,8 +2,9 @@
 // entry per distinct host among the remote rows, with the host account's workflow substrate
 // (Absent / Developer / Managed), its short HEAD, and its drift against GitHub.
 //
-// ## Read-only in WP5
-// No buttons. Install (WP6) lands on an Absent entry; Update / Uninstall (WP7) on a Managed one.
+// ## Buttons
+// WP5 shipped the readout alone. WP6: Install on an Absent entry whose link is Up
+// (`RemoteInstallPanel`). WP7: Update / Uninstall on a Managed one.
 //
 // ## Background work only while shown (prior `background-work-only-for-what-is-on-screen`)
 // The drift read reaches GitHub (`ls-remote` from the host, about a second), so it runs once per
@@ -20,7 +21,7 @@
 // from a one-shot copy: a refresh writes the backend cache, and the `remote-substrate` event
 // updates this readout and every open workspace together.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { HostSubstrate } from "../../state/hostSubstrate";
 import {
   getRemoteHosts,
@@ -30,6 +31,7 @@ import {
   type RemoteHostEntry,
 } from "../../state/remoteHosts";
 import { useHostSubstrates } from "../../state/useHostSubstrate";
+import { RemoteInstallPanel } from "./RemoteInstallPanel";
 
 /** A host's refresh, as the readout tracks it. */
 export type HostCheck = RefreshOutcome | { readonly outcome: "checking" };
@@ -39,6 +41,11 @@ export interface RemoteHostsReadout {
   readonly hosts: readonly RemoteHostEntry[] | null;
   /** By host: the refresh in flight or its outcome. A host with its link down has none. */
   readonly checks: Readonly<Record<string, HostCheck>>;
+  /**
+   * M18 WP6 — refresh one host again (after an install, so its entry shows the new HEAD and
+   * drift). A result after the panel closed is dropped, as the mount's own refreshes are.
+   */
+  readonly recheck: (host: string) => void;
 }
 
 /**
@@ -48,23 +55,28 @@ export interface RemoteHostsReadout {
 export function useRemoteHostsReadout(): RemoteHostsReadout {
   const [hosts, setHosts] = useState<readonly RemoteHostEntry[] | null>(null);
   const [checks, setChecks] = useState<Record<string, HostCheck>>({});
+  // Set by the mount effect, cleared by its cleanup: `recheck` after the panel closed is a no-op.
+  const recheckRef = useRef<((host: string) => void) | null>(null);
   useEffect(() => {
     let cancelled = false;
     const record = (host: string, check: HostCheck) => {
       if (!cancelled) setChecks((prev) => ({ ...prev, [host]: check }));
     };
+    const refresh = (host: string) => {
+      record(host, { outcome: "checking" });
+      refreshRemoteHost(host)
+        .then((outcome) => record(host, outcome))
+        .catch((e: unknown) =>
+          record(host, { outcome: "failed", reason: String(e) }),
+        );
+    };
+    recheckRef.current = refresh;
     getRemoteHosts()
       .then((list) => {
         if (cancelled) return;
         setHosts(list);
         for (const entry of list) {
-          if (!entry.link_up) continue;
-          record(entry.host, { outcome: "checking" });
-          refreshRemoteHost(entry.host)
-            .then((outcome) => record(entry.host, outcome))
-            .catch((e: unknown) =>
-              record(entry.host, { outcome: "failed", reason: String(e) }),
-            );
+          if (entry.link_up) refresh(entry.host);
         }
       })
       .catch((e: unknown) => {
@@ -74,9 +86,11 @@ export function useRemoteHostsReadout(): RemoteHostsReadout {
       });
     return () => {
       cancelled = true;
+      recheckRef.current = null;
     };
   }, []);
-  return { hosts, checks };
+  const recheck = useCallback((host: string) => recheckRef.current?.(host), []);
+  return { hosts, checks, recheck };
 }
 
 /** One entry's text, as values (asserted directly in the tests). */
@@ -188,6 +202,12 @@ export function RemoteHostsSettings({
                 {lines.drift}
               </p>
             )}
+            {/* M18 WP6: Install, offered on an Absent host with its link Up (§R.5). */}
+            <RemoteInstallPanel
+              host={entry.host}
+              offered={substrate.state === "absent" && entry.link_up}
+              onInstalled={() => readout.recheck(entry.host)}
+            />
           </li>
         );
       })}
