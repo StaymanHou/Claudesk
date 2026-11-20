@@ -408,7 +408,7 @@ pub struct RemoteHostEntry {
 /// The distinct hosts of the VALID remote rows in `projects`, sorted, each with one of its rows'
 /// targets (any row will do: a refresh asks the host account, not the project folder). A row that
 /// fails validation is skipped, as it refuses to open.
-fn remote_hosts_of(projects: &[config_store::Project]) -> Vec<ValidTarget> {
+pub(crate) fn remote_hosts_of(projects: &[config_store::Project]) -> Vec<ValidTarget> {
     let mut by_host = std::collections::BTreeMap::new();
     for target in projects
         .iter()

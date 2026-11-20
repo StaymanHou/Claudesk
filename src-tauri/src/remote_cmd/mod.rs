@@ -666,7 +666,7 @@ fn substrate_probe_lines(home: Option<&str>) -> String {
 }
 
 /// [`SUBSTRATE_PROBE`] with the debug sandbox root as an env PREFIX on that one command, when given.
-fn substrate_probe_invocation(home: Option<&str>) -> String {
+pub(crate) fn substrate_probe_invocation(home: Option<&str>) -> String {
     let prefix = home
         .map(|h| format!("{SUBSTRATE_HOME_ENV}={} ", quote(h)))
         .unwrap_or_default();
@@ -678,6 +678,9 @@ fn substrate_probe_invocation(home: Option<&str>) -> String {
 /// `git` call runs behind this. On a Mac without the Command Line Tools, `/usr/bin/git` is the shim
 /// that asks for the GUI installer on the host's console. The empty-path test is load-bearing:
 /// there `xcode-select -p` prints nothing, and `[ -x "/usr/bin/git" ]` would test the shim and pass.
+/// ⚠️ It is an `&&` chain: NEGATE IT GROUPED, `if ! { GUARD; }; then`. A bare `if ! GUARD` negates
+/// only the first command, and a no-tools host then sails past the refusal (M18 WP6: the remote
+/// install's first draft did this; a stub-`xcode-select` test caught it).
 pub const DEV_TOOLS_GUARD: &str =
     r#"d=$(xcode-select -p 2>/dev/null) && [ -n "$d" ] && [ -x "$d/usr/bin/git" ]"#;
 

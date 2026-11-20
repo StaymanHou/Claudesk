@@ -69,6 +69,10 @@ pub mod commands;
 // only constructor is `refuse_guard`, so the ordering is a compiler fact, not a convention.
 pub mod guard;
 pub mod provenance;
+// M18 WP6 — the REMOTE install: the host-side run script, its sentinel parser, and the pure
+// reducer over its ending. Carries the module's one remote `rm -rf` (a leftover clone, guarded on
+// the host), pinned by `source_guard`.
+pub mod remote_runner;
 // The subprocess spawns (`git clone` → `install.sh` on the install side; `uninstall.sh`
 // [--dry-run] on the uninstall side) plus both load-bearing orderings: record written LAST on
 // install, deleted LAST on uninstall. Carries the crate's ONE deleting call, behind the

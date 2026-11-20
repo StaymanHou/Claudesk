@@ -453,6 +453,29 @@ fn run_streaming(
     sink: &dyn OutputSink,
     deadline: Duration,
 ) -> std::io::Result<(i32, String)> {
+    run_streaming_abortable(program, args, cwd, sink, deadline, &|| false)
+}
+
+/// The note [`run_streaming_abortable`] appends when `abort` ended the run.
+pub(crate) const ABORTED_NOTE: &str = "[stopped on request; the process group was killed]";
+
+/// [`run_streaming`], plus `abort`: polled every [`POLL`] while the child runs. When it answers
+/// `true` the whole group is killed and reaped, the lines already queued are kept (bounded by
+/// [`DRAIN_GRACE`]), [`ABORTED_NOTE`] is appended, and the result is exit code `-1`.
+///
+/// M18 WP6 (D10): a remote install's Cancel ends the LOCAL ssh this way, after the remote group
+/// kill (`remote_runner`). A local run passes "never" through [`run_streaming`]; its cancel stays
+/// cooperative, between steps, because killing `git` halfway corrupts a LOCAL object store. On a
+/// remote run the host's own `git` handles the TERM the remote kill sends (WP3 "Probe outcomes"
+/// (1): it removes the partial clone).
+pub(crate) fn run_streaming_abortable(
+    program: &str,
+    args: &[String],
+    cwd: Option<&Path>,
+    sink: &dyn OutputSink,
+    deadline: Duration,
+    abort: &dyn Fn() -> bool,
+) -> std::io::Result<(i32, String)> {
     let started = Instant::now();
     let mut cmd = Command::new(program);
     cmd.args(args)
@@ -497,7 +520,8 @@ fn run_streaming(
     // Lines still queued when a kill exit's drain ran out of time (see `drain_queued`).
     let mut dropped = 0usize;
 
-    // `None` means the deadline passed and the group was killed.
+    // `None` means the deadline passed (or `abort` answered true) and the group was killed.
+    let mut aborted = false;
     let status: Option<std::process::ExitStatus> = loop {
         if readers_done {
             std::thread::sleep(POLL);
@@ -531,6 +555,14 @@ fn run_streaming(
                 });
                 break Some(status);
             }
+            None if abort() => {
+                kill_and_reap(&mut child);
+                dropped = drain_queued(&rx, &stop, Instant::now() + DRAIN_GRACE, |s, l| {
+                    take(s, l, &mut combined, &mut stderr);
+                });
+                aborted = true;
+                break None;
+            }
             None if started.elapsed() >= deadline => {
                 kill_and_reap(&mut child);
                 // The readers end once the group is dead; keep the lines they already sent.
@@ -561,10 +593,14 @@ fn run_streaming(
         }
     }
     let Some(status) = status else {
-        let note = format!(
-            "[timed out after {}s; the process group was killed]",
-            deadline.as_secs()
-        );
+        let note = if aborted {
+            ABORTED_NOTE.to_string()
+        } else {
+            format!(
+                "[timed out after {}s; the process group was killed]",
+                deadline.as_secs()
+            )
+        };
         sink.line(&note);
         combined.push(note);
         return Ok((-1, combined.join("\n")));
@@ -855,6 +891,63 @@ mod tests {
 
     fn never_cancelled() -> bool {
         false
+    }
+
+    /// M18 WP6 (D10) — `abort` ends a running child: the whole group is killed and reaped within
+    /// about `POLL` + `DRAIN_GRACE` (not at the 30 s deadline), the line already printed is kept,
+    /// and the result is `-1` with [`ABORTED_NOTE`]. A grandchild in the group dies with it.
+    #[test]
+    fn abort_kills_the_group_promptly_and_keeps_queued_lines() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let pidfile = dir.path().join("child.pid");
+        let sink = CollectingSink::new();
+        let script = format!(
+            "sleep 60 & echo $! > '{}'; echo started; wait",
+            pidfile.display()
+        );
+        let seen = || sink.lines().iter().any(|l| l == "started");
+        let started = Instant::now();
+        let (code, output) = run_streaming_abortable(
+            "/bin/sh",
+            &["-c".into(), script],
+            None,
+            &sink,
+            Duration::from_secs(30),
+            &seen,
+        )
+        .unwrap();
+        let took = started.elapsed();
+        assert_eq!(code, -1);
+        assert!(
+            took < Duration::from_secs(3),
+            "aborted promptly, took {took:?}"
+        );
+        assert!(output.contains("started"), "{output}");
+        assert!(output.ends_with(ABORTED_NOTE), "{output}");
+        assert_eq!(sink.lines().last().map(String::as_str), Some(ABORTED_NOTE));
+        let pid: libc::pid_t = std::fs::read_to_string(&pidfile)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        assert!(is_dead(pid), "the grandchild in the group was left running");
+    }
+
+    /// An `abort` that never answers true changes nothing: the child's own exit code, no note.
+    #[test]
+    fn an_abort_that_never_fires_leaves_the_run_as_it_was() {
+        let sink = CollectingSink::new();
+        let (code, output) = run_streaming_abortable(
+            "/bin/sh",
+            &["-c".into(), "echo a; exit 3".into()],
+            None,
+            &sink,
+            Duration::from_secs(10),
+            &|| false,
+        )
+        .unwrap();
+        assert_eq!(code, 3);
+        assert_eq!(output, "a");
     }
 
     /// Build a local git repo containing an `install.sh` with the given body.

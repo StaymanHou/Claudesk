@@ -104,6 +104,11 @@ mod tests {
             "fn run_uninstall_guarded",
         ),
         (
+            "remote_runner.rs",
+            include_str!("remote_runner.rs"),
+            "pub fn resolve(",
+        ),
+        (
             "terminal.rs",
             include_str!("terminal.rs"),
             "fn resolve_uninstall_terminal_state",
@@ -156,10 +161,17 @@ mod tests {
         // A new deleting call must extend this table in the same change that adds it —
         // a conscious, reviewable act, not a guard quietly going stale.
         // ═══════════════════════════════════════════════════════════════════════════
-        const DELETION_TOKENS: &[&str] = &["remove_dir", "remove_file"];
+        // M18 WP6 adds the REMOTE delete: a shell `rm -rf` inside the run script's text, so the
+        // token is the shell command, not a Rust API. ONE is sanctioned: the leftover-clone
+        // removal in `remote_runner.rs`'s template, which runs on the host only after the host
+        // re-checked there is no record, the probe reads `no`, and the folder's physical path is
+        // exactly `<root>/.claudesk/vendor/<name>`. WP7's Uninstall removal will be a second,
+        // behind a `RemoteUninstallTarget`.
+        const DELETION_TOKENS: &[&str] = &["remove_dir", "remove_file", "rm -rf", "rm -r "];
         const ALLOWED: &[(&str, &str, usize)] = &[
             ("runner.rs", "remove_dir", 1),
             ("provenance.rs", "remove_file", 1),
+            ("remote_runner.rs", "rm -rf", 1),
         ];
 
         for (name, src, _) in MODULE_FILES {

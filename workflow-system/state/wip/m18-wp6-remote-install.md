@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP6 — Install over the master
 
 **Workflow:** feature
-**State:** verify-codify (phase 1 complete)
+**State:** verify-codify (phase 2 complete)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -87,7 +87,7 @@ Phase 1 first pays down the review findings the handoff marked "due before WP6",
     — evidence: mutations, each alone, each restored byte-exact (shasum): drop the local-key guard → "makes NO IPC for a local key" FAILED; drop Recycle's refresh call → 3 Recycle tests FAILED; refresh moved AFTER the read → the same 3 FAILED; a direct `set_open_bypass` in `remote_bypass_refresh` → `the_bypass_answer_has_two_writers_each_a_settle` FAILED; settle writes without the marker (`unwrap_or(false)`) → `a_bypass_refresh_writes_the_cache_only_when_the_host_answered` FAILED. (P1.1's mutation was run at build.)
     — evidence: `pnpm verify:auto` → EXIT=0, 60 s (vitest `Tests 4157 passed (4157)`; cargo test lib ok; clippy, fmt clean).
 
-- [ ] Phase 2: The remote install run (backend: script, transport, cancel, reducer)  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [x] Phase 2: The remote install run (backend: script, transport, cancel, reducer)  <!-- status: done -->
   **Observable outcomes:**
   - CLI: pure builder tests in `remote_runner.rs` pass. They pin:
     - the root and the record JSON are quoted (`'`, `$`, spaces and a newline in a root are refused before any build);
@@ -126,16 +126,37 @@ Phase 1 first pays down the review findings the handoff marked "due before WP6",
   - CLI: `pnpm verify:auto` exits 0.
   **Alignment questions:**
   - none (no operator-visible surface yet; the result copy is reviewed in Phase 3)
-  - [ ] P2.1 `run_streaming` → `pub(crate)` + abort predicate (D10); local callers pass never  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 `remote_runner.rs`: pure script builder (preflight → host re-probe/refuse → guarded stale-clone removal → `phase:clone` + clone → `phase:install` + trapped subshell { `install.sh` with `HOME=<root>` → record tmp + `mv` } → log `cat` → `result:`), the record JSON from Rust, and the sentinel parser (6.2)  <!-- status: NOT-STARTED -->
-  - [ ] P2.3 The remote reducer, pure: (outcome lines, exit, cancel-requested, re-probe read) → `RemoteInstallFinished`. Per-arm decisions, no shared default, no gate field (6.3)  <!-- status: NOT-STARTED -->
-  - [ ] P2.4 Transport + commands: `master_only_exec_argv` + `login_shell(script)` as the program; `LinkRegistry::hold_if_up` (D8); `begin_remote_install` + `workflow_remote_install_start(host)` on a worker under `HeldRunLock` + `RunGuard` with the D7 events; post-run re-probe through `set_substrate` (known answers only) (6.1, 6.3)  <!-- status: NOT-STARTED -->
-  - [ ] P2.5 Cancel per ruling A: `workflow_remote_install_cancel` → ignored after `phase:install` (it answers "too late: the install is finishing"); a pending cancel before the pgid arrives fires once it arrives; the remote `kill -TERM -- -<pgid>` over `master_exec` (2 s) + the local abort (6.3b)  <!-- status: NOT-STARTED -->
-  - [ ] P2.6 Tests: the builder, the preflight's three stub arms, the local end-to-end arms, 6.3b, 6.4 containment, the delete-guard entry + its mutation proof  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P2.1 `run_streaming` → `pub(crate)` + abort predicate (D10); local callers pass never  <!-- status: done -->
+  - [x] P2.2 `remote_runner.rs`: pure script builder (preflight → host re-probe/refuse → guarded stale-clone removal → `phase:clone` + clone → `phase:install` + trapped subshell { `install.sh` with `HOME=<root>` → record tmp + `mv` } → log `cat` → `result:`), the record JSON from Rust, and the sentinel parser (6.2)  <!-- status: done -->
+  - [x] P2.3 The remote reducer, pure: (outcome lines, exit, cancel-requested, re-probe read) → `RemoteInstallFinished`. Per-arm decisions, no shared default, no gate field (6.3)  <!-- status: done -->
+  - [x] P2.4 Transport + commands: `master_only_exec_argv` + `login_shell(script)` as the program; `LinkRegistry::hold_if_up` (D8); `begin_remote_install` + `workflow_remote_install_start(host)` on a worker under `HeldRunLock` + `RunGuard` with the D7 events; post-run re-probe through `set_substrate` (known answers only) (6.1, 6.3)  <!-- status: done -->
+  - [x] P2.5 Cancel per ruling A: `workflow_remote_install_cancel` → ignored after `phase:install` (it answers "too late: the install is finishing"); a pending cancel before the pgid arrives fires once it arrives; the remote `kill -TERM -- -<pgid>` over `master_exec` (2 s) + the local abort (6.3b)  <!-- status: done -->
+  - [x] P2.6 Tests: the builder, the preflight's three stub arms, the local end-to-end arms, 6.3b, 6.4 containment, the delete-guard entry + its mutation proof  <!-- status: done -->
+  - [x] verify-auto  <!-- status: done -->
+    — evidence: `pnpm verify:auto` → EXIT=0, 71 s (lint 0 errors, the 1 pre-existing `XtermPane.tsx` warning; prettier; tsc; check:link; vitest `Tests 4157 passed (4157)`; cargo fmt; clippy `--all-targets -D warnings` clean; cargo test lib `1450 passed; 0 failed`; `sync_commands_do_not_block` 16 passed with the two new sync commands).
+    — evidence (build-time, scoped): `cargo test --lib workflow_install::remote_runner` → 20 passed, including the real script under zsh against a fixture repo (ok / already-present ×3 / leftover removed / symlink + outside-root refused / clone-fail / no install.sh / install-fail / no root / the 3 preflight stub arms / group kill after `phase:install` → still `ok` + record / group kill during the clone → no record, group empty); `the_guard_releases_the_lock_and_reports_on_both_paths` extended to 3 workers; delete-guard mutation (a 2nd `rm -rf`) → "found 2 … 1 permitted", restored byte-exact.
+  - [x] verify-self  <!-- status: done -->
+    - [x] builder (quoting, printf+mv record, HTTPS URL, git behind the GROUPED guard, sentinel order) — evidence (runner): the 5 builder tests ok; the template's negation is `if ! { GUARD; }; then`.
+    - [x] preflight 3 stub arms — evidence: `the_developer_tools_preflight_refuses_without_running_git` ok (stub exit 2 → NoDevTools, no clone dir; `DEVELOPER_DIR=/var/empty` → NoDevTools; real dir → Ok).
+    - [x] local end-to-end arms (ok / already-present ×3 / leftover removed / symlink + outside-root refused / clone-fail / no install.sh / install-fail / no root) — evidence: 9 tests ok; `resolve` unit-tested over every arm. Runner note: the worker's composition (first-result → `settle_refresh` → `resolve`) is covered by the live run below.
+    - [x] 6.3b (kill after `phase:install` → still ok + record + Managed; kill during clone → no result, no record, group empty) — evidence: both tests ok (group checked at +500 ms after the reap, not +1 s; runner judged it at least as strict).
+    - [x] 6.4 containment (decoy `$HOME` empty, every write under the canonical root, positive set present) — evidence: `every_write_of_a_sandboxed_install_stays_under_the_root` ok.
+    - [x] delete guard (`remote_runner.rs` `rm -rf` 1, others 0) + lock guard — evidence: both ok; delete-guard mutation run at build.
+    - [x] `run_streaming_abortable` — evidence: `abort_kills_the_group_promptly_and_keeps_queued_lines`, `an_abort_that_never_fires_leaves_the_run_as_it_was` ok; local install tests unchanged.
+    - [x] `begin_remote_install` refusals (no link / not a row / not Absent / bad root / already running; lock free after each) — evidence: `begin_remote_install_refuses_each_unsafe_start_and_leaves_the_lock_free` ok. Gaps noted by the runner: Managed is not in the not-Absent loop; "not Up" is tested only as "no link" (`hold_if_up` matches only `(Up, Some(home))`).
+    - [x] LIVE install (dev build relaunched clean after the fixes, PID start 14:00:23 > binary 13:58:57 > last restore; `CLAUDESK_REMOTE_SUBSTRATE_ROOT=<abs empty sandbox on the mini>`; orchestrator via bridge) — evidence: `remote_open_check` → start; `remote_substrate_refresh` → checked/absent; `workflow_remote_install_start` → ok; `remote-install-phase` clone @1.57 s, install @6.26 s; `remote-install-finished` {ok: true, cancelled: false, message: null} @6.98 s; `remote-substrate` event → managed; `remote_hosts` → the host Managed, record `clone_path` = `<sandbox>/.claudesk/vendor/my-claude-code-customization`; 79 output lines, 0 containing `CLAUDESK-RUN:`. Host: record = the Rust JSON (HTTPS origin); 54 sandbox links, 0 resolving outside the sandbox clone; `.claudesk` = record + install.log + vendor. Live account: baseline (54 links, `CLAUDE.md` / `settings.json` shasums, clone HEAD `f8e8873`, 0-line status, `~/.claudesk` listing) IDENTICAL before / after / at teardown; 0 paths under the real `~/.claude/{skills,agents,hooks,CLAUDE.md}` newer than the marker. Corrected `-newer` sweep (prunes first, `-newer` on the print branch; my first sweep attached `-newer` to one branch only and listed everything, a false finding caught by `stat`): every hit is explained (the dev link's own deploy under `~/.claudesk/com.claudesk.app.dev/`, the live CC session's runtime files under `~/.claude/`, `$HOME`'s mtime from the sandbox mkdir, the live clone's `.git` from the baseline's `git status` index refresh); positive control: 4 sandbox files newer.
+    - [x] LIVE cancel during the clone (sandbox reset to empty, path-checked) — evidence: cancel invoked on the `clone` phase event @0.95 s → accepted; `remote-install-finished` {ok: false, cancelled: true, message: "Cancelled. Nothing was installed."} @1.07 s; output = "Cloning into …" + "[stopped on request; the process group was killed]". Host: 0 processes referencing the sandbox from the first sample on; no record; NO clone dir (git's own TERM handler removed it, which a local-only kill would not have caused: WP3 "Probe outcomes" (1)).
+    - [x] LIVE next start clears a leftover — evidence: a planted `vendor/<name>/{.git,LEFTOVER}` → the run's first line "Removing a leftover clone from an earlier run that did not finish." → `ok: true`; host: LEFTOVER gone, install.sh present, record present; 0 sentinel leaks.
+    - [x] `pnpm verify:auto` → EXIT=0 (verify-auto).
+    - [x] Teardown — evidence: sandbox + marker removed (path-checked); no `claudesk-dev` tmux server; dev app stopped; dev `projects.json` / `settings.json` shas = backups; only the installed app's `ssh -M` remains.
+    - [x] Finding 1 (runner; COSMETIC there, treated as BLOCKING here: it broke the module's "quoted or refused" invariant) — the template's chained `str::replace` re-scanned inserted values, so a root containing `__JSON__` left the JSON (and the root's `$(…)`) unquoted, and it executed. Fixed in place (SHORTCUT below): a one-pass `fill`, test `a_root_carrying_a_placeholder_token_stays_quoted` (runs the root's `$(touch …)` for real), mutation (the replace chain back) → FAILED.
+    - [x] Finding 2 (runner; COSMETIC) — the single-run-lock guard's table did not name the remote command. Fixed in place: two entries + whole-body slicing (the fixed 400-char window was outgrown); mutation (no lock take in `begin_remote_install`) → the guard AND arm (d) FAILED.
+  - [x] verify-human  <!-- status: done --> — zero admissible leaves (F11)
+  - [x] verify-codify  <!-- status: done -->
+    Test scope: full — suite not long (`runtimes.md` → `pnpm verify:auto` Last 71s < 300s)
+    — evidence: the runner's two gaps filled: `begin_remote_install_refuses_each_unsafe_start_and_leaves_the_lock_free` now refuses a cached Managed host too; new `a_link_that_is_still_connecting_is_not_held_and_install_refuses` (a link held in Connecting by the pre-connect delay: `hold_if_up` → None, begin → "isn't connected"; once Up it can be held). Mutation (`hold_if_up` accepts any state) → the new test FAILED; restored byte-exact.
+    — evidence: the live-only composition (first result → `settle_refresh` → `resolve`) stays covered by the Phase 2 live run; Phase 3's live run repeats it through the UI.
+    — evidence: `pnpm verify:auto` → EXIT=0, 69 s (vitest `Tests 4157 passed (4157)`; cargo test lib `1452 passed; 0 failed`; clippy, fmt clean).
 
 - [ ] Phase 3: The Install button, its output, and the live result  <!-- status: NOT-STARTED; depends on Phase 2 -->
   **Observable outcomes:**
@@ -173,10 +194,10 @@ Phase 1 first pays down the review findings the handoff marked "due before WP6",
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 2 > P2.1
-- **Active scope:** P2.1 (`run_streaming` abort predicate)
+- **Path:** Feature > Phase 3 > P3.1
+- **Active scope:** P3.1 (the `remoteInstall` state module + the Absent-entry affordance)
 - **Blocked:** none
-- **Unvisited:** Phase 3
+- **Unvisited:** none (Phase 3 is the last)
 - **Open discoveries:** none
 
 ## Verification hygiene (from memory; read before any live step)
@@ -192,4 +213,6 @@ Phase 1 first pays down the review findings the handoff marked "due before WP6",
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
+- [2026-11-20] P2.2 (fixed in build, no backlog entry) — the run script's first draft negated `DEV_TOOLS_GUARD` bare (`if ! d=$(…) && … ; then`), which negates only the first command of the `&&` chain: a no-tools host sailed past the refusal into `git`. Caught by the stub-`xcode-select` arm; fixed as `if ! { GUARD; }; then`, pinned by a builder assertion, and the warning now sits on the constant's doc.
+- [SHORTCUT-2026-11-20] P2.verify-self findings 1+2 — fixed in place (a one-pass template `fill` replacing the `str::replace` chain; the lock guard's two remote entries + whole-body slicing), each mutation-proven; re-verified by a FRESH runner subagent (8 hostile roots + a hostile URL against `fill`, positive control with the old chain; every table entry's body end named) → both PASS. Then the live checks ran on a clean relaunch.
 - [SURFACED-2026-11-20] feature-plan — wbs.md exceeds size guard (360 lines); read the first 44 lines + headings, plus the WP3–WP8, dependency-map, exit-criteria and "Probe outcomes" sections in full (WP6's own inputs). Consider summarizing the shipped WPs at WP6 finalize.

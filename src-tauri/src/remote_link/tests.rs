@@ -2532,3 +2532,149 @@ fn a_bypass_refresh_writes_the_cache_only_when_the_host_answered() {
     );
     assert!(h.reg.open_bypass(key));
 }
+
+/// M18 WP6 (D8) — `hold_if_up` holds an Up link (with its home) and never starts one: no link →
+/// `None` with nothing spawned; Up → a counted hold that keeps the link up after the session's own
+/// hold goes, and the link stops once it drops too.
+#[test]
+fn hold_if_up_holds_only_an_up_link_and_never_starts_one() {
+    let h = harness();
+    assert!(h.reg.hold_if_up(HOST).is_none(), "no link: nothing to hold");
+    assert!(h.reg.state(HOST).is_none(), "and none was started");
+    assert!(h.t.spawned.lock().unwrap().is_empty(), "no ssh spawned");
+
+    let (_, session) = up(&h.reg, &target());
+    let (run, home) = h.reg.hold_if_up(HOST).expect("Up: held");
+    assert_eq!(home, "/Users/me");
+    assert_eq!(h.reg.refs(HOST), 2);
+    drop(session);
+    assert_eq!(h.reg.refs(HOST), 1);
+    assert_eq!(
+        h.reg.state(HOST),
+        Some(LinkState::Up),
+        "the run's hold keeps it up"
+    );
+    drop(run);
+    wait_no_link(&h, Duration::from_secs(2));
+    assert!(h.reg.hold_if_up(HOST).is_none(), "stopped: nothing to hold");
+}
+
+/// A remote row for `host` (the shape `projects.json` holds), for the substrate-command tests.
+fn remote_row(host: &str) -> crate::config_store::Project {
+    serde_json::from_value(serde_json::json!({
+        "project_path": format!("ssh://{host}/Users/me/p"),
+        "last_opened_at": 1,
+        "remote": {"host": host, "path": "/Users/me/p"},
+    }))
+    .unwrap()
+}
+
+/// M18 WP6 — the remote install's synchronous half refuses, in plain words and with the lock
+/// FREE afterwards: (a) a host that is no row's host, (b) a host whose cached substrate is not
+/// Absent, (c) a host whose link is not Up (nothing is started: §R.5), (d) a second run while one
+/// holds the lock. An Absent host with an Up link starts, holding the link, rooted at its `$HOME`
+/// (or the sandbox override).
+#[test]
+fn begin_remote_install_refuses_each_unsafe_start_and_leaves_the_lock_free() {
+    use crate::remote_substrate::HostSubstrate;
+    use crate::workflow_install::commands::{begin_remote_install, InstallControl};
+    let h = harness();
+    let ctl = Arc::new(InstallControl::default());
+    let rows = [remote_row(HOST)];
+    let begin = |rows: &[crate::config_store::Project], host: &str, sandbox: Option<String>| {
+        begin_remote_install(&ctl, &h.reg, rows, host, sandbox)
+    };
+
+    // (c) no link at all: refused, nothing started.
+    h.reg.set_substrate(HOST, HostSubstrate::Absent);
+    let e = begin(&rows, HOST, None).err().expect("no link");
+    assert!(e.contains("isn't connected"), "{e}");
+    assert!(
+        h.reg.state(HOST).is_none(),
+        "Install never brings a link up"
+    );
+    assert!(h.t.spawned.lock().unwrap().is_empty());
+
+    let (_, session) = up(&h.reg, &target());
+    // (a) not a row's host.
+    let e = begin(&rows, "other@host", None).err().expect("not a row");
+    assert!(e.contains("not the host of a remote project"), "{e}");
+    // (b) the cache says the host is not Absent.
+    for not_absent in [
+        HostSubstrate::Unknown,
+        HostSubstrate::Developer {
+            root: None,
+            head: None,
+        },
+        HostSubstrate::Managed {
+            root: None,
+            head: None,
+            record: crate::workflow_install::remote_runner::remote_record("/Users/me", "t"),
+        },
+    ] {
+        h.reg.set_substrate(HOST, not_absent);
+        let e = begin(&rows, HOST, None).err().expect("not absent");
+        assert!(
+            e.contains("only on a host that has no workflow system"),
+            "{e}"
+        );
+    }
+    h.reg.set_substrate(HOST, HostSubstrate::Absent);
+    // A bad sandbox override is refused, never built into a script.
+    let e = begin(&rows, HOST, Some("relative/x".into()))
+        .err()
+        .expect("bad root");
+    assert!(e.contains("normalized"), "{e}");
+    assert_eq!(h.reg.refs(HOST), 1, "a refusal drops its hold");
+
+    // A good start: holds the link, roots at the link's home.
+    let run = begin(&rows, HOST, None).expect("starts");
+    assert_eq!(run.root, "/Users/me");
+    assert_eq!(h.reg.refs(HOST), 2, "the run holds the link");
+    // (d) a second run while the first holds the lock.
+    let e = begin(&rows, HOST, None).err().expect("locked");
+    assert!(e.contains("already running"), "{e}");
+    drop(run);
+    assert_eq!(h.reg.refs(HOST), 1, "the run's hold is released with it");
+    let sandboxed = begin(&rows, HOST, Some("/Users/me/sandbox".into())).expect("free again");
+    assert_eq!(sandboxed.root, "/Users/me/sandbox");
+    drop(sandboxed);
+    drop(session);
+}
+
+/// M18 WP6 — a link that EXISTS but is not Up (still connecting) is not held, and Install refuses
+/// on it rather than waiting: `hold_if_up` matches only Up-with-a-home.
+#[test]
+fn a_link_that_is_still_connecting_is_not_held_and_install_refuses() {
+    use crate::remote_substrate::HostSubstrate;
+    use crate::workflow_install::commands::{begin_remote_install, InstallControl};
+    let h = harness();
+    *h.t.pre_delay.lock().unwrap() = Duration::from_millis(400);
+    let reg = Arc::clone(&h.reg);
+    let opener = std::thread::spawn(move || reg.ensure_and_hold(&target()).map(|(_, hold)| hold));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while h.reg.state(HOST) != Some(LinkState::Connecting) {
+        assert!(
+            Instant::now() < deadline,
+            "never saw Connecting: {:?}",
+            h.states()
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(
+        h.reg.hold_if_up(HOST).is_none(),
+        "a connecting link is not held"
+    );
+    h.reg.set_substrate(HOST, HostSubstrate::Absent);
+    let ctl = Arc::new(InstallControl::default());
+    let e = begin_remote_install(&ctl, &h.reg, &[remote_row(HOST)], HOST, None)
+        .err()
+        .expect("refused while connecting");
+    assert!(e.contains("isn't connected"), "{e}");
+    let hold = opener.join().unwrap().expect("the opener's link comes up");
+    assert!(
+        h.reg.hold_if_up(HOST).is_some(),
+        "and once Up it can be held"
+    );
+    drop(hold);
+}

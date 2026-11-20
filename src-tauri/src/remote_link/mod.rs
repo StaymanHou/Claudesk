@@ -1112,6 +1112,40 @@ impl LinkRegistry {
             .unwrap_or(0)
     }
 
+    /// M18 WP6 — the local argv of a long streaming run over `host`'s master (a remote install):
+    /// [`master_only_exec_argv`], so a dead master fails it at once instead of a direct connect.
+    /// The caller runs it through `run_streaming_abortable`, never [`Self::exec`]'s 10 s capture.
+    pub fn master_run_argv(&self, host: &str, remote_command: &str) -> Vec<String> {
+        master_only_exec_argv(&control_path(&self.app_data, host), host, remote_command)
+    }
+
+    /// M18 WP6 (D8): take a hold on `host`'s link ONLY if it is Up now, with the remote `$HOME` the
+    /// link printed at connect. `None` when there is no link, it is not Up, or its home is not
+    /// known yet. It never starts or waits for a link (§R.5: Settings never brings one up), so it
+    /// is a pair of short lock reads, safe on the main thread.
+    ///
+    /// For a run that must outlive the workspace that brought the link up (a remote install): the
+    /// hold keeps the link from stopping under it when that workspace closes mid-run.
+    pub fn hold_if_up(self: &Arc<Self>, host: &str) -> Option<(LinkHold, String)> {
+        let mut links = self.links.lock().ok()?;
+        let link = links.get_mut(host)?;
+        let home = {
+            let g = link.shared.inner.lock().ok()?;
+            match (&g.state, &g.home) {
+                (LinkState::Up, Some(home)) => home.clone(),
+                _ => return None,
+            }
+        };
+        link.refs += 1;
+        let hold = LinkHold {
+            links: Arc::clone(self),
+            host: host.to_string(),
+            gen: link.gen,
+            linger: None,
+        };
+        Some((hold, home))
+    }
+
     /// `host`'s current link state, if a link exists.
     pub fn state(&self, host: &str) -> Option<LinkState> {
         let links = self.links.lock().ok()?;

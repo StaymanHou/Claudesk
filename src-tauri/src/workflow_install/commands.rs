@@ -26,6 +26,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
 
+use super::remote_runner::{self, Phase, RunLine};
 use super::runner::{self, OutputSink};
 use super::{provenance, terminal, InstallState};
 
@@ -49,6 +50,21 @@ pub const UNINSTALL_FINISHED_EVENT: &str = "workflow-uninstall-finished";
 pub struct InstallControl {
     cancelled: AtomicBool,
     running: AtomicBool,
+    /// M18 WP6 — the in-flight REMOTE install's cancel state. Separate from `cancelled`, because
+    /// a remote Cancel is not cooperative: it kills the run's process group on the host.
+    remote: std::sync::Mutex<RemoteRunState>,
+}
+
+/// M18 WP6 — what Cancel needs to know about a remote install in flight, written by the run's
+/// worker as the sentinels arrive and read by [`workflow_remote_install_cancel`] (a lock read).
+#[derive(Debug, Default)]
+pub(crate) struct RemoteRunState {
+    /// The run's process group on the host, once the script's first line arrived.
+    pgid: Option<u32>,
+    /// The phase the stream last reported.
+    phase: Option<Phase>,
+    /// Cancel was requested, and not refused as too late.
+    cancel_requested: bool,
 }
 
 /// What the frontend learns when a run ends.
@@ -508,6 +524,323 @@ pub fn workflow_uninstall_cancel(control: State<'_, Arc<InstallControl>>) {
     control.cancelled.store(true, Ordering::SeqCst);
 }
 
+// ── M18 WP6: Install over the master ────────────────────────────────────────────────────
+
+/// Each non-sentinel output line of a remote install. Payload: the line.
+pub const REMOTE_INSTALL_OUTPUT_EVENT: &str = "remote-install-output";
+
+/// The remote install's phase changed. Payload: [`RemotePhase`]. The UI disables Cancel on
+/// `install` (ruling A: Cancel is honoured only during the clone).
+pub const REMOTE_INSTALL_PHASE_EVENT: &str = "remote-install-phase";
+
+/// Fired once when a remote install ends. Payload: [`remote_runner::RemoteInstallFinished`].
+pub const REMOTE_INSTALL_FINISHED_EVENT: &str = "remote-install-finished";
+
+/// [`REMOTE_INSTALL_PHASE_EVENT`]'s payload.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RemotePhase {
+    pub host: String,
+    pub phase: Phase,
+}
+
+/// How long the remote group kill may take. One small exec over an Up master (WP3 measured
+/// 0.13 s); it runs on the install's worker, never the main thread.
+const REMOTE_CANCEL_TIMEOUT_MS: u64 = 2_000;
+
+/// What the IPC side hands the remote install's worker.
+pub(crate) struct RemoteInstallStart {
+    lock: HeldRunLock,
+    /// Keeps the host's link up for the whole run, even if the workspace that opened it closes.
+    hold: crate::remote_link::LinkHold,
+    target: crate::remote_cmd::ValidTarget,
+    /// The host-side root: the link's `$HOME`, or a debug build's sandbox override.
+    pub(crate) root: String,
+}
+
+/// The remote install's synchronous half: take the single-run lock, then validate, in this order:
+/// the host is a remote row's host, its cached substrate is Absent, its link is Up (held, never
+/// brought up: §R.5), and the root is a valid remote path. Every refusal returns before the worker
+/// exists, and the lock (and any hold) it took is released by drop.
+///
+/// Sync and cheap: one small local file read (`projects.json`, as `remote_hosts` does) and lock
+/// reads; no ssh.
+pub(crate) fn begin_remote_install(
+    control: &Arc<InstallControl>,
+    links: &Arc<crate::remote_link::LinkRegistry>,
+    projects: &[crate::config_store::Project],
+    host: &str,
+    sandbox_root: Option<String>,
+) -> Result<RemoteInstallStart, String> {
+    let lock = HeldRunLock::try_acquire(control)
+        .ok_or_else(|| "a workflow-system install or uninstall is already running".to_string())?;
+    if let Ok(mut r) = control.remote.lock() {
+        *r = RemoteRunState::default();
+    }
+    let target = crate::remote_link::commands::remote_hosts_of(projects)
+        .into_iter()
+        .find(|t| t.host() == host)
+        .ok_or_else(|| format!("{host} is not the host of a remote project"))?;
+    let substrate = links.substrate(host);
+    if substrate != crate::remote_substrate::HostSubstrate::Absent {
+        return Err(format!(
+            "Install is offered only on a host that has no workflow system; Claudesk last read              this one as {}. Reopen Settings to check it again.",
+            match substrate {
+                crate::remote_substrate::HostSubstrate::Unknown => "unknown",
+                crate::remote_substrate::HostSubstrate::Developer { .. } => "Developer",
+                crate::remote_substrate::HostSubstrate::Managed { .. } => "Managed",
+                crate::remote_substrate::HostSubstrate::Absent => "Absent",
+            }
+        ));
+    }
+    let (hold, home) = links.hold_if_up(host).ok_or_else(|| {
+        format!(
+            "Claudesk isn't connected to {host} right now. Open a workspace on it, then try              again: Claudesk installs over that connection and never opens one by itself."
+        )
+    })?;
+    let root = sandbox_root.unwrap_or(home);
+    if !remote_runner::valid_root(&root) {
+        return Err(format!(
+            "the host's home folder {root:?} is not an absolute, normalized path"
+        ));
+    }
+    Ok(RemoteInstallStart {
+        lock,
+        hold,
+        target,
+        root,
+    })
+}
+
+/// Streams a remote install's output to the webview, and reads the sentinel lines as they
+/// arrive: the pgid and the phase go to [`RemoteRunState`] (the phase also to the UI), the
+/// result is kept for the reducer, and none of them is shown as output.
+struct RemoteSink {
+    app: AppHandle,
+    host: String,
+    control: Arc<InstallControl>,
+    result: std::sync::Mutex<Option<remote_runner::RunResult>>,
+}
+
+impl OutputSink for RemoteSink {
+    fn line(&self, line: &str) {
+        match remote_runner::parse_run_line(line) {
+            None => {
+                let _ = self.app.emit(REMOTE_INSTALL_OUTPUT_EVENT, line);
+            }
+            Some(RunLine::Pgid(pgid)) => {
+                if let Ok(mut r) = self.control.remote.lock() {
+                    r.pgid.get_or_insert(pgid);
+                }
+            }
+            Some(RunLine::Phase(phase)) => {
+                if let Ok(mut r) = self.control.remote.lock() {
+                    r.phase = Some(phase);
+                }
+                let _ = self.app.emit(
+                    REMOTE_INSTALL_PHASE_EVENT,
+                    RemotePhase {
+                        host: self.host.clone(),
+                        phase,
+                    },
+                );
+            }
+            Some(RunLine::StaleRemoved) => {}
+            Some(RunLine::Result(result)) => {
+                if let Ok(mut r) = self.result.lock() {
+                    r.get_or_insert(result);
+                }
+            }
+        }
+    }
+}
+
+/// What the run's abort poll decides, from the cancel state. Pure.
+#[derive(Debug, PartialEq, Eq)]
+enum AbortStep {
+    /// Keep running: no Cancel, or Cancel came too late (the install phase).
+    Continue,
+    /// Kill the run's group on the host first, then stop the local ssh.
+    KillRemoteThenStop(u32),
+    /// Stop the local ssh only: the script has not printed its pgid yet, so there is nothing to
+    /// address on the host (its next write then ends it).
+    StopLocal,
+}
+
+fn abort_step(state: &RemoteRunState) -> AbortStep {
+    if !state.cancel_requested || state.phase == Some(Phase::Install) {
+        return AbortStep::Continue;
+    }
+    match state.pgid {
+        Some(pgid) => AbortStep::KillRemoteThenStop(pgid),
+        None => AbortStep::StopLocal,
+    }
+}
+
+/// Install the workflow system on `host` over its open connection (M18 WP6, §R.3).
+///
+/// Returns at once. Output arrives on [`REMOTE_INSTALL_OUTPUT_EVENT`], the phase on
+/// [`REMOTE_INSTALL_PHASE_EVENT`], and the outcome on [`REMOTE_INSTALL_FINISHED_EVENT`]. The run
+/// holds the single-run lock (no local install or uninstall can run beside it) and a hold on the
+/// host's link. ⚠️ It never touches the local workflow-features gate.
+///
+/// The outcome is decided by `remote_runner::resolve` from the script's result AND a re-probe of
+/// the host afterwards, which also updates the per-host cache (`settle_refresh`, so every open
+/// workspace on the host hears the new state).
+#[tauri::command]
+pub fn workflow_remote_install_start(
+    app: AppHandle,
+    control: State<'_, Arc<InstallControl>>,
+    links: State<'_, crate::remote_link::commands::SharedLinks>,
+    host: String,
+) -> Result<(), String> {
+    let dir = crate::config_store::commands::resolve_data_dir(&app)?;
+    let projects = crate::config_store::read_projects(&dir).map_err(|e| e.to_string())?;
+    let start = begin_remote_install(
+        control.inner(),
+        links.inner(),
+        &projects,
+        &host,
+        crate::remote_cmd::substrate_home_override(),
+    )?;
+    let record = remote_runner::remote_record(&start.root, &now_rfc3339());
+    let command = remote_runner::install_command(&start.root, &record)?;
+    let argv = links.master_run_argv(&host, &command);
+    let ctl = Arc::clone(&control);
+    let links = Arc::clone(&links);
+
+    std::thread::spawn(move || {
+        let RemoteInstallStart {
+            lock, hold, target, ..
+        } = start;
+        // The panic boundary, as the local install's: the lock is released and a terminal event
+        // sent on every path. A panicked run claims nothing about the host.
+        let mut guard = RunGuard {
+            app: app.clone(),
+            lock: Some(lock),
+            reported: false,
+            terminal_event: REMOTE_INSTALL_FINISHED_EVENT,
+            panic_payload: serde_json::to_value(remote_runner::RemoteInstallFinished {
+                host: host.clone(),
+                ok: false,
+                cancelled: false,
+                message: Some(REMOTE_PANIC_MESSAGE.to_string()),
+            })
+            .unwrap_or_default(),
+        };
+        let sink = RemoteSink {
+            app: app.clone(),
+            host: host.clone(),
+            control: Arc::clone(&ctl),
+            result: std::sync::Mutex::new(None),
+        };
+        // Polled every 20 ms by the streaming loop, ON THIS WORKER: the remote group kill (one
+        // short exec) runs here, never on the main thread the Cancel command runs on.
+        let remote_killed = std::cell::Cell::new(false);
+        let abort = || {
+            let step = ctl
+                .remote
+                .lock()
+                .map(|r| abort_step(&r))
+                .unwrap_or(AbortStep::Continue);
+            match step {
+                AbortStep::Continue => false,
+                AbortStep::StopLocal => true,
+                AbortStep::KillRemoteThenStop(pgid) => {
+                    if !remote_killed.replace(true) {
+                        let _ = links.master_exec(
+                            &target,
+                            &remote_runner::cancel_command(pgid),
+                            REMOTE_CANCEL_TIMEOUT_MS,
+                        );
+                    }
+                    true
+                }
+            }
+        };
+        let exit = match runner::run_streaming_abortable(
+            &argv[0],
+            &argv[1..],
+            None,
+            &sink,
+            remote_runner::REMOTE_INSTALL_DEADLINE,
+            &abort,
+        ) {
+            Ok((code, _)) => code,
+            Err(e) => {
+                let _ = app.emit(
+                    REMOTE_INSTALL_OUTPUT_EVENT,
+                    format!("[could not run ssh: {e}]"),
+                );
+                -1
+            }
+        };
+
+        // The host decides what happened (D6): re-probe it, through the one settle every Settings
+        // refresh uses (an answerless probe writes nothing).
+        let out = links.master_exec(
+            &target,
+            &crate::remote_cmd::substrate_refresh_command(
+                crate::remote_cmd::substrate_home_override().as_deref(),
+            ),
+            crate::remote_link::EXEC_TIMEOUT_MS,
+        );
+        let after = match crate::remote_link::commands::settle_refresh(&links, &host, out) {
+            crate::remote_link::commands::RefreshOutcome::Checked { substrate, .. } => {
+                Some(substrate)
+            }
+            _ => None,
+        };
+        let result = sink.result.lock().ok().and_then(|r| r.clone());
+        let cancel_requested = ctl
+            .remote
+            .lock()
+            .map(|r| r.cancel_requested)
+            .unwrap_or(false);
+        guard.finish(remote_runner::resolve(
+            &host,
+            result.as_ref(),
+            exit,
+            cancel_requested,
+            after.as_ref(),
+        ));
+        // The link hold goes last, after the re-probe that needed it.
+        drop(hold);
+    });
+
+    Ok(())
+}
+
+/// The message a panicked remote install worker reports.
+const REMOTE_PANIC_MESSAGE: &str = "The install stopped unexpectedly. Check Settings → Remote      hosts before retrying: the host may or may not have been changed.";
+
+/// Request Cancel of the remote install in flight (ruling A). `Err` in plain words once
+/// `install.sh` has started: from then on the run cannot be split, so it finishes. With no remote
+/// run in flight it does nothing.
+///
+/// Sync and cheap (a lock write): the remote group kill itself runs on the install's worker.
+#[tauri::command]
+pub fn workflow_remote_install_cancel(
+    control: State<'_, Arc<InstallControl>>,
+) -> Result<(), String> {
+    request_remote_cancel(control.inner())
+}
+
+/// [`workflow_remote_install_cancel`]'s decision, on the cancel state.
+fn request_remote_cancel(control: &InstallControl) -> Result<(), String> {
+    let mut r = control
+        .remote
+        .lock()
+        .map_err(|_| "the install's state is unreadable".to_string())?;
+    if r.phase == Some(Phase::Install) {
+        return Err(
+            "Too late to cancel: install.sh is running, and stopping it halfway would leave the              host half-installed. It finishes in about a second."
+                .to_string(),
+        );
+    }
+    r.cancel_requested = true;
+    Ok(())
+}
+
 /// Current UTC time as RFC-3339, for the provenance record's `installed_at`.
 ///
 /// Lives here rather than in `runner` so the runner stays deterministic under test (it takes the
@@ -518,6 +851,52 @@ fn now_rfc3339() -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::{abort_step, request_remote_cancel, AbortStep, InstallControl, RemoteRunState};
+    use crate::workflow_install::remote_runner::Phase;
+
+    /// M18 WP6 (ruling A) — Cancel's decision, per phase: honoured before and during the clone
+    /// (a remote group kill when the pgid is known, else a local stop), never once `install.sh`
+    /// has started; and without a Cancel nothing stops.
+    #[test]
+    fn the_abort_poll_honours_cancel_only_before_the_install_phase() {
+        let st = |cancel, pgid, phase| RemoteRunState {
+            pgid,
+            phase,
+            cancel_requested: cancel,
+        };
+        assert_eq!(
+            abort_step(&st(false, Some(9), Some(Phase::Clone))),
+            AbortStep::Continue
+        );
+        assert_eq!(abort_step(&st(true, None, None)), AbortStep::StopLocal);
+        assert_eq!(
+            abort_step(&st(true, Some(9), None)),
+            AbortStep::KillRemoteThenStop(9)
+        );
+        assert_eq!(
+            abort_step(&st(true, Some(9), Some(Phase::Clone))),
+            AbortStep::KillRemoteThenStop(9)
+        );
+        assert_eq!(
+            abort_step(&st(true, Some(9), Some(Phase::Install))),
+            AbortStep::Continue
+        );
+    }
+
+    /// The Cancel command refuses once the install phase began (and records nothing), and
+    /// records the request otherwise.
+    #[test]
+    fn the_cancel_command_is_refused_as_too_late_in_the_install_phase() {
+        let ctl = InstallControl::default();
+        ctl.remote.lock().unwrap().phase = Some(Phase::Install);
+        let e = request_remote_cancel(&ctl).unwrap_err();
+        assert!(e.contains("Too late"), "{e}");
+        assert!(!ctl.remote.lock().unwrap().cancel_requested);
+        ctl.remote.lock().unwrap().phase = Some(Phase::Clone);
+        request_remote_cancel(&ctl).unwrap();
+        assert!(ctl.remote.lock().unwrap().cancel_requested);
+    }
+
     #[test]
     fn only_this_layer_resolves_real_paths() {
         // The inverse of the sibling modules' guards: they forbid ambient roots, and this file
@@ -674,12 +1053,23 @@ mod tests {
         // covering the uninstall worker while staying green (code review, 2026-07-31: "the one
         // guard in this WP whose failure mode is 'quietly stops checking'").
         let worker_bodies: Vec<&str> = production.split("std::thread::spawn").skip(1).collect();
+        // M18 WP6 added the third: the remote install's worker.
         assert_eq!(
             worker_bodies.len(),
-            2,
-            "expected exactly two spawned workers (install + uninstall); if a third was added \
-             it must also delegate its lock release to RunGuard"
+            3,
+            "expected exactly three spawned workers (install, uninstall, remote install); if \
+             another was added it must also delegate its lock release to RunGuard"
         );
+        assert!(
+            production.contains("terminal_event: REMOTE_INSTALL_FINISHED_EVENT"),
+            "the remote install worker must report on its own event"
+        );
+        for body in &worker_bodies {
+            assert!(
+                body.contains("RunGuard {"),
+                "every worker closure must build a RunGuard: {body}"
+            );
+        }
         for body in worker_bodies {
             assert!(
                 !body.contains("ctl.running.store(false"),
@@ -752,8 +1142,11 @@ mod tests {
             let at = code
                 .find(signature)
                 .unwrap_or_else(|| panic!("{signature} must exist — did it get renamed?"));
-            // The lock acquisition sits in the first few lines of each body.
-            &code[at..(at + 400).min(code.len())]
+            // The whole function: from its signature to its closing brace at column 0 (every fn
+            // in this table is top-level). M18 WP6 replaced a fixed 400-char window, which the
+            // remote install's longer preamble outgrew.
+            let end = code[at..].find("\n}\n").map_or(code.len(), |rel| at + rel);
+            &code[at..end]
         };
 
         for (command, takes_it_via) in [
@@ -765,6 +1158,15 @@ mod tests {
             ),
             ("fn begin_install(", "HeldRunLock::try_acquire("),
             ("fn begin_uninstall(", "HeldRunLock::try_acquire("),
+            // M18 WP6: the remote install.
+            (
+                "pub fn workflow_remote_install_start",
+                "begin_remote_install(",
+            ),
+            (
+                "pub(crate) fn begin_remote_install(",
+                "HeldRunLock::try_acquire(",
+            ),
         ] {
             assert!(
                 body_of(command).contains(takes_it_via),
