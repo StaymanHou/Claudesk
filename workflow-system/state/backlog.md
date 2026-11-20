@@ -767,3 +767,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** the operator's proposal is to lower the inner list's height cap so the card never overflows. Possibly better, to weigh when this is worked: make the overlay card the same flex column as the standalone picker (`display: flex; flex-direction: column; overflow: hidden` on `.picker-overlay-panel`, the `.picker` inside it `flex: 1; min-height: 0`), so the list takes exactly the leftover height and is the **only** scroller at any window size. A smaller fixed cap would still overflow on short windows and waste space on tall ones. Verify both pickers (first-open and overlay) at a short and a tall window, and that the card's bottom controls stay visible without scrolling the card.
 - **Priority:** low
 - **Status:** open
+
+## SURFACE-2026-11-20-INSTALL-SH-RERUN-DELETES-AN-EXISTING-CLAUDE-MD-BAK
+- **Source:** feature:build (M18 WP3 probe, P1.3, after verify-self caught the first record's gap)
+- **Target level:** upstream (mccc `install.sh`), with a note for M18 WP7 (Update)
+- **Type:** bug (upstream hygiene)
+- **Summary:** A re-run of `install.sh` on an account that already has the workflow block is **content**-idempotent but not metadata-idempotent, and it deletes an existing `~/.claude/CLAUDE.md.bak`. On the "block present" path it does `cp CLAUDE.md CLAUDE.md.bak` (overwriting whatever `.bak` was there), `mv $(mktemp) CLAUDE.md` (new inode and mtime, mode **0600**), then `rm CLAUDE.md.bak` when nothing changed. Measured in a sandbox root on the mini, 2026-11-20: a planted `.bak` holding other content was gone after one re-run, and `CLAUDE.md` went from 0644 to 0600 with the same sha.
+- **Context:** M18 WP7's Update runs `install.sh` again on a Managed install, so every Update carries this. The 0600 mode is harmless for the owning user. The lost `.bak` is the real cost: a user's own backup under that name, or the backup from an earlier `[update]` run, is destroyed silently. Not a Claudesk bug; Claudesk only runs the script (the scripts are the source of truth, `arch/claude-substrate.md` §R.3).
+- **Suggested action:** upstream (mccc): write the backup to a fresh name (`CLAUDE.md.bak.<timestamp>`), or only `cp` to `.bak` when the result differs, and keep the original file's mode (`cat "$updated_tmp" > "$GLOBAL_CLAUDE_MD"` instead of `mv`). Send it in the next mccc handoff. Claudesk side: no change; WP7's Update stays as designed (the probe found no duplicate block and no prompt).
+- **Priority:** low
+- **Status:** open

@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-11-18
+updated: 2026-11-20
 ---
 
 # Runtime Registry
@@ -31,7 +31,7 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 54s (2026-11-18, M18 WP2.5 Phase 2 verify-codify (full, last phase), EXIT=0; incremental, timeout kept at the cold-run value)
+- **Last:** 54s (2026-11-20, M18 WP3 Phase 2 verify-codify (full, last phase), EXIT=0; timeout kept at the cold-run value)
 - **Prior:** 61s (2026-11-18, M18 WP2 Phase 3 verify-codify (full, last phase), EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 49s (2026-11-18, M18 WP2 Phase 3 verify-auto, EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 48s (2026-11-18, M18 WP2 Phase 2 verify-codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
@@ -67,6 +67,8 @@ real chronology.
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 54s — 2026-11-20
+  - 47s — 2026-11-20
   - 60s — 2026-11-17 (M17 WP7 P2 verify-codify, full)
   - 64s — 2026-11-17 (M17 WP7 P2 verify-auto)
   - 45s — 2026-11-17 (M17 WP7 P1 verify-codify, full)

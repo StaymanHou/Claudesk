@@ -253,4 +253,106 @@ WP3 (probe) → WP4 → WP5 → WP6 → WP7 ─┴→ WP8 (release + acceptance)
 
 ## Probe outcomes
 
-*(WP3 writes here.)*
+Measured 2026-11-20 on `<user>@<mini-host>` (macOS 26.6, git 2.50.1 Apple), in a sandbox root `~/claudesk-m18-sandbox` over the
+probe's own ControlMaster, never a Claudesk master. The live account was only read: its baseline (54 links, `CLAUDE.md` /
+`settings.json` shasums, the live clone's HEAD + status) was byte-identical before, during and after. The sandbox is removed. Raw
+evidence: `workflow-system/state/archive/m18-wp3-remote-substrate-probe.md` → "Evidence" (once archived).
+
+**(1) Cancel over the master. A local SIGKILL does NOT stop the remote side; a remote process-group kill does.**
+- **Measured:** the local `ssh` was SIGKILLed as a group (= `subprocess::kill_group`). The remote `zsh -lc` (a session leader,
+  pgid = its pid) **runs on until its next stdout write**, which kills it with SIGPIPE. A `git clone` in flight (with `--progress` or
+  `--quiet`) **completed** (`clone_exit=0`). Only the following `echo` died.
+- **Measured:** one extra exec, `kill -TERM -- -<pgid>`, left no process in the group at +1 s, and git's own signal handler removed the
+  partial clone dir. That exec round trip is 0.13 s.
+- **→ WP6:** cancel = SIGKILL the local stream **and** one remote `kill -TERM -- -<pgid>` exec. §R.9.1's contingency becomes the design.
+  Simpler than a pid file: the run script's first line prints its pgid as a sentinel (`ps -o pgid= -p $$`), and Rust reads it from
+  the stream it already consumes. Then no file is written in the record's dir.
+- **→ WP6 (new):** a group kill that lands while `install.sh` runs stops it between two `ln -s`. That leaves workflow links and no record,
+  which the §R.2 probe reads as **Developer** (no Uninstall offered). `install.sh` takes 0.45 s; the clone takes about 4 s. **Recommended:**
+  cancel is honoured only during the clone. Once `install.sh` starts, the Cancel button disables until the run ends.
+  ✅ **Operator ruling (2026-11-20, WP3 verify-human): option A.** This cancel shape (local kill + one remote group-kill exec, pgid as a
+  stream sentinel, cancel only during the clone, Install clears a stale vendor clone) is the WP6 design. Rejected: B (uncancellable once
+  cloning) and C (cancel any time + `uninstall.sh` cleanup).
+- **→ WP6 (new):** if the app dies mid-run (quit, crash), the remote clone **finishes**, and the script then dies at its first stdout
+  write after it. That leaves a clone dir with no install and no record (Absent). The next Install's `git clone` then fails on the
+  existing dir. Install must handle "clone dir present, no record". Recommended: the run script removes it first (the path is
+  Claudesk's own fixed vendor path under the root, never user data).
+
+**(2) `install.sh` re-run. CONTENT-idempotent, no prompt, no duplicate block → Update stays as designed.**
+- **Measured:** a second run gives exit 0, no prompt (stdin `/dev/null`), all 55 `[ok]`, every link unchanged, one workflow block, and
+  `CLAUDE.md` with the same sha.
+- **Not metadata-idempotent:** `CLAUDE.md` is replaced each run (new inode + mtime, mode 0644 → 0600 from `mktemp`), and an existing
+  `CLAUDE.md.bak` is **deleted**. The cause is `install.sh` §"Inject workflow snippet" (`cp` → `.bak`, `mv` tmp over it, `rm .bak`).
+- **→ WP7:** Update = `pull --ff-only` → `install.sh` → record `updated_at`, unchanged; it does not need to become Uninstall + Install
+  (✅ operator-confirmed 2026-11-20).
+  The `.bak` loss is upstream (`SURFACE-2026-11-20-INSTALL-SH-RERUN-DELETES-AN-EXISTING-CLAUDE-MD-BAK`, low; send with the next mccc handoff).
+
+**(3) `HOME=<root>` contains every write of `install.sh` and `uninstall.sh`. Yes.**
+- **Measured:** a `find $HOME -xdev -newer <marker>` sweep (the root pruned) after install found 103 hits, and after uninstall 2. Every hit is
+  another process's runtime state, and **none is a path `install.sh` / `uninstall.sh` writes** (`~/.claude/{skills,agents,hooks}`,
+  `~/.claude/CLAUDE.md`, `settings.json`). Every sandbox link resolves into the sandbox clone.
+  - Those two windows: the tank workspace's Unreal / Epic files, its repo, and its CC transcript.
+  - A later verify-self sweep window: also `~/.claude.json` (CC), `~/.zen/` (a browser), `Library/Application Support/Google` and
+    `Library/HTTPStorages`.
+  - The install-window sweep files lived in the (now deleted) sandbox; their tallies are in the WIP's Evidence.
+- `install.sh` uses `mktemp` in `$TMPDIR`, outside the root, but renames the file into it, so nothing is left outside.
+- `uninstall.sh --dry-run` changes nothing, and the real run removes all 55.
+- Residue after uninstall: an empty `CLAUDE.md`, `CLAUDE.md.bak`, and empty `skills/` + `agents/` dirs.
+- **→ WP6.4:** judge containment on the set `install.sh` writes, plus a `-newer` sweep with an **explicit exclusion list** for CC/tank
+  runtime paths (`~/.claude/projects`, `~/.claude.json`, the tank repo, `Library/Application Support/{Epic,Google}`, `Library/HTTPStorages`,
+  browser profiles such as `~/.zen/`, Unreal logs). Better still: assert positively on the script-written set, and treat the sweep as an
+  inverse check filtered to `~/.claude/` + dotfiles. Do **not** use a shasum of
+  the whole real `~/.claude`: the tank workspace writes there continuously, and that would be a false finding.
+- **→ WP6:** `install.sh` never writes `settings.json`. It only PRINTS four permissions (and `uninstall.sh` symmetrically only prints).
+  Claudesk spawns remote CC with `bypassPermissions`, so nothing needs them. Show the printed lines in the output panel as the local
+  wizard does, and edit no settings.
+
+**(4) `SUBSTRATE_PROBE` cost: +16 ms median, inside the budget** (✅ operator-accepted 2026-11-20).
+- **Measured:** the real `open_check_command` string, printed by a throwaway test (not retyped), was run over the master 15× without
+  and 15× with the probe appended inside the same login-shell script, interleaved, all exit 0.
+  - Without: median **0.117 s** (min 0.088, max 0.179).
+  - With: median **0.133 s** (min 0.107, max 0.214).
+  - Delta: **+16 ms median, +35 ms max**, on the live account's 48-skill tree.
+- **Measured (agreement):** the draft below agrees with `workflow_substrate::skills_dir_exists` on all **12** local fixture shapes: none, no
+  skills dir, skills is a file, empty, a user's real dir, a dangling link, a repo without an installer, an installer without the marker, the
+  marker, a user dir + a marker link, a marker link under a dotfile name, and the skills dir itself a symlink. It also prints the right root.
+  A mutated marker fails the comparison (it is mutation-proven: the Rust run failed; the shell-level rerun is saved, marker fixture `yes` → mutated `no`).
+- **Measured (live reads):** live account → `yes`, root = the live clone's `pwd -P`, HEAD `f8e8873`, no record → **Developer**. Sandbox root →
+  `yes` + the sandbox clone. Empty root → `no`. The record line round-trips (`{"x":1}\n` → `7b2278223a317d0a`).
+- **→ WP4.1:** adopt the draft as `remote_cmd::SUBSTRATE_PROBE`. It is one `perl` process, already a dependency of `TRUSTED_KEYS`; a missing perl
+  prints nothing → read as unknown → fail closed. The parity test takes these 12 fixtures. ⚠️ **One known divergence to settle there:** for an
+  `install.sh` that is not valid UTF-8 but holds the marker, Rust's `read_to_string` fails (`false`) while perl reads bytes (`true`).
+  Recommended: make the Rust side read bytes too, since the marker is ASCII.
+- The record crosses as one hex line, so a multi-line JSON record survives the line protocol.
+
+```sh
+perl -MCwd=abs_path -MFile::Basename=dirname -e '
+my $d = "$ENV{HOME}/.claude/skills"; my $root;
+if (opendir(my $h, $d)) { for my $n (readdir $h) { next if $n eq "." || $n eq "..";
+  my $e = "$d/$n"; next unless -l $e; my $t = abs_path($e); next unless defined $t && -e $t;
+  my $r = dirname(dirname($t)); open(my $f, "<", "$r/install.sh") or next; local $/; my $b = <$f>;
+  if (defined $b && index($b, "claude-workflow-system") >= 0) { $root = $r; last } } }
+if (defined $root) { print "CLAUDESK-OPEN:substrate:yes\nCLAUDESK-OPEN:substrate-root:$root\n";
+  if (open(my $g, "-|", "git", "-C", $root, "rev-parse", "HEAD")) { my $s = <$g>; print "CLAUDESK-OPEN:substrate-head:$s" if defined $s } }
+else { print "CLAUDESK-OPEN:substrate:no\n" }
+if (open(my $j, "<", "$ENV{HOME}/.claudesk/install-record.json")) { local $/; my $x = <$j>;
+  print "CLAUDESK-OPEN:record-hex:", unpack("H*", defined $x ? $x : ""), "\n" }' 2>/dev/null
+```
+
+**(5) `git` without the Command Line Tools. The real case is not measurable here; `xcode-select -p` alone is too weak a preflight.**
+- **Not measured:** the mini has both Xcode and the CLT, and no host without them exists. The real case (the `/usr/bin/git` shim with no developer
+  dir) is **cited, not measured**: per Apple's stub behaviour it prints a "no developer tools were found, requesting install" note, exits
+  non-zero, and asks for the GUI installer on the host's console.
+- **Measured (simulation that pops nothing):** `DEVELOPER_DIR=/var/empty /usr/bin/git --version` over a non-tty ssh → exit 1,
+  `xcrun: error: invalid DEVELOPER_DIR path …`.
+- ⚠️ **Measured:** `DEVELOPER_DIR=/var/empty xcode-select -p` prints `/var/empty` and **exits 0**. It does not validate the path.
+- **→ WP6 preflight:** `d=$(xcode-select -p 2>/dev/null) && [ -n "$d" ] && [ -x "$d/usr/bin/git" ]`. It checks that the real binary exists
+  (Xcode's and the CLT's developer dirs both carry `usr/bin/git`) and never runs the shim, so it can never pop the installer. The refusal names
+  `xcode-select --install` at the host's console (§R.6).
+  - ⚠️ **The empty-path guard is load-bearing (caught at verify-self).** On a no-tools host `xcode-select -p` prints nothing and exits 2. The
+    naive `test -x "$(xcode-select -p)/usr/bin/git"` then collapses to `test -x /usr/bin/git`, which IS the shim, and **passes**.
+  - **Measured** with a stub `xcode-select` (empty stdout, exit 2): the naive form exits 0 (wrong), the guarded form exits 2 (refuses).
+    Invalid `DEVELOPER_DIR` → 1. A real developer dir → 0, on this Mac and on the mini.
+  - WP6 should unit-test the preflight's three arms with that stub.
+
+**Other timings for WP6's UX:** a public HTTPS clone takes about 3.9 s, `install.sh` 0.45 s, and `uninstall.sh` well under 1 s.
