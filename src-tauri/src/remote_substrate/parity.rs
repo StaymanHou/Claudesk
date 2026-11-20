@@ -18,7 +18,7 @@ use crate::remote_cmd::{
 };
 use crate::workflow_substrate::skills_dir_exists;
 
-const MARKER_INSTALLER: &[u8] =
+pub(super) const MARKER_INSTALLER: &[u8] =
     b"#!/usr/bin/env bash\nBEGIN=\"<!-- BEGIN claude-workflow-system -->\"\n";
 
 /// Run the real probe with `HOME=home` (and an optional `PATH` prefix), through the real parser.
@@ -56,7 +56,7 @@ fn probe(home: &Path) -> HostProbe {
 }
 
 /// A repo at `at` with a `skills/<skill>` dir and an `install.sh` holding `installer`.
-fn repo(at: &Path, installer: Option<&[u8]>) -> PathBuf {
+pub(super) fn repo(at: &Path, installer: Option<&[u8]>) -> PathBuf {
     fs::create_dir_all(at.join("skills/feature-build")).unwrap();
     if let Some(body) = installer {
         fs::write(at.join("install.sh"), body).unwrap();
@@ -64,13 +64,13 @@ fn repo(at: &Path, installer: Option<&[u8]>) -> PathBuf {
     at.to_path_buf()
 }
 
-fn skills(home: &Path) -> PathBuf {
+pub(super) fn skills(home: &Path) -> PathBuf {
     let d = home.join(".claude/skills");
     fs::create_dir_all(&d).unwrap();
     d
 }
 
-fn link(home: &Path, repo: &Path, name: &str) {
+pub(super) fn link(home: &Path, repo: &Path, name: &str) {
     symlink(repo.join("skills/feature-build"), skills(home).join(name)).unwrap();
 }
 
@@ -192,7 +192,7 @@ fn substrate_probe_agrees_with_skills_dir_exists() {
     }
 }
 
-fn git(dir: &Path, args: &[&str]) -> String {
+pub(super) fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .arg("-C")
         .arg(dir)
@@ -206,7 +206,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 }
 
 /// A marker repo under git, linked into `home`. Returns (repo, HEAD sha).
-fn git_repo(home: &Path, scratch: &Path) -> (PathBuf, String) {
+pub(super) fn git_repo(home: &Path, scratch: &Path) -> (PathBuf, String) {
     let r = repo(&scratch.join("r"), Some(MARKER_INSTALLER));
     link(home, &r, "feature-build");
     git(&r, &["init", "-q", "-b", "main"]);

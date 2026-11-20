@@ -395,6 +395,129 @@ pub fn remote_host_substrates(
     links.substrates()
 }
 
+/// M18 WP5 (§R.5) — one entry of Settings → Remote hosts: a distinct host among the remote rows.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct RemoteHostEntry {
+    pub host: String,
+    /// The host's link is Up now, so a refresh can ask it (Settings never brings one up).
+    pub link_up: bool,
+    /// The last substrate this app session observed (`Unknown` when never probed).
+    pub substrate: crate::remote_substrate::HostSubstrate,
+}
+
+/// The distinct hosts of the VALID remote rows in `projects`, sorted, each with one of its rows'
+/// targets (any row will do: a refresh asks the host account, not the project folder). A row that
+/// fails validation is skipped, as it refuses to open.
+fn remote_hosts_of(projects: &[config_store::Project]) -> Vec<ValidTarget> {
+    let mut by_host = std::collections::BTreeMap::new();
+    for target in projects
+        .iter()
+        .filter_map(|p| p.remote.as_ref()?.validated().ok())
+    {
+        by_host.entry(target.host().to_string()).or_insert(target);
+    }
+    by_host.into_values().collect()
+}
+
+/// M18 WP5 (§R.5): the hosts Settings → Remote hosts lists, with each one's link state and cached
+/// substrate. Empty when there is no valid remote row (the group is then not shown).
+///
+/// Sync on purpose: one bounded local read of `projects.json` and short lock reads, no ssh.
+#[tauri::command]
+pub fn remote_hosts(
+    app: AppHandle,
+    links: State<'_, SharedLinks>,
+) -> Result<Vec<RemoteHostEntry>, String> {
+    let dir = resolve_data_dir(&app)?;
+    let projects = config_store::read_projects(&dir).map_err(|e| e.to_string())?;
+    Ok(remote_hosts_of(&projects)
+        .into_iter()
+        .map(|t| RemoteHostEntry {
+            link_up: links.state(t.host()) == Some(super::LinkState::Up),
+            substrate: links.substrate(t.host()),
+            host: t.host().to_string(),
+        })
+        .collect())
+}
+
+/// M18 WP5 — what one Settings refresh of a host found.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum RefreshOutcome {
+    /// The host answered: its substrate (now cached) and, when there is something to compare, the
+    /// drift verdict.
+    Checked {
+        substrate: crate::remote_substrate::HostSubstrate,
+        drift: Option<crate::remote_substrate::Drift>,
+    },
+    /// The host's link is not Up: nothing was sent, and the cache is unchanged (D4).
+    LinkDown,
+    /// The exec ran and failed; the cache is unchanged.
+    Failed { reason: String },
+}
+
+/// M18 WP5 (§R.4, §R.5): re-probe `host`'s substrate and read its drift against GitHub, in ONE exec
+/// over the host's master. Run by Settings → Remote hosts while it is shown, never on open or by a
+/// timer (prior `background-work-only-for-what-is-on-screen`).
+///
+/// ⚠️ It never brings a link up and never holds one: `master_exec` is Up-only and master-only, so
+/// a host with no live link answers [`RefreshOutcome::LinkDown`] at the cost of a lock read (D4).
+/// `host` must be the host of a remote row; any other value is refused before anything runs.
+#[tauri::command]
+pub async fn remote_substrate_refresh(
+    app: AppHandle,
+    links: State<'_, SharedLinks>,
+    host: String,
+) -> Result<RefreshOutcome, String> {
+    let dir = resolve_data_dir(&app)?;
+    let links = Arc::clone(&links);
+    crate::blocking::on_blocking_worker("checking the remote host", move || {
+        let projects = config_store::read_projects(&dir).map_err(|e| e.to_string())?;
+        let target = remote_hosts_of(&projects)
+            .into_iter()
+            .find(|t| t.host() == host)
+            .ok_or_else(|| format!("{host} is not the host of a remote project"))?;
+        let out = links.master_exec(
+            &target,
+            &crate::remote_cmd::substrate_refresh_command(
+                crate::remote_cmd::substrate_home_override().as_deref(),
+            ),
+            super::EXEC_TIMEOUT_MS,
+        );
+        Ok(settle_refresh(&links, &host, out))
+    })
+    .await
+}
+
+/// A refresh exec's result → the outcome, writing the cache ONLY when the host answered (D3): the
+/// same `set_substrate` the open check uses, so every `useHostSubstrate` hears the change.
+pub(crate) fn settle_refresh(
+    links: &LinkRegistry,
+    host: &str,
+    out: Result<String, super::CloseExecError>,
+) -> RefreshOutcome {
+    let out = match out {
+        Err(super::CloseExecError::LinkNotUp) => return RefreshOutcome::LinkDown,
+        Err(e) => {
+            return RefreshOutcome::Failed {
+                reason: e.to_string(),
+            }
+        }
+        Ok(out) => out,
+    };
+    let Some(facts) = crate::remote_cmd::parse_refresh(&out) else {
+        return RefreshOutcome::Failed {
+            reason: "the host printed no answer".to_string(),
+        };
+    };
+    let substrate = crate::remote_substrate::HostSubstrate::from_read(&facts.substrate);
+    links.set_substrate(host, substrate.clone());
+    RefreshOutcome::Checked {
+        drift: crate::remote_substrate::Drift::decide(&substrate, facts.drift.as_ref()),
+        substrate,
+    }
+}
+
 /// The notice the last open check left for the workspace it opened (M17 WP5, AC-2.3), taken once,
 /// or `None`. Read by the remote workspace once its spawn resolved, like `remote_hook_warning`.
 ///
@@ -794,6 +917,84 @@ mod tests {
         let err = target_for(dir.path(), &row.path.display().to_string()).unwrap_err();
         assert!(err.contains("cannot start with \"-\""), "{err}");
         assert!(err.contains("Remove it and add it again"), "{err}");
+    }
+
+    /// M18 WP5 (§R.5): one entry per DISTINCT host among the VALID remote rows, sorted; a local
+    /// row and a row that fails validation are not hosts.
+    #[test]
+    fn remote_hosts_are_the_distinct_valid_hosts_sorted() {
+        let dir = TempDir::new().unwrap();
+        for (host, path, at) in [
+            ("me@zeta", "/Users/me/a", 1),
+            ("me@mini-host", "/Users/me/a", 2),
+            ("me@mini-host", "/Users/me/b", 3),
+        ] {
+            add_remote(
+                dir.path(),
+                RemoteTarget {
+                    host: host.into(),
+                    path: path.into(),
+                },
+                at,
+            )
+            .unwrap();
+        }
+        let mut rows = config_store::read_projects(dir.path()).unwrap();
+        let mut local = rows[0].clone();
+        local.path = std::path::PathBuf::from("/Users/me/local");
+        local.remote = None;
+        let mut bad = rows[0].clone();
+        let bad_target = RemoteTarget {
+            host: "-oProxyCommand=x".into(),
+            path: "/r".into(),
+        };
+        bad.path = std::path::PathBuf::from(bad_target.key());
+        bad.remote = Some(bad_target);
+        rows.extend([local, bad]);
+        write_projects(dir.path(), &rows).unwrap();
+        let hosts: Vec<String> = remote_hosts_of(&config_store::read_projects(dir.path()).unwrap())
+            .iter()
+            .map(|t| t.host().to_string())
+            .collect();
+        assert_eq!(hosts, ["me@mini-host", "me@zeta"]);
+    }
+
+    /// M18 WP5 (D4) caller guard over `remote_substrate_refresh`: the host is asked in ONE exec, and
+    /// that exec is `master_exec` (Up-only, master-only: never connects, never holds a link).
+    /// `exec` or `ensure_and_hold` here would let Settings bring a link up (§R.5).
+    #[test]
+    fn the_refresh_asks_the_host_once_over_the_master_only() {
+        let body = dense_body(
+            include_str!("commands.rs"),
+            "pub async fn remote_substrate_refresh(",
+        );
+        let worker = &body[body
+            .find("on_blocking_worker(")
+            .expect("runs on a blocking worker")..];
+        assert_eq!(
+            links_calls(worker),
+            ["master_exec"],
+            "ONE master-only exec, nothing else remote: {worker}"
+        );
+        assert_eq!(
+            worker.matches("substrate_refresh_command(").count(),
+            1,
+            "{worker}"
+        );
+        super::assert_remote_reach_is_closed(
+            &body,
+            &[
+                "crate::remote_cmd::substrate_home_override",
+                "crate::remote_cmd::substrate_refresh_command",
+                "super::EXEC_TIMEOUT_MS",
+            ],
+            &[
+                "links:State<'_,SharedLinks>",
+                "letlinks=Arc::clone(&links);",
+                "links.master_exec(",
+                "settle_refresh(&links,",
+            ],
+        );
     }
 
     #[test]

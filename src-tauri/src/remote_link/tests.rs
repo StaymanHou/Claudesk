@@ -2366,3 +2366,111 @@ fn every_answered_open_decision_carries_the_probed_substrate() {
     let dead = decide_open(Ok("noise".into()), None, false, &target);
     assert_eq!(dead.substrate, None, "no answer: nothing to write");
 }
+
+/// M18 WP5 (D4) — a refresh against a host whose link is not Up runs NOTHING: `master_exec` refuses
+/// before it builds an argv (no ssh is spawned, so it answers at once), and the settle leaves the
+/// substrate cache and its event untouched.
+#[test]
+fn a_refresh_with_the_link_down_sends_nothing_and_keeps_the_cache() {
+    use super::commands::{settle_refresh, RefreshOutcome};
+    use crate::remote_substrate::{HostSubstrate, SubstrateEvent};
+    let h = harness();
+    let seen: Arc<Mutex<Vec<SubstrateEvent>>> = Arc::default();
+    let sink_seen = Arc::clone(&seen);
+    h.reg
+        .set_substrate_sink(Arc::new(move |e| sink_seen.lock().unwrap().push(e)));
+    h.reg.set_substrate(
+        "me@mini-host",
+        HostSubstrate::Developer {
+            root: Some("/r".into()),
+            head: None,
+        },
+    );
+    seen.lock().unwrap().clear();
+    let started = Instant::now();
+    let out = h.reg.master_exec(
+        &target(),
+        &crate::remote_cmd::substrate_refresh_command(None),
+        10_000,
+    );
+    assert!(matches!(out, Err(CloseExecError::LinkNotUp)), "{out:?}");
+    assert!(
+        started.elapsed() < Duration::from_millis(500),
+        "nothing ran: no ssh, no wait"
+    );
+    assert_eq!(
+        settle_refresh(&h.reg, "me@mini-host", out),
+        RefreshOutcome::LinkDown
+    );
+    assert!(matches!(
+        h.reg.substrate("me@mini-host"),
+        HostSubstrate::Developer { .. }
+    ));
+    assert!(seen.lock().unwrap().is_empty(), "no substrate event");
+}
+
+/// M18 WP5 (D3) — a host that answered writes the cache through `set_substrate` (one event, the
+/// fresh value) and carries the drift verdict; a failed exec or an answerless one writes nothing.
+#[test]
+fn a_refresh_that_answered_writes_the_cache_once() {
+    use super::commands::{settle_refresh, RefreshOutcome};
+    use crate::remote_substrate::{Drift, HostSubstrate, SubstrateEvent};
+    use crate::subprocess::RunError;
+    let h = harness();
+    let seen: Arc<Mutex<Vec<SubstrateEvent>>> = Arc::default();
+    let sink_seen = Arc::clone(&seen);
+    h.reg
+        .set_substrate_sink(Arc::new(move |e| sink_seen.lock().unwrap().push(e)));
+    let a = "a".repeat(40);
+    let b = "b".repeat(40);
+    let s = crate::remote_cmd::OPEN_SENTINEL;
+
+    for failed in [
+        Err(CloseExecError::Run(RunError::TimedOut(10_000))),
+        Ok(String::new()),
+    ] {
+        assert!(matches!(
+            settle_refresh(&h.reg, "me@mini-host", failed),
+            RefreshOutcome::Failed { .. }
+        ));
+    }
+    assert!(seen.lock().unwrap().is_empty(), "a failure writes nothing");
+    assert_eq!(h.reg.substrate("me@mini-host"), HostSubstrate::Unknown);
+
+    let out = format!(
+        "{s}substrate-probed\n{s}substrate:yes\n{s}substrate-root:/Users/me/r\n\
+         {s}substrate-head:{a}\n{s}drift-remote:{b}\n"
+    );
+    let dev = HostSubstrate::Developer {
+        root: Some("/Users/me/r".into()),
+        head: Some(a.clone()),
+    };
+    assert_eq!(
+        settle_refresh(&h.reg, "me@mini-host", Ok(out)),
+        RefreshOutcome::Checked {
+            substrate: dev.clone(),
+            drift: Some(Drift::Behind { head: a, remote: b }),
+        }
+    );
+    assert_eq!(h.reg.substrate("me@mini-host"), dev);
+    let events: Vec<(String, HostSubstrate)> = seen
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|e| (e.host.clone(), e.substrate.clone()))
+        .collect();
+    assert_eq!(events, vec![("me@mini-host".to_string(), dev)]);
+
+    // An Absent host: cached, and no drift to report.
+    assert_eq!(
+        settle_refresh(
+            &h.reg,
+            "me@mini-host",
+            Ok(format!("{s}substrate-probed\n{s}substrate:no\n"))
+        ),
+        RefreshOutcome::Checked {
+            substrate: HostSubstrate::Absent,
+            drift: None
+        }
+    );
+}

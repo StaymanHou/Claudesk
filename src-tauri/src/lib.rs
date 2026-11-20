@@ -538,6 +538,8 @@ pub fn run() {
             remote_link::commands::remote_hook_warning,
             remote_link::commands::remote_open_notice,
             remote_link::commands::remote_host_substrates,
+            remote_link::commands::remote_hosts,
+            remote_link::commands::remote_substrate_refresh,
             cc_session::commands::cc_spawn_remote,
             cc_session::commands::cc_inject,
             config_store::commands::record_open,

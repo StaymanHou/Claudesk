@@ -630,10 +630,119 @@ pub fn substrate_home_from(debug: bool, raw: Option<String>) -> Option<String> {
 /// as an env PREFIX on that one command when given. With `home = None` this is byte-identical in
 /// every build.
 fn substrate_probe_lines(home: Option<&str>) -> String {
+    format!(
+        "echo '{OPEN_SENTINEL}substrate-probed'\n{}",
+        substrate_probe_invocation(home)
+    )
+}
+
+/// [`SUBSTRATE_PROBE`] with the debug sandbox root as an env PREFIX on that one command, when given.
+fn substrate_probe_invocation(home: Option<&str>) -> String {
     let prefix = home
         .map(|h| format!("{SUBSTRATE_HOME_ENV}={} ", quote(h)))
         .unwrap_or_default();
-    format!("echo '{OPEN_SENTINEL}substrate-probed'\n{prefix}{SUBSTRATE_PROBE}")
+    format!("{prefix}{SUBSTRATE_PROBE}")
+}
+
+/// M18 WP5 (D2) — constant fragment: succeeds only when the host's developer tools carry a real
+/// `git` binary (WP3 "Probe outcomes" (5)), leaving its path's directory in `$d`. ⚠️ Every remote
+/// `git` call runs behind this. On a Mac without the Command Line Tools, `/usr/bin/git` is the shim
+/// that asks for the GUI installer on the host's console. The empty-path test is load-bearing:
+/// there `xcode-select -p` prints nothing, and `[ -x "/usr/bin/git" ]` would test the shim and pass.
+pub const DEV_TOOLS_GUARD: &str =
+    r#"d=$(xcode-select -p 2>/dev/null) && [ -n "$d" ] && [ -x "$d/usr/bin/git" ]"#;
+
+/// M18 WP5 — the plain-words fix for a host without developer tools (§R.6).
+pub const DEV_TOOLS_FIX: &str = "run `xcode-select --install` at the host's console";
+
+/// M18 WP5 (§R.4) — Settings → Remote hosts' ONE exec per host: the substrate probe (as the open
+/// check runs it, with the same debug sandbox root) and then the drift read, `ls-remote` from the
+/// host. Read-only: `ls-remote` writes nothing into the clone (a count would need a `fetch`, §R.4).
+///
+/// The drift half runs only when the probe printed a root, and prints ONE line:
+/// - `drift-remote:<sha>`: the clone's `origin` HEAD on its server (D1: the clone's own `origin`,
+///   which is what Update's `pull --ff-only` fetches from);
+/// - `drift-error:no-devtools` ([`DEV_TOOLS_GUARD`] failed; no `git` ran at all);
+/// - `drift-error:no-origin` (the clone has no `origin` remote);
+/// - `drift-error:git:<last line of git's output>`.
+///
+/// `git` is the developer dir's own binary, never a PATH lookup, and runs non-interactively (no
+/// credential prompt, ssh in batch mode, stdin closed): a prompt over a non-tty exec would hang
+/// until the exec's timeout. Constant text apart from the sandbox prefix, which is quoted.
+pub fn substrate_refresh_command(substrate_home: Option<&str>) -> String {
+    login_shell(&substrate_refresh_script(substrate_home))
+}
+
+/// [`substrate_refresh_command`]'s script, before the login-shell wrapper (tests run it locally).
+pub fn substrate_refresh_script(substrate_home: Option<&str>) -> String {
+    // The open check's `substrate-probed` marker, then the probe captured in `$p` so the drift half
+    // can read the root it printed: the root is decided ONCE, by the probe, never re-derived here.
+    let probe_cmd = substrate_probe_invocation(substrate_home);
+    format!(
+        "echo '{S}substrate-probed'\n\
+p=$({probe_cmd})\n\
+printf '%s\\n' \"$p\"\n\
+root=$(printf '%s\\n' \"$p\" | sed -n 's/^{S}substrate-root://p')\n\
+if [ -n \"$root\" ]; then\n\
+if {DEV_TOOLS_GUARD}; then\n\
+if \"$d/usr/bin/git\" -C \"$root\" remote get-url origin >/dev/null 2>&1 </dev/null; then\n\
+o=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND='ssh -o BatchMode=yes' \"$d/usr/bin/git\" -C \"$root\" ls-remote origin HEAD 2>&1 </dev/null); rc=$?\n\
+r=$(printf '%s\\n' \"$o\" | awk '$2 == \"HEAD\" {{ print $1; exit }}')\n\
+if [ \"$rc\" -eq 0 ] && [ -n \"$r\" ]; then printf '%s%s\\n' '{S}drift-remote:' \"$r\"; \
+else printf '%s%s\\n' '{S}drift-error:git:' \"$(printf '%s\\n' \"$o\" | tail -n 1)\"; fi\n\
+else echo '{S}drift-error:no-origin'; fi\n\
+else echo '{S}drift-error:no-devtools'; fi\n\
+fi",
+        S = OPEN_SENTINEL,
+    )
+}
+
+/// M18 WP5 — the drift half of a refresh, as the host printed it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DriftLine {
+    /// GitHub's (the clone's `origin`'s) HEAD.
+    Remote(String),
+    /// The host has no developer tools; no `git` ran.
+    NoDevTools,
+    /// The clone has no `origin` remote.
+    NoOrigin,
+    /// `git ls-remote` failed (or printed no HEAD): its last output line, possibly empty.
+    Git(String),
+}
+
+/// M18 WP5 — what one refresh exec found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefreshFacts {
+    /// The probe's answer (`Unknown` when no `substrate:` line came back).
+    pub substrate: SubstrateRead,
+    /// The drift line, when the drift half ran and printed one.
+    pub drift: Option<DriftLine>,
+}
+
+/// [`substrate_refresh_command`]'s answer, or `None` when not even the `substrate-probed` marker
+/// came back (the shell never ran the script).
+pub fn parse_refresh(out: &str) -> Option<RefreshFacts> {
+    let substrate = parse_substrate(out)?;
+    let mut drift = None;
+    for line in out.lines() {
+        let Some(rest) = line.trim_end_matches('\r').strip_prefix(OPEN_SENTINEL) else {
+            continue;
+        };
+        if let Some(v) = rest.strip_prefix("drift-remote:") {
+            drift = Some(if is_sha(v) {
+                DriftLine::Remote(v.to_string())
+            } else {
+                DriftLine::Git(format!("unexpected HEAD {v:?}"))
+            });
+        } else if rest == "drift-error:no-devtools" {
+            drift = Some(DriftLine::NoDevTools);
+        } else if rest == "drift-error:no-origin" {
+            drift = Some(DriftLine::NoOrigin);
+        } else if let Some(v) = rest.strip_prefix("drift-error:git:") {
+            drift = Some(DriftLine::Git(v.trim().to_string()));
+        }
+    }
+    Some(RefreshFacts { substrate, drift })
 }
 
 /// M18 WP4 — what [`SUBSTRATE_PROBE`] found, when it answered.
@@ -704,11 +813,6 @@ pub fn parse_open_facts(out: &str) -> Option<OpenFacts> {
     let mut session_md = false;
     let mut trusted_keys = Vec::new();
     let mut bypass_accepted = false;
-    let mut probed = false;
-    let mut present = None;
-    let mut root = None;
-    let mut head = None;
-    let mut record = None;
     for line in out.lines() {
         let Some(rest) = line.trim_end_matches('\r').strip_prefix(OPEN_SENTINEL) else {
             continue;
@@ -720,19 +824,8 @@ pub fn parse_open_facts(out: &str) -> Option<OpenFacts> {
             "live:no" => live = Some(false),
             "session-md:yes" => session_md = true,
             "bypass-accepted:yes" => bypass_accepted = true,
-            "substrate-probed" => probed = true,
-            "substrate:yes" => present = Some(true),
-            "substrate:no" => present = Some(false),
             _ => {
-                if let Some(v) = rest.strip_prefix("substrate-root:") {
-                    root = is_normalized_remote_path(v).then(|| v.to_string());
-                } else if let Some(v) = rest.strip_prefix("substrate-head:") {
-                    head = (matches!(v.len(), 40 | 64)
-                        && v.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
-                    .then(|| v.to_string());
-                } else if let Some(v) = rest.strip_prefix("record-hex:") {
-                    record = decode_hex(v);
-                } else if let Some(v) = rest.strip_prefix("mode:") {
+                if let Some(v) = rest.strip_prefix("mode:") {
                     mode = parse_mode_value(v);
                 } else if let Some(v) = rest.strip_prefix("real:") {
                     real = is_normalized_remote_path(v).then(|| v.to_string());
@@ -751,16 +844,53 @@ pub fn parse_open_facts(out: &str) -> Option<OpenFacts> {
         session_md,
         trusted_keys,
         bypass_accepted,
-        substrate: probed.then_some(match present {
-            None => SubstrateRead::Unknown,
-            Some(present) => SubstrateRead::Known(HostProbe {
-                present,
-                root,
-                head,
-                record,
-            }),
+        substrate: parse_substrate(out),
+    })
+}
+
+/// M18 WP4/WP5 — the substrate lines of an open check or a refresh ([`substrate_probe_lines`]):
+/// `None` when the output carries no `substrate-probed` line (not probed), `Unknown` when it was
+/// probed but no `substrate:` answer came back. One parser for both callers, so the open check and
+/// Settings can never read the same probe two ways.
+fn parse_substrate(out: &str) -> Option<SubstrateRead> {
+    let mut probed = false;
+    let mut present = None;
+    let mut root = None;
+    let mut head = None;
+    let mut record = None;
+    for line in out.lines() {
+        let Some(rest) = line.trim_end_matches('\r').strip_prefix(OPEN_SENTINEL) else {
+            continue;
+        };
+        match rest {
+            "substrate-probed" => probed = true,
+            "substrate:yes" => present = Some(true),
+            "substrate:no" => present = Some(false),
+            _ => {
+                if let Some(v) = rest.strip_prefix("substrate-root:") {
+                    root = is_normalized_remote_path(v).then(|| v.to_string());
+                } else if let Some(v) = rest.strip_prefix("substrate-head:") {
+                    head = is_sha(v).then(|| v.to_string());
+                } else if let Some(v) = rest.strip_prefix("record-hex:") {
+                    record = decode_hex(v);
+                }
+            }
+        }
+    }
+    probed.then_some(match present {
+        None => SubstrateRead::Unknown,
+        Some(present) => SubstrateRead::Known(HostProbe {
+            present,
+            root,
+            head,
+            record,
         }),
     })
+}
+
+/// A full git object name: 40 (SHA-1) or 64 (SHA-256) lower-case hex digits.
+fn is_sha(v: &str) -> bool {
+    matches!(v.len(), 40 | 64) && v.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 /// A stored [`MODE_OPTION`] value: one of the four → that mode; [`NO_MODE`] → none; anything else

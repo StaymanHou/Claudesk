@@ -9,11 +9,12 @@
 //! is cached per host in `LinkRegistry` and is the funnel's third input
 //! (`config_store::profiles::workflow_applicable`).
 //!
-//! Pure: no filesystem, no ssh. WP5–WP7 add the readout, Install, Update and Uninstall around it.
+//! Pure: no filesystem, no ssh. WP5 adds the drift verdict ([`Drift`], Settings → Remote hosts);
+//! WP6–WP7 add Install, Update and Uninstall around it.
 
 use serde::Serialize;
 
-use crate::remote_cmd::SubstrateRead;
+use crate::remote_cmd::{DriftLine, SubstrateRead, DEV_TOOLS_FIX};
 use crate::workflow_install::provenance::{self, InstallRecord};
 use crate::workflow_install::{resolve_state, InstallState};
 
@@ -69,6 +70,73 @@ impl HostSubstrate {
     }
 }
 
+/// M18 WP5 (§R.4) — the host clone against GitHub, as Settings → Remote hosts shows it. Compared
+/// on the full HEADs; the readout prints them short.
+///
+/// ⚠️ `Behind` means "the two HEADs differ" (D6). Without a `fetch` (a write into a clone Claudesk
+/// may not own) a host that is ahead or has diverged cannot be told apart from one that is behind.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "drift", rename_all = "snake_case")]
+pub enum Drift {
+    UpToDate {
+        head: String,
+        remote: String,
+    },
+    Behind {
+        head: String,
+        remote: String,
+    },
+    /// No verdict, with the reason in plain words.
+    CantCheck {
+        reason: String,
+    },
+}
+
+impl Drift {
+    /// The verdict for `substrate` from the refresh's drift line. `None` when there is nothing to
+    /// compare: the workflow system is not there (Absent) or its state is not known.
+    pub fn decide(substrate: &HostSubstrate, line: Option<&DriftLine>) -> Option<Self> {
+        let (root, head) = match substrate {
+            HostSubstrate::Unknown | HostSubstrate::Absent => return None,
+            HostSubstrate::Developer { root, head } | HostSubstrate::Managed { root, head, .. } => {
+                (root, head)
+            }
+        };
+        let cant = |reason: &str| {
+            Some(Self::CantCheck {
+                reason: reason.to_string(),
+            })
+        };
+        if root.is_none() {
+            return cant("Claudesk couldn't resolve the install's folder on the host");
+        }
+        match line {
+            None => cant("the host printed no answer"),
+            Some(DriftLine::NoDevTools) => Some(Self::CantCheck {
+                reason: format!("the host has no developer tools ({DEV_TOOLS_FIX})"),
+            }),
+            Some(DriftLine::NoOrigin) => cant("the install has no `origin` remote"),
+            Some(DriftLine::Git(detail)) if detail.is_empty() => {
+                cant("`git ls-remote` gave no answer")
+            }
+            Some(DriftLine::Git(detail)) => Some(Self::CantCheck {
+                reason: format!("`git ls-remote` failed: {detail}"),
+            }),
+            Some(DriftLine::Remote(remote)) => match head {
+                None => cant("Claudesk couldn't read the install's HEAD"),
+                Some(head) if head == remote => Some(Self::UpToDate {
+                    head: head.clone(),
+                    remote: remote.clone(),
+                }),
+                Some(head) => Some(Self::Behind {
+                    head: head.clone(),
+                    remote: remote.clone(),
+                }),
+            },
+        }
+    }
+}
+
 /// The `remote-substrate` event: one host's substrate changed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SubstrateEvent {
@@ -81,6 +149,9 @@ pub const SUBSTRATE_EVENT: &str = "remote-substrate";
 
 #[cfg(test)]
 mod parity;
+
+#[cfg(test)]
+mod refresh_script;
 
 #[cfg(test)]
 mod tests {
@@ -145,6 +216,97 @@ mod tests {
                 "{bad:?}"
             );
         }
+    }
+
+    fn developer(head: Option<&str>) -> HostSubstrate {
+        HostSubstrate::Developer {
+            root: Some("/Users/me/repo".into()),
+            head: head.map(str::to_string),
+        }
+    }
+
+    const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    #[test]
+    fn drift_compares_the_full_heads() {
+        let remote = DriftLine::Remote(A.into());
+        assert_eq!(
+            Drift::decide(&developer(Some(A)), Some(&remote)),
+            Some(Drift::UpToDate {
+                head: A.into(),
+                remote: A.into()
+            })
+        );
+        assert_eq!(
+            Drift::decide(&developer(Some(B)), Some(&remote)),
+            Some(Drift::Behind {
+                head: B.into(),
+                remote: A.into()
+            })
+        );
+        // Managed compares the same way (its HEAD is the fixture's all-`a` sha).
+        let managed = HostSubstrate::from_read(&probe(true, Some(RECORD)));
+        assert!(matches!(
+            Drift::decide(&managed, Some(&remote)),
+            Some(Drift::UpToDate { .. })
+        ));
+        assert!(matches!(
+            Drift::decide(&managed, Some(&DriftLine::Remote(B.into()))),
+            Some(Drift::Behind { .. })
+        ));
+    }
+
+    #[test]
+    fn no_substrate_means_no_drift_at_all() {
+        let remote = DriftLine::Remote(A.into());
+        assert_eq!(Drift::decide(&HostSubstrate::Absent, Some(&remote)), None);
+        assert_eq!(Drift::decide(&HostSubstrate::Unknown, Some(&remote)), None);
+    }
+
+    #[test]
+    fn every_failure_is_a_plain_words_cant_check() {
+        let reason = |s: &HostSubstrate, l: Option<&DriftLine>| match Drift::decide(s, l) {
+            Some(Drift::CantCheck { reason }) => reason,
+            other => panic!("{other:?}"),
+        };
+        let dev = developer(Some(A));
+        assert!(reason(&dev, Some(&DriftLine::NoDevTools)).contains("xcode-select --install"));
+        assert!(reason(&dev, Some(&DriftLine::NoOrigin)).contains("`origin`"));
+        assert_eq!(
+            reason(
+                &dev,
+                Some(&DriftLine::Git("fatal: unable to access".into()))
+            ),
+            "`git ls-remote` failed: fatal: unable to access"
+        );
+        assert!(reason(&dev, Some(&DriftLine::Git(String::new()))).contains("no answer"));
+        assert!(reason(&dev, None).contains("no answer"));
+        assert!(
+            reason(&developer(None), Some(&DriftLine::Remote(A.into()))).contains("HEAD"),
+            "a remote HEAD with no local one is not a verdict"
+        );
+        let rootless = HostSubstrate::Developer {
+            root: None,
+            head: Some(A.into()),
+        };
+        assert!(reason(&rootless, Some(&DriftLine::Remote(A.into()))).contains("folder"));
+    }
+
+    #[test]
+    fn the_drift_wire_shape_is_tagged() {
+        assert_eq!(
+            serde_json::to_value(Drift::Behind {
+                head: A.into(),
+                remote: B.into()
+            })
+            .unwrap(),
+            serde_json::json!({"drift": "behind", "head": A, "remote": B})
+        );
+        assert_eq!(
+            serde_json::to_value(Drift::CantCheck { reason: "x".into() }).unwrap(),
+            serde_json::json!({"drift": "cant_check", "reason": "x"})
+        );
     }
 
     #[test]

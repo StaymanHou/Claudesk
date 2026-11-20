@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP5: Settings → "Remote hosts" (read-only readout + drift)
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** verify-codify (phase 1 complete)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -61,7 +61,7 @@ endpoint, reached by `git ls-remote` from the host (measured ~1 s at arch time).
 
 ## Work Tree
 
-- [ ] Phase 1: Backend: the host list and `remote_substrate_refresh` (5.1)  <!-- status: NOT-STARTED -->
+- [x] Phase 1: Backend: the host list and `remote_substrate_refresh` (5.1)
   **Observable outcomes:**
   - CLI: `cargo test` (via `pnpm verify:auto`) passes new tests that run the drift fragment LOCALLY under a temp
     `HOME` against fixture repos with a local bare repo as `origin`: HEAD == origin's HEAD → `up to date`; HEAD
@@ -84,16 +84,34 @@ endpoint, reached by `git ls-remote` from the host (measured ~1 s at arch time).
     that HEAD with `ssh <host> git -C <root> ls-remote origin HEAD` (both run by the agent, outside Claudesk).
     `remote_hosts` lists the host with `link: up`; after the scratch workspace closes and the link drops, a refresh
     returns `link: down`.
+  - CLI (integration boundary, added at verify-self): the refactor moved the substrate lines of `parse_open_facts`
+    into the shared `parse_substrate`, so the EXISTING consumer `remote_open_check` must still read the host:
+    invoked on the scratch row (gate ON), it returns `kind: start` with `hostSubstrate` = `developer` + the same root
+    and HEAD as the independent ssh read.
   **Alignment questions:**
   - none (no operator-visible surface yet; D1's URL choice becomes visible in Phase 2)
-  - [ ] P1.1 `remote_cmd`: the drift fragment (constant, no interpolated value; D2's guard; D1's `ls-remote origin HEAD`; non-interactive git) composed after `SUBSTRATE_PROBE` into one refresh command that honours `substrate_home_override` like `open_check_command`. Sentinel lines on the existing `CLAUDESK-OPEN:` protocol.  <!-- status: NOT-STARTED -->
-  - [ ] P1.2 A pure parser: the refresh output → `(SubstrateRead, Drift)`, with `Drift = UpToDate { head, remote } | Behind { head, remote } | CantCheck { reason }`, compared on full SHAs, `None` when absent. Plain-words reasons (no developer tools; no origin; GitHub unreachable + the git stderr tail; HEAD unreadable).  <!-- status: NOT-STARTED -->
-  - [ ] P1.3 Commands: `remote_hosts()` (distinct hosts of VALID remote rows, sorted, each with its link state and cached substrate) and async `remote_substrate_refresh(host)` (D3, D4; on a blocking worker; host must be a remote row's host). Register both; add the `ASYNC_COMMANDS` entry.  <!-- status: NOT-STARTED -->
-  - [ ] P1.4 Tests: local fixture runs of the fragment, the guard's three arms with the stub, the parser, the link-down seam test, the caller guard, the cache write. Mutation-prove each new term individually.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P1.1 `remote_cmd`: the drift fragment (constant, no interpolated value; D2's guard; D1's `ls-remote origin HEAD`; non-interactive git) composed after `SUBSTRATE_PROBE` into one refresh command that honours `substrate_home_override` like `open_check_command`. Sentinel lines on the existing `CLAUDESK-OPEN:` protocol.  <!-- status: done -->
+  - [x] P1.2 A pure parser: the refresh output → `(SubstrateRead, Drift)`, with `Drift = UpToDate { head, remote } | Behind { head, remote } | CantCheck { reason }`, compared on full SHAs, `None` when absent. Plain-words reasons (no developer tools; no origin; GitHub unreachable + the git stderr tail; HEAD unreadable).  <!-- status: done -->
+  - [x] P1.3 Commands: `remote_hosts()` (distinct hosts of VALID remote rows, sorted, each with its link state and cached substrate) and async `remote_substrate_refresh(host)` (D3, D4; on a blocking worker; host must be a remote row's host). Register both; add the `ASYNC_COMMANDS` entry.  <!-- status: done -->
+  - [x] P1.4 Tests: local fixture runs of the fragment, the guard's three arms with the stub, the parser, the link-down seam test, the caller guard, the cache write. Mutation-prove each new term individually.  <!-- status: done -->
+  - [x] verify-auto  <!-- status: done -->
+    — evidence: `pnpm verify:auto` → EXIT=0 in 63s (lint 0 errors, 1 pre-existing warning in the untouched `XtermPane.tsx`; format, `tsc`, `check:link` clean; vitest `Tests 4136 passed (4136)`; `cargo fmt --check` clean; clippy `--all-targets -D warnings` clean; `cargo test` lib `1418 passed; 0 failed`, `sync_commands_do_not_block` `16 passed`)
+    — evidence: `cargo test --lib remote_` → `230 passed; 0 failed` (incl. `refresh_script` 9, the `remote_substrate` drift tests, the caller guard, the link-down + cache-write settles)
+    — evidence: mutants M1–M9 each red on their own test (build notes), the tree restored and confirmed by shasum
+  - [x] verify-self  <!-- status: done -->
+    - [x] Drift script fixtures (runner)  — evidence: `cargo test --lib refresh_script` → `9 passed`: up to date, behind with both SHAs + `for-each-ref` unchanged (nothing fetched), NoOrigin, Absent → no drift
+    - [x] Developer-tools guard, three arms (runner)  — evidence: same run; arm 1 (empty + exit 2 AND empty + exit 0) → NoDevTools + reason contains `xcode-select --install`; arm 2 `/var/empty` → NoDevTools; arm 3 → the dev dir's own git logs both calls. "Runs no git" in arm 1 is by code reading (the refusal branch only echoes), not by a log assertion
+    - [x] Link-down seam + caller guard (runner)  — evidence: `a_refresh_with_the_link_down_sends_nothing_and_keeps_the_cache` ok; `the_refresh_asks_the_host_once_over_the_master_only` ok (`links_calls(worker) == ["master_exec"]`)
+    - [x] Cache write once; distinct hosts; unknown host refused before any exec (runner)  — evidence: `a_refresh_that_answered_writes_the_cache_once` ok; `remote_hosts_are_the_distinct_valid_hosts_sorted` ok; the lookup's `?` precedes `links.master_exec`
+    - [x] `ASYNC_COMMANDS` entry (runner)  — evidence: `cargo test --test sync_commands_do_not_block` → `16 passed`; the entry carries its reason
+    - [x] Live refresh against the mini (orchestrator, tauri MCP bridge; subagents can't reach it)  — evidence: the agent's own ssh master: the live clone's HEAD `f8e8873970c0…` (`rev-parse --short` `f8e8873`), and `ls-remote origin HEAD` the same sha. Dev app: `remote_substrate_refresh` → `{outcome: checked, substrate: developer, root: ~/my-claude-code-customization, head: f8e8873970c0…, drift: up_to_date, remote: f8e8873970c0…}` (~260 ms over an Up link); `remote_hosts` lists the host with `link_up: true` (plus the old real row's host, `unknown`); `remote_host_substrates` carries the same value (cache written); `nobody@nowhere` → "is not the host of a remote project". ⚠️ The link was brought Up by the open check's 20 s grace (no CC session spawned), not by an open workspace as the outcome text says; the link state Up is the property under test.
+    - [x] Live link-down  — evidence: after the dev app's master stopped (only the installed app's `ssh -M` remained, parent `/Applications/Claudesk.app`), `remote_hosts` → `link_up: false`; the refresh → `{outcome: link_down}` in 2 ms; the cache still `developer`
+    - [x] Integration boundary: `remote_open_check` (the existing consumer of the refactored parser)  — evidence: on the scratch row, gate ON → `{kind: start, hostSubstrate: {state: developer, root, head: f8e8873970c0…}, trusted: true, sessionMd: false}`
+  - [x] verify-human  <!-- status: done --> — zero admissible leaves (F11)
+  - [x] verify-codify  <!-- status: done -->
+    Test scope: full — suite not long (`runtimes.md` → `pnpm verify:auto` Last 63s)
+    — evidence: new tests `the_wrapped_command_gives_the_same_answer_through_its_login_shell` (the whole `zsh -lc '<script>'` through `/bin/sh -c`, as sshd runs it; a double-quote wrapper mutant turns it red) and `only_a_given_sandbox_root_adds_the_prefix`; the consuming surface `remote_open_check` stays covered by the existing `decide_open` substrate-line tests in `remote_link/commands.rs`
+    — evidence: `pnpm verify:auto` → EXIT=0 in 57s (vitest `4136 passed`; `cargo test` lib `1420 passed; 0 failed`; fmt + clippy clean; the one lint warning is the pre-existing `XtermPane.tsx` one)
 
 - [ ] Phase 2: The Settings group + landing on it (5.2, 5.2b, 5.3)  <!-- status: NOT-STARTED; depends on Phase 1 -->
   **Observable outcomes:**
@@ -155,10 +173,18 @@ endpoint, reached by `git ls-remote` from the host (measured ~1 s at arch time).
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > P1.1
-- **Active scope:** P1.1 (the drift fragment)
+- **Path:** Feature > Phase 2 > P2.1
+- **Active scope:** P2.1 (the Settings group body)
+- **Live-check state (until Phase 2 verify-self):** the dev app is RUNNING (agent-launched, `pnpm tauri:dev`), the dev `projects.json` has the scratch remote row added and `settings.json` has the gate ON; backups (pre-check shas `38ee76dd…` / `72bfef1c…`) are in the session scratchpad. Restore both after Phase 2 verify-self, with the app stopped.
+- **Build notes (Phase 1):**
+  - The refresh is `remote_cmd::substrate_refresh_command`: the open check's probe captured in `$p`, then the drift half reads the root the probe printed (never re-derived).
+  - The substrate parser is now shared: `parse_substrate`, used by `parse_open_facts` and `parse_refresh`.
+  - `remote_hosts` (sync) and `remote_substrate_refresh` (async, in `ASYNC_COMMANDS`) live in `remote_link/commands.rs`; `settle_refresh` is the only cache write.
+  - The local script tests are `remote_substrate/refresh_script.rs` (9).
+  - Mutants M1–M9 each fail their own test.
+  - ⚠️ M1 (drop `[ -n "$d" ]`) first SURVIVED: the stub's exit 2 is already caught by `d=$(…) &&`. The `-n` test only matters for an empty path with exit 0, so that arm was added.
 - **Blocked:** none
-- **Unvisited:** Phase 2 (Settings group + landing), Phase 3 (host-argument guard per arm), then ship → review-quality → finalize
+- **Unvisited:** Phase 3 (host-argument guard per arm), then ship → review-quality → finalize
 - **Open discoveries:** none
 
 ## Verification hygiene (R.8 + memory `remote-verify-hygiene`)
@@ -171,3 +197,4 @@ endpoint, reached by `git ls-remote` from the host (measured ~1 s at arch time).
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
+[AMENDED-2026-11-20] Phase 1 Observable outcomes — verify-self found an integration boundary the plan missed: the substrate lines of `parse_open_facts` moved into the shared `parse_substrate`, which `remote_open_check` consumes. I added a boundary outcome citing `remote_open_check` and drove it live in the same pass, instead of an F9b back-loop that would only have added the line.
