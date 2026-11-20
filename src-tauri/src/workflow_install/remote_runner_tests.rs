@@ -952,6 +952,7 @@ fn the_abort_step_honours_cancel_only_before_the_install_phase() {
         pgid,
         phase,
         cancel_requested: cancel,
+        active: None,
     };
     assert_eq!(
         abort_step(&st(false, Some(9), Some(Phase::Clone))),
@@ -981,6 +982,7 @@ fn the_abort_poll_kills_once_and_keeps_reading() {
             pgid: Some(42),
             phase: Some(Phase::Clone),
             cancel_requested: true,
+            active: None,
         });
         let sent = std::cell::Cell::new(false);
         let kills = Mutex::new(Vec::new());
@@ -1012,6 +1014,7 @@ fn the_abort_poll_kills_once_and_keeps_reading() {
         pgid: None,
         phase: None,
         cancel_requested: true,
+        active: None,
     });
     let sent = std::cell::Cell::new(false);
     assert!(abort_poll(&state, &sent, &|_| Ok(()), &|_| {}));

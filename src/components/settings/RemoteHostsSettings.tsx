@@ -3,8 +3,9 @@
 // (Absent / Developer / Managed), its short HEAD, and its drift against GitHub.
 //
 // ## Buttons
-// WP5 shipped the readout alone. WP6: Install on an Absent entry whose link is Up
-// (`RemoteInstallPanel`). WP7: Update / Uninstall on a Managed one.
+// WP5 shipped the readout alone. WP6: Install on an Absent entry whose link is Up. WP7: Update on a
+// Managed entry the drift reads as behind, and Uninstall on any Managed one (`RemoteRunPanel`,
+// `remoteRunOffers`). ⚠️ A Developer entry (the live account) is never offered any of them.
 //
 // ## Background work only while shown (prior `background-work-only-for-what-is-on-screen`)
 // The drift read reaches GitHub (`ls-remote` from the host, about a second), so it runs once per
@@ -31,7 +32,7 @@ import {
   type RemoteHostEntry,
 } from "../../state/remoteHosts";
 import { useHostSubstrates } from "../../state/useHostSubstrate";
-import { RemoteInstallPanel } from "./RemoteInstallPanel";
+import { RemoteRunPanel, type RemoteRunOffers } from "./RemoteRunPanel";
 
 /** A host's refresh, as the readout tracks it. */
 export type HostCheck = RefreshOutcome | { readonly outcome: "checking" };
@@ -152,6 +153,28 @@ function driftLine(
   }
 }
 
+/**
+ * Which runs an entry offers (WP7 D12), as a value. Every one needs the link Up (Settings never
+ * brings one up). Install: Absent. Uninstall: Managed. Update: Managed AND this mount's refresh
+ * read the drift as `differs`; a drift still checking, unknown or uncheckable offers no Update.
+ * ⚠️ Developer and Unknown are offered nothing: Claudesk never acts on an install it did not make
+ * (the live host account reads Developer).
+ */
+export function remoteRunOffers(
+  substrate: HostSubstrate,
+  linkUp: boolean,
+  check: HostCheck | undefined,
+): RemoteRunOffers {
+  const managed = linkUp && substrate.state === "managed";
+  const behind =
+    check?.outcome === "checked" && check.drift?.drift === "differs";
+  return {
+    install: linkUp && substrate.state === "absent",
+    update: managed && behind,
+    uninstall: managed,
+  };
+}
+
 export function RemoteHostsSettings({
   readout,
 }: {
@@ -202,11 +225,11 @@ export function RemoteHostsSettings({
                 {lines.drift}
               </p>
             )}
-            {/* M18 WP6: Install, offered on an Absent host with its link Up (§R.5). */}
-            <RemoteInstallPanel
+            {/* M18 WP6 + WP7: Install / Update / Uninstall (§R.5, WP7 D12). */}
+            <RemoteRunPanel
               host={entry.host}
-              offered={substrate.state === "absent" && entry.link_up}
-              onInstalled={() => readout.recheck(entry.host)}
+              offers={remoteRunOffers(substrate, entry.link_up, check)}
+              onDone={() => readout.recheck(entry.host)}
             />
           </li>
         );

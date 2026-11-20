@@ -225,6 +225,10 @@ pub(crate) struct RemoteRunState {
     pub(crate) phase: Option<Phase>,
     /// Cancel was requested, and not refused as too late.
     pub(crate) cancel_requested: bool,
+    /// M18 WP7 (D11) — the remote run this state belongs to: its host and op, set by the start
+    /// command once its checks passed. Read by `workflow_remote_run_state` (only while the
+    /// single-run lock is held), so a Settings panel reopened mid-run shows the run.
+    pub(crate) active: Option<(String, RemoteOp)>,
 }
 
 /// What the run's abort poll decides, from the cancel state. Pure.

@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { REMOTE_CLONE_PATH } from "../remoteInstall";
+import { REMOTE_CLONE_PATH } from "../remoteRun";
 
 const rustSrc = readFileSync(
   fileURLToPath(

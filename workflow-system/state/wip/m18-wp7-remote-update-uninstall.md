@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP7 — Update and Uninstall (the remote refuse-guard)
 
 **Workflow:** feature
-**State:** verify-codify (phase 3 complete)
+**State:** verify-codify (all phases complete)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -344,7 +344,13 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
     — new: the behind test now asserts that install.sh's own output (`[ok] feature-build`) is shown before `result:ok`. This closes the runner's surviving M6: with the update template's `cat -- "$log"` removed, the test FAILED; restore `shasum -c` OK.
     — consuming surface: the live dev-app install → behind → update → uninstall run (P3.verify-self), plus the caller guards over `stream_with_cancel` and the guard-first order of the update worker.
 
-- [ ] Phase 4: Settings → Remote hosts — the Update and Uninstall buttons, one run panel, re-attach on reopen; live on the sandbox (7.5)  <!-- status: NOT-STARTED; depends on Phase 3 -->
+- [x] Phase 4: Settings → Remote hosts — the Update and Uninstall buttons, one run panel, re-attach on reopen; live on the sandbox (7.5)  <!-- status: done 2026-11-20 -->
+  **Relevance check (before Phase 4):**
+  - Requester still needs this: yes — the buttons are how the operator reaches Update / Uninstall; the reopened-Settings gap grows with them
+  - Requirements unchanged: yes — D11 / D12 as planned
+  - Solution still feasible: yes — the backend for all three ops is built and live-verified
+  - No superior alternative discovered: yes
+  **Verdict:** proceed
   **Observable outcomes:**
   - CLI: `pnpm vitest run src/components/settings` exits 0. jsdom render tests of `RemoteHostsSettings` check which buttons each state offers:
     - Absent + link Up: Install only;
@@ -371,33 +377,82 @@ WP7 adds the second remote delete, so the guard is fixed before that delete exis
   - (decision) Update gets a short confirm step (what it does: fetch from GitHub, fast-forward, re-run install.sh; it refuses on local changes), and is offered only when drift reads "Behind GitHub". Keep the confirm step, and keep hiding Update when drift can't be checked?
   - (decision) Uninstall has no Cancel (it takes under a second and must not be split), and Update can be cancelled only while fetching. OK?
   - The 7.5 happy path, in action: Install → Behind → Update → Uninstall → Absent on the sandbox entry. Does each result read right to you (`RemoteInstallFinished`-style messages for update and uninstall)?
-  - [ ] P4.1 IPC (D11):
+  - [x] P4.1 IPC (D11):
     - one event triple with `{host, op, …}` payloads;
     - `workflow_remote_run_state`;
     - `workflow_remote_run_cancel`;
     - the preview / update / uninstall invokes in `src/state/remoteInstall.ts` (renamed `remoteRun.ts`).
 
-    Every consumer is migrated in this phase; the backend events change with them.  <!-- status: NOT-STARTED -->
-  - [ ] P4.2 The run panel (generalized from `RemoteInstallPanel`; one component, `op` as a prop):
+    Every consumer is migrated in this phase; the backend events change with them.  <!-- status: done 2026-11-20 -->
+  - [x] P4.2 The run panel (generalized from `RemoteInstallPanel`; one component, `op` as a prop):
     - the Install consent unchanged;
     - Update's confirm;
     - Uninstall's preview → confirm;
     - the log, the phase-gated Cancel (none for uninstall), and the result;
     - the mount-time seed from `workflow_remote_run_state`.
 
-    `RemoteHostsSettings` offers the buttons per D12, and a success re-checks the entry.  <!-- status: NOT-STARTED -->
-  - [ ] P4.3 The jsdom tests above (+ the HEAD-copy reproduction of the reopened-Settings gap).  <!-- status: NOT-STARTED -->
-  - [ ] P4.4 Live 7.5 on the sandbox (verify-self), with the live-account baseline before/after and full state restore.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+    `RemoteHostsSettings` offers the buttons per D12, and a success re-checks the entry.  <!-- status: done 2026-11-20 -->
+  - [x] P4.3 The jsdom tests above (+ the HEAD-copy reproduction of the reopened-Settings gap).  <!-- status: done 2026-11-20 -->
+  - [x] P4.4 Live 7.5 on the sandbox (verify-self), with the live-account baseline before/after and full state restore.  <!-- status: NOT-STARTED -->
+  - Build notes:
+    - P4.1: events `remote-run-output` `{host, op, line}`, `remote-run-phase` `{host, op, phase}`, `remote-run-finished` (`RemoteRunFinished` with `op`). The commands `workflow_remote_run_state` → `{host, op, phase} | null` and `workflow_remote_run_cancel` (renamed). `RemoteRunState.active` is set by each start command, never by the preview, and read only while the lock is held; every begin, local included, resets the remote state. Frontend `src/state/remoteInstall.ts` → `remoteRun.ts` (`git mv`) with all three consumers migrated in this phase; `check:link` is clean.
+    - P4.2: `RemoteInstallPanel` → `RemoteRunPanel` (`git mv`), one component with the ops as offers. Testids are now generic `remote-run-*` plus `remote-<op>-open`. `remoteRunOffers` (a pure value) decides the buttons per D12.
+    - P4.3: the HEAD-copy reproduction was substituted by a mutation positive control. HEAD's panel used other events and testids, so the new test can't run against it. Removing the re-attach makes `Settings reopened mid-run shows THIS host's run…` FAIL, which shows the WP6 behaviour (offer Install mid-run) fails the test. Also mutation-proven: Update offered on any drift, and Uninstall offered on a Developer host, each fail 2 tests. Each restore is `shasum -c` OK.
+    - Gate: `pnpm verify:auto` EXIT=0, 92 s, vitest 4180, cargo 1504.
+  - [x] verify-auto  <!-- status: done 2026-11-20 -->
+    — evidence: `eslint` on the 4 changed frontend files → exit 0
+    — evidence: `vitest run src/components/settings src/state/__tests__/remoteClonePath.test.ts` → `Test Files 24 passed`, `Tests 295 passed`
+    — evidence: `cargo test --lib workflow_install::commands` → `17 passed` (incl. the run-state + event-payload tests)
+    — evidence: the full `pnpm verify:auto` at build → EXIT=0, 92 s, `check:link — every entry linked cleanly (main, pip)` (the renamed module and exports migrated)
+  - [x] verify-self  <!-- status: done 2026-11-20 (runner: 3 CLI PASS; orchestrator: 3 live outcomes PASS + 4 alignment captures) -->
+    - [x] Offers per state (jsdom) — evidence: `vitest run src/components/settings` → EXIT=0, `294 passed`; the `remoteRunOffers` value tests + the live-mount matrix (runner)
+    - [x] Run-panel flows + re-attach (jsdom). Mutants (runner, each restore OK):
+      - re-attach removed → only the re-attach test FAILED;
+      - (a) `cancellable` always true → the Update test FAILED ("Finishing the update…" expected, "Cancel" received);
+      - (b) `canConfirm = true` → only the refused-preview test FAILED.
+
+      The HEAD copy also ran in a throwaway `zz` test: WP6's `RemoteInstallPanel`, with an in-flight run mocked, made NO run-state call and showed Install, so the reproduction FAILS on the pre-change panel as planned. The runner accepts the mutation substitution.
+      - runner gap, for codify: the Update test asserts the finishing label but not `disabled` at `install`. Both come from `finishing`, which mutant (a) proves; WP6's install test asserts `disabled`.
+    - [x] `pnpm verify:auto` — evidence: EXIT=0, 55 s, `check:link — every entry linked cleanly (main, pip)`, vitest `4180 passed`, cargo `1504 passed` (runner)
+    - [x] Live 7.5 through the PANEL (orchestrator, tauri bridge). Setup: the dev app with `CLAUDESK_REMOTE_SUBSTRATE_ROOT=/Users/<user>/claudesk-m18-wp7-sandbox` (empty); the scratch workspace opened from the picker (the app's master Up, a tmux session in the scratch folder); Settings opened by the `menu` event `app.settings`. Each read was taken after the step settled.
+      0. The entry reads `Absent`, with buttons `[Install…]` only; the other row (`<admin>@<host>`, link down) reads `Unknown` with no buttons.
+      1. Install… → consent ("Install the workflow system on this host…") → Install → result **Installed** in 6.5 s; the entry reads `Managed`, "installed by Claudesk · HEAD f8e8873", "Up to date with GitHub."
+      2. Sandbox-only `git reset --hard HEAD~1` (`cd -P` path check, own `ssh -M`) → `755d1db`; Settings closed and reopened → "Behind GitHub: this host is at 755d1db, GitHub at f8e8873.", buttons `[Update…, Uninstall…]`.
+      3. Update… → the confirm lists `REMOTE_UPDATE_ITEMS` → Update. The Cancel button showed "Cancel", then "Finishing the update… [disabled]". Result **Updated** in 2.5 s; the log opens "Updating 755d1db..f8e8873 / Fast-forward"; the entry then reads "Up to date with GitHub.", HEAD `f8e8873`.
+      4. Uninstall… → the preview in 1.7 s: "The clone that will be deleted: /Users/<user>/claudesk-m18-wp7-sandbox/.claudesk/vendor/my-claude-code-customization" + the host's 72-line dry run ("Uninstalling Claude Code workflow customizations… (dry-run — nothing will be changed) … Done (dry-run)") + the note; buttons `[Cancel, Uninstall]`. Uninstall → no Cancel button while running → result **Uninstalled** in 2.4 s; Close → `Absent`, buttons `[Install…]`.
+
+      — note: the dev build delivered every streamed line twice (Update log: 164 lines, 76 unique). That is `SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN` (medium, dev-only StrictMode leak, prod confirmation at WP8), not this phase.
+    - [x] Re-attach, live — evidence: Install → confirm → after 400 ms Settings closed (the group gone) → reopened 150 ms later. The entry showed "Installing on this host…" + "This run started before Settings was reopened; its earlier output isn't shown." + an enabled Cancel, and NO Install button; it then went on to **Installed** → `Managed`.
+    - [x] The live account's Developer entry — evidence: the dev app was restarted WITHOUT the sandbox override (the workspace was closed through the UI first; tmux "no server") and the scratch workspace reopened. The entry reads `Developer`, "installed by hand; Claudesk doesn't manage it · HEAD f8e8873", "Up to date with GitHub.", buttons `[]`.
+    - [x] align: Uninstall's confirm in action — evidence: `<session scratchpad>/p4-uninstall-confirm.png` (the intro, the clone path, the scrolling dry run, the note, Cancel / Uninstall all inside the panel) + the step-4 text above
+    - [x] align: (decision) Update's confirm step + hidden when the drift is not "Behind" — evidence: the step-3 confirm text; the jsdom offers matrix (Uninstall only for up-to-date, checking, failed or can't check)
+    - [x] align: (decision) no Cancel on Uninstall; Update cancellable only while fetching — evidence: steps 3 + 4 (Cancel → "Finishing the update… [disabled]"; no Cancel button during Uninstall)
+    - [x] align: the 7.5 results' wording — evidence: results "Installed" / "Updated" / "Uninstalled", each with `message: null` on a clean run (the messages show only on failure; the copy is in `remote_ops::resolve_update` / `resolve_uninstall`)
+    — cleanup:
+      - both workspaces were closed through the UI (tmux "no server");
+      - both dev apps were stopped (the second by PID, incl. its Vite on :1420);
+      - the dev `projects.json` / `settings.json` were restored to `38ee76dd…` / `72bfef1c…`;
+      - the sandbox was removed after its `cd -P` check (it held no record and no clone);
+      - the scratch folder is unchanged;
+      - the live baseline is identical before and after;
+      - the master was closed, and no `ssh -M` is left.
+  - [x] verify-human  <!-- status: done 2026-11-20 — 4 leaves, all approved by the operator as recommended -->
+    - [x] P4.verify-human.1: the 7.5 happy path's results (Installed / Updated / Uninstalled; failure messages only on failure) — still what you want?  <!-- status: done 2026-11-20 — operator: "Yes, keep" -->
+    - [x] P4.verify-human.2: Uninstall's confirm = the approved clone path + the host's real dry run, then "Uninstall" (screenshot p4-uninstall-confirm.png) — the confirmation you want before a remote delete?  <!-- status: done 2026-11-20 — operator: "Yes, as shown" -->
+    - [x] P4.verify-human.3: (decision) Update has a short confirm step and is offered only when drift reads "Behind GitHub"  <!-- status: done 2026-11-20 — operator: "Keep both" -->
+    - [x] P4.verify-human.4: (decision) no Cancel on Uninstall; Update cancellable only while fetching  <!-- status: done 2026-11-20 — operator: "OK, keep" -->
+  - [x] verify-codify  <!-- status: done 2026-11-20 -->
+    Test scope: full — last phase
+    — evidence: `cargo fmt` + `pnpm verify:auto` → EXIT=0, 76 s; `check:link — every entry linked cleanly (main, pip)`; vitest `4183 passed`; cargo `1504 passed; 0 failed; 4 ignored`
+    — new: the Update test asserts Cancel is `disabled` at `install` (the runner's gap). Mutation-proven: `disabled={cancel === "pending"}` (finishing dropped) → only that test FAILED; restore `shasum -c` OK.
+    — new: the operator-approved P4 copy pinned by LITERAL (`REMOTE_UPDATE_ITEMS`, `REMOTE_UNINSTALL_INTRO` / `_NOTE`, and the update / uninstall result headings), as WP6 pinned the install consent.
+    — consuming surface: the live 7.5 run through Settings → Remote hosts (P4.verify-self) + the jsdom mounts of the REAL `SettingsPanel` (Update, Uninstall, refused preview, re-attach).
 
 ## Current Node
-- **Path:** Feature > Phase 4 > P4.1
-- **Active scope:** P4.1 (IPC: one event triple with `{host, op, …}`, `workflow_remote_run_state`, the cancel rename)
+- **Path:** Feature > ship
+- **Active scope:** none — all four phases complete; next is `/feature-ship`
 - **Blocked:** none
-- **Unvisited:** none after Phase 4
+- **Unvisited:** none
 - **Open discoveries:** D-P1-a (fixed in P1.1: `install.sh` ran in a zsh subshell, which resets the ignored trap)
 
 ## Discoveries

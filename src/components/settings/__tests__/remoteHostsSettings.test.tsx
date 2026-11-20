@@ -12,7 +12,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import SettingsPanel from "../SettingsPanel";
 import { hostReadoutLines } from "../RemoteHostsSettings";
-import { resultTitle } from "../RemoteInstallPanel";
+import { remoteRunOffers } from "../RemoteHostsSettings";
+import { resultTitle } from "../RemoteRunPanel";
 import type {
   RefreshOutcome,
   RemoteHostEntry,
@@ -22,7 +23,10 @@ import { emit } from "@tauri-apps/api/event";
 import {
   FINISHING_LABEL,
   REMOTE_CONSENT_ITEMS,
-} from "../../../state/remoteInstall";
+  REMOTE_UNINSTALL_INTRO,
+  REMOTE_UNINSTALL_NOTE,
+  REMOTE_UPDATE_ITEMS,
+} from "../../../state/remoteRun";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -405,26 +409,35 @@ describe("Install on a remote host, from its entry", () => {
       }),
     });
     await click(q(entry(panel), "remote-install-open"));
-    const consent = q(entry(panel), "remote-install")!;
+    const consent = q(entry(panel), "remote-run")!;
     expect(consent.textContent).toContain("me@up-host");
     for (const item of REMOTE_CONSENT_ITEMS)
       expect(consent.textContent).toContain(item);
     expect(cmds("workflow_remote_install_start")).toEqual([]);
 
-    await click(q(entry(panel), "remote-install-confirm"));
+    await click(q(entry(panel), "remote-run-confirm"));
     expect(cmds("workflow_remote_install_start").map((c) => c.args)).toEqual([
       { host: "me@up-host" },
     ]);
-    await fire("remote-install-phase", { host: "me@up-host", phase: "clone" });
-    await fire("remote-install-output", "Cloning into 'x'...");
-    await fire("remote-install-output", "[ok] feature-build");
-    expect(q(entry(panel), "remote-install-log")?.textContent).toBe(
+    await fire("remote-run-phase", {
+      op: "install",
+      host: "me@up-host",
+      phase: "clone",
+    });
+    await fire("remote-run-output", {
+      host: "me@up-host",
+      op: "install",
+      line: "Cloning into 'x'...",
+    });
+    await fire("remote-run-output", {
+      host: "me@up-host",
+      op: "install",
+      line: "[ok] feature-build",
+    });
+    expect(q(entry(panel), "remote-run-log")?.textContent).toBe(
       "Cloning into 'x'...\n[ok] feature-build",
     );
-    const cancel = q(
-      entry(panel),
-      "remote-install-cancel",
-    ) as HTMLButtonElement;
+    const cancel = q(entry(panel), "remote-run-cancel") as HTMLButtonElement;
     expect(cancel.disabled).toBe(false);
     expect(cancel.textContent).toBe("Cancel");
   });
@@ -432,25 +445,27 @@ describe("Install on a remote host, from its entry", () => {
   it("Cancel is honoured during the clone and disabled once install.sh starts", async () => {
     const panel = await mountPanel({ hosts: [UP_ABSENT], refresh: absent });
     await click(q(entry(panel), "remote-install-open"));
-    await click(q(entry(panel), "remote-install-confirm"));
-    await fire("remote-install-phase", { host: "me@up-host", phase: "clone" });
-    await click(q(entry(panel), "remote-install-cancel"));
-    expect(cmds("workflow_remote_install_cancel").length).toBe(1);
-    expect(q(entry(panel), "remote-install-cancel")!.textContent).toBe(
+    await click(q(entry(panel), "remote-run-confirm"));
+    await fire("remote-run-phase", {
+      op: "install",
+      host: "me@up-host",
+      phase: "clone",
+    });
+    await click(q(entry(panel), "remote-run-cancel"));
+    expect(cmds("workflow_remote_run_cancel").length).toBe(1);
+    expect(q(entry(panel), "remote-run-cancel")!.textContent).toBe(
       "Cancelling…",
     );
 
     const panel2 = panel;
-    await fire("remote-install-phase", {
+    await fire("remote-run-phase", {
+      op: "install",
       host: "me@up-host",
       phase: "install",
     });
-    const cancel = q(
-      entry(panel2),
-      "remote-install-cancel",
-    ) as HTMLButtonElement;
+    const cancel = q(entry(panel2), "remote-run-cancel") as HTMLButtonElement;
     expect(cancel.disabled).toBe(true);
-    expect(cancel.textContent).toBe(FINISHING_LABEL);
+    expect(cancel.textContent).toBe(FINISHING_LABEL.install);
     expect(entry(panel2).textContent).toContain("it finishes");
   });
 
@@ -459,17 +474,15 @@ describe("Install on a remote host, from its entry", () => {
       hosts: [UP_ABSENT],
       refresh: absent,
       onCmd: (cmd) =>
-        cmd === "workflow_remote_install_cancel"
+        cmd === "workflow_remote_run_cancel"
           ? Promise.reject("Too late to cancel: install.sh is running")
           : undefined,
     });
     await click(q(entry(panel), "remote-install-open"));
-    await click(q(entry(panel), "remote-install-confirm"));
-    await click(q(entry(panel), "remote-install-cancel"));
+    await click(q(entry(panel), "remote-run-confirm"));
+    await click(q(entry(panel), "remote-run-cancel"));
     expect(entry(panel).textContent).toContain("Too late to cancel");
-    expect(q(entry(panel), "remote-install-cancel")!.textContent).toBe(
-      "Cancel",
-    );
+    expect(q(entry(panel), "remote-run-cancel")!.textContent).toBe("Cancel");
   });
 
   it("a success: the entry reads Managed through the store, re-checks the host, and the result says Installed", async () => {
@@ -497,8 +510,9 @@ describe("Install on a remote host, from its entry", () => {
     });
     expect(refreshCalls()).toEqual(["me@up-host"]);
     await click(q(entry(panel), "remote-install-open"));
-    await click(q(entry(panel), "remote-install-confirm"));
-    await fire("remote-install-phase", {
+    await click(q(entry(panel), "remote-run-confirm"));
+    await fire("remote-run-phase", {
+      op: "install",
       host: "me@up-host",
       phase: "install",
     });
@@ -507,19 +521,18 @@ describe("Install on a remote host, from its entry", () => {
     await fire("remote-substrate", { host: "me@up-host", substrate: MANAGED });
     expect(q(entry(panel), "remote-host-state")?.textContent).toBe("Managed");
     expect(
-      q(entry(panel), "remote-install"),
+      q(entry(panel), "remote-run"),
       "the panel stays to show the result",
     ).not.toBeNull();
-    await fire("remote-install-finished", {
+    await fire("remote-run-finished", {
+      op: "install",
       host: "me@up-host",
       ok: true,
       cancelled: false,
       message: null,
     });
-    expect(q(entry(panel), "remote-install-result")?.textContent).toBe(
-      "Installed",
-    );
-    expect(q(entry(panel), "remote-install-message")).toBeNull();
+    expect(q(entry(panel), "remote-run-result")?.textContent).toBe("Installed");
+    expect(q(entry(panel), "remote-run-message")).toBeNull();
     expect(refreshCalls()).toEqual(["me@up-host", "me@up-host"]);
     expect(q(entry(panel), "remote-host-drift")?.textContent).toBe(
       "Up to date with GitHub.",
@@ -527,8 +540,8 @@ describe("Install on a remote host, from its entry", () => {
     expect(entry(panel).querySelector("code")?.textContent).toBe(
       "HEAD aaaaaaa",
     );
-    await click(q(entry(panel), "remote-install-close"));
-    expect(q(entry(panel), "remote-install")).toBeNull();
+    await click(q(entry(panel), "remote-run-close"));
+    expect(q(entry(panel), "remote-run")).toBeNull();
     expect(
       q(entry(panel), "remote-install-open"),
       "Managed: no Install",
@@ -552,16 +565,17 @@ describe("Install on a remote host, from its entry", () => {
       ],
     ] as const) {
       await click(q(entry(panel), "remote-install-open"));
-      await click(q(entry(panel), "remote-install-confirm"));
-      await fire("remote-install-finished", {
+      await click(q(entry(panel), "remote-run-confirm"));
+      await fire("remote-run-finished", {
+        op: "install",
         host: "me@up-host",
         ...finished,
       });
-      expect(q(entry(panel), "remote-install-result")?.textContent).toBe(title);
-      expect(q(entry(panel), "remote-install-message")?.textContent).toBe(
+      expect(q(entry(panel), "remote-run-result")?.textContent).toBe(title);
+      expect(q(entry(panel), "remote-run-message")?.textContent).toBe(
         finished.message,
       );
-      await click(q(entry(panel), "remote-install-close"));
+      await click(q(entry(panel), "remote-run-close"));
       expect(q(entry(panel), "remote-install-open")).not.toBeNull();
     }
     expect(refreshCalls()).toEqual(["me@up-host"]);
@@ -570,7 +584,7 @@ describe("Install on a remote host, from its entry", () => {
   it("an open consent step closes when the host stops being Absent (another run installed it)", async () => {
     const panel = await mountPanel({ hosts: [UP_ABSENT], refresh: absent });
     await click(q(entry(panel), "remote-install-open"));
-    expect(q(entry(panel), "remote-install-confirm")).not.toBeNull();
+    expect(q(entry(panel), "remote-run-confirm")).not.toBeNull();
     await fire("remote-substrate", {
       host: "me@up-host",
       substrate: {
@@ -586,7 +600,7 @@ describe("Install on a remote host, from its entry", () => {
     });
     expect(q(entry(panel), "remote-host-state")?.textContent).toBe("Managed");
     expect(
-      q(entry(panel), "remote-install"),
+      q(entry(panel), "remote-run"),
       "no stale consent on a Managed host",
     ).toBeNull();
     expect(q(entry(panel), "remote-install-open")).toBeNull();
@@ -603,7 +617,7 @@ describe("Install on a remote host, from its entry", () => {
           : undefined,
     });
     await click(q(entry(panel), "remote-install-open"));
-    await click(q(entry(panel), "remote-install-confirm"));
+    await click(q(entry(panel), "remote-run-confirm"));
     await fire("remote-substrate", {
       host: "me@up-host",
       substrate: {
@@ -623,10 +637,10 @@ describe("Install on a remote host, from its entry", () => {
     await settle();
     expect(q(entry(panel), "remote-host-state")?.textContent).toBe("Managed");
     expect(
-      q(entry(panel), "remote-install"),
+      q(entry(panel), "remote-run"),
       "no consent on a Managed host",
     ).toBeNull();
-    expect(q(entry(panel), "remote-install-confirm")).toBeNull();
+    expect(q(entry(panel), "remote-run-confirm")).toBeNull();
   });
 
   it("a consent step hidden by a late refusal does not come back by itself when the host is offered again", async () => {
@@ -640,7 +654,7 @@ describe("Install on a remote host, from its entry", () => {
           : undefined,
     });
     await click(q(entry(panel), "remote-install-open"));
-    await click(q(entry(panel), "remote-install-confirm"));
+    await click(q(entry(panel), "remote-run-confirm"));
     // The host stops being offered while the start is pending, the start is refused, then the host
     // is offered again (e.g. a link that dropped and came back).
     await fire("remote-substrate", {
@@ -656,7 +670,7 @@ describe("Install on a remote host, from its entry", () => {
       substrate: { state: "absent" },
     });
     expect(
-      q(entry(panel), "remote-install"),
+      q(entry(panel), "remote-run"),
       "no consent reopened by itself",
     ).toBeNull();
     expect(q(entry(panel), "remote-install-open")?.textContent).toBe(
@@ -664,7 +678,7 @@ describe("Install on a remote host, from its entry", () => {
     );
     // And opening it again shows no stale reason.
     await click(q(entry(panel), "remote-install-open"));
-    expect(q(entry(panel), "remote-install-start-error")).toBeNull();
+    expect(q(entry(panel), "remote-run-start-error")).toBeNull();
   });
 
   it("a host that is Managed from the start offers no Install", async () => {
@@ -702,31 +716,320 @@ describe("Install on a remote host, from its entry", () => {
           : undefined,
     });
     await click(q(entry(panel), "remote-install-open"));
-    await click(q(entry(panel), "remote-install-confirm"));
-    expect(
-      q(entry(panel), "remote-install-start-error")?.textContent,
-    ).toContain("isn't connected");
-    expect(q(entry(panel), "remote-install-confirm")).not.toBeNull();
+    await click(q(entry(panel), "remote-run-confirm"));
+    expect(q(entry(panel), "remote-run-start-error")?.textContent).toContain(
+      "isn't connected",
+    );
+    expect(q(entry(panel), "remote-run-confirm")).not.toBeNull();
 
     refuse = false;
-    await click(q(entry(panel), "remote-install-confirm"));
-    await fire("remote-install-finished", {
+    await click(q(entry(panel), "remote-run-confirm"));
+    await fire("remote-run-finished", {
+      op: "install",
       host: "me@other-host",
       ok: true,
       cancelled: false,
       message: null,
     });
-    await fire("remote-install-phase", {
+    await fire("remote-run-phase", {
+      op: "install",
       host: "me@other-host",
       phase: "install",
     });
     expect(
-      q(entry(panel), "remote-install-result"),
+      q(entry(panel), "remote-run-result"),
       "another host's end",
     ).toBeNull();
     expect(
-      (q(entry(panel), "remote-install-cancel") as HTMLButtonElement).disabled,
+      (q(entry(panel), "remote-run-cancel") as HTMLButtonElement).disabled,
     ).toBe(false);
+  });
+});
+
+// M18 WP7 — which runs an entry offers (D12), as values.
+describe("remoteRunOffers — the buttons per state", () => {
+  const MAN = {
+    state: "managed",
+    root: "/r",
+    head: A,
+    record: { clone_path: "/c", installed_at: "t", origin_url: "u" },
+  } as const;
+  const checked = (drift: "up_to_date" | "differs"): RefreshOutcome => ({
+    outcome: "checked",
+    substrate: MAN,
+    drift:
+      drift === "differs"
+        ? { drift, head: A, remote: B }
+        : { drift, head: A, remote: A },
+  });
+  const none = { install: false, update: false, uninstall: false };
+
+  it("Absent + link Up: Install only", () => {
+    expect(remoteRunOffers({ state: "absent" }, true, undefined)).toEqual({
+      ...none,
+      install: true,
+    });
+  });
+
+  it("Managed + Up + behind: Update and Uninstall; any other drift: Uninstall only", () => {
+    expect(remoteRunOffers(MAN, true, checked("differs"))).toEqual({
+      ...none,
+      update: true,
+      uninstall: true,
+    });
+    for (const check of [
+      checked("up_to_date"),
+      { outcome: "checking" } as const,
+      { outcome: "failed", reason: "x" } as const,
+      {
+        outcome: "checked",
+        substrate: MAN,
+        drift: { drift: "cant_check", reason: "x" },
+      } as const,
+      undefined,
+    ]) {
+      expect(remoteRunOffers(MAN, true, check), JSON.stringify(check)).toEqual({
+        ...none,
+        uninstall: true,
+      });
+    }
+  });
+
+  it("a link that is down offers nothing; Developer and Unknown are never offered anything", () => {
+    expect(remoteRunOffers(MAN, false, checked("differs"))).toEqual(none);
+    expect(remoteRunOffers({ state: "absent" }, false, undefined)).toEqual(
+      none,
+    );
+    for (const sub of [DEV, { state: "unknown" } as const]) {
+      expect(remoteRunOffers(sub, true, undefined)).toEqual(none);
+    }
+  });
+});
+
+describe("Update and Uninstall on a Managed host, from its entry", () => {
+  const MAN = {
+    state: "managed",
+    root: "/Users/me/.claudesk/vendor/my-claude-code-customization",
+    head: A,
+    record: {
+      clone_path: "/Users/me/.claudesk/vendor/my-claude-code-customization",
+      installed_at: "t",
+      origin_url: "https://x",
+    },
+  } as const;
+  const UP_MANAGED = {
+    host: "me@up-host",
+    link_up: true,
+    substrate: MAN,
+  } as const;
+  const behind = (): RefreshOutcome => ({
+    outcome: "checked",
+    substrate: MAN,
+    drift: { drift: "differs", head: A, remote: B },
+  });
+  const entry = (panel: HTMLElement, h = "me@up-host") =>
+    panel.querySelector(`[data-testid="remote-host-${h}"]`)!;
+  const q = (el: Element, id: string) =>
+    el.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+  const click = async (el: HTMLElement | null) => {
+    expect(el).not.toBeNull();
+    await act(async () => el!.click());
+    await settle();
+  };
+  const fire = async (event: string, payload: unknown) => {
+    await act(async () => {
+      await emit(event, payload);
+    });
+    await settle();
+  };
+  const cmds = (name: string) => calls.filter((c) => c.cmd === name);
+
+  it("a behind Managed host offers Update and Uninstall; an up-to-date one only Uninstall; the live account (Developer) nothing", async () => {
+    const panel = await mountPanel({
+      hosts: [
+        UP_MANAGED,
+        { host: "me@current", link_up: true, substrate: MAN },
+        { host: "me@up-dev", link_up: true, substrate: DEV },
+      ],
+      refresh: (h) =>
+        h === "me@up-host"
+          ? behind()
+          : h === "me@current"
+            ? {
+                outcome: "checked",
+                substrate: MAN,
+                drift: { drift: "up_to_date", head: A, remote: A },
+              }
+            : { outcome: "checked", substrate: DEV, drift: null },
+    });
+    expect(q(entry(panel), "remote-update-open")?.textContent).toBe("Update…");
+    expect(q(entry(panel), "remote-uninstall-open")?.textContent).toBe(
+      "Uninstall…",
+    );
+    expect(q(entry(panel), "remote-install-open")).toBeNull();
+    expect(q(entry(panel, "me@current"), "remote-update-open")).toBeNull();
+    expect(
+      q(entry(panel, "me@current"), "remote-uninstall-open"),
+    ).not.toBeNull();
+    const dev = entry(panel, "me@up-dev");
+    for (const op of ["install", "update", "uninstall"]) {
+      expect(q(dev, `remote-${op}-open`), op).toBeNull();
+    }
+    expect(dev.querySelector("button")).toBeNull();
+  });
+
+  it("Update: confirm, then THIS host's run; Cancel during the fetch, Finishing once install.sh runs; the result says Updated", async () => {
+    const panel = await mountPanel({ hosts: [UP_MANAGED], refresh: behind });
+    await click(q(entry(panel), "remote-update-open"));
+    expect(q(entry(panel), "remote-run")!.textContent).toContain(
+      "Fast-forwards the clone",
+    );
+    expect(cmds("workflow_remote_update_start")).toEqual([]);
+    await click(q(entry(panel), "remote-run-confirm"));
+    expect(cmds("workflow_remote_update_start").map((c) => c.args)).toEqual([
+      { host: "me@up-host" },
+    ]);
+    await fire("remote-run-phase", {
+      host: "me@up-host",
+      op: "update",
+      phase: "fetch",
+    });
+    await fire("remote-run-output", {
+      host: "me@up-host",
+      op: "update",
+      line: "Fast-forward",
+    });
+    // Another op's line (an install elsewhere is impossible, but the filter keys on both).
+    await fire("remote-run-output", {
+      host: "me@up-host",
+      op: "install",
+      line: "not mine",
+    });
+    expect(q(entry(panel), "remote-run-log")?.textContent).toBe("Fast-forward");
+    const cancel = q(entry(panel), "remote-run-cancel") as HTMLButtonElement;
+    expect(cancel.disabled).toBe(false);
+    await fire("remote-run-phase", {
+      host: "me@up-host",
+      op: "update",
+      phase: "install",
+    });
+    const finishing = q(entry(panel), "remote-run-cancel") as HTMLButtonElement;
+    expect(finishing.textContent).toBe("Finishing the update…");
+    expect(finishing.disabled, "no Cancel once install.sh runs").toBe(true);
+    await fire("remote-run-finished", {
+      host: "me@up-host",
+      op: "update",
+      ok: true,
+      cancelled: false,
+      message: null,
+    });
+    expect(q(entry(panel), "remote-run-result")?.textContent).toBe("Updated");
+    expect(
+      cmds("remote_substrate_refresh").length,
+      "a success re-checks the entry",
+    ).toBe(2);
+  });
+
+  it("Uninstall: the confirm IS the host's dry run and the approved clone; confirm runs it, with no Cancel", async () => {
+    const panel = await mountPanel({
+      hosts: [UP_MANAGED],
+      refresh: behind,
+      onCmd: (cmd) =>
+        cmd === "workflow_remote_uninstall_preview"
+          ? {
+              host: "me@up-host",
+              clone_dir:
+                "/Users/me/.claudesk/vendor/my-claude-code-customization",
+              preview: "  [remove] skills/feature-build (dry-run)",
+            }
+          : undefined,
+    });
+    await click(q(entry(panel), "remote-uninstall-open"));
+    expect(
+      cmds("workflow_remote_uninstall_preview").map((c) => c.args),
+    ).toEqual([{ host: "me@up-host" }]);
+    expect(q(entry(panel), "remote-uninstall-preview")?.textContent).toBe(
+      "  [remove] skills/feature-build (dry-run)",
+    );
+    expect(q(entry(panel), "remote-uninstall-clone")?.textContent).toBe(
+      "/Users/me/.claudesk/vendor/my-claude-code-customization",
+    );
+    expect(cmds("workflow_remote_uninstall_start")).toEqual([]);
+    await click(q(entry(panel), "remote-run-confirm"));
+    expect(cmds("workflow_remote_uninstall_start").length).toBe(1);
+    expect(q(entry(panel), "remote-run-cancel"), "no Cancel").toBeNull();
+    expect(entry(panel).textContent).toContain("Uninstall can't be cancelled");
+    await fire("remote-run-finished", {
+      host: "me@up-host",
+      op: "uninstall",
+      ok: true,
+      cancelled: false,
+      message: null,
+    });
+    expect(q(entry(panel), "remote-run-result")?.textContent).toBe(
+      "Uninstalled",
+    );
+  });
+
+  it("a preview the guard refuses shows its plain words and offers no Uninstall button", async () => {
+    const panel = await mountPanel({
+      hosts: [UP_MANAGED],
+      refresh: behind,
+      onCmd: (cmd) =>
+        cmd === "workflow_remote_uninstall_preview"
+          ? Promise.reject(
+              "Claudesk has no record of installing this workflow system, so it will not remove it.",
+            )
+          : undefined,
+    });
+    await click(q(entry(panel), "remote-uninstall-open"));
+    expect(q(entry(panel), "remote-uninstall-refused")?.textContent).toContain(
+      "will not remove it",
+    );
+    expect(q(entry(panel), "remote-run-confirm")).toBeNull();
+    expect(q(entry(panel), "remote-uninstall-preview")).toBeNull();
+    await click(q(entry(panel), "remote-run-dismiss"));
+    expect(q(entry(panel), "remote-uninstall-open")).not.toBeNull();
+  });
+
+  it("Settings reopened mid-run shows THIS host's run and its end, not a button the backend would refuse", async () => {
+    const panel = await mountPanel({
+      hosts: [
+        { host: "me@up-host", link_up: true, substrate: { state: "absent" } },
+        { host: "me@other", link_up: true, substrate: { state: "absent" } },
+      ],
+      refresh: () => ({
+        outcome: "checked",
+        substrate: { state: "absent" },
+        drift: null,
+      }),
+      onCmd: (cmd) =>
+        cmd === "workflow_remote_run_state"
+          ? { host: "me@up-host", op: "install", phase: "clone" }
+          : undefined,
+    });
+    expect(q(entry(panel), "remote-install-open")).toBeNull();
+    expect(q(entry(panel), "remote-run-reattached")).not.toBeNull();
+    expect(
+      (q(entry(panel), "remote-run-cancel") as HTMLButtonElement).disabled,
+    ).toBe(false);
+    expect(
+      q(entry(panel, "me@other"), "remote-install-open"),
+      "another host's entry is unaffected",
+    ).not.toBeNull();
+    await fire("remote-run-output", {
+      host: "me@up-host",
+      op: "install",
+      line: "[ok] feature-build",
+    });
+    await fire("remote-run-finished", {
+      host: "me@up-host",
+      op: "install",
+      ok: true,
+      cancelled: false,
+      message: null,
+    });
+    expect(q(entry(panel), "remote-run-result")?.textContent).toBe("Installed");
   });
 });
 
@@ -743,13 +1046,49 @@ describe("the remote install's approved words, as values", () => {
     ]);
   });
 
+  // M18 WP7 — the Update and Uninstall copy the operator approved at P4.verify-human.1–4
+  // (2026-11-20), pinned by LITERAL as the install's is.
+  it("Update's confirm lists exactly what it does on the host", () => {
+    expect(REMOTE_UPDATE_ITEMS).toEqual([
+      "Fetches the latest version from GitHub into the clone at ~/.claudesk/vendor/my-claude-code-customization.",
+      "Fast-forwards the clone. If it has local changes or commits of its own, nothing is changed and you are told why.",
+      "Runs install.sh again, which refreshes the links in ~/.claude/ and the workflow block in ~/.claude/CLAUDE.md.",
+      "Cancel works while fetching; once install.sh starts, the run finishes.",
+    ]);
+  });
+
+  it("Uninstall's confirm frames the host's own dry run", () => {
+    expect(REMOTE_UNINSTALL_INTRO).toBe(
+      "Claudesk will run the host's own uninstall.sh, then delete the clone and the install record. Here is what uninstall.sh says it will remove:",
+    );
+    expect(REMOTE_UNINSTALL_NOTE).toBe(
+      "It doesn't edit that account's ~/.claude/settings.json, and changes nothing on this Mac. Uninstall can't be cancelled once it starts; it takes about a second.",
+    );
+  });
+
+  it("each op's result heading", () => {
+    const t = (op: "install" | "update" | "uninstall", ok: boolean) =>
+      resultTitle({ host: "h", op, ok, cancelled: false, message: null });
+    expect([t("update", true), t("update", false)]).toEqual([
+      "Updated",
+      "Update failed",
+    ]);
+    expect([t("uninstall", true), t("uninstall", false)]).toEqual([
+      "Uninstalled",
+      "Uninstall failed",
+    ]);
+  });
+
   it("Cancel says the install is finishing once install.sh started", () => {
-    expect(FINISHING_LABEL).toBe("Finishing the install…");
+    expect(FINISHING_LABEL).toEqual({
+      install: "Finishing the install…",
+      update: "Finishing the update…",
+    });
   });
 
   it("the result's heading: Installed / Install failed / Cancelled", () => {
     const r = (ok: boolean, cancelled: boolean) =>
-      resultTitle({ host: "h", ok, cancelled, message: null });
+      resultTitle({ host: "h", op: "install", ok, cancelled, message: null });
     expect([r(true, false), r(false, false), r(false, true)]).toEqual([
       "Installed",
       "Install failed",

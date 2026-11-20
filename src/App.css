@@ -5085,6 +5085,12 @@ body,
   overflow-wrap: anywhere;
 }
 
+/* M18 WP7 — an entry's run buttons (Install, or Update + Uninstall) in one row. */
+.remote-run-buttons {
+  display: flex;
+  gap: 8px;
+}
+
 .substrate-status {
   margin: 0;
   font-size: 0.78rem;
