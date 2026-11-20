@@ -5,7 +5,8 @@ drive_mode: autopilot
 # Feature: M18 WP6 — Install over the master
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** finalize (complete)
+**Completed:** 2026-11-20
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -219,11 +220,49 @@ Phase 1 first pays down the review findings the handoff marked "due before WP6",
     — evidence: the copy the operator approved at P3.verify-human.2–4 pinned by LITERAL (`REMOTE_CONSENT_ITEMS`, `FINISHING_LABEL`, `resultTitle`'s three headings); mutation (one consent item reworded) → only the literal test FAILED (the render tests passed it, as the runner predicted); restored byte-exact. The verify-self additions stay as codified coverage: the stale-consent tests (×2, each mutation-proven), "Managed from the start", the refused-start-after-flip test.
     — evidence: `pnpm verify:auto` → EXIT=0, 57 s (vitest `Tests 4171 passed (4171)`; cargo test lib `1452 passed; 0 failed`; clippy, fmt clean; the 1 pre-existing lint warning).
 
+## Ship (2026-11-20)
+- Cleanup: no debug output, TODO or FIXME in the WP6 diff (`ea0c1be..HEAD`); working tree clean.
+- Full suite: reused the last-phase codify run (`Test scope: full — last phase`, `pnpm verify:auto` EXIT=0, 57 s); nothing changed since.
+- Linters/checks re-run: eslint 0 errors (the 1 pre-existing `XtermPane.tsx` warning), prettier, tsc, check:link, cargo fmt, clippy `--all-targets -D warnings`: all clean.
+- Commits on `main`: `ea0c1be` (plan), `3e657bb` (Phase 1), `96f388f` (Phase 2), `d89e24b` (Phase 3). NOT pushed (operator rule: push only when asked); `main` is 25 ahead of `origin`, every staged blob identifier-grepped.
+
+## Code-Quality Review
+
+*(feature-review-quality, 2026-11-20, window `ea0c1be^..d89e24b`, drive_mode=autopilot: 0 CRITICAL, 2 MAJOR, 5 MINOR, all auto-backlogged → `backlog-quality-findings.md` → `# m18-wp6-remote-install — 2026-11-20`.)*
+
+### Strengths
+- `fill` fills every placeholder in one pass, with its why; a real-zsh test runs a hostile root and proves its `$(…)` never executes.
+- The outcome is pure (`resolve`, the re-probe as authority; `abort_step`, `request_remote_cancel`), tested directly; side effects stay in the worker.
+- The run script is tested end to end in real zsh against a decoy `$HOME` (containment walk, symlinked / out-of-root leftovers, stubbed `xcode-select`, group kills in both phases).
+- Build lessons written back where they apply (`DEV_TOOLS_GUARD`'s grouped-negation doc, `settle_refresh`'s no-demote, `Differs`).
+- Existing guards tightened rather than left stale (3 RunGuard workers, whole-body lock-table slices, the bypass cache's two writers).
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`workflow_install/commands.rs` worker abort; `remote_runner.rs` trap + `resolve`] Cancel discards the remote kill's result and always stops the local ssh; a failed kill or a TERM landing after the clone (trap already set) leaves the host run going unread, and the immediate re-probe reads Absent → "Cancelled. Nothing was installed." while the host becomes Managed. → `SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-CAN-REPORT-NOTHING-INSTALLED-WRONGLY`
+- [`workflow_install/source_guard.rs`] the delete guard misses `rm -fr` / `-Rf` / `-R` / `find -delete` / `rmdir`, and `strip_comments` drops `*)` case-arm lines inside raw-string templates. → `SURFACE-2026-11-20-QUALITY-DELETE-GUARD-MISSES-SHELL-SPELLINGS-AND-STAR-LINES`
+
+**MINOR**
+- Space runs in four Rust messages (lost `\` continuations). → `…-REMOTE-INSTALL-STRINGS-CARRY-SPACE-RUNS`
+- `REMOTE_CLONE_PATH` duplicates Rust's `CLONE_DIR_NAME` in TS. → `…-REMOTE-CLONE-PATH-DUPLICATED-IN-TS`
+- The template hardcodes `.claudesk` / `install-record.json`; a mkdir failure reads as "no root". → `…-REMOTE-TEMPLATE-HARDCODES-RECORD-NAME-AND-MISNAMES-MKDIR-FAILURE`
+- The Cancel doc is inaccurate; a too-late Cancel ending in Managed says nothing about it. → `…-REMOTE-CANCEL-DOC-AND-LATE-CANCEL-MESSAGE`
+- A consent comment claims a link drop closes it (`link_up` is read once at mount). → `…-CONSENT-COMMENT-CLAIMS-A-LINK-DROP-CLOSES-IT`
+
+### Assessment
+Careful and well tested: correct quoting, one `rm -rf` behind a real physical-path check, a safe `fill`, the outcome from a fresh probe. The real-zsh integration tests are the strongest part. Main weakness: the Cancel path assumes the remote kill worked, so a failed or late kill can produce a false "nothing was installed"; fix it, and tighten the delete guard, before WP7 reuses this run shape and adds the second remote delete. The rest is small copy and constant-sharing cleanup.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives the WIP.
+
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship (all three phases complete)
+- **Path:** Feature > done (archived)
+- **Active scope:** none (WP6 complete)
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
+- **Unvisited:** none
 - **Open discoveries:** none
 
 ## Verification hygiene (from memory; read before any live step)
@@ -245,3 +284,12 @@ Phase 1 first pays down the review findings the handoff marked "due before WP6",
 - [SHORTCUT-2026-11-20] P3.verify-self Finding C — consent renders only while `offered`, so a refused start cannot reopen it on a non-Absent host; test + mutation. Fresh re-verify → FAIL (BLOCKING): the hidden consent came back BY ITSELF, with a stale refusal, once the host was offered again (link drops mid-start → refused "isn't connected" → link returns). Third fix: ANY change of `offered` closes a consent step (both directions); test "a consent step hidden by a late refusal does not come back by itself when the host is offered again"; mutation (the one-direction form back) → that test FAILED. Fresh re-verify of the whole lifecycle → PASS: the reoffer scenario now renders only "Install…" (no stale reason on reopen); a breadth-first fuzz of every sequence ≤ 9 actions over 15 actions (open, confirm held/resolved, consent Cancel, run Cancel accepted/refused, Close, resolve, reject oldest/newest, finished ok/failed/cancelled, offered false/true), with and without StrictMode (2,669 replays, 548 states per mode) found no realizable consent-not-opened / hidden-result / stale-refusal / render-loop; its 10 findings all need a start that REJECTS AFTER its own run's finished event, which the backend cannot produce (every refusal returns before the worker spawns; only the worker emits finished). Positive control: both mutants (no prop-change close; no render gate) caught. Harness: scratchpad `fuzz/fuzz.test.tsx`.
 - [SURFACED-2026-11-20] P3.verify-self — the dev-build duplicate event delivery is the pre-existing `useTauriListen` leak; logged as an update to `SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN` (priority low → medium), not a new entry.
 - [SURFACED-2026-11-20] feature-plan — wbs.md exceeds size guard (360 lines); read the first 44 lines + headings, plus the WP3–WP8, dependency-map, exit-criteria and "Probe outcomes" sections in full (WP6's own inputs). Consider summarizing the shipped WPs at WP6 finalize.
+
+## Retrospect
+- **What changed in our understanding:** the risky part of a host-side script is not the logic but the text layer around it. Three defects came from it, each caught by a test that ran the real thing: a negated `&&` guard (`! a && b && c` negates only `a`), placeholder filling by chained `str::replace` (a value re-scanned → the root's `$(…)` ran), and, in verification itself, a `find` expression whose `-newer` bound to one `-o` branch only (it listed everything). And the UI's consent step needed three rounds: closing it when `offered` turns false was not enough; a refused start could reopen it, and a hidden one came back on re-offer. The final rule (close a consent step on ANY `offered` change, render it only while offered) held under a fuzz of every sequence up to 9 actions.
+- **Assumptions that held:** operator ruling A's shape worked as probed (a remote group kill stops the clone, and git cleans up after itself; the trap window survives a late kill and a dead stream); one streaming exec over the master is enough; the post-run re-probe as the authority on the outcome; the host-side re-check making the leftover-clone removal safe; the per-host store flipping every open workspace without a reopen.
+- **Assumptions that were wrong:** that the workflow's own guards would see each new site without changes (the RunGuard worker count, the 400-char lock-table window and the delete guard's Rust-only tokens all needed extending, and review found the delete guard still misses shell spellings); that streamed output reaches the panel once (dev builds double it: the pre-existing `useTauriListen` leak, now medium on the backlog).
+- **Approach delta:** Phase 1 (the five carry-ins) went as planned. Phase 2 added `run_streaming_abortable` and `LinkRegistry::{hold_if_up, master_run_argv}` and kept the reducer in `remote_runner.rs` rather than adapting `terminal.rs` (no gate to revert remotely). Phase 3 added a post-success re-check (for HEAD + drift) the plan had not named. Four in-place shortcuts, each re-verified by a fresh subagent.
+
+**Feature complete:** M18 WP6 (Install over the master) has shipped. From Settings → Remote hosts, an Absent host account with an open connection now gets an Install button: consent, a streamed run on the host (cancellable during the clone), and the host reads Managed, with every open workspace on it gaining its workflow surfaces without a reopen. Verify it on a dev build with `CLAUDESK_REMOTE_SUBSTRATE_ROOT=<a sandbox dir on the host>` (the live account is off-limits, §R.8); the installed-build check comes at WP8's release. Requester = operator — closure notice for self-record.
+

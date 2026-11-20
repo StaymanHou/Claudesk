@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-20  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7); WP3 shipped (0c45070); WP4 shipped (d57aa15); WP5 shipped (9fd2c46)
+updated: 2026-11-20  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7); WP3 shipped (0c45070); WP4 shipped (d57aa15); WP5 shipped (9fd2c46); WP6 shipped (d89e24b)
 cycle: milestone-18-remote-workflow-substrate
 ---
 
@@ -176,7 +176,7 @@ Each entry shows the state (Absent / Managed / Developer), the short HEAD, and d
 
 **WP5 → WP6 rationale:** Install is a button on this group's Absent entry, and its result lands back in the readout, which must already work.
 
-### WP6: Install over the master
+### WP6: Install over the master ✅ SHIPPED 2026-11-20 (commits 3e657bb, 96f388f, d89e24b)
 **Description:** §R.3 install + the §R.6 Developer-tools preflight, in its **guarded** form from "Probe outcomes" (5) (`d=$(xcode-select -p) && [ -n "$d" ] && [ -x "$d/usr/bin/git" ]`; the bare `xcode-select -p` form passes on a no-tools host).
 - **The run:** a streaming exec over the master under the shared single-run lock and `RunGuard`. Clone the public HTTPS URL into
   `<root>/.claudesk/vendor/my-claude-code-customization`, run `install.sh` with `HOME=<root>`, then write the record **last**.
@@ -187,13 +187,13 @@ Each entry shows the state (Absent / Managed / Developer), the short HEAD, and d
 **Dependencies:** WP3, WP5
 **Size:** L
 **Tasks:**
-- [ ] 6.1 The streaming-exec transport (`run_streaming` with the master ssh as the program), plus the link-not-Up refusal.
-- [ ] 6.2 Pure command builders (clone, install, record write), unit-tested for quoting. The record JSON is built by Rust and written by a constant `printf`.
-- [ ] 6.3 The install sequence, with the record written last. Each failure arm goes through the `terminal` reducer, adapted (no gate revert for remote).
-- [ ] 6.3b Cancel per ruling A ("Probe outcomes" (1)): the pgid stream sentinel + the remote group-kill exec; a phase sentinel before `install.sh` disables Cancel; `install.sh` + the record write run guarded on the HOST against stream death and an in-flight cancel (`SURFACE-2026-11-20-QUALITY-INSTALL-SH-WINDOW-UNGUARDED-AGAINST-STREAM-DEATH`); a stale vendor clone with no record is removed first. Test each arm.
-- [ ] 6.4 Sandbox containment test, the remote analogue of `sandbox.rs`: after a sandboxed install, every new host path lies under the root (canonicalized). Assert positively on the set `install.sh` writes; do **not** shasum the whole real `~/.claude` (a live workspace on the account writes there continuously, "Probe outcomes" (3)). The `-newer` sweep is an inverse check with an explicit exclusion list.
-- [ ] 6.5 The Settings Install button, its output, and its result, which updates `HostSubstrate` and the workspace surfaces live.
-- [ ] 6.6 Live, dev build, sandbox root: Absent → Install → Managed; a gate-ON workspace whose probe reads the sandbox shows its workflow surfaces without a reopen.
+- [x] 6.1 The streaming-exec transport (`run_streaming` with the master ssh as the program), plus the link-not-Up refusal.
+- [x] 6.2 Pure command builders (clone, install, record write), unit-tested for quoting. The record JSON is built by Rust and written by a constant `printf`.
+- [x] 6.3 The install sequence, with the record written last. Each failure arm goes through the `terminal` reducer, adapted (no gate revert for remote).
+- [x] 6.3b Cancel per ruling A ("Probe outcomes" (1)): the pgid stream sentinel + the remote group-kill exec; a phase sentinel before `install.sh` disables Cancel; `install.sh` + the record write run guarded on the HOST against stream death and an in-flight cancel (`SURFACE-2026-11-20-QUALITY-INSTALL-SH-WINDOW-UNGUARDED-AGAINST-STREAM-DEATH`); a stale vendor clone with no record is removed first. Test each arm.
+- [x] 6.4 Sandbox containment test, the remote analogue of `sandbox.rs`: after a sandboxed install, every new host path lies under the root (canonicalized). Assert positively on the set `install.sh` writes; do **not** shasum the whole real `~/.claude` (a live workspace on the account writes there continuously, "Probe outcomes" (3)). The `-newer` sweep is an inverse check with an explicit exclusion list.
+- [x] 6.5 The Settings Install button, its output, and its result, which updates `HostSubstrate` and the workspace surfaces live.
+- [x] 6.6 Live, dev build, sandbox root: Absent → Install → Managed; a gate-ON workspace whose probe reads the sandbox shows its workflow surfaces without a reopen.
 
 **WP6 → WP7 rationale:** Update and Uninstall act only on a **Managed** install, and only WP6 can create one.
 
@@ -207,6 +207,7 @@ Each entry shows the state (Absent / Managed / Developer), the short HEAD, and d
 **Dependencies:** WP6
 **Size:** M–L
 **Tasks:**
+- [ ] 7.0 FIRST, the two WP6-review MAJORs this WP builds on (added at WP6 finalize): a Cancel whose remote kill fails or lands after the clone can report "Nothing was installed" while the host becomes Managed (`SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-CAN-REPORT-NOTHING-INSTALLED-WRONGLY`: when the pgid is known, let the stream end by itself); the delete guard misses other `rm` spellings and `*)` lines inside script templates (`SURFACE-2026-11-20-QUALITY-DELETE-GUARD-MISSES-SHELL-SPELLINGS-AND-STAR-LINES`), and 7.2 adds the second remote delete.
 - [ ] 7.1 The remote refuse-guard + its pure path checks (`$HOME`, `~/.claude`, ancestors, not-a-dir, no `uninstall.sh`), fed only by the record + a host `pwd -P`. Every refusal arm mutation-proven on its own.
 - [ ] 7.2 The `E0451` compile-fail test for `RemoteUninstallTarget`. A test asserts the `rm -rf` builder takes only that type.
 - [ ] 7.3 Uninstall: dry-run preview → confirm → run. A failure never clears the record (a test).

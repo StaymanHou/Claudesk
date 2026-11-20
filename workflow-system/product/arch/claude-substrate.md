@@ -99,7 +99,7 @@ Also as-built:
 
 ---
 
-## Remote hosts (M18) — 📐 PLANNED 2026-11-18 (`/product-arch`); §R.1–R.2 ✅ BUILT at WP4, §R.4–R.5 (readout) ✅ BUILT at WP5 (2026-11-20)
+## Remote hosts (M18) — 📐 PLANNED 2026-11-18 (`/product-arch`); §R.1–R.2 ✅ BUILT at WP4, §R.4–R.5 (readout) ✅ BUILT at WP5, §R.3 Install + §R.6 preflight ✅ BUILT at WP6 (2026-11-20)
 
 **Milestone 18, the remote workflow substrate.** Scope was settled at the entry grill
 (`roadmap.md` → "### Milestone 18" → "Scope, settled at the entry grill"). In short: detect the workflow system
@@ -225,6 +225,44 @@ What the build settled that the design above left open (the WP4 WIP's D1–D10; 
   (`CLAUDESK_REMOTE_SUBSTRATE_ROOT`, read in the commands layer under `cfg(debug_assertions)`), which is how M18 is verified
   **without ever touching the live host-account install** that the tank workspace depends on. This is the remote analogue of
   `docs/lessons/sandboxed-home-verification.md`.
+
+### R.3 Install as built — ✅ WP6 (2026-11-20)
+
+What the build settled (the WP6 WIP's D1–D11, archived as `m18-wp6-remote-install.md`; Update / Uninstall are WP7):
+- **One host-side script, reporting through sentinels.** `workflow_install/remote_runner.rs` builds it (pure); it runs as ONE
+  streaming exec over the master (`LinkRegistry::master_run_argv` = `master_only_exec_argv`, through
+  `runner::run_streaming_abortable`), never the 10 s capture. Lines `CLAUDESK-RUN:pgid:<n>` (first), `phase:clone`,
+  `phase:install`, `stale-removed`, `result:<arm>` are parsed live (`parse_run_line`) and never shown as output.
+- **The order on the host:** root exists → `if ! { DEV_TOOLS_GUARD; }` (⚠️ GROUPED: a bare `! a && b && c` negates only `a`; the
+  first draft did that and a stub-`xcode-select` test caught it) → **the host re-checks** (`SUBSTRATE_PROBE` against the root, plus
+  the record): anything but `substrate:no` with no record is `already-present`, so a stale readout never acts → a leftover clone
+  with no record is removed only when it is a real folder whose physical path is EXACTLY `<physical root>/.claudesk/vendor/<name>`
+  (the module's one `rm -rf`, sanctioned in `source_guard`) → `phase:clone` + `git clone` of the public HTTPS URL with the
+  developer dir's own `git` → `trap '' HUP PIPE TERM INT` → `phase:install` → `install.sh` with `HOME=<root>`, output to
+  `<root>/.claudesk/install.log` (it is `set -e`: an echo into a dead pipe would end it) → the record LAST (Rust's JSON, a
+  constant-format `printf` to a tmp file, then `mv`) → the log printed → `result:`.
+- **Values enter quoted, in one pass.** `fill` substitutes the template's placeholders in ONE pass over the template; a chain of
+  `str::replace` rescanned inserted values, so a root containing `__JSON__` left its `$(…)` unquoted and it ran (caught at
+  Phase 2 verify-self).
+- **The root** is the link's `$HOME` (`LinkRegistry::hold_if_up`, which also holds the link for the run and never brings one up),
+  or a debug build's `CLAUDESK_REMOTE_SUBSTRATE_ROOT`; refused unless absolute, normalized, not `/`.
+- **The outcome comes from the host.** After every ending the worker re-probes over the master through `settle_refresh` (which
+  writes only a KNOWN answer, WP6 Phase 1) and the pure `remote_runner::resolve` decides: `ok` only when the host reads Managed;
+  a run that never reported (late Cancel, dropped connection) is judged by what the host now is.
+- **Cancel (ruling A):** honoured until `phase:install`; the worker's abort poll sends `kill -TERM -- -<pgid>` over the master
+  (2 s), then stops the local ssh. ⚠️ Open (WP6 review MAJOR): a failed or late kill can yield a false "Nothing was installed"
+  (`SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-CAN-REPORT-NOTHING-INSTALLED-WRONGLY`, before WP7).
+- **Commands:** `workflow_remote_install_start(host)` (sync: `begin_remote_install` takes the shared `HeldRunLock`, then
+  refuses a non-row host, a non-Absent cached state, a link that is not Up, a bad root) and `workflow_remote_install_cancel`
+  (a lock write; refused as too late in the install phase). Events: `remote-install-output` / `-phase` / `-finished`; the
+  local wizard's events are untouched. The local gate is never touched.
+- **The UI:** `RemoteInstallPanel` in each Settings → Remote hosts entry: "Install…" only on an Absent entry whose link is Up;
+  consent (operator-approved copy, pinned by literal) → the streamed log + Cancel gated on the phase → the result. The entry's
+  state comes through `useHostSubstrates`, so it (and every open workspace on the host) flips without a reopen; a success
+  re-checks the host for HEAD + drift. A consent step closes whenever `offered` changes and renders only while offered.
+- ⚠️ Known, backlogged: dev builds show every streamed line twice (the `useTauriListen` StrictMode leak,
+  `SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN`, medium); a Settings reopened mid-run shows Install again
+  (`SURFACE-2026-11-20-REMOTE-INSTALL-REOPENED-SETTINGS-HIDES-THE-RUNNING-INSTALL`).
 
 ### R.4 Drift (Settings only)
 

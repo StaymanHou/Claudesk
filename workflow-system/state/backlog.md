@@ -696,17 +696,17 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m18-wp2-fresh-account-hardening (2026-11-18)
 
-- **Pointer:** **2 MAJOR + 3 MINOR** open from the review of the WP2 ship commit (`1a71d1b`). MAJOR: the remote bypass answer goes stale across Recycle (accepting the warning doesn't clear it until a reopen); `token_fix`'s `ssh -t <host> claude setup-token` hint dead-ends on a `~/.local/bin`-only account. MINOR: `withheldNotice`'s defaulted `cause`; the Recycle reason overclaims "is showing"; an indent-bound source guard. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-fresh-account-hardening — 2026-11-18`.
-- **Priority:** medium (the 2 MAJOR), low (the rest)
+- **Pointer:** **2 MINOR** open from the review of the WP2 ship commit (`1a71d1b`): `withheldNotice`'s defaulted `cause`; an indent-bound source guard. The 2 MAJORs (the stale remote bypass answer across Recycle; the `setup-token` hint) and the "is showing" MINOR were resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-fresh-account-hardening — 2026-11-18`.
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** one small remote-path follow-up task. The two MAJORs both sit on the fresh-account recovery path WP2 hardens; fold them in before WP6 (Install), whose fresh accounts hit them first.
+- **Pickup shape:** paydown polish.
 
 ## Code-quality findings — m18-wp2-5-remote-copy-to-mac-clipboard (2026-11-18)
 
-- **Pointer:** **1 MAJOR + 4 MINOR** open from the review of the WP2.5 ship commit (`e38cdc7`). MAJOR: `security-posture.md`'s reasoning for the every-pane OSC 52 write handler leaves out the paste-jacking vector (DISPLAYED bytes such as `cat`, `git log` or `curl` output can set the Mac clipboard; the ruling stands, the record is incomplete). MINOR: the 4 MiB cap is duplicated in TS and Rust with nothing pinning them together; a failed or refused copy is silent (the operator pastes the previous clipboard); the xterm `Terminal` test fake is copied into 3 files; one conf assert has no message. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18`.
-- **Priority:** medium (the MAJOR), low (the rest)
+- **Pointer:** **4 MINOR** open from the review of the WP2.5 ship commit (`e38cdc7`): the 4 MiB cap is duplicated in TS and Rust with nothing pinning them together; a failed or refused copy is silent (the operator pastes the previous clipboard); the xterm `Terminal` test fake is copied into 3 files; one conf assert has no message. The paste-jacking MAJOR was resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18`.
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** one small follow-up task: a doc edit for the MAJOR, plus the silent-failure toast, which also settles the duplicated cap. The test-fake consolidation fits any later `XtermPane` test touch.
+- **Pickup shape:** the silent-failure toast also settles the duplicated cap. The test-fake consolidation fits any later `XtermPane` test touch.
 
 ## SURFACE-2026-11-17-REMOTE-EXEC-COUNT-NEEDS-A-BEHAVIOURAL-HARNESS
 - **Source:** feature:verify-self (M17 WP5 Phase 2, AC-8.2)
@@ -753,17 +753,15 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Source:** feature:verify-self (M17 WP7 Phase 4, live)
 - **Target level:** product:arch
 - **Type:** gap
-- **Summary (remaining open work, rewritten at M18 WP5 finalize 2026-11-20):**
-  - The DETECTION half (WP4) and the READOUT half (WP5) are resolved (CHANGELOG 2026-11-20). The open check probes each host
-    account, a workspace on a host without the workflow system shows only the absent-host note, and Settings → Remote hosts
-    shows each host's state, HEAD and drift.
-  - What remains is the INSTALL half. On such a host the operator can install the workflow system only by hand: Claudesk
-    has no Install, Update or Uninstall yet.
-- **Context:** M18's seed. Interim, the mini's dev account was set up by hand (`~/my-claude-code-customization`,
-  `install.sh`, the 4 printed permissions); it reads as **Developer**.
-- **Suggested action:** M18 WP6 (Install), WP7 (Update / Uninstall).
+- **Summary (remaining open work, rewritten at M18 WP6 finalize 2026-11-20):**
+  - DETECTION (WP4), the READOUT (WP5) and INSTALL (WP6) are resolved (CHANGELOG 2026-11-20): Settings → Remote hosts installs
+    the workflow system on an Absent host account over its open connection, and the host then reads Managed.
+  - What remains is UPDATE and UNINSTALL: a Managed install that is behind GitHub cannot be updated from Claudesk, and nothing
+    removes one.
+- **Context:** M18's seed. The mini's dev account was set up by hand and reads **Developer**, so it never gets Update or
+  Uninstall (Claudesk acts only on what it recorded installing).
+- **Suggested action:** M18 WP7 (Update / Uninstall), after its task 7.0 (the two WP6-review MAJORs).
 - **Priority:** medium
-- **Status:** routed — the seed of Milestone 18 (`roadmap.md`); closes with M18 WP7
 
 ## SURFACE-2026-11-18-PICKER-SEARCH-BOX-NOT-AUTOFOCUSED
 - **Source:** operator request (2026-11-18)
@@ -795,13 +793,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** open
 
-## Code-quality findings — m18-wp3-remote-substrate-probe (2026-11-20)
-
-- **Pointer:** **1 MAJOR** open from the review of the WP3 probe ship commit (`0c45070`). Ruling A's `install.sh` window is unguarded against stream death and an in-flight cancel; guard it on the host (WBS task 6.3b). The probe-constant MAJORs and the newline-guard MINOR were resolved at WP4 (see CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp3-remote-substrate-probe — 2026-11-20`.
-- **Priority:** medium
-- **Status:** pending
-- **Pickup shape:** belongs to WP6 (task 6.3b).
-
 ## Code-quality findings — m18-wp4-substrate-detection-and-funnel (2026-11-20)
 
 - **Pointer:** **5 MINOR** open from the review of the WP4 window (`9ce4810^..d57aa15`). The stale arch-wording MINOR was resolved at WP4 finalize; the guard MAJOR and the optional-`onOpenSettings` MINOR were resolved at M18 WP5 (CHANGELOG 2026-11-20).
@@ -813,10 +804,18 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m18-wp5-remote-hosts-readout (2026-11-20)
 
-- **Pointer:** **1 MAJOR + 2 MINOR** open from the review of the WP5 window (`e3926dc^..9fd2c46`). The stale §R.4 drift-URL wording MINOR was resolved at WP5 finalize.
-  - MAJOR: a Settings refresh whose probe prints no answer writes `Unknown` over a known host (its doc says it never does), which hides open workspaces' workflow surfaces until the next open check.
-  - MINOR: `Drift::Behind` means "differs" (rename it before WP7 reads it); the drift copy says "GitHub" for any origin.
-  - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp5-remote-hosts-readout — 2026-11-20`.
-- **Priority:** medium (the MAJOR), low (the MINORs)
+- **Pointer:** **1 MINOR** open from the review of the WP5 window (`e3926dc^..9fd2c46`): the drift copy says "GitHub" for any origin. The MAJOR (a refresh writing `Unknown` over a known host) and the `Drift::Behind` → `Differs` MINOR were resolved at M18 WP6, the stale §R.4 wording at WP5 finalize (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp5-remote-hosts-readout — 2026-11-20`.
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** the MAJOR is a one-guard fix plus a settle test, small enough to fold into WP6. Do the rename before WP7.
+- **Pickup shape:** copy polish.
+
+## Code-quality findings — m18-wp6-remote-install (2026-11-20)
+
+- **Pointer:** **2 MAJOR + 5 MINOR** open from the review of the WP6 window (`ea0c1be^..d89e24b`).
+  - MAJOR: a Cancel whose remote kill fails or lands after the clone can report "Cancelled. Nothing was installed." while the host goes on to Managed; the delete guard misses other `rm` spellings and strips `*)` lines inside raw-string templates.
+  - MINOR: space runs in four Rust messages (lost `\` continuations); `REMOTE_CLONE_PATH` duplicated in TS; the template hardcodes the record name and calls a mkdir failure "no root"; the Cancel doc + a missing late-cancel sentence; a consent comment claiming a link drop closes it.
+  - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp6-remote-install — 2026-11-20`.
+- **Priority:** medium (the 2 MAJORs, both before WP7), low (the MINORs)
+- **Status:** pending
+- **Pickup shape:** both MAJORs belong at the front of WP7 (it reuses the run shape and adds the second remote delete); the MINORs are small and can ride along.
+

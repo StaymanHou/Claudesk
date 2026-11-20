@@ -127,6 +127,8 @@
 - [strip-types imports](node-strip-types-fails-on-extensionless-runtime-imports.md) — Breaks on extensionless imports; use a throwaway vitest spec.
 - [open('w') truncates](open-w-truncates-before-read-wipes-untracked-file.md) — Copy an untracked file aside before scripted edits.
 - [BSD sed no \b](bsd-sed-lacks-word-boundary.md) — A mutation silently no-ops; use `perl -pi -e`, check it landed.
+- [Python string eats `\`-newline](python-heredoc-eats-backslash-newline-in-written-code.md) — A scripted edit drops Rust's `\` continuations (space runs); use Edit or `r'''…'''`.
+- [find -newer binds to one -o branch](find-newer-binds-only-to-its-own-or-branch.md) — Prunes first, `-newer` on the print branch, plus a positive control.
 - [Check payload first](check-payload-before-outward-send.md) — `test -s` + `head` before any outward send (an empty public issue).
 - [zsh no word-split](zsh-unquoted-var-does-not-word-split.md) — `$rev:src/x` is a modifier; write `"${rev}:path"`.
 - [zsh =word expansion](zsh-equals-expansion-eats-tmux-exact-targets.md) — `-t =cd-x` fails; quote it or send the script on stdin.

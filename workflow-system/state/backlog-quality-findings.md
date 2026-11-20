@@ -209,7 +209,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # m17-wp4-status-over-the-link — 2026-11-16
 
-
 ## SURFACE-2026-11-16-QUALITY-M17WP4-REALPATH-ALIAS-NEVER-CLEARED
 - **Source:** feature-review-quality (M17 WP4, MINOR)
 - **Location:** src-tauri/src/status_broadcaster/mod.rs: `remote_realpaths`, `set_remote_realpath`
@@ -341,32 +340,11 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # m18-wp2-fresh-account-hardening — 2026-11-18
 
-## SURFACE-2026-11-18-QUALITY-REMOTE-BYPASS-ANSWER-STALE-ACROSS-RECYCLE
-- **Source:** feature-review-quality (M18 WP2, MAJOR)
-- **Type:** gap (stale cached state)
-- **Summary:** For a remote row, `bypass_prompt::commands::remote_cleared` answers from `LinkRegistry::open_bypass`, which only the open check writes, and Recycle runs no open check. On a fresh remote account the first open withholds `/session-restore` and tells the operator to accept the warning. Accepting writes the key on the host, but the cached `false` remains, so every later Recycle of that workspace withholds the restore and shows a now-false "is showing its Bypass Permissions warning" toast until the workspace is closed and reopened.
-- **Suggested action:** refresh the remote bypass answer for a Recycle respawn (one small exec reading the `BYPASS_ACCEPTED` fragment over the link, through `settle`-style single writer), or treat the cached remote answer as stale on Recycle and word the toast as a possibility. Fails safe today (one typed command), never a lost session.
-- **Priority:** medium
-
-## SURFACE-2026-11-18-QUALITY-TOKEN-FIX-HINT-ASSUMES-CLAUDE-ON-NONLOGIN-PATH
-- **Source:** feature-review-quality (M18 WP2, MAJOR)
-- **Type:** bug (copy / dead-end hint)
-- **Summary:** `remote_cmd::preflight::token_fix` still tells the operator to run `ssh -t <host> claude setup-token`. `ssh host cmd` runs a non-login, non-interactive shell, so on exactly the account shape WP2 hardens (`claude` only in `~/.local/bin`, PATH line only in `~/.zshrc`) the tools check now passes via the fallback, the token check fails, and the suggested fix fails with "command not found".
-- **Suggested action:** suggest `ssh -t <host> ~/.local/bin/claude setup-token` when that is where `claude` lives (the preflight could report which path `command -v claude` resolved to), or wrap the hint in the same `CLAUDE_PATH_FALLBACK` (`ssh -t <host> 'zsh -lc "…; claude setup-token"'`).
-- **Priority:** medium
-
 ## SURFACE-2026-11-18-QUALITY-WITHHELD-NOTICE-CAUSE-DEFAULT
 - **Source:** feature-review-quality (M18 WP2, MINOR)
 - **Type:** tech-debt (API shape)
 - **Summary:** `autoResumeFire.ts` → `withheldNotice`'s `cause` defaults to `{ untrusted: true, bypass: false }`. Production always passes it; only one older test relies on the default, and a future caller that forgets it silently gets trust-only behaviour.
 - **Suggested action:** make `cause` required and update the one test.
-- **Priority:** low
-
-## SURFACE-2026-11-18-QUALITY-RECYCLE-BYPASS-REASON-OVERCLAIMS
-- **Source:** feature-review-quality (M18 WP2, MINOR)
-- **Type:** copy
-- **Summary:** `recycleSession.ts` → `RESTORE_WITHHELD_FOR_BYPASS` says the warning "is showing", but the value is a prediction from settings plus the recorded spawn mode, not read off the screen (and false in the stale-remote case above).
-- **Suggested action:** "has not been accepted" (matches the auto-resume notice) instead of "is showing". Pairs with the stale-answer fix above.
 - **Priority:** low
 
 ## SURFACE-2026-11-18-QUALITY-SPAWN-PERMISSION-GUARD-INDENT-BOUND
@@ -379,14 +357,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 # m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18
 
 *(feature-review-quality on ship commit `e38cdc7`, window `e38cdc7^..e38cdc7`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-11-18-QUALITY-OSC52-PASTEJACK-VECTOR-UNRECORDED
-- **Source:** feature-review-quality (M18 WP2.5, MAJOR)
-- **Type:** gap (security reasoning)
-- **Summary:** `arch/security-posture.md` → "Terminal clipboard" justifies the every-pane OSC 52 write handler (R-d, operator-ratified) with "a local program could already do this with `pbcopy`". That considers only programs. It leaves out **displayed bytes**: `cat` of a hostile file, `git log`, `curl` output, or any in-pane OSC 52 that tmux now passes through under `set-clipboard on` can silently replace the Mac clipboard without anything running `pbcopy`. That is the standard paste-jacking setup (put a command on the clipboard, wait for the operator to paste it into a terminal), and it is why several terminals gate or prompt on OSC 52 writes.
-- **Context:** the ruling stands (operator, 2026-11-18, vh2 A). The defect is that the doc future readers will re-derive it from records incomplete reasoning.
-- **Suggested action:** add the displayed-content vector to "Terminal clipboard" as an explicitly accepted risk. Optionally note follow-up options: a per-write toast ("Copied N chars from <workspace>"), remote-only, or a size/newline heuristic. Re-ask the operator only if the recorded risk changes their call.
-- **Priority:** medium
 
 ## SURFACE-2026-11-18-QUALITY-CLIPBOARD-CAP-DUPLICATED-UNPINNED
 - **Source:** feature-review-quality (M18 WP2.5, MINOR)
@@ -415,20 +385,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Summary:** in `remote_link/tests.rs` → `the_tmux_conf_lets_in_pane_osc52_through_and_is_safe_to_re_source`, the `!TMUX_CONF.contains("-ga ") && !TMUX_CONF.contains(" -a ")` assert has no failure message, unlike its siblings, which print `{TMUX_CONF}`.
 - **Suggested action:** add `"{TMUX_CONF}"`.
 - **Priority:** low
-
-# m18-wp3-remote-substrate-probe — 2026-11-20
-
-*(feature-review-quality on ship commit `0c45070`, window `0c45070^..0c45070`; drive_mode=autopilot. 0 CRITICAL, 4 MAJOR, 4 MINOR, all auto-backlogged; 1 MAJOR + 3 MINOR resolved at WP3 finalize, see CHANGELOG 2026-11-20. A probe: no app code; the findings are about how the probe's answers carry into WP4–WP7.)*
-
-## SURFACE-2026-11-20-QUALITY-INSTALL-SH-WINDOW-UNGUARDED-AGAINST-STREAM-DEATH
-- **Source:** feature-review-quality (M18 WP3, MAJOR)
-- **Type:** gap (design: the operator-ruled cancel shape A)
-- **Summary:** "cancel only during the clone" is enforced only by disabling the button, which leaves two gaps.
-  - (a) `install.sh` echoes after each `ln -s`. Probe (1) measured that a dead stream kills the remote at its next stdout write, so an app quit or crash during the 0.45 s `install.sh` window kills it between links: links with no record, which reads as Developer with no Uninstall. The "app dies mid-run" consequence covers only the clone window.
-  - (b) Rust learns the clone→install boundary only from the stream, so a cancel already in flight (0.13 s) can land after `install.sh` has started.
-- **Context:** ruling A stands. Its unguarded window is the state A was chosen to avoid.
-- **Suggested action:** at WP6, enforce the boundary on the HOST. Run `install.sh` (and the record write) under `trap '' HUP PIPE TERM`, with its output going to a remote log that the stream tails, or `nohup`'d. Have the script print a phase sentinel (`CLAUDESK-RUN:phase:install`) before it, which the UI uses to disable Cancel. Test that a group kill sent after the sentinel does not interrupt `install.sh`.
-- **Priority:** medium
 
 # m18-wp4-substrate-detection-and-funnel — 2026-11-20
 
@@ -473,26 +429,65 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on the WP5 window `e3926dc^..9fd2c46`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 3 MINOR. The MAJOR and two MINORs are auto-backlogged here; the stale §R.4 drift-URL wording MINOR was resolved at WP5 finalize.)*
 
-## SURFACE-2026-11-20-QUALITY-SETTINGS-REFRESH-WRITES-UNKNOWN-OVER-A-KNOWN-HOST
-- **Source:** feature-review-quality (M18 WP5, MAJOR)
-- **Type:** bug (a doc that promises the opposite of the code)
-- **Summary:** `remote_link::commands::settle_refresh` says it writes the substrate cache "ONLY when the host answered (D3)". It actually writes whenever `parse_refresh` returns `Some`, and the refresh script echoes `substrate-probed` BEFORE the probe runs. So a probe that prints no `substrate:` line (no perl, a broken read) parses as `SubstrateRead::Unknown` and overwrites a known `Developer` / `Managed` value.
-- **Context:** Unknown fails CLOSED in the funnel (the host is `workflow_applicable`'s third input). Opening Settings, a read-only readout, can therefore hide the workflow surfaces of every open workspace on that host until the next open check. The open check writes `Unknown` the same way (WP4 D5), so the write is consistent with that; the doc is not.
-- **Suggested action:** decide one way and pin it. Either skip the write when the read is `Unknown` in `settle_refresh` (a passive readout should not demote a host), with a settle test that a known value survives an answerless probe; or keep the write and fix the doc to say it matches the open check. Recommendation: skip the write, since Settings is a readout.
-- **Priority:** medium
-
-## SURFACE-2026-11-20-QUALITY-DRIFT-BEHIND-VARIANT-MEANS-DIFFERS
-- **Source:** feature-review-quality (M18 WP5, MINOR)
-- **Type:** tech-debt (naming)
-- **Summary:** `remote_substrate::Drift::Behind` (wire tag `behind`) means "the two HEADs differ" (D6). Without a fetch, ahead and diverged look the same. The doc comment says so, but the type name carries the wrong meaning.
-- **Context:** WP7's Update is the obvious next consumer. Gating Update on `Behind` would offer `pull --ff-only` to a clone that is ahead or diverged, and the pull would fail.
-- **Suggested action:** rename it to `Differs` (Rust + TS + the wire tag) before WP7 reads it; keep the "Behind GitHub" copy (D6).
-- **Priority:** low
-
 ## SURFACE-2026-11-20-QUALITY-DRIFT-COPY-SAYS-GITHUB-FOR-ANY-ORIGIN
 - **Source:** feature-review-quality (M18 WP5, MINOR)
 - **Type:** cosmetic (copy)
 - **Summary:** every drift string ("Checking GitHub…", "Up to date with GitHub.", "Behind GitHub…") and the group hint say "GitHub", but D1 compares against the clone's own `origin`, which can be any server.
 - **Context:** a Developer clone whose origin is not GitHub gets a verdict naming the wrong server. Polish: today's real hosts all clone from GitHub.
 - **Suggested action:** say "its origin" (or name the origin's host) when the origin is not GitHub, or accept as-is and record that the copy assumes the published repo.
+- **Priority:** low
+
+# m18-wp6-remote-install — 2026-11-20
+
+*(feature-review-quality on the WP6 window `ea0c1be^..d89e24b`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 5 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-CAN-REPORT-NOTHING-INSTALLED-WRONGLY
+- **Source:** feature-review-quality (M18 WP6, MAJOR)
+- **Type:** bug (a confident wrong outcome)
+- **Summary:** once the pgid is known, Cancel sends the remote group kill (`let _ = links.master_exec(...)`, result discarded) and then ALWAYS stops the local ssh. If the kill failed or timed out (2 s), or the TERM reached the host after the clone ended and `trap '' HUP PIPE TERM INT` was already set (the phase is polled every 20 ms; the kill takes ~0.13 s), the host run carries on unread: a non-tty `git clone` writes little, and the trap comes before the `phase:install` echo, so the dead stream does not stop it. The worker then re-probes at once, reads Absent (no record yet), and `resolve`'s `None if cancel_requested && Absent` arm says "Cancelled. Nothing was installed." Moments later the host is Managed.
+- **Context:** the one place the operator is told nothing changed on the host, and it can be wrong. WP7's Update / Uninstall reuse this run shape.
+- **Suggested action:** when the pgid is known, do NOT stop the local side: let the stream end by itself (it does if the TERM landed during the clone; it reports `result:ok` if it landed too late). Keep `StopLocal` only for "no pgid yet". Or have the script check the stream is still alive before setting the trap. Add a test that drives the late-TERM arm.
+- **Priority:** medium (fix before WP7)
+
+## SURFACE-2026-11-20-QUALITY-DELETE-GUARD-MISSES-SHELL-SPELLINGS-AND-STAR-LINES
+- **Source:** feature-review-quality (M18 WP6, MAJOR)
+- **Type:** gap (a guard that can pass while checking nothing)
+- **Summary:** `source_guard`'s delete guard lists the shell spellings `"rm -rf"` / `"rm -r "`, so `rm -fr`, `rm -Rf`, `rm -R`, `find … -delete` and `rmdir` pass it. And `strip_comments` drops every line whose trimmed text starts with `*` (block-comment continuation), which includes `case` arms inside a raw-string template (`  *) rm -rf -- "$x" ;;` is stripped before the scan; checked).
+- **Context:** WP7 adds the next remote delete (Uninstall) into the same template style.
+- **Suggested action:** before WP7: scan with a regex over `\brm\b` with any recursive flag, plus `-delete` and `rmdir`; do not strip `*` lines inside raw strings (or scan raw-string templates separately). Mutation-prove each spelling (`docs/lessons/source-text-guards.md`).
+- **Priority:** medium (fix before WP7)
+
+## SURFACE-2026-11-20-QUALITY-REMOTE-INSTALL-STRINGS-CARRY-SPACE-RUNS
+- **Source:** feature-review-quality (M18 WP6, MINOR)
+- **Type:** copy (lost `\` continuations)
+- **Summary:** four user-facing Rust strings in `workflow_install/commands.rs` (the not-Absent refusal, the not-connected refusal, `REMOTE_PANIC_MESSAGE`, the too-late Cancel) carry runs of 6–14 spaces (`last read              this one`). Cause: the strings were written through a Python heredoc whose `\`-newline was consumed as a Python line continuation, so Rust never saw its own. Invisible in a `<p>` (HTML collapses spaces); visible in any `<pre>`, log or exact-match test.
+- **Suggested action:** restore the `\` continuations (or single-line strings); a test that no remote-install message contains two consecutive spaces.
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-REMOTE-CLONE-PATH-DUPLICATED-IN-TS
+- **Source:** feature-review-quality (M18 WP6, MINOR)
+- **Type:** tech-debt (a cross-language copy)
+- **Summary:** `src/state/remoteInstall.ts` → `REMOTE_CLONE_PATH` hardcodes `my-claude-code-customization`, a copy of Rust's `CLONE_DIR_NAME`, re-opening the drift channel `SURFACE-2026-07-29-QUALITY-WP3.5A-CLONE-DIR-NAME-DUPLICATED` closed for the local wizard.
+- **Suggested action:** derive it from the backend (the local wizard's `workflow_install_default_location` pattern), or a test reading both sources.
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-REMOTE-TEMPLATE-HARDCODES-RECORD-NAME-AND-MISNAMES-MKDIR-FAILURE
+- **Source:** feature-review-quality (M18 WP6, MINOR)
+- **Type:** tech-debt + copy
+- **Summary:** the run template hardcodes `.claudesk` and `install-record.json` while `__NAME__` comes from `CLONE_DIR_NAME` (and `provenance::RECORD_FILENAME` exists); `mkdir -p … || result:no-root` reports a permissions failure as "The install folder doesn't exist".
+- **Suggested action:** fill the record name from the provenance constant; a distinct `result:no-write` arm.
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-REMOTE-CANCEL-DOC-AND-LATE-CANCEL-MESSAGE
+- **Source:** feature-review-quality (M18 WP6, MINOR)
+- **Type:** doc + copy gap
+- **Summary:** `workflow_remote_install_cancel`'s doc says it does nothing with no run in flight, but it sets `cancel_requested` (harmless: the next start resets it). And a Cancel accepted during the clone that loses the race to `phase:install` resolves through `Some(Ok) if managed` with no message: "Cancelling…" → "Installed" without saying the cancel came too late (the `None` arms have that sentence).
+- **Suggested action:** fix the doc; in `resolve`, `Some(Ok) if managed && cancel_requested` → "Cancel came after install.sh had started, so the install finished."
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-CONSENT-COMMENT-CLAIMS-A-LINK-DROP-CLOSES-IT
+- **Source:** feature-review-quality (M18 WP6, MINOR)
+- **Type:** doc (a comment describing behaviour that does not exist)
+- **Summary:** `RemoteInstallPanel`'s comment says `offered` turns false when "its link went down", but `entry.link_up` is read once from `getRemoteHosts` at mount and never updates, so a dropped link never closes an open consent step (only the backend refusal catches it).
+- **Suggested action:** fix the comment, or make `link_up` live (the `remote-link` event) if WP7 needs it.
 - **Priority:** low

@@ -20,6 +20,16 @@
 - **Backlog resolved:** SURFACE-2026-11-20-QUALITY-ONOPENSETTINGS-OPTIONAL-PROP — `onOpenSettings` is required on `CenterStage` and `Workspace`, so a dropped prop is a type error instead of a silently missing button.
 - **Backlog resolved:** SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD (partial) — the Settings → Remote hosts readout and drift half shipped at M18 WP5; Install, Update and Uninstall remain open.
 - **Milestone:** WP5: Settings → "Remote hosts" (read-only readout + drift)
+- **Feature shipped:** M18 WP6 lets Settings → Remote hosts install the workflow system on a host account over its open connection: one host-side script that re-checks the host before writing, removes only a provably-leftover clone, clones the public repo, runs `install.sh` in a window a late Cancel or a dead connection cannot split, writes the record last, and reports through a re-probe of the host, so the entry and every open workspace on that host flip to Managed without a reopen.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-SETTINGS-REFRESH-WRITES-UNKNOWN-OVER-A-KNOWN-HOST — a Settings refresh whose probe prints no answer now answers `Failed` and leaves a known host as it was.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-DRIFT-BEHIND-VARIANT-MEANS-DIFFERS — `Drift::Behind` is now `Differs` in Rust, TS and the wire tag, before WP7 reads it.
+- **Backlog resolved:** SURFACE-2026-11-18-QUALITY-REMOTE-BYPASS-ANSWER-STALE-ACROSS-RECYCLE — a remote Recycle re-reads the host's bypass answer (`remote_bypass_refresh`) before deciding whether to withhold `/session-restore`.
+- **Backlog resolved:** SURFACE-2026-11-18-QUALITY-TOKEN-FIX-HINT-ASSUMES-CLAUDE-ON-NONLOGIN-PATH — the preflight reports where `claude` resolved and the token fix names that absolute, quoted path.
+- **Backlog resolved:** SURFACE-2026-11-18-QUALITY-RECYCLE-BYPASS-REASON-OVERCLAIMS — the withheld-restore reason says the warning "has not been accepted", not "is showing".
+- **Backlog resolved:** SURFACE-2026-11-18-QUALITY-OSC52-PASTEJACK-VECTOR-UNRECORDED — `security-posture.md` records the displayed-bytes OSC 52 paste-jacking vector as an accepted risk, with follow-up options.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-INSTALL-SH-WINDOW-UNGUARDED-AGAINST-STREAM-DEATH — the remote run ignores HUP/PIPE/TERM/INT from `phase:install` on and logs `install.sh` to a file, so a late group kill or a dead stream cannot split the links from the record (tested both ways).
+- **Backlog resolved:** SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD (partial) — the Install half is done; the entry now holds only Update and Uninstall (WP7).
+- **Milestone:** M18 WP6 — Install over the master.
 
 ## 2026-11-18
 
