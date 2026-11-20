@@ -58,6 +58,8 @@ const WIDE_FLEX_CHILDREN = [
   ".substrate-info",
   ".install-wizard",
   ".profiles-settings",
+  // M18 WP5: the remote hosts list (a `user@host` and an install path per entry).
+  ".remote-hosts",
 ];
 
 describe("Settings panel — the horizontal-overflow guard WP3 paid for", () => {

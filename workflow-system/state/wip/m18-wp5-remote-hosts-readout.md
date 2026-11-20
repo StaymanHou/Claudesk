@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP5: Settings → "Remote hosts" (read-only readout + drift)
 
 **Workflow:** feature
-**State:** verify-codify (phase 1 complete)
+**State:** verify-codify (phase 2 complete)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -113,7 +113,13 @@ endpoint, reached by `git ls-remote` from the host (measured ~1 s at arch time).
     — evidence: new tests `the_wrapped_command_gives_the_same_answer_through_its_login_shell` (the whole `zsh -lc '<script>'` through `/bin/sh -c`, as sshd runs it; a double-quote wrapper mutant turns it red) and `only_a_given_sandbox_root_adds_the_prefix`; the consuming surface `remote_open_check` stays covered by the existing `decide_open` substrate-line tests in `remote_link/commands.rs`
     — evidence: `pnpm verify:auto` → EXIT=0 in 57s (vitest `4136 passed`; `cargo test` lib `1420 passed; 0 failed`; fmt + clippy clean; the one lint warning is the pre-existing `XtermPane.tsx` one)
 
-- [ ] Phase 2: The Settings group + landing on it (5.2, 5.2b, 5.3)  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [x] Phase 2: The Settings group + landing on it (5.2, 5.2b, 5.3)
+  **Relevance check (before Phase 2):**
+  - Requester still needs this: yes — the absent-host note already points at a group that does not exist
+  - Requirements unchanged: yes — §R.4/§R.5 as planned; Phase 1 confirmed the data shapes live
+  - Solution still feasible: yes — `remote_hosts` + `remote_substrate_refresh` work against the mini
+  - No superior alternative discovered: yes
+  **Verdict:** proceed
   **Observable outcomes:**
   - Browser (tauri MCP bridge, dev app): with ≥1 remote row, ⌘, (or the menu) opens Settings and
     `[data-testid="settings-group-remote-hosts"]` exists, placed directly after `settings-group-workflow-features`,
@@ -134,9 +140,11 @@ endpoint, reached by `git ls-remote` from the host (measured ~1 s at arch time).
   - Browser: geometry at the app's minimum window size: the panel fits the window (panel bottom ≤ window inner
     height), the body scrolls to the group's last entry, and no entry overflows horizontally
     (`scrollWidth <= clientWidth`).
-  - CLI: Vitest: unmounting the group before a refresh resolves drops the result (no state update, no `act`
-    warning), and no further `remote_substrate_refresh` invoke happens after unmount (`mockIPC` call count stays
-    flat across a later tick). Mutation: removing the cancel turns it red.
+  - CLI: Vitest: closing the panel starts no further work: no `remote_substrate_refresh` invoke after unmount,
+    whether a refresh was in flight or the host list had not arrived yet (`mockIPC` call count stays flat across a
+    later tick). Mutation: removing the cancel turns it red. [Amended 2026-11-20, P2.verify-human.6 decision A: the
+    original "drops the result (no `act` warning)" is unobservable under React 19, so the outcome now names the
+    observable property.]
   - CLI: `tsc` fails if `onOpenSettings` is dropped from `CenterStage` / `Workspace` (required prop, D9), and the
     source guard it replaces is deleted.
   **Alignment questions:**
@@ -146,14 +154,40 @@ endpoint, reached by `git ls-remote` from the host (measured ~1 s at arch time).
     Settings is where you identify the account; still right?
   - (decision) The group sits right after "Workflow features". Right place?
   - D1 in action: drift compares against the clone's `origin`, which is what Update will pull. Still what you want?
-  - [ ] P2.1 `RemoteHostsSettings` body (reads `remote_hosts`, the substrate through `useHostSubstrates(true)` — the seam, never a one-shot copy — and drift from the refresh result); `SettingsGroup id="remote-hosts"` in `SettingsPanel`, rendered only when the host list is non-empty.  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 Refresh on mount, one call per host in parallel, cancelled on unmount (D7, 5.3).  <!-- status: NOT-STARTED -->
-  - [ ] P2.3 5.2b: `onOpenSettings(group?)` → App sets `settingsHighlight` for a routed open and clears it for an ordinary one (D8); `SettingsPanel` scrolls the highlighted group into view once it renders (the group appears after an async read). Make `onOpenSettings` required (D9).  <!-- status: NOT-STARTED -->
-  - [ ] P2.4 Styles (copy hex from the existing settings groups: no CSS token layer) + geometry measured live at the minimum window size (lesson: a 702px dialog in a 599px panel).  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P2.1 `RemoteHostsSettings` body (reads `remote_hosts`, the substrate through `useHostSubstrates(true)` — the seam, never a one-shot copy — and drift from the refresh result); `SettingsGroup id="remote-hosts"` in `SettingsPanel`, rendered only when the host list is non-empty.  <!-- status: done -->
+  - [x] P2.2 Refresh on mount, one call per host in parallel, cancelled on unmount (D7, 5.3).  <!-- status: done -->
+  - [x] P2.3 5.2b: `onOpenSettings(group?)` → App sets `settingsHighlight` for a routed open and clears it for an ordinary one (D8); `SettingsPanel` scrolls the highlighted group into view once it renders (the group appears after an async read). Make `onOpenSettings` required (D9).  <!-- status: done -->
+  - [x] P2.4 Styles (copy hex from the existing settings groups: no CSS token layer) + geometry measured live at the minimum window size (lesson: a 702px dialog in a 599px panel).  <!-- status: done -->
+  - [x] verify-auto  <!-- status: done -->
+    — evidence: `pnpm verify:auto` → EXIT=0 in 50s (lint 0 errors, the one pre-existing `XtermPane.tsx` warning; format, `tsc`, `check:link` clean; vitest `Tests 4148 passed (4148)`; `cargo test` lib `1420 passed; 0 failed`; fmt + clippy clean)
+    — evidence: `vitest run remoteHostsSettings.test.tsx` → `11 passed`; mutants (early-unmount refresh, scroll call, down-host skip, group-always) each red, source restored by shasum
+  - [x] verify-self  <!-- status: done -->
+    - [x] Group placement + one entry per host (live)  — evidence: dev app via the bridge, picker gear → groups in order `claude-code, profiles, workflow-features, remote-hosts, analytics, updates, hotkeys`; two entries (the old real row's account + the scratch account). With NO remote row the group is absent: covered by the real-panel mount test `does not exist without a remote row, and asks nothing` (the dev `projects.json` always holds a remote row, so not driven live)
+    - [x] Developer + HEAD + drift against the mini (live, real account)  — evidence: scratch workspace open (link Up), ⌘, → the scratch entry at 400 ms `Developer · installed by hand; Claudesk doesn't manage it · HEAD f8e8873` + `Checking GitHub…`, at 1.2 s `Up to date with GitHub.`; the HEAD's tooltip is the clone root; matches the agent's own ssh read (HEAD = `ls-remote origin HEAD` = `f8e8873970c0…`). Screenshot: session scratchpad `p2-developer.png` (shows the real host, so not committed)
+    - [x] Link down (live)  — evidence: fresh launch, no workspace: both entries `Unknown · not checked yet` + `Connect a workspace on this host to check.`; after the workspace closed and its master stopped: the entry KEEPS `Developer · HEAD f8e8873` + the connect line. ssh PIDs identical before/after opening Settings both times (`6043 6044 6052`: the agent, and the installed app's tank link)
+    - [x] Absent on the sandbox root (live, state-changing as declared: an empty `~/claudesk-wp5-sandbox` on the mini, removed after)  — evidence: dev launch with `CLAUDESK_REMOTE_SUBSTRATE_ROOT`; the scratch workspace shows the absent-host note (no skill row); the Settings entry reads `Absent · the workflow system isn't installed for this account`, no drift line. Screenshot `p2-absent.png` (scratchpad)
+    - [x] 5.2b + D8 (live)  — evidence: the note's Settings button → 200 ms after: `data-highlighted="true"` + `settings-group-highlight`, body `scrollTop` 586 with the group inside the body rect; 1.6 s after: highlight gone. Then each close path (close button, ⌘, toggle, Esc), followed by a ⌘, open, → `anyHighlighted: false`, `scrollTop: 0`. The routed open at the same 200 ms read is the positive control. The invite route (`setSettingsHighlight("workflow-features")`) is unchanged and still pinned by `workflowInviteCopy.test.ts`; not driven live (the invite is acknowledged in the dev settings)
+    - [x] Geometry (live)  — evidence: no `minWidth`/`minHeight` in `tauri.conf.json`, so measured at 800×500 and 520×500: the panel fits (`bottom ≤ innerHeight`), the body scrolls (2901/331) to the last entry, and there is no horizontal overflow (body 439/439, group 439/439; the `user@host` names wrap to 2 lines). Window restored to 1280×800
+    - [x] Unmount drops work (runner)  — evidence: `remoteHostsSettings.test.tsx` 11 passed: no second refresh after a close while one is in flight, and no refresh at all when the panel closes before the list arrives (that mutant is killed)
+      - [ ] Outcome wording vs test  <!-- status: FAILED-cosmetic --> — the plan's outcome promised "drops the result (no `act` warning)". A late `setChecks` is unobservable under React 19 (no warning, the mutant is equivalent), so no test can assert it. The code keeps the guard; the test asserts the observable 5.3 property (no work started after close)
+    - [x] `onOpenSettings` required (runner)  — evidence: required in both prop interfaces, strict mode, no spread render sites; `tsc --noEmit` exit 0; the old presence guard is replaced by a which-function guard (`onOpenSettings={openSettingsAt}` + its body)
+    - [x] align: the entry's layout and words — evidence: `p2-developer.png` + `p2-absent.png` (scratchpad); the words are in the Developer and Absent leaves above
+    - [x] align: (decision) the full `user@host` in Settings — evidence: the entries render the full account and host (e.g. `<user>@<mini-host>`), and wrap at 520 px
+    - [x] align: (decision) placement right after Workflow features — evidence: the group order above
+    - [x] align: D1 in action (drift vs the clone's `origin`) — evidence: `Up to date with GitHub.` for HEAD `f8e8873`, and the clone's `origin` is the public HTTPS mccc URL (memory `remote-verify-hygiene` rule 5)
+    - Cleanup: the dev app (agent-launched) stopped by its recorded PIDs with no workspace open; the dev `projects.json` / `settings.json` restored (`38ee76dd…` / `72bfef1c…` match); the sandbox removed (path-checked, empty); no `claudesk-dev` tmux server; the scratch folder unchanged; the agent's own master closed
+  - [x] verify-human  <!-- status: done --> — operator 2026-11-20: "all good. go with your rec"
+    - [x] P2.verify-human.1: the entry's layout and words (Developer / up to date, and Absent), from the screenshots — is this the readout you meant?  <!-- status: done -->
+    - [x] P2.verify-human.2: D5 in action: the group shows even with Workflow features OFF (it is the on-ramp, like the local substrate block) — still what you want?  <!-- status: done -->
+    - [x] P2.verify-human.3: D1 in action: drift compares against the install clone's own `origin` (what Update will pull), not the record's URL — still what you want?  <!-- status: done -->
+    - [x] P2.verify-human.4: (decision) the full `user@host` in Settings vs the short host in the picker and the note  <!-- status: done --> — A: full `user@host`
+    - [x] P2.verify-human.5: (decision) placement right after Workflow features  <!-- status: done --> — A: after Workflow features
+    - [x] P2.verify-human.6: (decision) accept the cosmetic outcome-wording gap (the late-result guard is unobservable under React 19)  <!-- status: done --> — A: accept; amend the outcome wording at codify
+  - [x] verify-codify  <!-- status: done -->
+    Test scope: full — suite not long (`runtimes.md` → `pnpm verify:auto` Last 50s)
+    — evidence: D8 codified at App level on the REAL app (jsdom boot of `src/main.tsx`): `settingsHighlightCloseButton.test.tsx` and `settingsHighlightCmdComma.test.tsx` (shared `settingsHighlightHarness.ts`). Each takes the invite's routed open (the positive control: highlighted), closes by its own path, and reopens from the picker gear (which clears nothing, so the close path's clear is what's proven). Mutants: dropping `closeSettings`' clear reds ONLY the close-button test; dropping the ⌘, toggle's clear reds ONLY the ⌘, test
+    — evidence: the outcome wording amended per P2.verify-human.6 (decision A)
+    — evidence: `pnpm verify:auto` → EXIT=0 in 56s (vitest `4150 passed`; `cargo test` lib `1420 passed`; fmt, clippy, `tsc`, `check:link` clean; the one pre-existing lint warning)
 
 - [ ] Phase 3: The host-argument guard checks each arm (WP4 review MAJOR)  <!-- status: NOT-STARTED; depends on Phase 2 -->
   **Observable outcomes:**
@@ -173,18 +207,10 @@ endpoint, reached by `git ls-remote` from the host (measured ~1 s at arch time).
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 2 > P2.1
-- **Active scope:** P2.1 (the Settings group body)
-- **Live-check state (until Phase 2 verify-self):** the dev app is RUNNING (agent-launched, `pnpm tauri:dev`), the dev `projects.json` has the scratch remote row added and `settings.json` has the gate ON; backups (pre-check shas `38ee76dd…` / `72bfef1c…`) are in the session scratchpad. Restore both after Phase 2 verify-self, with the app stopped.
-- **Build notes (Phase 1):**
-  - The refresh is `remote_cmd::substrate_refresh_command`: the open check's probe captured in `$p`, then the drift half reads the root the probe printed (never re-derived).
-  - The substrate parser is now shared: `parse_substrate`, used by `parse_open_facts` and `parse_refresh`.
-  - `remote_hosts` (sync) and `remote_substrate_refresh` (async, in `ASYNC_COMMANDS`) live in `remote_link/commands.rs`; `settle_refresh` is the only cache write.
-  - The local script tests are `remote_substrate/refresh_script.rs` (9).
-  - Mutants M1–M9 each fail their own test.
-  - ⚠️ M1 (drop `[ -n "$d" ]`) first SURVIVED: the stub's exit 2 is already caught by `d=$(…) &&`. The `-n` test only matters for an empty path with exit 0, so that arm was added.
+- **Path:** Feature > Phase 3 > P3.1
+- **Active scope:** P3.1 (per-arm host-argument check)
 - **Blocked:** none
-- **Unvisited:** Phase 3 (host-argument guard per arm), then ship → review-quality → finalize
+- **Unvisited:** ship → review-quality → finalize
 - **Open discoveries:** none
 
 ## Verification hygiene (R.8 + memory `remote-verify-hygiene`)

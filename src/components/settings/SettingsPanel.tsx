@@ -45,8 +45,8 @@
 // ## Layout (paydown 2026-11-04 WP13)
 // This file is the panel's SHELL: the group order, each group's id/title/hint, the highlight,
 // the error surface and the gate control. Each group's BODY is its own module beside it
-// (ClaudeCodeSettings, ProfilesSettings, WorkflowFeaturesSettings, AnalyticsSettings,
-// UpdatesSettings, HotkeySettings). A body that owns a setting owns its `useSettingControl`
+// (ClaudeCodeSettings, ProfilesSettings, WorkflowFeaturesSettings, RemoteHostsSettings,
+// AnalyticsSettings, UpdatesSettings, HotkeySettings). A body that owns a setting owns its `useSettingControl`
 // too, except the gate's, which two groups read (see WorkflowFeaturesSettings.tsx).
 
 import { useCallback, useEffect, useState } from "react";
@@ -55,6 +55,10 @@ import { SettingsGroup } from "./SettingsGroup";
 import { ClaudeCodeSettings } from "./ClaudeCodeSettings";
 import { ProfilesSettings } from "./ProfilesSettings";
 import { WorkflowFeaturesSettings } from "./WorkflowFeaturesSettings";
+import {
+  RemoteHostsSettings,
+  useRemoteHostsReadout,
+} from "./RemoteHostsSettings";
 import { AnalyticsSettings } from "./AnalyticsSettings";
 import { UpdatesSettings } from "./UpdatesSettings";
 import { HotkeySettings } from "./HotkeySettings";
@@ -64,6 +68,7 @@ import {
   getWorkflowFeaturesEnabled,
   setWorkflowFeaturesEnabled,
 } from "../../state/workflowGate";
+import { REMOTE_HOSTS_GROUP_ID } from "../../state/remoteHosts";
 
 export interface SettingsPanelProps {
   /** Close the panel (Esc is handled app-level, alongside the ⌘, toggle). */
@@ -114,6 +119,11 @@ export default function SettingsPanel({
     errorLabel: "update workflow features",
     onError,
   });
+
+  // M18 WP5 — the remote hosts. The panel holds the readout because it decides whether the group
+  // exists at all: only when at least one valid remote row does (§R.5). Not gated, like the local
+  // substrate block: it is the on-ramp.
+  const remoteHosts = useRemoteHostsReadout();
 
   // M10.9 WP3 — the routed-from-invite highlight, self-clearing after HIGHLIGHT_MS.
   //
@@ -184,6 +194,17 @@ export default function SettingsPanel({
         >
           <WorkflowFeaturesSettings workflowFeatures={workflowFeatures} />
         </SettingsGroup>
+
+        {remoteHosts.hosts !== null && remoteHosts.hosts.length > 0 && (
+          <SettingsGroup
+            id={REMOTE_HOSTS_GROUP_ID}
+            title="Remote hosts"
+            hint="The workflow system on each remote account your projects run on. Checked against GitHub while this panel is open, for hosts with a workspace connected."
+            highlighted={highlighted === REMOTE_HOSTS_GROUP_ID}
+          >
+            <RemoteHostsSettings readout={remoteHosts} />
+          </SettingsGroup>
+        )}
 
         <SettingsGroup
           id="analytics"

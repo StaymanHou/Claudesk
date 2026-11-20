@@ -63,7 +63,11 @@ function workspaceFixture(
 
 function renderWorkspaceHeader(overrides: Partial<WorkspaceModel> = {}) {
   const html = renderToStaticMarkup(
-    <Workspace workspace={workspaceFixture(overrides)} visible={true} />,
+    <Workspace
+      workspace={workspaceFixture(overrides)}
+      visible={true}
+      onOpenSettings={() => {}}
+    />,
   );
   return new JSDOM(`<!doctype html><body>${html}</body>`).window.document;
 }

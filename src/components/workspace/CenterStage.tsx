@@ -41,8 +41,8 @@ interface CenterStageProps {
   ) => void;
   /** M17 WP5 — the app's notice for a workspace (a failed Detach), shown in its toast. */
   noticeFor?: (workspaceId: string) => WorkspaceNotice | undefined;
-  /** M18 WP4 — open the Settings panel (a remote workspace's absent-host note). */
-  onOpenSettings?: () => void;
+  /** M18 WP4 — open the Settings panel (a remote workspace's absent-host note), at a group (WP5). */
+  onOpenSettings: (group?: string) => void;
 }
 
 export function CenterStage({

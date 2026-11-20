@@ -124,6 +124,7 @@ import { useHostSubstrate } from "../../state/useHostSubstrate";
 // is DELETED; do not reintroduce it (`App.css`, above `.workspace-turn-nav-btn`, says why).
 import type { TurnNavView } from "./XtermPane";
 import { cancelOrigin, claimOrigin } from "../../state/supervisor/turnOrigin";
+import { REMOTE_HOSTS_GROUP_ID } from "../../state/remoteHosts";
 import {
   RECYCLE_LABEL,
   RECYCLE_TESTID,
@@ -132,8 +133,12 @@ import {
 } from "./recycleButton";
 
 interface WorkspaceProps {
-  /** M18 WP4 — open the Settings panel (the absent-host note's button). */
-  onOpenSettings?: () => void;
+  /**
+   * M18 WP4 — open the Settings panel (the absent-host note's button). M18 WP5 (5.2b): at a group
+   * (the note opens Remote hosts). Required, so a dropped prop is a type error rather than a
+   * button that silently vanishes.
+   */
+  onOpenSettings: (group?: string) => void;
   workspace: WorkspaceModel;
   visible: boolean;
   /** Store the backend CC session id once cc_spawn resolves (WP7). */
@@ -1190,16 +1195,14 @@ export function Workspace({
             >
               {hostNote.text}
             </span>
-            {onOpenSettings !== undefined && (
-              <button
-                type="button"
-                className="workspace-skill-btn"
-                data-testid={`${ABSENT_HOST_NOTE_TESTID}-settings`}
-                onClick={onOpenSettings}
-              >
-                Settings
-              </button>
-            )}
+            <button
+              type="button"
+              className="workspace-skill-btn"
+              data-testid={`${ABSENT_HOST_NOTE_TESTID}-settings`}
+              onClick={() => onOpenSettings(REMOTE_HOSTS_GROUP_ID)}
+            >
+              Settings
+            </button>
           </div>
         )}
         {skillRowShown && (

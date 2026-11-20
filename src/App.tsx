@@ -270,6 +270,18 @@ function App() {
   const [settingsHighlight, setSettingsHighlight] = useState<
     string | undefined
   >(undefined);
+  // M18 WP5 (D8) — the highlight is a property of ONE routed open. Every close clears it, so the
+  // next ordinary open (⌘, / menu / picker gear) highlights nothing. Before WP5 nothing cleared it,
+  // so every open after the invite re-flashed Workflow features.
+  const closeSettings = useCallback(() => {
+    setShowSettings(false);
+    setSettingsHighlight(undefined);
+  }, []);
+  // M18 WP5 (5.2b) — a routed open: the absent-host note lands on Remote hosts.
+  const openSettingsAt = useCallback((group?: string) => {
+    setSettingsHighlight(group);
+    setShowSettings(true);
+  }, []);
 
   // ── M10.9 WP3 Phase 4: the one-time workflow-features invite ──────────────────────
   //
@@ -400,7 +412,7 @@ function App() {
         // suppression of a one-time pitch would resurrect the mislabeled-control bug the
         // three-button model exists to prevent: the user pressed Esc, not "never again".
         if (target === "invite") setInviteDismissedThisSession(true);
-        if (target === "settings") setShowSettings(false);
+        if (target === "settings") closeSettings();
         if (target === "dashboard") setShowDashboard(false);
         // ⚠️ Added 2026-08-18 (paydown WP3) for SYMMETRY with the dashboard-chord branch
         // above, which returns. Without it an Escape fell through to `isSettingsChord(e)`.
@@ -416,12 +428,15 @@ function App() {
       // settings strip.
       if (isSettingsChord(e)) {
         e.preventDefault();
+        // An ordinary open highlights nothing (M18 WP5, D8); a close clears it too.
+        setSettingsHighlight(undefined);
         setShowSettings((prev) => !prev);
       }
     };
     document.addEventListener("keydown", onKeyDown, true); // capture phase
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, []);
+    // `closeSettings` is a `useCallback` with no deps: stable, so the listener still registers once.
+  }, [closeSettings]);
 
   // QoL-WP1 — per-workspace unsaved-doc probe registry. Each workspace's RightPanelHost
   // registers `() => editor.dirtyDocCount()` on mount (cleared on unmount). The close
@@ -950,7 +965,7 @@ function App() {
               focusedId={focusedId}
               onSessionId={setSessionId}
               noticeFor={(id) => workspaceNotices[id]}
-              onOpenSettings={() => setShowSettings(true)}
+              onOpenSettings={openSettingsAt}
               statusFor={stateFor}
               displayStatusFor={displayStateFor}
               snippetFor={snippetFor}
@@ -1016,7 +1031,7 @@ function App() {
           }
         >
           <SettingsPanel
-            onClose={() => setShowSettings(false)}
+            onClose={closeSettings}
             // M10.9 WP2 Phase 4 — the manual update check moved here with the
             // update-notifications toggle it sits beside. App owns `useUpdater`; the
             // panel just kicks the check.

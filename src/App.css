@@ -5027,6 +5027,64 @@ body,
   min-width: 0;
 }
 
+/* M18 WP5 — Settings → Remote hosts: one entry per host account. A flex child of
+   `.settings-group-body` (flex-start), so it opts out of content sizing like `.substrate-info`
+   (pinned by settingsPanelLayout.test.ts); a long `user@host` or install path then wraps inside
+   the group instead of pushing the panel sideways. */
+.remote-hosts {
+  align-self: stretch;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.remote-host {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.remote-host-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  min-width: 0;
+  font-size: 0.85rem;
+}
+
+.remote-host-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* The state as a small tag, the hotkey-chord look (copied literals; there is no token layer). */
+.remote-host-state {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background-color: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.remote-host-state-absent,
+.remote-host-state-unknown {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.remote-host-drift {
+  overflow-wrap: anywhere;
+}
+
 .substrate-status {
   margin: 0;
   font-size: 0.78rem;

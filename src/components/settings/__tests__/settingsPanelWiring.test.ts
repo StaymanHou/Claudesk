@@ -63,7 +63,8 @@ describe("App.tsx mounts the panel app-level, lazily, with both entry points", (
 
   it("renders inside Suspense so the lazy chunk has a fallback", () => {
     expect(appSrc).toContain("<SettingsPanel");
-    expect(appSrc).toContain("onClose={() => setShowSettings(false)}");
+    // M18 WP5 (D8): the close clears the routed highlight too.
+    expect(appSrc).toContain("onClose={closeSettings}");
     expect(appSrc).toContain('data-testid="settings-panel-loading"');
   });
 

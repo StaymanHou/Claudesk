@@ -7,6 +7,7 @@ import {
   unmountWorkspace,
 } from "./liveWorkspace";
 import { ABSENT_HOST_NOTE_TESTID } from "../absentHostNote";
+import { REMOTE_HOSTS_GROUP_ID } from "../../../state/remoteHosts";
 
 vi.mock(
   "../XtermPane",
@@ -42,12 +43,12 @@ afterEach(async () => {
 
 describe("the absent-host note (M18 WP4)", () => {
   it("gate ON, host ABSENT: the note names the account and Settings → Remote hosts; no skill row", async () => {
-    const opened: number[] = [];
+    const opened: (string | undefined)[] = [];
     const el = await mountWorkspace({
       gate: true,
       projectPath: REMOTE,
       ipcAnswers: hosts("absent"),
-      onOpenSettings: () => opened.push(1),
+      onOpenSettings: (group) => opened.push(group),
     });
     const note = el.querySelector(NOTE);
     // Operator, WP4 P3.verify-human.1: the SHORT host in the text, the full user@host in the
@@ -64,7 +65,8 @@ describe("the absent-host note (M18 WP4)", () => {
     await click(
       el.querySelector(`[data-testid="${ABSENT_HOST_NOTE_TESTID}-settings"]`),
     );
-    expect(opened).toEqual([1]);
+    // WP5 (5.2b): the button lands on the Remote hosts group, not just on Settings.
+    expect(opened).toEqual([REMOTE_HOSTS_GROUP_ID]);
     expect(uncaught).toEqual([]);
   });
 
@@ -117,12 +119,12 @@ describe("the absent-host note (M18 WP4)", () => {
   });
 });
 
-// The REAL wiring of the note's Settings button: App opens Settings, CenterStage forwards it to
-// every Workspace. A source question (which prop App passes), so a source guard: the render test
-// above uses a stub callback and cannot see App drop the prop, which would make the button vanish
-// silently (it renders only when `onOpenSettings` is defined). Flattened: Prettier may reflow it.
+// The REAL wiring of the note's Settings button: App opens Settings AT the group, CenterStage
+// forwards it to every Workspace. Presence is a type error now (the prop is required on both,
+// WP5 D9), so what is left to guard is WHICH function App passes: a source question. Flattened:
+// Prettier may reflow it.
 describe("the note's Settings button is wired to App's Settings panel", () => {
-  it("App passes onOpenSettings → setShowSettings(true); CenterStage forwards it", async () => {
+  it("App passes openSettingsAt (highlight + open); CenterStage forwards it", async () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const flat = (rel: string) =>
@@ -130,13 +132,17 @@ describe("the note's Settings button is wired to App's Settings panel", () => {
         .replace(/\/\*[\s\S]*?\*\//g, "")
         .replace(/(^|[^:"'`])\/\/.*$/gm, "$1")
         .replace(/\s+/g, "");
-    // ⚠️ Anchored INSIDE the `<CenterStage … />` element: App passes the same prop to another
-    // component too, so a whole-file `toContain` would pass with this wiring deleted.
+    // ⚠️ Anchored INSIDE the `<CenterStage … />` element: App passes an onOpenSettings to the
+    // picker too, so a whole-file `toContain` would pass with this wiring deleted.
     const app = flat("../../../App.tsx");
     const start = app.indexOf("<CenterStage");
     expect(start, "App renders <CenterStage").toBeGreaterThan(-1);
     const centerStage = app.slice(start, app.indexOf("/>", start));
-    expect(centerStage).toContain("onOpenSettings={()=>setShowSettings(true)}");
+    expect(centerStage).toContain("onOpenSettings={openSettingsAt}");
+    // …and that function sets the highlight from its argument, then opens.
+    expect(app).toContain(
+      "constopenSettingsAt=useCallback((group?:string)=>{setSettingsHighlight(group);setShowSettings(true);},[]);",
+    );
     expect(flat("../CenterStage.tsx")).toContain(
       "onOpenSettings={onOpenSettings}",
     );

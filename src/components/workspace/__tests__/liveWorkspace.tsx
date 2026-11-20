@@ -263,8 +263,8 @@ export interface MountOptions {
   projectPath?: string;
   /** M17 WP5 — the app's notice for this workspace (a failed Detach). */
   notice?: { text: string; seq: number };
-  /** M18 WP4 — App's "open Settings" (the absent-host note's button). */
-  onOpenSettings?: () => void;
+  /** M18 WP4 — App's "open Settings" (the absent-host note's button), at a group (WP5). */
+  onOpenSettings?: (group?: string) => void;
 }
 
 let root: Root | null = null;
@@ -317,7 +317,7 @@ export async function mountWorkspace(opts: MountOptions) {
         statusDisplayState={opts.statusDisplayState}
         statusLink={opts.statusLink}
         notice={opts.notice}
-        onOpenSettings={opts.onOpenSettings}
+        onOpenSettings={opts.onOpenSettings ?? (() => {})}
       />,
     ),
   );
