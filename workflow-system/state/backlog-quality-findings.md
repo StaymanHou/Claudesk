@@ -415,3 +415,40 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Summary:** in `remote_link/tests.rs` → `the_tmux_conf_lets_in_pane_osc52_through_and_is_safe_to_re_source`, the `!TMUX_CONF.contains("-ga ") && !TMUX_CONF.contains(" -a ")` assert has no failure message, unlike its siblings, which print `{TMUX_CONF}`.
 - **Suggested action:** add `"{TMUX_CONF}"`.
 - **Priority:** low
+
+# m18-wp3-remote-substrate-probe — 2026-11-20
+
+*(feature-review-quality on ship commit `0c45070`, window `0c45070^..0c45070`; drive_mode=autopilot. 0 CRITICAL, 4 MAJOR, 4 MINOR, all auto-backlogged; 1 MAJOR + 3 MINOR resolved at WP3 finalize, see CHANGELOG 2026-11-20. A probe: no app code; the findings are about how the probe's answers carry into WP4–WP7.)*
+
+## SURFACE-2026-11-20-QUALITY-SUBSTRATE-PROBE-RUNS-THE-GIT-SHIM
+- **Source:** feature-review-quality (M18 WP3, MAJOR)
+- **Type:** bug (in a drafted constant WP4.1 is told to adopt)
+- **Summary:** the drafted `SUBSTRATE_PROBE` (`wbs.md` → "Probe outcomes" (4)) runs `git -C $root rev-parse HEAD` through PATH on every gate-ON remote open. On a host whose Command Line Tools are missing or broken (common after a macOS upgrade), that `git` is the `/usr/bin/git` shim, which (5) says asks for the GUI installer on the host's console, the side effect the WP6 preflight is built to avoid.
+- **Context:** WP4.1 would put the shim on the open path of a Developer install whose CLT later broke, repeatedly.
+- **Suggested action:** at WP4.1, read `HEAD` without git: in the same perl, read `<root>/.git/HEAD`; if it is `ref: <r>`, read `<root>/.git/<r>`, else `packed-refs`. Or gate the `git` call with the guarded `xcode-select -p` test. Add a parity/fixture test for a loose ref and a packed ref.
+- **Priority:** medium
+
+## SURFACE-2026-11-20-QUALITY-SUBSTRATE-PROBE-HAS-NO-SANDBOX-ROOT-SEAM
+- **Source:** feature-review-quality (M18 WP3, MAJOR)
+- **Type:** gap (design)
+- **Summary:** the draft reads `$ENV{HOME}` and, per §R.2, has no interpolated value. But WP4.6 (a scratch row "whose HOME override lacks the substrate") and WP6.6 (a workspace "whose probe reads the sandbox") need the open check to read the debug `CLAUDESK_REMOTE_SUBSTRATE_ROOT`. The probe's own sandbox reads used `HOME=<root>` on the command line, and the outcomes never say how WP4 should do that.
+- **Context:** prefixing `HOME=<root>` inside the fragment breaks the "constant, no interpolated value" rule the parity guard relies on.
+- **Suggested action:** decide at WP4.1: e.g. a debug-only, quoted `CLAUDESK_SUBSTRATE_HOME=<root>` export ahead of the constant (outside the fragment), with the fragment reading `$ENV{CLAUDESK_SUBSTRATE_HOME} // $ENV{HOME}`. Keep the release build's command byte-identical (a test).
+- **Priority:** medium
+
+## SURFACE-2026-11-20-QUALITY-INSTALL-SH-WINDOW-UNGUARDED-AGAINST-STREAM-DEATH
+- **Source:** feature-review-quality (M18 WP3, MAJOR)
+- **Type:** gap (design: the operator-ruled cancel shape A)
+- **Summary:** "cancel only during the clone" is enforced only by disabling the button, which leaves two gaps.
+  - (a) `install.sh` echoes after each `ln -s`. Probe (1) measured that a dead stream kills the remote at its next stdout write, so an app quit or crash during the 0.45 s `install.sh` window kills it between links: links with no record, which reads as Developer with no Uninstall. The "app dies mid-run" consequence covers only the clone window.
+  - (b) Rust learns the clone→install boundary only from the stream, so a cancel already in flight (0.13 s) can land after `install.sh` has started.
+- **Context:** ruling A stands. Its unguarded window is the state A was chosen to avoid.
+- **Suggested action:** at WP6, enforce the boundary on the HOST. Run `install.sh` (and the record write) under `trap '' HUP PIPE TERM`, with its output going to a remote log that the stream tails, or `nohup`'d. Have the script print a phase sentinel (`CLAUDESK-RUN:phase:install`) before it, which the UI uses to disable Cancel. Test that a group kill sent after the sentinel does not interrupt `install.sh`.
+- **Priority:** medium
+
+## SURFACE-2026-11-20-QUALITY-SUBSTRATE-ROOT-LINE-NO-NEWLINE-GUARD
+- **Source:** feature-review-quality (M18 WP3, MINOR)
+- **Type:** hardening
+- **Summary:** the draft prints `substrate-root:$root` without the newline guard `TRUSTED_KEYS` applies (`next if $k =~ /\n/`), so a pathological root path could inject a sentinel line. The Rust side should also take it through the existing remote-path normalization.
+- **Suggested action:** at WP4.1/4.2, add the guard and the normalization, plus a fixture with a newline in the repo path.
+- **Priority:** low

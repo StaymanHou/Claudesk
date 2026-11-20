@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-18  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7)
+updated: 2026-11-20  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7); WP3 shipped (0c45070)
 cycle: milestone-18-remote-workflow-substrate
 ---
 
@@ -111,7 +111,7 @@ the cause), `mouse=1`. Local panes are unaffected (no tmux).
 **WP2.5 → WP3 rationale:** tank is in daily remote use, so this pays off now. It touches only the deployed tmux.conf and the
 terminal pane, nothing the substrate track builds on.
 
-### WP3: Probe — remote substrate behaviour on the mini
+### WP3: Probe — remote substrate behaviour on the mini ✅ SHIPPED 2026-11-20 (commit 0c45070)
 **Type:** probe
 **Milestone:** M18 (before WP4–WP7)
 **Dependencies:** none (can run alongside WP1/WP2)
@@ -128,12 +128,12 @@ Plus: what does `git` do over ssh on a Mac with no Command Line Tools?
 Unknown (1) decides whether cancel needs a remote pid file. Unknown (2) decides whether Update can be offered as designed, or has to become
 Uninstall + Install.
 **Tasks:**
-- [ ] 3.1 Sandbox root on the mini under the dev account (a scratch dir; never the live `~/.claude`). Run a full clone + `install.sh` with `HOME=<root>`. Diff the file list against the root (canonicalized), and confirm nothing landed under the real `$HOME`.
-- [ ] 3.2 Re-run `install.sh` in the same sandbox and diff (idempotency).
-- [ ] 3.3 Start a streaming exec over a dev master, kill the local ssh group mid-clone, then check the host process table.
-- [ ] 3.4 Draft `SUBSTRATE_PROBE`. Time the open-check exec with and without it (≥10 runs). Run it against the live account read-only, and against the sandbox root.
-- [ ] 3.5 Record the `git` / CLT behaviour on a host without the Command Line Tools (or cite Apple's stub behaviour if no such host exists).
-- [ ] 3.6 Clean up the sandbox. Confirm the live install's `git status` and `~/.claude` are unchanged (a shasum list taken before and after).
+- [x] 3.1 Sandbox root on the mini under the dev account (a scratch dir; never the live `~/.claude`). Run a full clone + `install.sh` with `HOME=<root>`. Diff the file list against the root (canonicalized), and confirm nothing landed under the real `$HOME`.
+- [x] 3.2 Re-run `install.sh` in the same sandbox and diff (idempotency).
+- [x] 3.3 Start a streaming exec over a dev master, kill the local ssh group mid-clone, then check the host process table.
+- [x] 3.4 Draft `SUBSTRATE_PROBE`. Time the open-check exec with and without it (≥10 runs). Run it against the live account read-only, and against the sandbox root.
+- [x] 3.5 Record the `git` / CLT behaviour on a host without the Command Line Tools (or cite Apple's stub behaviour if no such host exists).
+- [x] 3.6 Clean up the sandbox. Confirm the live install's `git status` and `~/.claude` are unchanged (a shasum list taken before and after).
 
 **WP3 → WP4 rationale:** detection is built on the probe's measured exec cost and the shell probe's behaviour on the real host. Building
 the funnel first and finding the probe too slow for every open would put the change in the wrong place.
@@ -176,11 +176,11 @@ Each entry shows the state (Absent / Managed / Developer), the short HEAD, and d
 **WP5 → WP6 rationale:** Install is a button on this group's Absent entry, and its result lands back in the readout, which must already work.
 
 ### WP6: Install over the master
-**Description:** §R.3 install + the `xcode-select -p` preflight from §R.6.
+**Description:** §R.3 install + the §R.6 Developer-tools preflight, in its **guarded** form from "Probe outcomes" (5) (`d=$(xcode-select -p) && [ -n "$d" ] && [ -x "$d/usr/bin/git" ]`; the bare `xcode-select -p` form passes on a no-tools host).
 - **The run:** a streaming exec over the master under the shared single-run lock and `RunGuard`. Clone the public HTTPS URL into
   `<root>/.claudesk/vendor/my-claude-code-customization`, run `install.sh` with `HOME=<root>`, then write the record **last**.
 - **The root:** injected, with the debug-only `CLAUDESK_REMOTE_SUBSTRATE_ROOT` sandbox override.
-- **Output and cancel:** output goes to the existing wizard panel; cancel follows WP3's answer (1).
+- **Output and cancel:** output goes to the existing wizard panel. Cancel follows WP3's answer (1) + the operator's ruling **A** ("Probe outcomes" (1)): local kill + one remote `kill -TERM -- -<pgid>` exec, with the pgid printed as the run's first stream line; Cancel is honoured only during the clone; Install first clears a stale vendor clone.
 - **Never touches the local gate.**
 **Milestone:** M18
 **Dependencies:** WP3, WP5
@@ -189,7 +189,8 @@ Each entry shows the state (Absent / Managed / Developer), the short HEAD, and d
 - [ ] 6.1 The streaming-exec transport (`run_streaming` with the master ssh as the program), plus the link-not-Up refusal.
 - [ ] 6.2 Pure command builders (clone, install, record write), unit-tested for quoting. The record JSON is built by Rust and written by a constant `printf`.
 - [ ] 6.3 The install sequence, with the record written last. Each failure arm goes through the `terminal` reducer, adapted (no gate revert for remote).
-- [ ] 6.4 Sandbox containment test, the remote analogue of `sandbox.rs`: after a sandboxed install, every new host path lies under the root (canonicalized), compared with a shasum list of the real `~/.claude` taken before and after.
+- [ ] 6.3b Cancel per ruling A ("Probe outcomes" (1)): the pgid stream sentinel + the remote group-kill exec; a phase sentinel before `install.sh` disables Cancel; `install.sh` + the record write run guarded on the HOST against stream death and an in-flight cancel (`SURFACE-2026-11-20-QUALITY-INSTALL-SH-WINDOW-UNGUARDED-AGAINST-STREAM-DEATH`); a stale vendor clone with no record is removed first. Test each arm.
+- [ ] 6.4 Sandbox containment test, the remote analogue of `sandbox.rs`: after a sandboxed install, every new host path lies under the root (canonicalized). Assert positively on the set `install.sh` writes; do **not** shasum the whole real `~/.claude` (a live workspace on the account writes there continuously, "Probe outcomes" (3)). The `-newer` sweep is an inverse check with an explicit exclusion list.
 - [ ] 6.5 The Settings Install button, its output, and its result, which updates `HostSubstrate` and the workspace surfaces live.
 - [ ] 6.6 Live, dev build, sandbox root: Absent → Install → Managed; a gate-ON workspace whose probe reads the sandbox shows its workflow surfaces without a reopen.
 
@@ -341,7 +342,7 @@ if (open(my $j, "<", "$ENV{HOME}/.claudesk/install-record.json")) { local $/; my
 
 **(5) `git` without the Command Line Tools. The real case is not measurable here; `xcode-select -p` alone is too weak a preflight.**
 - **Not measured:** the mini has both Xcode and the CLT, and no host without them exists. The real case (the `/usr/bin/git` shim with no developer
-  dir) is **cited, not measured**: per Apple's stub behaviour it prints a "no developer tools were found, requesting install" note, exits
+  dir, and `xcode-select -p` printing nothing + exiting 2, reproduced below only with a STUB) is **cited, not measured**: per Apple's stub behaviour it prints a "no developer tools were found, requesting install" note, exits
   non-zero, and asks for the GUI installer on the host's console.
 - **Measured (simulation that pops nothing):** `DEVELOPER_DIR=/var/empty /usr/bin/git --version` over a non-tty ssh → exit 1,
   `xcrun: error: invalid DEVELOPER_DIR path …`.
@@ -349,7 +350,7 @@ if (open(my $j, "<", "$ENV{HOME}/.claudesk/install-record.json")) { local $/; my
 - **→ WP6 preflight:** `d=$(xcode-select -p 2>/dev/null) && [ -n "$d" ] && [ -x "$d/usr/bin/git" ]`. It checks that the real binary exists
   (Xcode's and the CLT's developer dirs both carry `usr/bin/git`) and never runs the shim, so it can never pop the installer. The refusal names
   `xcode-select --install` at the host's console (§R.6).
-  - ⚠️ **The empty-path guard is load-bearing (caught at verify-self).** On a no-tools host `xcode-select -p` prints nothing and exits 2. The
+  - ⚠️ **The empty-path guard is load-bearing (caught at verify-self).** On a no-tools host `xcode-select -p` prints nothing and exits 2 (cited; stub-measured). The
     naive `test -x "$(xcode-select -p)/usr/bin/git"` then collapses to `test -x /usr/bin/git`, which IS the shim, and **passes**.
   - **Measured** with a stub `xcode-select` (empty stdout, exit 2): the naive form exits 0 (wrong), the guarded form exits 2 (refuses).
     Invalid `DEVELOPER_DIR` → 1. A real developer dir → 0, on this Mac and on the mini.

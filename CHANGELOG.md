@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-20
+
+- **Feature shipped:** M18 WP3 measured on the mini how a remote install, re-run, cancel and detection probe actually behave, and recorded one answer and design consequence per question in `wbs.md` → "Probe outcomes": a local kill does not stop the host (cancel is one remote group-kill exec, operator ruling A), the `install.sh` re-run is content-idempotent, `HOME=<root>` contains every write, the drafted `SUBSTRATE_PROBE` costs +16 ms, and the CLT preflight must guard an empty `xcode-select -p`.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-WP6-TASK-TEXT-AND-ARCH-STILL-DESCRIBE-REFUTED-DESIGNS — WP6's description and tasks 6.3b/6.4 and arch §R.2/§R.6/§R.9 were reconciled with the probe's answers at WP3 finalize.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-WP3-WIP-P1-4-CHECKBOX-UNCHECKED — the leaf was ticked before archiving.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-RUNTIMES-PRIOR-LAST-OVERWRITTEN — the overwritten `**Last:**` lines were restored as `**Prior:**` and the History bullets labelled.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-NO-CLT-XCODE-SELECT-CLAIM-UNLABELLED — the claim is now marked cited and stub-measured.
+- **Milestone:** WP3: Probe — remote substrate behaviour on the mini
+
 ## 2026-11-18
 
 - **Feature shipped:** M18 WP1 makes Recycle on a remote workspace respawn CC and restore the session. A relaunch no longer re-sends the Reconnect door, so a workspace opened through Reconnect gets a fresh `new -A` session instead of an attach to the session Recycle had just ended.

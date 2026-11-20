@@ -777,3 +777,10 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** upstream (mccc): write the backup to a fresh name (`CLAUDE.md.bak.<timestamp>`), or only `cp` to `.bak` when the result differs, and keep the original file's mode (`cat "$updated_tmp" > "$GLOBAL_CLAUDE_MD"` instead of `mv`). Send it in the next mccc handoff. Claudesk side: no change; WP7's Update stays as designed (the probe found no duplicate block and no prompt).
 - **Priority:** low
 - **Status:** open
+
+## Code-quality findings — m18-wp3-remote-substrate-probe (2026-11-20)
+
+- **Pointer:** **3 MAJOR + 1 MINOR** open from the review of the WP3 probe ship commit (`0c45070`); the doc-drift MAJOR and 3 record MINORs were resolved at WP3 finalize. MAJOR: the drafted `SUBSTRATE_PROBE` runs the `git` shim on every open (read `HEAD` in perl instead); the draft has no seam for the debug sandbox root that WP4.6 and WP6.6 need; ruling A's `install.sh` window is unguarded against stream death and an in-flight cancel (guard it on the host; now WBS task 6.3b). MINOR: a newline guard for the root line. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp3-remote-substrate-probe — 2026-11-20`.
+- **Priority:** medium (the MAJORs), low (the MINOR)
+- **Status:** pending
+- **Pickup shape:** the two probe-constant MAJORs and the newline guard belong to WP4.1; the `install.sh` window MAJOR belongs to WP6 (task 6.3b).

@@ -154,8 +154,8 @@ behaviour is unchanged) or `Remote(HostSubstrate)`, which is applicable only whe
   would otherwise answer an *adjacent* question, the failure that shipped twice locally (§WP3.5b lesson 1).
 - **It rides the existing open-check exec.** No new exec, and no per-tick cost. `OpenFacts` gains `substrate: Option<HostProbe>`,
   which is `None` when not probed (gate OFF).
-- **Provenance on the host** follows the local rule unchanged: **recorded, never inferred**. The same exec `cat`s
-  `~/.claudesk/install-record.json` on the host, and Rust parses it with the local `provenance` parser, so degraded reads collapse to `None`. The result is
+- **Provenance on the host** follows the local rule unchanged: **recorded, never inferred**. The same exec reads
+  `~/.claudesk/install-record.json` on the host (as ONE hex line, so a multi-line record survives the line protocol; probed at WP3), and Rust parses it with the local `provenance` parser, so degraded reads collapse to `None`. The result is
   `Managed` only for a well-formed record. The record is **identity-shared**, not per bundle id, because dev and prod share one host clone,
   for the same reason as local ("Record location" above). ⚠️ The mini's hand install has no record, so it reads as
   **`Developer`**: drift is shown, there is no Update or Uninstall, and there is no adopt path (grill).
@@ -219,9 +219,11 @@ wizard uses. A host whose link is down shows "connect a workspace on this host t
 
 ### R.6 Preflight, for a fresh host account (what an install actually meets next)
 
-- **Developer tools:** `xcode-select -p` before `git clone`. On a Mac without the Command Line Tools, `git` is a stub that pops
-  a GUI installer on the host's console and fails over ssh. The refusal names the fix (`xcode-select --install` at the
-  host's console).
+- **Developer tools:** before `git clone`, `d=$(xcode-select -p 2>/dev/null) && [ -n "$d" ] && [ -x "$d/usr/bin/git" ]` (probed at WP3,
+  `wbs.md` → "Probe outcomes" (5)). On a Mac without the Command Line Tools, `git` is a stub that pops a GUI installer on the
+  host's console and fails over ssh. ⚠️ The bare `xcode-select -p` is not enough: it does not validate a path, and on a no-tools
+  host its empty output turns `test -x "$(xcode-select -p)/usr/bin/git"` into a test of the shim, which passes. The refusal names
+  the fix (`xcode-select --install` at the host's console).
 - ✅ **`claude` not on the `zsh -l` PATH — BUILT at M18 WP2 (2026-11-18)**
   (`SURFACE-2026-11-17-REMOTE-CLAUDE-ONLY-ON-INTERACTIVE-PATH`). One constant fragment,
   `remote_cmd::CLAUDE_PATH_FALLBACK` (`command -v claude || PATH="$HOME/.local/bin:$PATH"`), runs ahead of the
@@ -257,7 +259,13 @@ wizard uses. A host whose link is down shows "connect a workspace on this host t
 - Remote checks fire real commands only in the scratch remote folder (memory `remote-verify-hygiene`).
 - Installed-build acceptance waits for a release (`installed-build-verify-deferred-to-release`).
 
-### R.9 Open, for the WBS's probe WP (not decidable on paper)
+### R.9 Open, for the WBS's probe WP (not decidable on paper) — ✅ ANSWERED at WP3 (2026-11-20, `0c45070`)
+
+**Answers + design consequences:** `wbs.md` → "Probe outcomes". In short: (1) a local kill does NOT stop the host; cancel = one
+remote group-kill exec, pgid as a stream sentinel (no pid file), honoured only during the clone (operator ruling A); (2) the re-run
+is content-idempotent, so Update stays as designed; (3) `HOME=<root>` contains every write; (4) the probe adds +16 ms median. The
+host record crosses the open check as one hex line (§R.2). The original questions follow.
+
 
 1. **Cancel over the master.** Does killing the local `ssh` process group of a streaming exec stop the remote `git clone` / `install.sh`?
    Without a tty, the remote side may run on. If so, the remote script writes its own pid to the record's directory and cancel

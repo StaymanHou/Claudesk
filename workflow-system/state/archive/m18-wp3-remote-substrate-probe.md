@@ -5,7 +5,8 @@ drive_mode: autopilot
 # Feature: M18 WP3 — Probe: remote substrate behaviour on the mini
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete)
+**Completed:** 2026-11-20
 **Created:** 2026-11-20
 **WBS:** `workflow-system/product/wbs.md` → WP3 (type: probe, size S, timebox half a day)
 **Design:** `workflow-system/product/arch/claude-substrate.md` → "Remote hosts (M18)" §R.2, §R.3, §R.6, §R.8, §R.9
@@ -80,7 +81,7 @@ Problem statement unchanged (2026-11-20, F9b re-entry from verify-self): the fiv
   - [x] P1.1 Probe master + host string: derive `<user>@<mini-host>` per the fence, open the scratchpad ControlMaster, `mkdir ~/claudesk-m18-sandbox` (refuse if it already exists), capture the live before-baseline  <!-- status: done -->
   - [x] P1.2 Sandbox clone + first `install.sh` with `HOME=<root>`, a marker before, then the `-newer` sweep + the live re-read (unknown 3, install half)  <!-- status: done -->
   - [x] P1.3 Second `install.sh` run + diff + the block count (unknown 2)  <!-- status: done (re-done at F9b with a mode/inode/mtime snapshot + a planted `.bak`) -->
-  - [ ] P1.4 The cancel probe, runs (a) and (b) (unknown 1). Kill only the probe's own local pgid, and sweep the host for that pgid afterwards  <!-- status: done (re-run at F9b with every capture saved to `scratchpad/wp3/cancel2/`) -->
+  - [x] P1.4 The cancel probe, runs (a) and (b) (unknown 1). Kill only the probe's own local pgid, and sweep the host for that pgid afterwards  <!-- status: done (re-run at F9b with every capture saved to `scratchpad/wp3/cancel2/`) -->
   - [x] P1.5 `uninstall.sh --dry-run` + the real uninstall in the sandbox, the sweep + live re-read (unknown 3, uninstall half), then re-install for Phase 2  <!-- status: done -->
   - [x] P1.6 Record raw evidence (commands, outputs, timings, with identifiers redacted) in this WIP under `## Evidence`  <!-- status: done -->
   - [x] verify-auto  <!-- status: done (re-run after F9b) -->
@@ -268,12 +269,69 @@ was closed with `-O exit` (pid 9780 gone), its socket and `/tmp/cdk3.*` dir were
 **P2.6 — `wbs.md` → "## Probe outcomes"** is written: 5 answers, each with its → WP consequence, plus the draft constant. Identifier grep
 of the added lines → 0.
 
+## Retrospect
+- **What changed in our understanding:**
+  - Cancel over the master is not what §R.9.1 guessed. The host runs on after a local kill (a clone finishes), and dies only at its next stdout write. That makes a remote group kill necessary, and it also opens an app-death window around `install.sh`.
+  - `install.sh` is content- but not metadata-idempotent, and it deletes an existing `.bak`.
+  - `xcode-select -p` does not validate, and a naive preflight built on it passes on the very host it should refuse.
+- **Assumptions that held:**
+  - `HOME=<root>` contains every write, so the sandbox-root verification strategy (§R.8) is sound.
+  - The re-run is clean enough for Update as designed.
+  - A one-process probe fits the open-check budget (+16 ms).
+- **Assumptions that were wrong:**
+  - "The remote may run on → write a pid file": a stream sentinel is simpler.
+  - The first idempotency record (contents-only snapshot) and the first cancel record (unsaved host captures) were too weak, and verify-self caught both.
+  - The first CLT preflight was wrong.
+  - Containment cannot be judged by a whole-`~/.claude` shasum on an account a live workspace uses.
+- **Approach delta:**
+  - One F9b back-loop in Phase 1 (evidence fidelity).
+  - One in-place fix at Phase 2 verify-self (the preflight).
+  - The probe used its own ControlMaster instead of a dev app, so no Claudesk session was touched.
+  - The probe ran a 20 s sleep, not the planned 60 s (judged immaterial).
+  - The review-quality doc drift was reconciled at finalize. The WP4.1/WP6 design gaps the review found (the `git` shim in the draft, the sandbox-root seam, the `install.sh` window guard) stay backlogged to those WPs.
+
+**Closure:** Requester = operator — closure notice for self-record.
+> **Feature complete:** M18 WP3 (probe) has shipped. It measured on the mini how a remote install, re-run, cancel and detection probe actually behave, and wrote one answer + design consequence per question into `wbs.md` → "Probe outcomes". WP4 starts from its drafted `SUBSTRATE_PROBE`, and WP6 from its cancel ruling A and the guarded preflight.
+
+## Code-Quality Review — m18-wp3-remote-substrate-probe
+
+*(ship commit `0c45070`; drive_mode=autopilot → 4 MAJOR + 4 MINOR auto-backlogged to `backlog-quality-findings.md` → `# m18-wp3-remote-substrate-probe — 2026-11-20`; pointer in `backlog.md`.)*
+
+### Strengths
+- Every "Measured" claim in `wbs.md` → "Probe outcomes" traces to a saved capture. When verify-self found gaps, both were re-run, and the corrected record is labelled rather than quietly swapped in.
+- The `SUBSTRATE_PROBE` draft is checked against the real `skills_dir_exists` on 12 fixtures and mutation-proven. The one divergence (a non-UTF-8 `install.sh`) is recorded with a recommendation.
+- The CLT preflight's empty-path trap was caught and proven with a stub. Measured, simulated and cited claims are kept apart.
+- Operator rulings sit next to the evidence, with the rejected options named.
+- Public-repo hygiene holds, the live account was provably read-only, and the upstream `.bak` SURFACE is well shaped.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [wbs.md "Probe outcomes" (4), the draft] The probe runs `git -C $root rev-parse HEAD` via PATH on every gate-ON open. On a host with broken or missing CLT that is the `/usr/bin/git` shim, which (5) says pops the installer. — WP4.1 would adopt it as written. → `SURFACE-2026-11-20-QUALITY-SUBSTRATE-PROBE-RUNS-THE-GIT-SHIM`
+- [wbs.md (4)] The draft reads `$ENV{HOME}` with no seam for the debug sandbox root that WP4.6 and WP6.6 need. A `HOME=<root>` prefix breaks the "constant fragment" rule. → `…-SUBSTRATE-PROBE-HAS-NO-SANDBOX-ROOT-SEAM`
+- [wbs.md (1), ruling A] Cancel-only-during-clone is enforced only by disabling the button. App death during `install.sh` SIGPIPEs it between links, and a cancel already in flight can land after the boundary. → `…-INSTALL-SH-WINDOW-UNGUARDED-AGAINST-STREAM-DEATH`
+- [wbs.md WP6 description + 6.4; arch §R.2/§R.6/§R.9.1] Downstream text still describes the refuted designs (the whole-`~/.claude` shasum, the naive preflight, the pid file), and there are no WP6 tasks for the cancel items. → `…-WP6-TASK-TEXT-AND-ARCH-STILL-DESCRIBE-REFUTED-DESIGNS`
+
+**MINOR**
+- [WIP] P1.4 is `[ ]` with status done, under a Phase 1 marked `[x]`. → `…-WP3-WIP-P1-4-CHECKBOX-UNCHECKED`
+- [runtimes.md] The previous `**Last:**` line was overwritten, and the new History bullets are unlabelled. → `…-RUNTIMES-PRIOR-LAST-OVERWRITTEN`
+- [wbs.md (5)] The no-CLT `xcode-select -p` behaviour is stated as fact but was only stub-measured. → `…-NO-CLT-XCODE-SELECT-CLAIM-UNLABELLED`
+- [wbs.md (4)] The `substrate-root:` line has no newline guard. → `…-SUBSTRATE-ROOT-LINE-NO-NEWLINE-GUARD`
+
+### Assessment
+Strong as a probe deliverable: measured answers with saved evidence, a mutation-proven parity draft, and honest self-corrections. The weaker side is how the findings carry forward. The drafted constant still runs the `git` shim and lacks a sandbox-root seam. Ruling A's `install.sh` window needs a host-side guard. The WP6 task text and arch still describe the refuted designs. Nothing measured is wrong. The risk is that WP4/WP6 builders follow their own task lines.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives the WIP.
+
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship (all phases [x])
+- **Path:** Feature > done (archived)
+- **Active scope:** none (finalized 2026-11-20)
 - **Blocked:** none
 - **Unvisited:** none (Phase 2 is the last)
-- **Open discoveries:** SURFACE-2026-11-20-INSTALL-SH-RERUN-DELETES-AN-EXISTING-CLAUDE-MD-BAK (upstream, low)
+- **Open discoveries:** SURFACE-2026-11-20-INSTALL-SH-RERUN-DELETES-AN-EXISTING-CLAUDE-MD-BAK (upstream, low); 8 code-quality findings (pointer in backlog.md)
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

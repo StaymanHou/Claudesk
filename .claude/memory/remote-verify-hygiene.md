@@ -80,3 +80,17 @@ like the respawn bug but isn't. No toast was visible minutes later, so don't rel
   `/session-restore` stops at its drive-mode pick when the row has no drive mode: answer it (`tmux -L claudesk-dev send-keys
   -t '=<session>:' Enter`) before checking that `.session.md` was consumed. Remove the WIP (and the empty `wip/`) afterwards,
   so the folder is back to README + an empty `state/`.
+
+**7. Probe a host account WITHOUT Claudesk: your own ControlMaster** (M18 WP3, 2026-11-20). When a check needs only the host
+(install scripts, a shell fragment's behaviour, latency of an exec), don't launch the dev app or ride its master. That avoids
+every hazard above: orphaned masters, tmux leftovers, rebuild/App.tsx hard stops.
+- **Open:** `D=$(mktemp -d /tmp/x.XXXX); ssh -M -S $D/c -o BatchMode=yes -o ControlPersist=no -fN <user>@<host>`. ⚠️ The socket must
+  live in a SHORT dir: the session scratchpad path is over the 104-byte Unix-socket limit, and ssh fails with
+  `ControlPath too long` / `unix_listener: … too long for Unix domain socket`.
+- **Run:** `ssh -S $D/c -o BatchMode=yes -- <user>@<host> zsh -l -s < script.sh` (script on stdin, `zsh -l` for the login PATH).
+  ⚠️ A script passed as ARGV is re-split by the remote login shell (it read `R=$(…)` as a local-ish command: "read-only file
+  system: /probe-pid"), so argv needs one quote layer: `"zsh -lc '<script>'"` (what `remote_cmd::login_shell` + `quote` do).
+- **Close:** `ssh -S $D/c -O exit <user>@<host>; rmdir $D`. Then the `ssh -M` sweep (rule 3). A remaining master whose parent is
+  `/Applications/Claudesk.app` is the installed app's (a live workspace such as tank): leave it alone.
+- Writes still go only in a scratch dir on the host (a sandbox root such as `~/claudesk-m18-sandbox`, removed after, path-checked
+  with `cd -P` against `$HOME` before `rm -rf`). The live account stays read-only: take a baseline before and `cmp` it after.
