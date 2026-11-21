@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP8 — the WP7-review paydown (release + installed acceptance moved after M18)
 
 **Workflow:** feature
-**State:** plan (complete; revised 2026-11-20, F23: Phase 3 removed) — all phases complete
+**State:** ship (complete) — Phase 3 removed by the F23 revision (2026-11-20)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -109,11 +109,17 @@ Problem statement unchanged (2026-11-20, F12 from P2.verify-human.1): the operat
     still gets the read paths, remote Recycle, the bypass withhold, and the once-not-twice streamed-line check.
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship (Phases 1–2 complete; Phase 3 removed by the F23 revision; Phase 2's verify-codify ran the full suite, `Test scope: full`)
+- **Path:** Feature > review-quality
+- **Active scope:** review-quality over the WP8 window `22bcec6^..HEAD` (ship: no push by operator ruling — the post-M18 `/release` pushes `main`)
 - **Blocked:** none
-- **Unvisited:** none
+- **Unvisited:** finalize
 - **Open discoveries:** P2.6 partial (`RemoteUninstallTarget` rename left open); CLT + Xcode update before the next release (backlog)
+
+## Ship
+- Cleanup: `git status` clean; no TODO / FIXME / `dbg!` / `console.log` added in `22bcec6..HEAD` under `src`, `src-tauri`.
+- Full suite: reused the last-phase codify run (`Test scope: full — suite not long`, Phase 2: `pnpm verify:auto` EXIT=0, 75 s); only WIP / WBS / backlog docs changed since.
+- Checks re-run: `pnpm lint` (0 errors, the pre-existing `XtermPane.tsx` warning), `pnpm format:check` clean, `tsc --noEmit` OK, `cargo fmt --check` OK, `cargo clippy --all-targets -D warnings` clean.
+- Release prep: **no push** (operator, 2026-11-20). `main` stays ahead of `origin` until the post-M18 `/release`.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
