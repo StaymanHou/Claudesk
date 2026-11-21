@@ -99,7 +99,7 @@ Also as-built:
 
 ---
 
-## Remote hosts (M18) — 📐 PLANNED 2026-11-18 (`/product-arch`); §R.1–R.2 ✅ BUILT at WP4, §R.4–R.5 (readout) ✅ BUILT at WP5, §R.3 Install + §R.6 preflight ✅ BUILT at WP6, §R.3 Update + Uninstall ✅ BUILT at WP7, the WP7-review paydown at WP8 (2026-11-20)
+## Remote hosts (M18) — ✅ BUILT, cycle closed 2026-11-20 (designed 2026-11-18 at `/product-arch`; §R.1–R.2 at WP4, §R.4–R.5 at WP5, §R.3 Install + §R.6 at WP6, §R.3 Update + Uninstall at WP7, the WP7-review paydown at WP8; §R.7 at WP1, §R.9 answered at WP3). ⚠️ The installed-build acceptance was moved AFTER M18 with the release (operator, 2026-11-20): every WP was verified live on dev builds.
 
 **Milestone 18, the remote workflow substrate.** Scope was settled at the entry grill
 (`roadmap.md` → "### Milestone 18" → "Scope, settled at the entry grill"). In short: detect the workflow system

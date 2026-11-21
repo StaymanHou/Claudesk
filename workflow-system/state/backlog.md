@@ -681,21 +681,21 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 - **Pointer:** **4 MINOR** open from the review of the WP1 ship commit (`411bff8`): a stale lifecycle-flag count and pointer in `XtermPane`; the real-pane test's `not.toBe` should be an exact `toEqual`; the live-pane xterm mocks copied twice; the stub `relaunch()`'s unstated assumption. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp1-remote-recycle-respawn — 2026-11-18`.
 - **Priority:** low (all)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** one small test-and-comment polish pass. The mock dedupe fits whenever a third live-pane test appears.
 
 ## Code-quality findings — m18-wp2-fresh-account-hardening (2026-11-18)
 
 - **Pointer:** **2 MINOR** open from the review of the WP2 ship commit (`1a71d1b`): `withheldNotice`'s defaulted `cause`; an indent-bound source guard. The 2 MAJORs (the stale remote bypass answer across Recycle; the `setup-token` hint) and the "is showing" MINOR were resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-fresh-account-hardening — 2026-11-18`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** paydown polish.
 
 ## Code-quality findings — m18-wp2-5-remote-copy-to-mac-clipboard (2026-11-18)
 
 - **Pointer:** **4 MINOR** open from the review of the WP2.5 ship commit (`e38cdc7`): the 4 MiB cap is duplicated in TS and Rust with nothing pinning them together; a failed or refused copy is silent (the operator pastes the previous clipboard); the xterm `Terminal` test fake is copied into 3 files; one conf assert has no message. The paste-jacking MAJOR was resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** the silent-failure toast also settles the duplicated cap. The test-fake consolidation fits any later `XtermPane` test touch.
 
 ## SURFACE-2026-11-17-REMOTE-EXEC-COUNT-NEEDS-A-BEHAVIOURAL-HARNESS
@@ -747,8 +747,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** There are two places the picker appears. (1) `PickerOverlay`, summoned by the filmstrip "+" to open another workspace. (2) The first-open picker that `App` renders before any workspace exists. Both render `ProjectPicker`, so a fix in `ProjectPicker` covers both. Precedent: `AddRemoteForm`'s input already uses `autoFocus`. Things to check: (a) whether the overlay is mounted on summon or kept mounted and toggled; if it is kept mounted, `autoFocus` fires only once and needs a focus-on-open effect instead. (b) Focus must move out of the focused workspace's xterm, or keystrokes leak into the CC pane (see `[[wkwebview-button-click-does-not-take-focus]]`). (c) Esc-to-close is registered on the document, so it is unaffected.
 - **Suggested action:** Focus the filter input when the picker mounts or opens, in both places. Add a jsdom test asserting `document.activeElement` is `picker-filter` after the overlay opens, and mutation-prove it by removing the focus.
 - **Priority:** low
-- **Status:** open
-
+- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 ## SURFACE-2026-11-18-PICKER-OVERLAY-NESTED-SCROLLBARS
 - **Source:** operator report (2026-11-18, screenshot of the "+" picker overlay)
 - **Target level:** task
@@ -757,8 +756,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** `src/App.css`: `.picker-overlay-panel` is `max-height: 80%; overflow-y: auto`, and `.picker-recents` inside it is capped at `max-height: 60vh` and scrolls itself. The comment on `.picker-recents` explains why: the standalone first-open picker is a flex column where the list takes the leftover height (`flex: 1; min-height: 0`), but "the overlay variant (no flex column) falls back to the 60vh cap". 60vh of list plus the title, filter box, toasts and buttons is more than 80% of the window, so the outer card overflows as well.
 - **Suggested action:** the operator's proposal is to lower the inner list's height cap so the card never overflows. Possibly better, to weigh when this is worked: make the overlay card the same flex column as the standalone picker (`display: flex; flex-direction: column; overflow: hidden` on `.picker-overlay-panel`, the `.picker` inside it `flex: 1; min-height: 0`), so the list takes exactly the leftover height and is the **only** scroller at any window size. A smaller fixed cap would still overflow on short windows and waste space on tall ones. Verify both pickers (first-open and overlay) at a short and a tall window, and that the card's bottom controls stay visible without scrolling the card.
 - **Priority:** low
-- **Status:** open
-
+- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 ## SURFACE-2026-11-20-INSTALL-SH-RERUN-DELETES-AN-EXISTING-CLAUDE-MD-BAK
 - **Source:** feature:build (M18 WP3 probe, P1.3, after verify-self caught the first record's gap)
 - **Target level:** upstream (mccc `install.sh`), with a note for M18 WP7 (Update)
@@ -767,22 +765,21 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** M18 WP7's Update runs `install.sh` again on a Managed install, so every Update carries this. The 0600 mode is harmless for the owning user. The lost `.bak` is the real cost: a user's own backup under that name, or the backup from an earlier `[update]` run, is destroyed silently. Not a Claudesk bug; Claudesk only runs the script (the scripts are the source of truth, `arch/claude-substrate.md` §R.3).
 - **Suggested action:** upstream (mccc): write the backup to a fresh name (`CLAUDE.md.bak.<timestamp>`), or only `cp` to `.bak` when the result differs, and keep the original file's mode (`cat "$updated_tmp" > "$GLOBAL_CLAUDE_MD"` instead of `mv`). Send it in the next mccc handoff. Claudesk side: no change; WP7's Update stays as designed (the probe found no duplicate block and no prompt).
 - **Priority:** low
-- **Status:** open
-
+- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*: an upstream (mccc) `install.sh` fix; Claudesk only re-runs it
 ## Code-quality findings — m18-wp4-substrate-detection-and-funnel (2026-11-20)
 
 - **Pointer:** **5 MINOR** open from the review of the WP4 window (`9ce4810^..d57aa15`). The stale arch-wording MINOR was resolved at WP4 finalize; the guard MAJOR and the optional-`onOpenSettings` MINOR were resolved at M18 WP5 (CHANGELOG 2026-11-20).
   - MINOR: the host-store latch never retries after a failed `listen`; a third inline gate-hook call in `Workspace`; `shortHost` is imported across layers; the substrate sink uses a setter shape; one doc-comment line is too wide.
   - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp4-substrate-detection-and-funnel — 2026-11-20`.
 - **Priority:** low (all)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** paydown polish.
 
 ## Code-quality findings — m18-wp5-remote-hosts-readout (2026-11-20)
 
 - **Pointer:** **1 MINOR** open from the review of the WP5 window (`e3926dc^..9fd2c46`): the drift copy says "GitHub" for any origin. The MAJOR (a refresh writing `Unknown` over a known host) and the `Drift::Behind` → `Differs` MINOR were resolved at M18 WP6, the stale §R.4 wording at WP5 finalize (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp5-remote-hosts-readout — 2026-11-20`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** copy polish.
 
 ## Code-quality findings — m18-wp7-remote-update-uninstall (2026-11-20)
@@ -790,7 +787,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Pointer:** **1 MINOR** still open from the review of the WP7 window (`a33f7ba^..753f5cf`): `RemoteUninstallTarget` also feeds Update, so it wants a rename. The other 4 MAJOR + 6 MINOR were resolved at M18 WP8 (CHANGELOG 2026-11-20).
   - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp7-remote-update-uninstall — 2026-11-20`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** one rename plus the compile-fail test's expected type and the arch doc.
 
 ## SURFACE-2026-11-20-CLT-AND-XCODE-UPDATE-BEFORE-NEXT-RELEASE
@@ -801,12 +798,11 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** The operator ruled (2026-11-20) to skip the audit for the M18 release and to install the CLT (and likely update Xcode) after M18 wraps, before the NEXT release.
 - **Suggested action:** Operator: `xcode-select --install` (a macOS dialog), and update Xcode if Software Update offers one; then confirm `brew config` shows a CLT version and `brew audit --cask` runs against the tap.
 - **Priority:** medium (before the release after M18)
-- **Status:** pending
-
+- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*: the operator does it before the release AFTER the post-M18 one (that release skips `brew audit`)
 ## Code-quality findings — m18-wp8-release-acceptance (2026-11-20)
 
 - **Pointer:** **4 MINOR** open from the review of the WP8 window (`22bcec6^..b015868`): the consent refusal can name an unchanged folder twice; `GitClean` misses the Rust `Command` form; the syn `#[cfg(test)]` fence is hand-copied three times; the run panel's listener count is hard-coded.
   - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp8-release-acceptance — 2026-11-20`.
 - **Priority:** low (all)
-- **Status:** pending
+- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** four small, independent polish items in `workflow_install/` and `RemoteRunPanel`; any can ride along with the next remote-substrate change.

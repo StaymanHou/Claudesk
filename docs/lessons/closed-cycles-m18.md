@@ -1,0 +1,19 @@
+# Closed-cycle properties: M18 (remote workflow substrate)
+
+Extracted VERBATIM from the project-root `CLAUDE.md` "Current Milestone" section at M18's `/product-finalize`
+(2026-11-20), to keep that file under the harness's 40k warn threshold. M18 is **closed** (WP1–WP8; WP2.5 inserted).
+⚠️ It was **not released inside the milestone**: by operator ruling, the release and its installed-build acceptance
+come AFTER M18 (skip `brew audit` once; the destructive installed-build rows are waived on the dev-build basis).
+
+⚠️ Where this file and the `arch/` set differ, **the `arch/` set is the authority**: `arch/claude-substrate.md` →
+"Remote hosts (M18)" is the AS-BUILT record. The cycle's WBS and probe outcomes are in
+`workflow-system/product/archive/milestone-18-remote-workflow-substrate/`.
+
+**Closing WP (WP8, 2026-11-20):** re-scoped to the WP7-review paydown — Uninstall runs only the removal the operator
+reviewed (`confirmed_matches`), a refused Update says what was not updated (`RefusalReason::update_message`), every
+single-run-lock refusal is one `RUN_LOCK_BUSY` text, the Settings re-attach subscribes then queries, and the Uninstall
+window + `source_guard` tails are pinned (`arch/claude-substrate.md` → "R.3 Update + Uninstall: the WP8 paydown").
+
+## The section as it stood at close
+
+⭐ **ACTIVE: M18 — Remote workflow substrate** (grilled, designed and decomposed 2026-11-18; `wbs.md`, 9 WPs: WP2.5 added 2026-11-18). Detect the workflow system per remote host account, install / update / uninstall it in-app over the master (public HTTPS clone, provenance kept on the host), plus three remote fixes. Design: `arch/claude-substrate.md` → "Remote hosts (M18)". ⚠️ **The host is `workflow_applicable`'s THIRD input** (never a per-site flag; unknown fails closed). ⚠️ **Never install/uninstall against the live host account a real workspace runs on**: sandbox root, debug builds only (§R.8). ✅ **WP1 (remote Recycle), WP2 (bypass-warning withhold + `claude` PATH fallback) and WP2.5 (remote panes copy to the Mac clipboard: a write-only OSC 52 handler, `arch/security-posture.md` → "Terminal clipboard") shipped 2026-11-18. WP3 (probe) shipped 2026-11-20: every §R.9 unknown answered in `wbs.md` → "Probe outcomes" (cancel ruling A; the guarded CLT preflight; the drafted `SUBSTRATE_PROBE`). WP4 (detection + the funnel's third input) shipped 2026-11-20: the host is `workflow_applicable`'s third input, a skill-less host shows the absent-host note, and the OFF pin is 6 / 11 (`arch/claude-substrate.md` → "R.1 + R.2 as built"). WP5 (Settings → Remote hosts: the readout + drift, one exec per host over an already-Up master, every remote `git` behind `DEV_TOOLS_GUARD`; the note lands on the group) shipped 2026-11-20 (`arch/claude-substrate.md` → "R.4 + R.5 as built"). WP6 (Install over the master: one host-side script with sentinels, the host re-checks before writing, the record last, Cancel per ruling A, the outcome from a re-probe; plus the WP2/WP2.5/WP3/WP5 review carry-ins) shipped 2026-11-20 (`arch/claude-substrate.md` → "R.3 Install as built"). WP7 (Update + Uninstall behind a remote refuse-guard) shipped 2026-11-20 (`arch/claude-substrate.md` → "R.3 Update + Uninstall as built"). ⚠️ A host-side trap window runs its child DIRECTLY, never in `( … )` (zsh resets an ignored trap in a subshell). Next: WP8, FIRST the four WP7-review MAJORs.** ⚠️ A remote tmux call from a plain ssh exec must go through `remote_cmd::login_shell`: tmux is not on the host's non-login PATH, and a stub on the test PATH hides that (WP2.5 P2.vs.1). ✅ The `tank-sim-lite-demo` workspace moved to the mini on 2026-11-18 (tank's checkpoint is **2026-12-11**). After the move, tank writes to its own `workflow-system/outbox/` on the mini ("read tank's outbox" = fetch it over ssh), and messages to tank go over ssh into the mini's `~/tank-sim-lite-demo/workflow-system/inbox/` (one file, no commit).

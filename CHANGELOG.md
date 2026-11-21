@@ -54,6 +54,7 @@
 - **Backlog resolved:** SURFACE-2026-11-20-QUALITY-STALE-PHASE-4-DOC-REFERENCE — the stale WP7 Phase 4 parenthetical is gone.
 - **Backlog resolved:** SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD — its last open part (remote Update and Uninstall) shipped in M18 WP7; the entry was missed at WP7's finalize.
 - **Milestone:** M18 WP8 — Release + installed-build acceptance, re-scoped to the WP7-review paydown (the release moved after M18).
+- **Product cycle complete:** milestone-18-remote-workflow-substrate — Claudesk now detects the companion workflow system on each remote host account, shows its state and drift in Settings → Remote hosts, and installs, updates and uninstalls it over the host's open connection with provenance and a remote refuse-guard, plus remote Recycle, the bypass-dialog withhold and remote copy to the Mac clipboard; the release and its installed-build acceptance follow after the milestone.
 
 ## 2026-11-18
 

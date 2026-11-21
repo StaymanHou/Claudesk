@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-11-17  # M17 closed (v0.9.0); M18 next
+updated: 2026-11-20  # M18 closed (release moved after M18); was: M17 closed (v0.9.0)
 ---
 
 # Roadmap
@@ -55,6 +55,7 @@ record is `arch/<subsystem>.md`** (indexed by `arch.md`). Where the two disagree
 | M16 | Right-panel media viewer | 2026-10-20 | Images, SVG, sniff-gated PDF, audio and video open in the editor file tab: glance viewer, review player (midpoint frame-step, frame-accurate timecode, reload keeps the playhead), a 4 GiB cap with Open in default app (`arch/right-panel-surfaces.md`) |
 | M16.5 | Supervisor hardening, QoL + paydown | 2026-11-08 | Only execution workflows chain; emitted-token rule; full-id adjudicator pin + loud failures; artifact watch reads idle, every verify-human pause reads blue; QoL batch; per-result replace; the 15-WP code-quality paydown; context-pressure recycle only at F15 |
 | M17 | Remote workspaces (one SSH host first) | 2026-11-17 | A workspace whose CC runs on another Mac over SSH + tmux: one ControlMaster per host, the hook over the link with `(origin, cwd)` routing, lifecycle R-1–R-4 (reconnect, Detach, dialogs, the remote two-signal rule), OUT rows absent through one `workspaceSurfaces` funnel, remote Docs with an on-screen-only poller. Released in `v0.9.0` and accepted on the installed build against the mini. Known gap: remote Recycle never respawns CC (backlogged); drop / quit / live dev+prod waived on the installed build (dev-build basis). Entry: `archive/milestone-17-remote-workspaces/roadmap-entry.md` |
+| M18 | Remote workflow substrate | 2026-11-20 | The workflow system per remote host account: the host as `workflow_applicable`'s third input (unknown fails closed; a skill-less host shows the absent-host note), Settings → Remote hosts (state + drift vs GitHub), in-app Install / Update / Uninstall over the master with provenance on the host behind a remote refuse-guard (a Developer host is offered nothing), plus remote Recycle, the bypass-dialog withhold + `claude` PATH fallback, and remote copy to the Mac clipboard (OSC 52). ⚠️ Released AFTER the milestone: the installed-build acceptance goes with the release (operator, 2026-11-20). Entry archived to `archive/milestone-18-remote-workflow-substrate/roadmap-entry.md` |
 
 **Carried forward from shipped work. These are not complete, so read them before reading any `[x]` as "done":**
 - ⚠️ **M15's live half: firing IS observed on an installed build** (`v0.7.1`, four fires on
@@ -101,45 +102,7 @@ Each ruling is one line here. Its full text is in the archive, under the heading
 
 ## Next
 
-✅ **M17 (remote workspaces) closed 2026-11-17** (`v0.9.0`; entry archived with the cycle). **Next: Milestone 18, the remote workflow substrate** (below; decomposed 2026-11-18 in `wbs.md`, starting at WP1). Operational work outside the milestone list: ✅ the `tank-sim-lite-demo` workspace moved from local to remote on the mini on 2026-11-18 (its clone is on GitHub with a repo-scoped deploy key; the auto `/session-restore` fired on the remote reopen; the local row stays as a read-only clone).
-
-### Milestone 18: Remote workflow substrate (planned 2026-11-17; grilled, designed and decomposed 2026-11-18: `wbs.md`, 8 WPs)
-
-**Why:** M17 brings a remote workspace's workflow buttons (skills, Session-Start, Recycle) to the remote
-host, but nothing checks that the companion workflow system is installed there, and nothing can install it.
-On a host account without it, every one of those buttons is dead (`SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-…`).
-M17 never scoped this: tank's 2026-11-13 request said the mini already had the skills, which held for the
-admin account and stopped holding when the work moved to the personal account (2026-11-16/17). Operator
-ruling (2026-11-17, during M17 WP8): a milestone of its own, after M17, not an insert; for tank's
-checkpoint the mini's account is set up by hand (done 2026-11-17).
-
-**Scope, settled at the entry grill (2026-11-18, `/util-grill-me`):**
-- **Fact that removed the roadmap's source question:** mccc is a **public** repo, and the mini's account reaches
-  it anonymously over HTTPS (`git ls-remote` answered, HEAD `f8e8873`). "No GitHub access" only meant no SSH key.
-  So a host clones and pulls over HTTPS, and git bundles are not needed.
-- **Asked: install** → **full in-app install** (operator; recommendation was detect + a copyable command). The
-  install reuses `workflow_install`'s runner over the host's master: clone from the public HTTPS URL, then
-  `install.sh`. A provenance record is kept on the host, and there is a paired **Uninstall**. The operator
-  ruled this a one-off call, not a design prior.
-- **Asked: keeping current** → **a drift readout against GitHub's HEAD** (`ls-remote` run from the host), plus an
-  **Update** button (`git pull --ff-only`, then re-run `install.sh`) only for installs Claudesk made (Managed).
-  Nothing updates without a click.
-- **Assumed (operator confirmed "all good"):**
-  - **Remote profiles are out.**
-  - **Detection:** the same marker check as local, run in the open check's single exec. Drift is checked on open
-    and when Settings is viewed, never polled in the background.
-  - **The controls live in Settings,** one entry per host derived from the remote rows. The note on a workspace
-    points there.
-  - **Gate ON + absent on the host:** the skill-injecting surfaces are hidden (skill row, Session-Start, Recycle,
-    auto `/session-restore`), Docs and Prompt stay, and a plain-words note explains. **Gate OFF:** no detection,
-    no note.
-  - **The mini's hand install counts as Developer:** drift is shown, no Update or Uninstall, and there is no adopt
-    path.
-  - **Two backlog items move into M18:** remote Recycle respawn (`SURFACE-2026-11-17-REMOTE-RECYCLE-NEVER-RESPAWNS-CC`)
-    and the bypass-dialog inject (`SURFACE-2026-11-17-AUTO-RESUME-INJECT-ANSWERS-BYPASS-PERMISSIONS-DIALOG-NO-EXIT`).
-  - **A new account's `~/.zprofile` PATH line** gets a preflight message, not an automatic fix.
-  - **Install and Uninstall are verified against a sandboxed HOME on the mini,** never the live install.
-  - **Next:** `/product-arch` → `/product-wbs` (no new libraries, so no `/product-research`).
+✅ **M18 (remote workflow substrate) closed 2026-11-20** (WP1–WP8; entry archived with the cycle). **Next, outside the milestone list:** the release that carries M17's fixes since `v0.9.0` and all of M18 (`/release`, skip `brew audit` this once; then the installed-build acceptance, destructive rows waived), first thing next session. **The next milestone is not yet chosen** (`/product-vision` or `/product-roadmap` when ready). ✅ M17 closed 2026-11-17 (`v0.9.0`). Operational: the `tank-sim-lite-demo` workspace runs remote on the mini since 2026-11-18.
 
 **Held open, not scheduled:**
 - The stale minimap (feature-sized; revive as its own feature when the `drawLine` rewrite is worth
@@ -147,6 +110,7 @@ checkpoint the mini's account is set up by hand (done 2026-11-17).
 
 ## Revisions
 
+- **2026-11-20** — **M18 closed** at `/product-finalize` (WP1–WP8, WP2.5 inserted), moved to Shipped, its entry archived verbatim to `archive/milestone-18-remote-workflow-substrate/roadmap-entry.md`. Exit criteria: met on dev builds; the "accepted on an installed build" criterion **moved after M18 with the release** (operator ruling: "the release will be after M18, not the last part of M18"), and WP8 shipped as the WP7-review paydown. Next: the release, then choose the next milestone.
 - **2026-11-17 (b)** — **M17 closed** at `/product-finalize` (WP1–WP8; `v0.9.0`), moved to Shipped, its entry archived verbatim to `archive/milestone-17-remote-workspaces/roadmap-entry.md`. Exit criteria: met on the installed build except remote Recycle (accepted known failure) and the drop / quit / live dev+prod checks the operator waived on the installed build (dev-build basis WP3–WP5). Next: M18.
 - **2026-11-17** — **M18 (remote workflow substrate) added** after M17, by operator ruling during M17 WP8: detect + install the workflow system on a remote host, and decide remote profiles. Not an M17 insert; the mini's account was set up by hand for tank's checkpoint.
 - **2026-11-14** — `/product-vision` revisit done: vision condensed, the CC-cockpit direction set, and remote workspaces ruled a general capability built one host first. **M17 (remote workspaces) added and scoped** at a `/util-grill-me` pass (lifecycle rulings R-1 to R-4). Its first consumer is `tank-sim-lite-demo`, with a checkpoint on 2026-12-11.

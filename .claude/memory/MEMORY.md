@@ -20,6 +20,7 @@
 - [Unreachable mutant line](mutant-survives-because-its-line-never-executes.md) — A gate short-circuits above it; check the arm is reachable first.
 - [Caller guard for plan*](extracted-machine-needs-a-live-caller-guard.md) — A pure module's tests can't see it has no callers; guard each exported `plan*`.
 - [jsdom whole-app boot](whole-app-jsdom-boot-via-tauri-mockipc.md) — Real `main.tsx` via `mockIPC` + `shouldMockEvents` + `mockWindows` (`appBoot.test.tsx`).
+- [mockIPC listen is sync](mockipc-listen-registers-synchronously.md) — A subscribe-then-query race can't occur; wrap the invoke and hold back the `listen` replies.
 - [XtermPane under jsdom](real-xtermpane-mounts-under-jsdom.md) — Fake `@xterm/*`, ResizeObserver, rAF; `useRealTimers()` before teardown.
 - [jsdom listener throws](jsdom-listener-throw-is-silent-in-vitest.md) — Swallowed, test stays green; tap `window` `error`.
 - [Vitest console silence](vitest-console-log-silent-on-passing-tests.md) — No console output on a passing test (stderr.write shows); silence is not a negative.
