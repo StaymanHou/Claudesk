@@ -521,3 +521,35 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Summary:** `workflow_remote_uninstall_start`'s doc says "(the events are shared until WP7 Phase 4 renames them for all three ops)", but Phase 4 shipped.
 - **Suggested action:** drop the parenthetical.
 - **Priority:** low
+
+# m18-wp8-release-acceptance — 2026-11-20
+
+*(feature-review-quality on the WP8 window `22bcec6^..b015868`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 4 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-20-QUALITY-CONSENT-REFUSAL-NAMES-AN-UNCHANGED-FOLDER
+- **Source:** feature-review-quality (M18 WP8, MINOR)
+- **Type:** copy (on the safety surface)
+- **Summary:** `remote_ops::confirmed_matches`'s refusal reads "(it was {clone_dir}, now {approved.clone_dir()})". When only the record changed (the case its test drives), it prints the same folder twice and shows a "change" the operator cannot see.
+- **Suggested action:** name the folder pair only when the folders differ; otherwise say the install record changed. Pin both wordings in `an_uninstall_proceeds_only_on_the_approval_the_operator_confirmed`.
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-GITCLEAN-MISSES-THE-COMMAND-FORM
+- **Source:** feature-review-quality (M18 WP8, MINOR)
+- **Type:** gap (guard coverage)
+- **Summary:** `Deletion::GitClean` matches only the shell spelling. `Command::new("git").args(["clean", …])` and the `GIT_BIN, vec!["clean".to_string(), …]` style this module uses to call git (`runner.rs`) count as zero, unlike `RmProgram`, which was added for exactly the Rust `Command` form.
+- **Suggested action:** add a `"clean"`-as-an-argument form scoped to a git invocation (or a quoted `"clean"` next to `GIT_BIN` / `"git"`), with one-spelling meta-tests and a near-miss.
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-CFG-TEST-FENCE-HAND-COPIED
+- **Source:** feature-review-quality (M18 WP8, MINOR)
+- **Type:** tech-debt (duplication)
+- **Summary:** the syn `#[cfg(test)]` item detector now exists twice (`source_guard::tests::is_cfg_test` and the `is_test` closure in `remote_ops_tests::the_deleting_builders_take_only_an_approved_target`), each with its own `Item`-variant → attrs match covering DIFFERENT variants; a third copy lives in `tests/sync_commands_do_not_block.rs`.
+- **Suggested action:** one `pub(crate)` test helper in `source_guard` (`fn item_attrs(&syn::Item) -> &[Attribute]` + `is_cfg_test`) covering every variant, used by all three.
+- **Priority:** low
+
+## SURFACE-2026-11-20-QUALITY-RUN-PANEL-LISTENER-COUNT-HARDCODED
+- **Source:** feature-review-quality (M18 WP8, MINOR)
+- **Type:** tech-debt (implicit coupling)
+- **Summary:** `RemoteRunPanel`'s `const listening = subscribed >= 3;` hard-codes the number of `useTauriListen` calls. A fourth listener would let the run-state query fire after only three subscribe, bringing back the race WP8 P1.2 closed.
+- **Suggested action:** name the count beside the three listen calls (e.g. `const LISTENERS = 3`) with a comment tying them, or count the registrations.
+- **Priority:** low

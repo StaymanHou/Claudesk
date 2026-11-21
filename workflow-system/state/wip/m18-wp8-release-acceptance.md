@@ -109,10 +109,10 @@ Problem statement unchanged (2026-11-20, F12 from P2.verify-human.1): the operat
     still gets the read paths, remote Recycle, the bypass withhold, and the once-not-twice streamed-line check.
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality over the WP8 window `22bcec6^..HEAD` (ship: no push by operator ruling — the post-M18 `/release` pushes `main`)
+- **Path:** Feature > finalize
+- **Active scope:** finalize (review-quality: 0 CRITICAL / 0 MAJOR / 4 MINOR auto-backlogged; no push by operator ruling)
 - **Blocked:** none
-- **Unvisited:** finalize
+- **Unvisited:** none
 - **Open discoveries:** P2.6 partial (`RemoteUninstallTarget` rename left open); CLT + Xcode update before the next release (backlog)
 
 ## Ship
@@ -120,6 +120,36 @@ Problem statement unchanged (2026-11-20, F12 from P2.verify-human.1): the operat
 - Full suite: reused the last-phase codify run (`Test scope: full — suite not long`, Phase 2: `pnpm verify:auto` EXIT=0, 75 s); only WIP / WBS / backlog docs changed since.
 - Checks re-run: `pnpm lint` (0 errors, the pre-existing `XtermPane.tsx` warning), `pnpm format:check` clean, `tsc --noEmit` OK, `cargo fmt --check` OK, `cargo clippy --all-targets -D warnings` clean.
 - Release prep: **no push** (operator, 2026-11-20). `main` stays ahead of `origin` until the post-M18 `/release`.
+
+## Code-Quality Review — m18-wp8-release-acceptance
+
+*(window `22bcec6^..b015868`, 2026-11-20; drive_mode=autopilot → 4 MINOR auto-backlogged, F39)*
+
+### Strengths
+- The tail-anchor fix closes the class, not the instance: a syn meta-test derives each file's last production item, mutation-proven against the stale anchor.
+- The re-attach race fix follows the repo's "subscribe, then query" seam and handles every ordering; the jsdom test holds back real `listen` replies and fails against HEAD's panel.
+- Consent binding: `confirmed_matches` sits between the guard and the script builder, pinned by a source-order assertion; the frontend test asserts the start carries exactly the preview's pair.
+- `RefusalReason::update_message` is an exhaustive match beside `user_message`; `no_update_refusal_speaks_of_removal` covers every variant.
+- The Uninstall window is pinned two ways (builder shape + a real-signal group-kill), each mutation-proven alone.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [`remote_ops.rs` `confirmed_matches`] The consent-mismatch refusal prints the same folder twice when only the record changed — a "change" the operator cannot see on the safety surface.
+- [`source_guard.rs` `deletions`] `GitClean` matches only the shell spelling; the Rust `Command` / `GIT_BIN, vec!["clean"…]` form this crate uses counts as zero.
+- [`source_guard.rs` / `remote_ops_tests.rs` / `tests/sync_commands_do_not_block.rs`] The syn `#[cfg(test)]` fence is hand-copied three times, with differing variant coverage.
+- [`RemoteRunPanel.tsx`] `subscribed >= 3` hard-codes the listener count; a fourth listener would reopen the race.
+
+### Assessment
+A clean paydown: all four MAJORs and six of seven MINORs closed at the source, each pinned by an individually mutation-proven test; the seventh (install-era names) is honestly partial (the `RemoteUninstallTarget` rename deferred). No event ordering drops a finished event. The remaining items are small and affect no correctness today.
+
+### If you disagree
+Mark a finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

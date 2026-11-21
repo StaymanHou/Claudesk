@@ -822,3 +822,11 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** Operator: `xcode-select --install` (a macOS dialog), and update Xcode if Software Update offers one; then confirm `brew config` shows a CLT version and `brew audit --cask` runs against the tap.
 - **Priority:** medium (before the release after M18)
 - **Status:** pending
+
+## Code-quality findings — m18-wp8-release-acceptance (2026-11-20)
+
+- **Pointer:** **4 MINOR** open from the review of the WP8 window (`22bcec6^..b015868`): the consent refusal can name an unchanged folder twice; `GitClean` misses the Rust `Command` form; the syn `#[cfg(test)]` fence is hand-copied three times; the run panel's listener count is hard-coded.
+  - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp8-release-acceptance — 2026-11-20`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** four small, independent polish items in `workflow_install/` and `RemoteRunPanel`; any can ride along with the next remote-substrate change.
