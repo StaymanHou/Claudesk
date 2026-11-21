@@ -99,7 +99,7 @@ Also as-built:
 
 ---
 
-## Remote hosts (M18) — 📐 PLANNED 2026-11-18 (`/product-arch`); §R.1–R.2 ✅ BUILT at WP4, §R.4–R.5 (readout) ✅ BUILT at WP5, §R.3 Install + §R.6 preflight ✅ BUILT at WP6, §R.3 Update + Uninstall ✅ BUILT at WP7 (2026-11-20)
+## Remote hosts (M18) — 📐 PLANNED 2026-11-18 (`/product-arch`); §R.1–R.2 ✅ BUILT at WP4, §R.4–R.5 (readout) ✅ BUILT at WP5, §R.3 Install + §R.6 preflight ✅ BUILT at WP6, §R.3 Update + Uninstall ✅ BUILT at WP7, the WP7-review paydown at WP8 (2026-11-20)
 
 **Milestone 18, the remote workflow substrate.** Scope was settled at the entry grill
 (`roadmap.md` → "### Milestone 18" → "Scope, settled at the entry grill"). In short: detect the workflow system
@@ -295,10 +295,32 @@ What the build settled (the WP7 WIP's D1–D12, archived as `m18-wp7-remote-upda
 - **The UI** (`RemoteRunPanel`, `remoteRunOffers`, D12, operator-approved at P4.verify-human): Install on Absent; Update on Managed +
   drift `differs`; Uninstall on Managed; every button only with the link Up; ⚠️ a Developer host (the live account) is offered
   nothing. Update has a short confirm; Uninstall's confirm IS the approved clone path + the host's dry run; Uninstall has no Cancel;
-  Update cancels only while fetching. A Settings reopened mid-run re-attaches to the run (mount-time `workflow_remote_run_state`).
-- ⚠️ Backlogged from the WP7 review (MAJOR, before WP8's release): the delete-scan tail anchor for `remote_ops.rs`, the re-attach's
-  listener race, Update showing removal-worded guard refusals, and no test pinning the Uninstall template's signal window
-  (`backlog-quality-findings.md` → `# m18-wp7-remote-update-uninstall`).
+  Update cancels only while fetching. A Settings reopened mid-run re-attaches to the run (`workflow_remote_run_state`; since WP8,
+  queried only after all three listeners subscribe, see below).
+
+### R.3 Update + Uninstall: the WP8 paydown — ✅ 2026-11-20 (the WP7-review findings; WIP `m18-wp8-release-acceptance.md`)
+- **Uninstall runs only the approval the operator reviewed.** The preview (`RemoteUninstallPreview`) also returns the record's bytes
+  (`record_hex`); the confirm sends `{clone_dir, record_hex}` back (`ConfirmedPreview`) and the worker refuses through
+  `remote_ops::confirmed_matches` unless the guard's FRESH approval is that pair. Order, pinned by a source test: guard → consent
+  check → script. The roots stay protected by the guard either way; this keeps the run to the folder the operator was SHOWN.
+- **A refused Update says what was not updated.** `observe_and_guard` takes a `GuardedOp`; Update maps refusals through
+  `RefusalReason::update_message` (an exhaustive match beside `user_message`, so a new reason must be worded for both ops).
+  Operator-approved wording (P1.verify-human.1): Uninstall's with "update" for "remove", and the missing-script case says "the
+  workflow system's scripts", never `uninstall.sh`.
+- **One lock-busy text.** Every `HeldRunLock::try_acquire` refusal, local AND remote, is `RUN_LOCK_BUSY` = "another
+  workflow-system run (install, update or uninstall) is already running" (local and remote share the lock, so an op-specific text
+  named the wrong run; operator ruling at P2.verify-human.1). Tests assert the literal.
+- **The re-attach seed.** `RemoteRunPanel` queries the run in flight from `useTauriListen`'s `onSubscribed` (all three listeners
+  attached), keeps a host-matching finished event / phase that lands while the query is pending, and routes events by a ref the
+  moment the answer names this host's run.
+- **The Uninstall window is pinned**: a builder assertion (the trap is line 1, `uninstall.sh` a direct child, the clone removed
+  before the record) + a real-signal group-kill test during a slowed `uninstall.sh`. `uninstall_script` returns `Result` (a builder
+  error is said as one, never `result:changed`); Uninstall streams through the shared `RemoteSink`.
+- **The guards**: `source_guard`'s tail anchors are derived (a syn meta-test: each anchor must name its file's last production item);
+  the delete classifier adds `RmProgram` (`"rm"` / `"/bin/rm"` as a quoted program) and `GitClean` (shell spelling only, a
+  backlogged gap); the deleting-builders test parses `remote_guard.rs` whole and skips `#[cfg(test)]` items.
+- Names: `RemoteRunStart`, `REMOTE_RUN_DEADLINE`; the one-caller `begin_remote_install` wrapper is gone. ⚠️ `RemoteUninstallTarget`
+  keeps its name (it also feeds Update); the rename is backlogged.
 
 ### R.4 Drift (Settings only)
 

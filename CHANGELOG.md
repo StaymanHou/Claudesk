@@ -40,6 +40,20 @@
 - **Backlog resolved:** SURFACE-2026-11-20-QUALITY-CONSENT-COMMENT-CLAIMS-A-LINK-DROP-CLOSES-IT — the comment now says the link state is a mount-time read.
 - **Backlog resolved:** SURFACE-2026-11-20-REMOTE-INSTALL-REOPENED-SETTINGS-HIDES-THE-RUNNING-INSTALL — a Settings entry seeds from `workflow_remote_run_state` and re-attaches to the run in flight.
 - **Milestone:** WP7: Update and Uninstall (the remote refuse-guard)
+- **Feature shipped:** M18 WP8 paid down the WP7 code review before any release: Uninstall now runs only the removal the operator reviewed, a refused Update says what was not updated, every "already running" refusal shares one text, a Settings panel reopened mid-run can no longer get stuck on a run that already ended, and the Uninstall script's signal window and the delete scan's file tails are pinned by tests (the release and its installed-build acceptance moved after M18 by operator ruling).
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-REMOTE-OPS-TAIL-ANCHOR-STALE — the anchor points at `resolve_update`, and a syn meta-test now derives every file's real tail.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-REATTACH-RACES-ITS-LISTENERS — `RemoteRunPanel` queries the run in flight only after its listeners subscribe and keeps a finished event that lands while the query is pending.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-UPDATE-SHOWS-REMOVAL-WORDED-REFUSALS — an Update's guard refusals come from `RefusalReason::update_message`, worded for the update.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-UNINSTALL-WINDOW-UNPINNED — a builder assertion and a real-signal group-kill test pin the Uninstall script's trap and direct-child window.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-UNINSTALL-CONSENT-NOT-BOUND-TO-PREVIEW — the confirm sends the previewed folder and record back, and a mismatch is refused before anything runs.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-DELETE-CLASSIFIER-MISSES-COMMAND-FORMS — the classifier counts `rm` as a quoted program and `git clean`.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-SYN-FENCE-SPLITS-ON-CFG-TEST — the deleting-builders test parses `remote_guard.rs` whole and skips `#[cfg(test)]` items.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-UNINSTALL-SCRIPT-FILL-FAILURE-MISLABELLED — `uninstall_script` returns `Result` and a builder error is reported as one.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-REMOTE-OPS-DUPLICATES-STATE-WORDS-AND-SINK — one shared `state_words`, and Uninstall streams through the shared `RemoteSink`.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-INSTALL-ERA-NAMES-SERVE-ALL-OPS — `RemoteRunStart`, `REMOTE_RUN_DEADLINE`, the wrapper removed and one lock-busy text (partial: the `RemoteUninstallTarget` rename stays open).
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-STALE-PHASE-4-DOC-REFERENCE — the stale WP7 Phase 4 parenthetical is gone.
+- **Backlog resolved:** SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD — its last open part (remote Update and Uninstall) shipped in M18 WP7; the entry was missed at WP7's finalize.
+- **Milestone:** M18 WP8 — Release + installed-build acceptance, re-scoped to the WP7-review paydown (the release moved after M18).
 
 ## 2026-11-18
 

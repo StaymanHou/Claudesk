@@ -739,20 +739,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
-## SURFACE-2026-11-17-REMOTE-HOST-WITHOUT-WORKFLOW-SKILLS-MAKES-WORKFLOW-BUTTONS-DEAD
-- **Source:** feature:verify-self (M17 WP7 Phase 4, live)
-- **Target level:** product:arch
-- **Type:** gap
-- **Summary (remaining open work, rewritten at M18 WP6 finalize 2026-11-20):**
-  - DETECTION (WP4), the READOUT (WP5) and INSTALL (WP6) are resolved (CHANGELOG 2026-11-20): Settings → Remote hosts installs
-    the workflow system on an Absent host account over its open connection, and the host then reads Managed.
-  - What remains is UPDATE and UNINSTALL: a Managed install that is behind GitHub cannot be updated from Claudesk, and nothing
-    removes one.
-- **Context:** M18's seed. The mini's dev account was set up by hand and reads **Developer**, so it never gets Update or
-  Uninstall (Claudesk acts only on what it recorded installing).
-- **Suggested action:** M18 WP7 (Update / Uninstall), after its task 7.0 (the two WP6-review MAJORs).
-- **Priority:** medium
-
 ## SURFACE-2026-11-18-PICKER-SEARCH-BOX-NOT-AUTOFOCUSED
 - **Source:** operator request (2026-11-18)
 - **Target level:** task
@@ -801,17 +787,11 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m18-wp7-remote-update-uninstall (2026-11-20)
 
-- **Pointer:** **4 MAJOR + 7 MINOR** open from the review of the WP7 window (`a33f7ba^..753f5cf`).
-  - MAJOR:
-    - `remote_ops.rs`'s source-guard tail anchor stayed behind Phase 3's code;
-    - the Settings re-attach can lose a `remote-run-finished` that lands before its run-state read;
-    - an Update shows the guard's removal-worded refusals;
-    - the Uninstall template's trap / direct-child window has no test.
-  - MINOR: the uninstall consent isn't bound to the previewed path; the delete classifier misses `Command::new("rm")` / `git clean`; the syn fence splits on `#[cfg(test)]`; a `fill` failure reads as "changed"; duplicated `state_words` / sink; install-era names; a stale Phase 4 doc reference.
+- **Pointer:** **1 MINOR** still open from the review of the WP7 window (`a33f7ba^..753f5cf`): `RemoteUninstallTarget` also feeds Update, so it wants a rename. The other 4 MAJOR + 6 MINOR were resolved at M18 WP8 (CHANGELOG 2026-11-20).
   - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp7-remote-update-uninstall — 2026-11-20`.
-- **Priority:** medium (the 4 MAJORs; the tail anchor and the Uninstall window before WP8's release), low (the MINORs)
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** the four MAJORs are small and test-heavy, and they belong ahead of WP8's `/release`: the Uninstall window pin and the re-attach race touch what the installed build exercises. The MINORs can ride along.
+- **Pickup shape:** one rename plus the compile-fail test's expected type and the arch doc.
 
 ## SURFACE-2026-11-20-CLT-AND-XCODE-UPDATE-BEFORE-NEXT-RELEASE
 - **Source:** feature:build (M18 WP8 Phase 3 entry)

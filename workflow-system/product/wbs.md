@@ -233,9 +233,9 @@ goes with it (it needs the release). WP8 shipped as the WP7-review paydown: the 
 **Size:** M + a release
 **Tasks:**
 - [x] 8.0 (added at plan) The WP7-review findings: 4 MAJORs + 7 MINORs (one part left open: the `RemoteUninstallTarget` rename).
-- [ ] 8.1 `/release` → **moved after M18** (skip `brew audit`: the CLT install is logged for before the release after it).
-- [ ] 8.2 The acceptance rows → **moved after M18** with the release. Ruled: the destructive rows are waived on the dev-build basis.
-- [ ] 8.3 Record acceptance → **moved after M18** (redact identifiers before commit; the repo is public).
+- (moved after M18) 8.1 `/release` → **moved after M18** (skip `brew audit`: the CLT install is logged for before the release after it).
+- (moved after M18) 8.2 The acceptance rows → **moved after M18** with the release. Ruled: the destructive rows are waived on the dev-build basis.
+- (moved after M18) 8.3 Record acceptance → **moved after M18** (redact identifiers before commit; the repo is public).
 
 ## Dependency map
 

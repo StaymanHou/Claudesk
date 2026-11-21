@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP8 — the WP7-review paydown (release + installed acceptance moved after M18)
 
 **Workflow:** feature
-**State:** ship (complete) — Phase 3 removed by the F23 revision (2026-11-20)
+**State:** Completed 2026-11-20 (finalize) — Phase 3 removed by the F23 revision
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -109,11 +109,11 @@ Problem statement unchanged (2026-11-20, F12 from P2.verify-human.1): the operat
     still gets the read paths, remote Recycle, the bypass withhold, and the once-not-twice streamed-line check.
 
 ## Current Node
-- **Path:** Feature > finalize
-- **Active scope:** finalize (review-quality: 0 CRITICAL / 0 MAJOR / 4 MINOR auto-backlogged; no push by operator ruling)
+- **Path:** Feature > finalize (complete) → product-finalize (M18: every WP shipped)
+- **Active scope:** none
 - **Blocked:** none
 - **Unvisited:** none
-- **Open discoveries:** P2.6 partial (`RemoteUninstallTarget` rename left open); CLT + Xcode update before the next release (backlog)
+- **Open discoveries:** P2.6 partial (`RemoteUninstallTarget` rename, backlogged); CLT + Xcode update before the next release (backlog)
 
 ## Ship
 - Cleanup: `git status` clean; no TODO / FIXME / `dbg!` / `console.log` added in `22bcec6..HEAD` under `src`, `src-tauri`.
@@ -155,3 +155,14 @@ Mark a finding `[DISMISSED]` in this section before `feature-finalize` archives 
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
 [SURFACED-2026-11-20] P2.6 — the `RemoteUninstallTarget` → `ApprovedRemoteClone` rename was not done: it is outside this phase's outcomes and touches the `E0451` compile-fail test's type. It stays open in `SURFACE-2026-11-20-QUALITY-INSTALL-ERA-NAMES-SERVE-ALL-OPS` (to be rewritten to that remaining part at close, not deleted). The lock refusal is now "another workflow-system run (install, update or uninstall) is already running" (the plan's outcome forbids "install or uninstall"; this names all three).
+
+## Retrospect
+- **What changed in our understanding:** The release was never M18's to own: the operator separated "the milestone's work is done" from "it ships", so a WP named after its release closed without one. Under `mockIPC`, `listen` registers synchronously, so the re-attach race cannot reproduce unless the test deliberately holds back the `listen` replies (an invoke wrapper did it).
+- **Assumptions that held:** Each WP7 finding was small and test-heavy; a mutation per new test caught every regression we tried (13 mutants across both phases, each failing on its own). The one-commit-per-phase shape and the full `pnpm verify:auto` gate (57–82 s) kept every phase cheap.
+- **Assumptions that were wrong:** That the remote lock wording could be fixed alone. Local and remote runs share one lock, so the local refusals named the wrong run too (verify-self found it; the operator chose one text for all). That the build's first `cargo fmt`-reflowed string would match a single-line replace (one site was missed and caught by the grep). That the moved-trap mutation landed on the first try (the line-1 trap follows `r#"`; the first attempt added a second trap and proved nothing, caught by checking the mutant landed).
+- **Approach delta:** Phase 3 (release + installed-build acceptance) was removed by an F23 plan revision after the operator held `/release` and then moved it after M18. P2.6 left the `RemoteUninstallTarget` rename open (outside the outcomes; it touches the compile-fail test). P2.verify-human.1 added a small F12 back-loop (`RUN_LOCK_BUSY`).
+
+## Closure
+> **Feature complete:** M18 WP8 (the WP7-review paydown) has shipped locally. Remote Uninstall now runs only the removal you reviewed, a refused Update says what was not updated, every "already running" refusal shares one text, a Settings panel reopened mid-run can no longer stick on a finished run, and the Uninstall window and delete-scan tails are pinned by tests. Commits `f28b4a7` and `d5bb004`; not pushed — the post-M18 `/release` pushes `main`.
+
+Requester = operator — closure notice for self-record.
