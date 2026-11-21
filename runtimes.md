@@ -275,7 +275,8 @@ real chronology.
 
 ## pnpm tauri build
 
-- **Last:** 129s (2026-11-17, /release v0.9.0: cargo clean removed 243573 files / 85.7 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)
+- **Last:** 154s (2026-11-20, /release v0.10.0: cargo clean + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted; first release on Xcode 27.2 + CLT 27.2)
+- **Prior:** 129s (2026-11-17, /release v0.9.0: cargo clean removed 243573 files / 85.7 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)
 - **Prior:** 141s (2026-11-09, /release v0.8.3: cargo clean removed 45549 files / 17.0 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)
 - **Prior:** 151s (2026-11-08, /release v0.8.2: cargo clean removed 64056 files / 22.2 GiB + cold build, Apple-signed + minisign-signed; notarization a separate notarytool round-trip, not counted)
 - **Prior:** 204s (2026-11-03, /release v0.8.1: cargo clean removed 69790 files / 25.6 GiB + cold build, Apple-signed + minisign-signed; notarization a separate 33s notarytool round-trip, not counted)
@@ -289,6 +290,7 @@ real chronology.
 - **Prior:** 131s (2026-09-06, /release v0.4.0: cargo clean removed 116836 files / 38.7 GiB — largest yet + cold build, bundle triad, signed)
 - **Use timeout:** 600000
 - **History:**
+  - 154s — 2026-11-20 (/release v0.10.0: cargo clean + cold build, signed + notarized)
   - 151s — 2026-11-08 (/release v0.8.2: cargo clean 64056 files/22.2GiB, signed + notarized)
   - 104s — 2026-09-29 (/release v0.7.1: cargo clean 54256 files/21.6GiB, signed + notarized)
   - 129s — 2026-09-24 (/release v0.7.0: cargo clean 45843 files/16.0GiB, signed + notarized)
