@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-11-20  # WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7); WP3 shipped (0c45070); WP4 shipped (d57aa15); WP5 shipped (9fd2c46); WP6 shipped (d89e24b); WP7 shipped (753f5cf)
+updated: 2026-11-20  # WP8 shipped as the WP7-review paydown (d5bb004); release moved after M18; WP1 shipped (411bff8); WP2 shipped (1a71d1b); WP2.5 shipped (e38cdc7); WP3 shipped (0c45070); WP4 shipped (d57aa15); WP5 shipped (9fd2c46); WP6 shipped (d89e24b); WP7 shipped (753f5cf)
 cycle: milestone-18-remote-workflow-substrate
 ---
 
@@ -216,7 +216,11 @@ Each entry shows the state (Absent / Managed / Developer), the short HEAD, and d
 
 **WP7 → WP8 rationale:** acceptance needs the whole paired set (prior `paired-actions-need-paired-affordances`).
 
-### WP8: Release + installed-build acceptance
+### WP8: Release + installed-build acceptance → re-scoped: the WP7-review paydown ✅ SHIPPED 2026-11-20 (commits f28b4a7, d5bb004)
+⚠️ **Re-scoped by the operator, 2026-11-20:** the release is AFTER M18, not its last part, and the installed-build acceptance
+goes with it (it needs the release). WP8 shipped as the WP7-review paydown: the four MAJORs (`f28b4a7`) and the seven MINORs
+(`d5bb004`). The release + acceptance below are the first post-M18 task, with the rulings already taken: skip `brew audit`
+(no Command Line Tools on this Mac), and the destructive rows are waived on the dev-build basis.
 **Description:** `/release`, then accept on the installed build against the mini.
 - **Read paths on the live account:** detection, Developer state, drift, and the absent-host behaviour on a skill-less scratch row.
 - **WP1 / WP2 fixes:** remote Recycle on the scratch row, and the withhold.
@@ -228,9 +232,10 @@ Each entry shows the state (Absent / Managed / Developer), the short HEAD, and d
 **Dependencies:** WP1, WP2, WP7
 **Size:** M + a release
 **Tasks:**
-- [ ] 8.1 `/release` (the Command Line Tools update this Mac needs for `brew audit` comes first; see the M17 handoff note).
-- [ ] 8.2 The operator's call on the disposable-account question, then the acceptance rows.
-- [ ] 8.3 Record acceptance (redacting identifiers before commit; the repo is public).
+- [x] 8.0 (added at plan) The WP7-review findings: 4 MAJORs + 7 MINORs (one part left open: the `RemoteUninstallTarget` rename).
+- [ ] 8.1 `/release` → **moved after M18** (skip `brew audit`: the CLT install is logged for before the release after it).
+- [ ] 8.2 The acceptance rows → **moved after M18** with the release. Ruled: the destructive rows are waived on the dev-build basis.
+- [ ] 8.3 Record acceptance → **moved after M18** (redact identifiers before commit; the repo is public).
 
 ## Dependency map
 
@@ -252,7 +257,7 @@ WP3 (probe) → WP4 → WP5 → WP6 → WP7 ─┴→ WP8 (release + acceptance)
 - From Settings → Remote hosts, Install makes a host Managed, Update brings a behind Managed install current, and Uninstall returns it to
   Absent. The live account (Developer) gets no destructive affordance.
 - Remote Recycle respawns and restores, and auto-resume never answers the bypass dialog.
-- Accepted on an installed build (with whatever the operator rules for the destructive rows at WP8).
+- ~~Accepted on an installed build~~ → **moved after M18** (operator, 2026-11-20): M18 closes on the dev-build verification of every WP; the release and its installed-build acceptance are the first post-M18 task.
 
 ## Probe outcomes
 
