@@ -283,7 +283,7 @@ mod tests {
         (
             "remote_ops.rs",
             include_str!("remote_ops.rs"),
-            "pub fn resolve_uninstall(",
+            "pub fn resolve_update(",
         ),
         ("commands.rs", include_str!("commands.rs"), "fn now_rfc3339"),
         ("guard.rs", include_str!("guard.rs"), "fn refuse_guard"),
@@ -300,6 +300,81 @@ mod tests {
                 code.contains(tail_anchor),
                 "{name}: the extractor truncated before `{tail_anchor}` — every source \
                  guard over this file is blind to whatever it cut"
+            );
+        }
+    }
+
+    /// The name a production item declares, for the anchor check below. An `impl` block is
+    /// named by its last fn (an anchor names a fn, never the impl). `None`: an item with no name
+    /// an anchor could cite (`use`, a macro call), which the check steps over.
+    fn last_name(item: &syn::Item) -> Option<String> {
+        use syn::Item;
+        Some(match item {
+            Item::Fn(f) => f.sig.ident.to_string(),
+            Item::Const(c) => c.ident.to_string(),
+            Item::Static(s) => s.ident.to_string(),
+            Item::Struct(s) => s.ident.to_string(),
+            Item::Enum(e) => e.ident.to_string(),
+            Item::Type(t) => t.ident.to_string(),
+            Item::Trait(t) => t.ident.to_string(),
+            Item::Mod(m) => m.ident.to_string(),
+            Item::Impl(i) => i.items.iter().rev().find_map(|ii| match ii {
+                syn::ImplItem::Fn(f) => Some(f.sig.ident.to_string()),
+                _ => None,
+            })?,
+            _ => return None,
+        })
+    }
+
+    fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
+        attrs.iter().any(|a| {
+            a.path().is_ident("cfg")
+                && a.parse_args::<syn::Meta>()
+                    .is_ok_and(|m| m.path().is_ident("test"))
+        })
+    }
+
+    #[test]
+    fn every_tail_anchor_names_its_files_last_production_item() {
+        // WP8 P1.1 (`SURFACE-2026-11-20-QUALITY-REMOTE-OPS-TAIL-ANCHOR-STALE`): an anchor is
+        // only a tail check while it IS the tail. WP7 appended five items after
+        // `remote_ops.rs`'s `resolve_uninstall` and the anchor stayed put, so an extractor
+        // cutting there would have hidden the Update script from the delete scan with
+        // `the_extractor_reaches_every_files_tail` still green. This derives the tail from the
+        // parsed file, so an append that outruns its anchor fails here.
+        for (name, src, tail_anchor) in MODULE_FILES {
+            let file = syn::parse_file(src).unwrap_or_else(|e| panic!("{name}: {e}"));
+            let last = file
+                .items
+                .iter()
+                .rev()
+                .filter(|i| {
+                    let attrs: &[syn::Attribute] = match i {
+                        syn::Item::Mod(m) => &m.attrs,
+                        syn::Item::Fn(f) => &f.attrs,
+                        syn::Item::Use(u) => &u.attrs,
+                        syn::Item::Impl(x) => &x.attrs,
+                        syn::Item::Const(c) => &c.attrs,
+                        syn::Item::Struct(s) => &s.attrs,
+                        syn::Item::Enum(e) => &e.attrs,
+                        _ => &[],
+                    };
+                    !is_cfg_test(attrs)
+                })
+                .find_map(last_name)
+                .unwrap_or_else(|| panic!("{name}: no production item"));
+            // The anchor's identifier: its last word, minus a trailing `(`.
+            let ident = tail_anchor
+                .trim_end_matches('(')
+                .split_whitespace()
+                .next_back()
+                .unwrap_or_default();
+            assert_eq!(
+                ident,
+                last.as_str(),
+                "{name}: the tail anchor `{tail_anchor}` is not the file's last production \
+                 item (`{last}`); point the anchor at the tail, or the extractor check stops \
+                 covering whatever was appended after it"
             );
         }
     }

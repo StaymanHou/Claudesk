@@ -130,16 +130,22 @@ pub fn record_of(obs: &HostObservation) -> Option<InstallRecord> {
 
 /// Observe the host twice and run the guard. `exec` runs one script on the host (production: over
 /// the master under a login shell; tests: `/bin/zsh -c`) and returns its stdout. `Err` is plain
-/// words for the operator, and means nothing was approved.
+/// words for the operator, and means nothing was approved. `op` picks the refusal's wording
+/// (an Update's refusal says what was not updated, WP8 P1.3); the checks are the same for both.
 pub fn observe_and_guard(
     root: &str,
+    op: GuardedOp,
     exec: &dyn Fn(&str) -> Result<String, String>,
 ) -> Result<RemoteUninstallTarget, String> {
+    let words = |r: &RefusalReason| match op {
+        GuardedOp::Uninstall => r.user_message(),
+        GuardedOp::Update => r.update_message(),
+    };
     let unreadable = "Claudesk couldn't read the host's install state. Nothing was changed.";
     let first = parse_observation(&exec(&observe_script(root, None)?)?)
         .ok_or_else(|| unreadable.to_string())?;
     let Some(record) = record_of(&first) else {
-        return Err(RefusalReason::NoRecord.user_message());
+        return Err(words(&RefusalReason::NoRecord));
     };
     let clone = record.clone_path.to_string_lossy().into_owned();
     let second = parse_observation(&exec(&observe_script(root, Some(&clone))?)?)
@@ -151,7 +157,15 @@ pub fn observe_and_guard(
                 .to_string(),
         );
     }
-    remote_refuse_guard(Some(&record), &second).map_err(|r| r.user_message())
+    remote_refuse_guard(Some(&record), &second).map_err(|r| words(&r))
+}
+
+/// The two ops that go through the remote refuse-guard (Install never does: it acts only on an
+/// Absent host). Only picks the refusal's words.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuardedOp {
+    Uninstall,
+    Update,
 }
 
 /// The preview: the host's own `uninstall.sh --dry-run` in the approved clone. Read-only (WP3

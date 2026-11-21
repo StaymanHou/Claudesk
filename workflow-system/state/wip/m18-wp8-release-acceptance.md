@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP8 — release + installed-build acceptance
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** verify-codify (phase 1 complete)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -24,7 +24,7 @@ No new 3rd-party dependency: the on-host behaviours were probed at WP3 (`wbs.md`
 
 ## Work Tree
 
-- [ ] Phase 1: The four WP7-review MAJORs  <!-- status: NOT-STARTED -->
+- [x] Phase 1: The four WP7-review MAJORs  <!-- status: done -->
   **Observable outcomes:**
   - CLI: `cargo test the_extractor_reaches_every_files_tail` passes with `remote_ops.rs`'s anchor at `pub fn resolve_update(`, AND a new meta-test (e.g. `every_tail_anchor_is_the_files_last_production_fn`) fails if any `MODULE_FILES` anchor is not the last production `fn` item of its file (parsed with `syn`, `#[cfg(test)]` items skipped). Mutation proof: put the anchor back to `pub fn resolve_uninstall(` → the new meta-test FAILS; restore → passes.
   - CLI: a vitest jsdom test in `src/components/settings/__tests__/` fires `remote-run-finished` for this host BEFORE the `getRemoteRunState` promise resolves (the promise then resolves with that same run); the panel ends showing the result (no "Installing on this host…" / no enabled Cancel). The same test asserts `getRemoteRunState` is not called before the finished listener has subscribed. Mutation proof: revert `RemoteRunPanel` to the mount-time query → the test FAILS.
@@ -33,14 +33,25 @@ No new 3rd-party dependency: the on-host behaviours were probed at WP3 (`wbs.md`
   - CLI: `pnpm verify:auto` exits 0.
   **Alignment questions:**
   - (decision) Update's refusal wording, one example: "Claudesk has no record of installing this workflow system, so it will not update it. Nothing was changed." — is that the voice you want for the Update refusals?
-  - [ ] P1.1 `source_guard.rs` → `MODULE_FILES`: `remote_ops.rs` anchor → `pub fn resolve_update(`; add the syn-based "anchor is the last production fn" meta-test over every entry (fix any other stale anchor it finds)  <!-- status: NOT-STARTED -->
-  - [ ] P1.2 `RemoteRunPanel`: query `getRemoteRunState` from `useTauriListen`'s `onSubscribed` (once all three listeners are attached), and while the seed is pending accept a host-matching `remote-run-finished` as final; jsdom test for the finished-before-seed order  <!-- status: NOT-STARTED -->
-  - [ ] P1.3 Per-op refusal wording: `observe_and_guard` takes the op (or the Update caller maps `RefusalReason` → Update words); Update's refusals say what was not updated; test on the words  <!-- status: NOT-STARTED -->
-  - [ ] P1.4 Pin `UNINSTALL_TEMPLATE`'s window: builder assertion + real-signal test (the fixture's `uninstall.sh` gains `FIXTURE_SLEEP` if it lacks it); mutation-prove each form individually (memory `signal-test-kill-can-land-before-the-fork`: delay the kill inside the step)  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P1.1 `source_guard.rs` → `MODULE_FILES`: `remote_ops.rs` anchor → `pub fn resolve_update(`; add the syn-based "anchor is the last production fn" meta-test over every entry (fix any other stale anchor it finds)  <!-- status: done -->
+  - [x] P1.2 `RemoteRunPanel`: query `getRemoteRunState` from `useTauriListen`'s `onSubscribed` (once all three listeners are attached), and while the seed is pending accept a host-matching `remote-run-finished` as final; jsdom test for the finished-before-seed order  <!-- status: done -->
+  - [x] P1.3 Per-op refusal wording: `observe_and_guard` takes the op (or the Update caller maps `RefusalReason` → Update words); Update's refusals say what was not updated; test on the words  <!-- status: done -->
+  - [x] P1.4 Pin `UNINSTALL_TEMPLATE`'s window: builder assertion + real-signal test (the fixture's `uninstall.sh` gains `FIXTURE_SLEEP` if it lacks it); mutation-prove each form individually (memory `signal-test-kill-can-land-before-the-fork`: delay the kill inside the step)  <!-- status: done -->
+  - [x] verify-auto  <!-- status: done -->
+    — evidence: `pnpm verify:auto` run 1 → EXIT=101 (clippy `double_ended_iterator_last` in the new `every_tail_anchor_names_its_files_last_production_item`) → F9 back-loop, fixed (`.rev().find_map`, `.next_back()`); the meta-test re-proven against the stale `resolve_uninstall(` anchor → FAIL, restored by `cp` + shasum.
+    — evidence: `pnpm verify:auto` run 2 → EXIT=0, 79 s: vitest 327 files / 4184 tests passed; `cargo test` 1509 + 24 + 17 passed (4 ignored); `cargo clippy --all-targets -D warnings` clean; `cargo fmt --check` clean. ESLint: 1 pre-existing warning in `XtermPane.tsx:988` (`react-hooks/exhaustive-deps`), a file this phase did not touch.
+  - [x] verify-self  <!-- status: done -->
+    - [x] O1 tail anchor — evidence: `cargo test --lib -- the_extractor_reaches_every_files_tail every_tail_anchor` → 2 passed; mutant anchor `resolve_uninstall(` → extractor test still green, `every_tail_anchor_names_its_files_last_production_item` FAILED ("…is not the file's last production item (`resolve_update`)"); restored, shasum matched.
+    - [x] O2 re-attach race — evidence: `vitest run …/remoteHostsSettings.test.tsx` → 37 passed; HEAD `RemoteRunPanel` over the file → FAILED "subscribe, then query: no question while the listens are unanswered … got 1"; restored, shasum matched.
+    - [x] O3 Update refusal words — evidence: `cargo test --lib -- an_update_refusal… no_update_refusal… the_remote_uninstall_guards_first… workflow_install::guard` → 18 passed; Update arm → `user_message()` mutant → exact-string test FAILED ("will not remove it" vs "will not update it"); restored.
+    - [x] O4 Uninstall window — evidence: the builder + real-signal tests → 2 passed (2.65 s); subshell mutant → both FAILED (:762, :791); moved-trap mutant → both FAILED (:757, :791); restored each time. Note: the helper sends SIGTERM only (the trap line covers HUP too).
+    - [x] O5 gate — evidence: `pnpm verify:auto` → EXIT=0, 68 s; vitest 4184 passed; cargo lib 1509 passed, 4 ignored.
+    - [x] align: Update refusal voice — evidence: built `update_message` vs `user_message`, all 7 variants (captured in the runner's report; NoRecord Update = "Claudesk has no record of installing this workflow system, so it will not update it. If you installed it yourself, update it the same way you installed it. Nothing was changed."; MissingUninstallScript Update says "does not contain the workflow system's scripts").
+  - [x] verify-human  <!-- status: done -->
+    - [x] P1.verify-human.1: (decision) Update's refusal voice — the 7 `update_message` texts vs `user_message`  <!-- status: done — operator 2026-11-20: keep as built -->
+  - [x] verify-codify  <!-- status: done -->
+    Test scope: full — suite not long (`runtimes.md` → `pnpm verify:auto` Last 79s)
+    — evidence: no new tests needed: every verified behaviour is pinned by a test written at build and mutation-proven at build and verify-self (incl. the consuming-surface test on the real `SettingsPanel`). `pnpm verify:auto` → EXIT=0, 57 s: vitest 4184 passed; cargo lib 1509 passed, 4 ignored.
 
 - [ ] Phase 2: The seven WP7-review MINORs  <!-- status: NOT-STARTED; depends on Phase 1 -->
   **Observable outcomes:**
@@ -87,10 +98,10 @@ No new 3rd-party dependency: the on-host behaviours were probed at WP3 (`wbs.md`
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > P1.1
-- **Active scope:** P1.1 (first task)
+- **Path:** Feature > Phase 2 > P2.1
+- **Active scope:** P2.1 (Phase 1 done: the four MAJORs fixed, verified, approved — Update refusal words kept as built)
 - **Blocked:** none (Phase 3 is operator-gated: `/release` go-ahead + the 8.2 ruling)
-- **Unvisited:** Phase 2 (MINORs), Phase 3 (release + acceptance)
+- **Unvisited:** Phase 3 (release + acceptance)
 - **Open discoveries:** none
 
 ## Discoveries

@@ -356,8 +356,8 @@ printf '# workflow block\n' >> "$HOME/.claude/CLAUDE.md"
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
         // WP7: the real `uninstall.sh`'s shape. It removes only links resolving into its own
         // repo (`readlink -f` vs a logical `pwd` SOURCE_DIR, as the real one), excises the block,
-        // `--dry-run` changes nothing, and `FIXTURE_UNINSTALL_FAIL` exits with that code after the
-        // first removal.
+        // `--dry-run` changes nothing, `FIXTURE_UNINSTALL_FAIL` exits with that code after the
+        // first removal, and `FIXTURE_SLEEP` pauses after each removal (WP8: the window test).
         let uninstall = r#"#!/bin/bash
 set -euo pipefail
 SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -370,6 +370,7 @@ for l in "$HOME"/.claude/skills/*; do
       if [ "$DRY" -eq 1 ]; then echo "  [remove] $(basename "$l") (dry-run)"
       else rm "$l"; echo "  [remove] $(basename "$l")"
         if [ -n "${FIXTURE_UNINSTALL_FAIL:-}" ]; then exit "$FIXTURE_UNINSTALL_FAIL"; fi
+        if [ -n "${FIXTURE_SLEEP:-}" ]; then sleep "$FIXTURE_SLEEP"; fi
       fi ;;
     *) echo "  [skip] $(basename "$l") (not ours)" ;;
   esac

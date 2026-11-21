@@ -143,12 +143,20 @@ async function settle(ms = 30) {
   });
 }
 
+type MockInvoke = (
+  cmd: string,
+  args: unknown,
+  opts?: unknown,
+) => Promise<unknown>;
+
 async function mountPanel(opts: {
   hosts: RemoteHostEntry[];
   refresh?: (host: string) => RefreshOutcome | Promise<RefreshOutcome>;
   highlightGroup?: string;
   /** M18 WP6: answer a command before the defaults (return `undefined` to fall through). */
   onCmd?: (cmd: string, args: unknown) => unknown;
+  /** M18 WP8: wrap the mocked IPC (e.g. to hold back `listen` replies as a slow backend would). */
+  wrapInvoke?: (inv: MockInvoke) => MockInvoke;
 }): Promise<HTMLDivElement> {
   mockWindows("main");
   calls.length = 0;
@@ -173,6 +181,12 @@ async function mountPanel(opts: {
     },
     { shouldMockEvents: true },
   );
+  if (opts.wrapInvoke) {
+    const internals = (
+      window as unknown as { __TAURI_INTERNALS__: { invoke: MockInvoke } }
+    ).__TAURI_INTERNALS__;
+    internals.invoke = opts.wrapInvoke(internals.invoke);
+  }
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
@@ -1030,6 +1044,50 @@ describe("Update and Uninstall on a Managed host, from its entry", () => {
       message: null,
     });
     expect(q(entry(panel), "remote-run-result")?.textContent).toBe("Installed");
+  });
+
+  // WP8 P1.2 (`SURFACE-2026-11-20-QUALITY-REATTACH-RACES-ITS-LISTENERS`). A slow backend: the
+  // three `listen` replies are held back, then the run finishes while the run-state question is
+  // still unanswered, and the answer names the run as it was when the backend read it.
+  it("a run that ends while a reopened panel is still asking shows its end, not a stuck run", async () => {
+    let releaseListens!: () => void;
+    const listensHeld = new Promise<void>((r) => (releaseListens = r));
+    let answer!: (v: unknown) => void;
+    const panel = await mountPanel({
+      hosts: [UP_MANAGED],
+      refresh: behind,
+      onCmd: (cmd) =>
+        cmd === "workflow_remote_run_state"
+          ? new Promise((r) => (answer = r))
+          : undefined,
+      wrapInvoke: (inv) => async (cmd, args, o) => {
+        // The handler registers now (the mock does it synchronously); only the reply waits.
+        const reply = inv(cmd, args, o);
+        if (cmd === "plugin:event|listen") await listensHeld;
+        return reply;
+      },
+    });
+    expect(
+      cmds("workflow_remote_run_state"),
+      "subscribe, then query: no question while the listens are unanswered",
+    ).toHaveLength(0);
+    await act(async () => releaseListens());
+    await settle();
+    expect(cmds("workflow_remote_run_state")).toHaveLength(1);
+    await fire("remote-run-finished", {
+      host: "me@up-host",
+      op: "update",
+      ok: true,
+      cancelled: false,
+      message: null,
+    });
+    await act(async () =>
+      answer({ host: "me@up-host", op: "update", phase: "fetch" }),
+    );
+    await settle();
+    expect(q(entry(panel), "remote-run-result")?.textContent).toBe("Updated");
+    expect(q(entry(panel), "remote-run-cancel"), "no live Cancel").toBeNull();
+    expect(entry(panel).textContent).not.toContain("Updating this host");
   });
 });
 

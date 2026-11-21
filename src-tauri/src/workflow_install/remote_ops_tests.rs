@@ -34,7 +34,7 @@ fn managed_host() -> (Host, TempDir) {
 }
 
 fn guard(host: &Host) -> Result<RemoteUninstallTarget, String> {
-    observe_and_guard(&host.root(), &exec_on(host))
+    observe_and_guard(&host.root(), GuardedOp::Uninstall, &exec_on(host))
 }
 
 /// Replace the host's record with one naming `clone_path` (everything else as written).
@@ -622,6 +622,47 @@ fn a_clone_without_an_upstream_and_a_vanished_record_are_refused() {
     assert_eq!(blocks(&host), 1);
 }
 
+/// WP8 P1.3: an Update the guard refuses says what was not UPDATED. The same host refused for an
+/// Uninstall keeps the removal wording, unchanged.
+#[test]
+fn an_update_refusal_is_worded_for_the_update() {
+    let (host, _repo) = managed_host();
+    std::fs::remove_file(host.record()).unwrap();
+    let update = observe_and_guard(&host.root(), GuardedOp::Update, &exec_on(&host)).unwrap_err();
+    assert_eq!(
+        update,
+        "Claudesk has no record of installing this workflow system, so it will not update it. \
+         If you installed it yourself, update it the same way you installed it. Nothing was \
+         changed."
+    );
+    let uninstall =
+        observe_and_guard(&host.root(), GuardedOp::Uninstall, &exec_on(&host)).unwrap_err();
+    assert_eq!(uninstall, RefusalReason::NoRecord.user_message());
+    assert!(uninstall.contains("will not remove it"), "{uninstall}");
+}
+
+/// Every refusal an Update can show is free of removal words, and still says nothing changed.
+#[test]
+fn no_update_refusal_speaks_of_removal() {
+    let p = || PathBuf::from("/h/x");
+    let every = [
+        RefusalReason::NoRecord,
+        RefusalReason::RecordedPathUnresolvable { recorded: p() },
+        RefusalReason::TargetIsHome { resolved: p() },
+        RefusalReason::TargetInClaudeDir { resolved: p() },
+        RefusalReason::TargetContainsProtectedRoot { resolved: p() },
+        RefusalReason::NotADirectory { resolved: p() },
+        RefusalReason::MissingUninstallScript { resolved: p() },
+    ];
+    for r in &every {
+        let m = r.update_message().to_lowercase();
+        for word in ["remov", "uninstall", "delet"] {
+            assert!(!m.contains(word), "{r:?}: `{word}` in {m}");
+        }
+        assert!(m.ends_with("nothing was changed."), "{r:?}: {m}");
+    }
+}
+
 #[test]
 fn a_failed_install_sh_after_the_merge_keeps_the_old_record() {
     let (host, repo) = managed_host();
@@ -695,6 +736,68 @@ fn a_group_kill_inside_the_update_window_cannot_split_it() {
     assert_eq!(head(&host), newer);
     let rec: InstallRecord = serde_json::from_slice(&record_bytes(&host)).unwrap();
     assert_eq!(rec.updated_at.as_deref(), Some("2026-11-21T00:00:00+00:00"));
+}
+
+// ── The uninstall window (WP8 P1.4) ──────────────────────────────────────────────────────
+// `SURFACE-2026-11-20-QUALITY-UNINSTALL-WINDOW-UNPINNED`: Uninstall has no Cancel (WP7 D7), so
+// its whole script is the window. A HUP/TERM between `rm -rf` and the record delete would leave a
+// record naming a missing clone, which the guard then refuses forever. Install and Update each
+// had their window pinned; this pins Uninstall's, both as text and under a real signal.
+
+/// The builder's shape: signals ignored on line 1, `uninstall.sh` a DIRECT child (zsh resets an
+/// ignored trap inside `( … )`), the clone removed before the record, the record before the result.
+#[test]
+fn the_uninstall_script_ignores_signals_from_its_first_line() {
+    let (host, _repo) = managed_host();
+    let s = uninstall_script(&guard(&host).unwrap());
+    let at = |needle: &str| {
+        s.find(needle)
+            .unwrap_or_else(|| panic!("`{needle}` missing: {s}"))
+    };
+    assert_eq!(
+        s.lines().next(),
+        Some("trap '' HUP PIPE TERM INT"),
+        "the trap is line 1: {s}"
+    );
+    assert!(
+        !s.contains("( cd") && !s.lines().any(|l| l.trim_start().starts_with('(')),
+        "uninstall.sh must not run in a subshell: {s}"
+    );
+    assert!(at("trap '' HUP PIPE TERM INT") < at("./uninstall.sh"));
+    assert!(at("./uninstall.sh") < at("rm -rf -- \"$target\""));
+    assert!(at("rm -rf -- \"$target\"") < at("rm -f -- \"$rec\""));
+    assert!(at("rm -f -- \"$rec\"") < at("CLAUDESK-RUN:result:$r"));
+}
+
+/// The behaviour: a group TERM delivered while a slowed `uninstall.sh` runs is ignored, and the run
+/// finishes, clone and record both gone. The script prints no pgid (it has no Cancel), so the test
+/// prepends the same pgid line Install and Update print, and keys the kill on the line the script
+/// prints just before `uninstall.sh`. ⚠️ The kill lands [`KILL_DELAY`] in, inside `uninstall.sh`,
+/// never on the marker itself (memory `signal-test-kill-can-land-before-the-fork`).
+#[test]
+fn a_group_kill_inside_the_uninstall_cannot_split_it() {
+    let (host, _repo) = managed_host();
+    let script = format!(
+        "echo \"CLAUDESK-RUN:pgid:$(ps -o pgid= -p $$ | tr -d ' ')\"\n{}",
+        uninstall_script(&guard(&host).unwrap())
+    );
+    let started = std::time::Instant::now();
+    let (lines, _) = run_and_group_kill_at(
+        &host,
+        &script,
+        "Running uninstall.sh on the host.",
+        "FIXTURE_SLEEP=1; export FIXTURE_SLEEP",
+    );
+    assert!(
+        started.elapsed() >= std::time::Duration::from_secs(2),
+        "the slowed uninstall.sh ran to its end (2 links × 1 s)"
+    );
+    let out = lines.join("\n");
+    assert_eq!(uninstall_result(&out), Some(UninstallResult::Ok), "{out}");
+    assert_eq!(links(&host), 0);
+    assert!(!host.clone_dir().exists(), "the clone is gone");
+    assert!(!host.record().exists(), "the record is gone");
+    assert_eq!(host.reprobe(), HostSubstrate::Absent);
 }
 
 #[test]

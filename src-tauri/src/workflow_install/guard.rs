@@ -141,6 +141,51 @@ impl RefusalReason {
     }
 }
 
+impl RefusalReason {
+    /// The same refusal, worded for a remote **Update** (M18 WP8,
+    /// `SURFACE-2026-11-20-QUALITY-UPDATE-SHOWS-REMOVAL-WORDED-REFUSALS`): an Update goes through
+    /// the same guard, but telling the operator Claudesk "will not remove" what they asked it to
+    /// update states the wrong thing was (not) done. Exhaustive, so a new reason must be worded
+    /// for both ops.
+    pub fn update_message(&self) -> String {
+        match self {
+            RefusalReason::NoRecord => "Claudesk has no record of installing this workflow \
+                 system, so it will not update it. If you installed it yourself, update it the \
+                 same way you installed it. Nothing was changed."
+                .to_string(),
+            RefusalReason::RecordedPathUnresolvable { recorded } => format!(
+                "The recorded install location ({}) no longer resolves on disk, so there is \
+                 nothing Claudesk can safely update. Nothing was changed.",
+                recorded.display()
+            ),
+            RefusalReason::TargetIsHome { resolved } => format!(
+                "The recorded install location resolves to your home directory ({}). \
+                 Claudesk refuses to update it. Nothing was changed.",
+                resolved.display()
+            ),
+            RefusalReason::TargetInClaudeDir { resolved } => format!(
+                "The recorded install location resolves into ~/.claude ({}), the live \
+                 substrate itself. Claudesk refuses to update it. Nothing was changed.",
+                resolved.display()
+            ),
+            RefusalReason::TargetContainsProtectedRoot { resolved } => format!(
+                "The recorded install location ({}) contains your home directory. Claudesk \
+                 refuses to update it. Nothing was changed.",
+                resolved.display()
+            ),
+            RefusalReason::NotADirectory { resolved } => format!(
+                "The recorded install location ({}) is not a directory. Nothing was changed.",
+                resolved.display()
+            ),
+            RefusalReason::MissingUninstallScript { resolved } => format!(
+                "The directory at {} does not contain the workflow system's scripts, so it does \
+                 not look like the installed workflow system. Nothing was changed.",
+                resolved.display()
+            ),
+        }
+    }
+}
+
 /// Resolve a path for comparison, following symlinks where it exists; a path that does not
 /// exist keeps its literal form (same failure direction as the sandbox fixture's helper:
 /// unresolvable components are still caught by the comparisons they fail).

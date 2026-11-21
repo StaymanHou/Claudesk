@@ -17,6 +17,8 @@
 // On mount the panel asks the backend for the run in flight (`getRemoteRunState`); if it is this
 // host's, the panel shows it running and listens to its events, instead of offering a button the
 // backend would refuse as "already running". Output from before the reopen is not replayed.
+// The query runs only once the three listeners are attached (subscribe, then query), and a finished
+// event or phase for this host that lands while it is in flight is kept, not dropped (WP8 P1.2).
 //
 // ## Cancel (ruling A)
 // Install: during the clone. Update: during the fetch. Once the run reports `install`, the button
@@ -44,6 +46,7 @@ import {
   type RemoteRunFinished,
   type RemoteRunLine,
   type RemoteRunPhase,
+  type RemoteRunView,
   type RemoteUninstallPreview,
 } from "../../state/remoteRun";
 import { CANCELLING_LABEL } from "./workflowInstallCopy";
@@ -137,42 +140,97 @@ export function RemoteRunPanel({
   const [preview, setPreview] = useState<Preview>({ kind: "loading" });
 
   const runningOp = step.kind === "running" ? step.op : null;
+  // WP8 P1.2 (`SURFACE-2026-11-20-QUALITY-REATTACH-RACES-ITS-LISTENERS`): the re-attach seed's
+  // state, in refs because the listeners must see it BEFORE React re-renders.
+  //  - `seedPending`: the run-state query has not answered yet. Until it does, this panel cannot
+  //    tell which op a host-matching event belongs to, so it keeps the newest finished event and
+  //    phase for this host instead of dropping them.
+  //  - `reattachedOp`: set the moment the answer names this host's run, so an event landing
+  //    between that answer and the re-render (when `runningOp` is still null) is routed, not lost.
+  const seedPending = useRef(true);
+  const reattachedOp = useRef<RemoteOp | null>(null);
+  const earlyFinished = useRef<RemoteRunFinished | null>(null);
+  const earlyPhase = useRef<RemotePhase | null>(null);
   const mine = (p: { host: string; op: RemoteOp }) =>
-    p.host === host && p.op === runningOp;
+    p.host === host &&
+    p.op ===
+      (runningOp ?? (step.kind === "closed" ? reattachedOp.current : null));
+  const unseeded = (p: { host: string }) =>
+    seedPending.current && step.kind === "closed" && p.host === host;
 
-  useTauriListen<RemoteRunLine>(REMOTE_RUN_OUTPUT_EVENT, (e) => {
-    if (mine(e.payload)) setLines((prev) => [...prev, e.payload.line]);
-  });
-  useTauriListen<RemotePhase>(REMOTE_RUN_PHASE_EVENT, (e) => {
-    if (mine(e.payload)) setPhase(e.payload.phase);
-  });
-  useTauriListen<RemoteRunFinished>(REMOTE_RUN_FINISHED_EVENT, (e) => {
-    if (!mine(e.payload)) return;
-    setResult(e.payload);
-    setStep({ kind: "done", op: e.payload.op });
-    // From the listener, not a state updater: StrictMode runs updaters twice.
-    if (e.payload.ok) onDone();
-  });
+  const finish = (p: RemoteRunFinished) => {
+    reattachedOp.current = null;
+    setResult(p);
+    setStep({ kind: "done", op: p.op });
+    // From the listener (or the seed's reply), not a state updater: StrictMode runs updaters twice.
+    if (p.ok) onDone();
+  };
+
+  // Subscribe, THEN query (`useTauriListen`'s `onSubscribed`): the query runs only once all three
+  // listeners are attached, so nothing the run sends after the backend reads its state is missed.
+  const [subscribed, setSubscribed] = useState(0);
+  const onSubscribed = useCallback(() => setSubscribed((n) => n + 1), []);
+  useTauriListen<RemoteRunLine>(
+    REMOTE_RUN_OUTPUT_EVENT,
+    (e) => {
+      if (mine(e.payload)) setLines((prev) => [...prev, e.payload.line]);
+    },
+    onSubscribed,
+  );
+  useTauriListen<RemotePhase>(
+    REMOTE_RUN_PHASE_EVENT,
+    (e) => {
+      if (unseeded(e.payload)) earlyPhase.current = e.payload;
+      else if (mine(e.payload)) setPhase(e.payload.phase);
+    },
+    onSubscribed,
+  );
+  useTauriListen<RemoteRunFinished>(
+    REMOTE_RUN_FINISHED_EVENT,
+    (e) => {
+      if (unseeded(e.payload)) earlyFinished.current = e.payload;
+      else if (mine(e.payload)) finish(e.payload);
+    },
+    onSubscribed,
+  );
 
   // WP7 D11: a run already in flight for this host (Settings reopened mid-run) is shown, not
-  // re-offered. Asked once per mount; a reply after unmount is dropped.
+  // re-offered. Asked once per mount, after the listeners; a reply after unmount is dropped.
+  const listening = subscribed >= 3;
+  const finishRef = useRef(finish);
   useEffect(() => {
+    finishRef.current = finish;
+  });
+  useEffect(() => {
+    if (!listening) return;
     let live = true;
-    getRemoteRunState()
-      .then((run) => {
-        if (!live || !run || run.host !== host) return;
+    const settle = (run: RemoteRunView | null) => {
+      if (!live) return;
+      seedPending.current = false;
+      const fin = earlyFinished.current;
+      const ph = earlyPhase.current;
+      earlyFinished.current = null;
+      earlyPhase.current = null;
+      if (run && run.host === host) {
+        // The run ended while the query was in flight: show how it ended.
+        if (fin && fin.op === run.op) return finishRef.current(fin);
+        reattachedOp.current = run.op;
         setStep((s) =>
           s.kind === "closed"
             ? { kind: "running", op: run.op, reattached: true }
             : s,
         );
-        setPhase(run.phase);
-      })
-      .catch(() => {});
+        setPhase(ph && ph.op === run.op ? ph.phase : run.phase);
+        return;
+      }
+      // The run ended before the backend read its state: its finished event is all there is.
+      if (fin) finishRef.current(fin);
+    };
+    getRemoteRunState().then(settle, () => settle(null));
     return () => {
       live = false;
     };
-  }, [host]);
+  }, [host, listening]);
 
   // A confirm step belongs to the moment the operator opened it, while its op was offered. When
   // that op's offer CHANGES, in either direction, close it: turned off (another run changed the

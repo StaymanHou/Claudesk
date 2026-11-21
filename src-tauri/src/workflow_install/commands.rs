@@ -1032,7 +1032,8 @@ pub async fn workflow_remote_uninstall_preview(
             root,
         } = start;
         let exec = host_exec(&links, &target);
-        let approved = remote_ops::observe_and_guard(&root, &exec)?;
+        let approved =
+            remote_ops::observe_and_guard(&root, remote_ops::GuardedOp::Uninstall, &exec)?;
         let preview = exec(&remote_ops::dry_run_script(&approved))?;
         Ok(RemoteUninstallPreview {
             host,
@@ -1114,7 +1115,7 @@ pub fn workflow_remote_uninstall_start(
         };
         let exec = host_exec(&links, &target);
         let approved: remote_guard::RemoteUninstallTarget =
-            match remote_ops::observe_and_guard(&root, &exec) {
+            match remote_ops::observe_and_guard(&root, remote_ops::GuardedOp::Uninstall, &exec) {
                 Ok(t) => t,
                 Err(refusal) => {
                     guard.finish(remote_runner::RemoteRunFinished {
@@ -1231,14 +1232,15 @@ pub fn workflow_remote_update_start(
             });
         };
         let exec = host_exec(&links, &target);
-        let approved = match remote_ops::observe_and_guard(&root, &exec) {
-            Ok(t) => t,
-            Err(refusal) => {
-                refuse(&mut guard, refusal);
-                drop(hold);
-                return;
-            }
-        };
+        let approved =
+            match remote_ops::observe_and_guard(&root, remote_ops::GuardedOp::Update, &exec) {
+                Ok(t) => t,
+                Err(refusal) => {
+                    refuse(&mut guard, refusal);
+                    drop(hold);
+                    return;
+                }
+            };
         let script = remote_ops::updated_record(&approved, &now_rfc3339())
             .ok_or_else(|| {
                 "Claudesk couldn't read the install record. Nothing was changed.".to_string()
@@ -1736,6 +1738,11 @@ mod tests {
         let preview = body("pub async fn workflow_remote_uninstall_preview");
         assert!(preview.contains("remote_ops::observe_and_guard("));
         assert!(preview.contains("remote_ops::dry_run_script(&approved)"));
+        // WP8 P1.3: each op gets its own refusal words (an Update never reads "will not remove").
+        assert!(update.contains("GuardedOp::Update") && !update.contains("GuardedOp::Uninstall"));
+        for b in [&start, &preview] {
+            assert!(b.contains("GuardedOp::Uninstall") && !b.contains("GuardedOp::Update"));
+        }
         for b in [&start, &preview, &update] {
             for gate in [
                 "revert_gate",
