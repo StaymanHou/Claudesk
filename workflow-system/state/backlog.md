@@ -812,3 +812,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium (the 4 MAJORs; the tail anchor and the Uninstall window before WP8's release), low (the MINORs)
 - **Status:** pending
 - **Pickup shape:** the four MAJORs are small and test-heavy, and they belong ahead of WP8's `/release`: the Uninstall window pin and the re-attach race touch what the installed build exercises. The MINORs can ride along.
+
+## SURFACE-2026-11-20-CLT-AND-XCODE-UPDATE-BEFORE-NEXT-RELEASE
+- **Source:** feature:build (M18 WP8 Phase 3 entry)
+- **Target level:** product:wbs
+- **Type:** gap (release tooling)
+- **Summary:** This Mac has no Command Line Tools package (`brew config` → `CLT: unknown`; `Xcode: 27.0` on macOS 27.2.1; `softwareupdate --list` offers no CLT), so Homebrew refuses `brew audit` in `/release`. M17 WP8 and the M18 release both ship with `brew style` only.
+- **Context:** The operator ruled (2026-11-20) to skip the audit for the M18 release and to install the CLT (and likely update Xcode) after M18 wraps, before the NEXT release.
+- **Suggested action:** Operator: `xcode-select --install` (a macOS dialog), and update Xcode if Software Update offers one; then confirm `brew config` shows a CLT version and `brew audit --cask` runs against the tap.
+- **Priority:** medium (before the release after M18)
+- **Status:** pending

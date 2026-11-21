@@ -98,7 +98,17 @@ Problem statement unchanged (2026-11-20, F12 from P2.verify-human.1): the operat
     Test scope: full — suite not long (`runtimes.md` → `pnpm verify:auto` Last 82s)
     — evidence: no new tests needed (every Phase 2 behaviour is pinned by a test mutation-proven at verify-self, incl. the consuming-surface test that the panel's Uninstall start carries `confirmed`). `pnpm verify:auto` → EXIT=0, 75 s: vitest 4184 passed; cargo lib 1511 passed, 4 ignored.
 
-- [ ] Phase 3: Release + installed-build acceptance  <!-- status: NOT-STARTED; depends on Phase 2. ⚠️ OPERATOR-GATED: /release is manual-only, it pushes main (32+ commits) and publishes; the destructive-rows ruling is the operator's (wbs.md WP8 8.2) -->
+- [ ] Phase 3: Release + installed-build acceptance  <!-- status: in-progress; depends on Phase 2. ⚠️ OPERATOR-GATED: /release is manual-only, it pushes main (32+ commits) and publishes; the destructive-rows ruling is the operator's (wbs.md WP8 8.2) -->
+  **Relevance check (before Phase 3):**
+  - Requester still needs this: yes — M18 exits only on an installed-build acceptance (wbs.md "Exit criteria").
+  - Requirements unchanged: yes — Phases 1–2 changed copy and guards, not what the acceptance rows check.
+  - Solution still feasible: yes — pending the CLT update and the operator's go-ahead.
+  - No superior alternative discovered: yes.
+  **Verdict:** proceed
+  **Operator rulings (2026-11-20, P3 entry):**
+  - CLT: **skip `brew audit` for this release** (as M17 WP8; `brew style` only — the cask diff is version + sha256, both checked against the download). The operator installs the Command Line Tools (and likely updates Xcode) after M18 wraps, before the NEXT release. Evidence of the gap: `brew config` → `CLT: unknown`, `Xcode: 27.0`, macOS 27.2.1; `softwareupdate --list` offers no CLT.
+  - Release: **not yet** — the operator holds `/release`. Phase 3 waits here; nothing is pushed (`main` is 35 commits ahead of `origin`, `b73e723`…`d5bb004`).
+  - 8.2: **waive the destructive rows on the dev-build basis** (the M17 WP8 precedent; Install / Update / Uninstall were run live on dev builds against a sandbox root at WP6 / WP7). The installed build still gets the read paths, remote Recycle, the bypass withhold, and the once-not-twice streamed-line check.
   **Observable outcomes:**
   - CLI: the Command Line Tools update is installed (`pkgutil --pkg-info=com.apple.pkg.CLTools_Executables` version ≥ the one `brew audit` asks for) — operator-run if it needs a password.
   - CLI (state-changing, outward — operator go-ahead required): `/release` completes: a new tag above the previous `git tag --sort=-v:refname | head -1`, the GitHub release carries the `.dmg`, `.app.tar.gz`, `.sig` and `latest.json` (memory `release-is-three-artifacts-verify-each`), the tap cask is bumped; every staged blob passed the public-repo identifier grep before the push.
@@ -110,8 +120,8 @@ Problem statement unchanged (2026-11-20, F12 from P2.verify-human.1): the operat
   **Alignment questions:**
   - (decision) 8.2: create a disposable account on the mini for the destructive rows, or waive them on the dev-build basis (the M17 WP8 precedent)?
   - The installed build's Remote hosts readout and absent-host note, seen live: still what you want?
-  - [ ] P3.1 CLT update (operator), then `/release` on the operator's go-ahead  <!-- status: NOT-STARTED -->
-  - [ ] P3.2 The operator's 8.2 ruling; run the read-path, WP1/WP2 and (if not waived) destructive acceptance rows on the installed build  <!-- status: NOT-STARTED -->
+  - [ ] P3.1 CLT update (operator), then `/release` on the operator's go-ahead  <!-- status: BLOCKED: the operator holds /release ("not yet", 2026-11-20); CLT deferred — skip brew audit this release -->
+  - [ ] P3.2 The operator's 8.2 ruling; run the read-path, WP1/WP2 and (if not waived) destructive acceptance rows on the installed build  <!-- status: BLOCKED: depends on P3.1 (needs the installed release). 8.2 ruled: destructive rows WAIVED on the dev-build basis -->
   - [ ] P3.3 Record acceptance in this WIP + `wbs.md` WP8, identifiers redacted (public repo)  <!-- status: NOT-STARTED -->
   - [ ] verify-auto  <!-- status: NOT-STARTED -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
@@ -120,10 +130,10 @@ Problem statement unchanged (2026-11-20, F12 from P2.verify-human.1): the operat
 
 ## Current Node
 - **Path:** Feature > Phase 3 > P3.1
-- **Active scope:** P3.1 (Phases 1–2 done. Phase 3 is OPERATOR-GATED: the Command Line Tools update, the `/release` go-ahead (manual-only; it pushes `main` and publishes), and the 8.2 destructive-rows ruling)
-- **Blocked:** P3.1 `/release` — waits on the operator's go-ahead; P3.2 destructive rows — wait on the 8.2 ruling
+- **Active scope:** none — waiting on the operator's `/release` go-ahead
+- **Blocked:** P3.1 (`/release` held by the operator, 2026-11-20); P3.2 depends on P3.1's installed build. Ruled already: skip `brew audit`; 8.2 destructive rows waived on the dev-build basis.
 - **Unvisited:** none after Phase 3
-- **Open discoveries:** P2.6 partial (`RemoteUninstallTarget` rename left open)
+- **Open discoveries:** P2.6 partial (`RemoteUninstallTarget` rename left open); CLT + Xcode update before the next release (backlog)
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
