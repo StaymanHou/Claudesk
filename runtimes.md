@@ -31,7 +31,9 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 57s (2026-11-20, M18 WP8 Phase 1 verify-codify (full), EXIT=0)
+- **Last:** 75s (2026-11-20, M18 WP8 Phase 2 verify-codify (full), EXIT=0)
+- **Prior:** 82s (2026-11-20, M18 WP8 Phase 2 verify-auto, EXIT=0)
+- **Prior:** 57s (2026-11-20, M18 WP8 Phase 1 verify-codify (full), EXIT=0)
 - **Prior:** 79s (2026-11-20, M18 WP8 Phase 1 verify-auto (re-run after a clippy fix), EXIT=0)
 - **Prior:** 56s (2026-11-20, M18 WP8 Phase 1 verify-auto, EXIT=101: clippy `double_ended_iterator_last`)
 - **Prior:** 76s (2026-11-20, M18 WP7 Phase 4 verify-codify (full, last phase), EXIT=0)

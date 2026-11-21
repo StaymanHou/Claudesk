@@ -277,13 +277,22 @@ export function RemoteRunPanel({
       setCancel("idle");
       setCancelError(null);
       setStep({ kind: "running", op, reattached: false });
-      startRemoteRun(op, host).catch((e: unknown) => {
+      // An Uninstall runs only what its preview showed (WP8 P2.1): the confirm is enabled only
+      // once the preview is ready, and its folder + record go with the start.
+      const confirmed =
+        op === "uninstall" && preview.kind === "ready"
+          ? {
+              clone_dir: preview.preview.clone_dir,
+              record_hex: preview.preview.record_hex,
+            }
+          : undefined;
+      startRemoteRun(op, host, confirmed).catch((e: unknown) => {
         // A refused start sends no finished event: this is the only place it can surface.
         setStartError(String(e));
         setStep({ kind: "consent", op });
       });
     },
-    [host],
+    [host, preview],
   );
 
   const requestCancel = useCallback(() => {

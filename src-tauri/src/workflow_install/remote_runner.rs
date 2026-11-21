@@ -63,9 +63,10 @@ pub const REMOTE_ORIGIN_URL: &str =
 /// The prefix of every line the run script prints for Claudesk rather than for the operator.
 pub const RUN_SENTINEL: &str = "CLAUDESK-RUN:";
 
-/// How long a remote install may run before its local ssh is killed: the local clone and install
-/// deadlines together. Only a true hang reaches it (a clone takes ~4 s, `install.sh` ~0.5 s).
-pub const REMOTE_INSTALL_DEADLINE: Duration = Duration::from_secs(1200);
+/// How long a remote run (any op) may go before its local ssh is killed: the local clone and
+/// install deadlines together. Only a true hang reaches it (a clone takes ~4 s, `install.sh`
+/// ~0.5 s).
+pub const REMOTE_RUN_DEADLINE: Duration = Duration::from_secs(1200);
 
 /// The vendor dir's path under a root, `/`-joined: `.claudesk/vendor`, from the local wizard's
 /// [`DEFAULT_VENDOR_SUBPATH`] (one source for both, and for the run script's paths).
@@ -395,8 +396,8 @@ pub struct RemoteRunFinished {
     pub message: Option<String>,
 }
 
-/// The host's state after the run, in a phrase.
-fn state_words(after: Option<&HostSubstrate>) -> &'static str {
+/// The host's state after a run, in a phrase. Shared by every remote op's reducer.
+pub(crate) fn state_words(after: Option<&HostSubstrate>) -> &'static str {
     match after {
         Some(HostSubstrate::Managed { .. }) => "installed by Claudesk (Managed)",
         Some(HostSubstrate::Developer { .. }) => {

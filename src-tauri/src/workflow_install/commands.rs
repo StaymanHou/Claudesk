@@ -237,8 +237,7 @@ fn begin_install(
     control: &Arc<InstallControl>,
     dest: &str,
 ) -> Result<(HeldRunLock, PathBuf, PathBuf), String> {
-    let lock = HeldRunLock::try_acquire(control)
-        .ok_or_else(|| "an install is already running".to_string())?;
+    let lock = HeldRunLock::try_acquire(control).ok_or_else(|| RUN_LOCK_BUSY.to_string())?;
     control.cancelled.store(false, Ordering::SeqCst);
     reset_remote_state(control);
     let root = claudesk_root()?;
@@ -293,7 +292,7 @@ pub fn workflow_install_start(
         // the finished-event emit were both the LAST statements of this closure, so a panic
         // anywhere above them — inside `run_install`, a poisoned lock, an allocation failure
         // while collecting output — left `running: true` for the rest of the process lifetime
-        // (every later `workflow_install_start` returning "an install is already running") AND
+        // (every later `workflow_install_start` returning the lock-busy refusal) AND
         // left the wizard stuck in `step === "running"` with no Close button and no Esc path.
         // One missing guard, two dead ends, and neither observable from a unit test.
         //
@@ -347,6 +346,13 @@ pub fn workflow_install_start(
 pub fn workflow_install_cancel(control: State<'_, Arc<InstallControl>>) {
     control.cancelled.store(true, Ordering::SeqCst);
 }
+
+/// The refusal every substrate-touching start gives while the single-run lock is held. ONE text for
+/// all of them (WP8 P2.verify-human.1): local and remote runs share the lock, so a local dialog
+/// can be refused by a remote Update, and an op-specific text ("an install or uninstall…") would
+/// name the wrong run.
+const RUN_LOCK_BUSY: &str =
+    "another workflow-system run (install, update or uninstall) is already running";
 
 /// Holds the single-run lock and releases it when dropped, on every path including a panic. The
 /// ONE place it is released.
@@ -402,8 +408,8 @@ impl Drop for HeldRunLock {
 pub async fn workflow_uninstall_dry_run(
     control: State<'_, Arc<InstallControl>>,
 ) -> Result<String, String> {
-    let lock = HeldRunLock::try_acquire(control.inner())
-        .ok_or_else(|| "an install or uninstall is already running".to_string())?;
+    let lock =
+        HeldRunLock::try_acquire(control.inner()).ok_or_else(|| RUN_LOCK_BUSY.to_string())?;
     finish_on_worker(lock, || {
         let home = dirs_home()?;
         let root = claudesk_root()?;
@@ -436,8 +442,7 @@ where
 fn begin_uninstall(
     control: &Arc<InstallControl>,
 ) -> Result<(HeldRunLock, PathBuf, PathBuf), String> {
-    let lock = HeldRunLock::try_acquire(control)
-        .ok_or_else(|| "an install or uninstall is already running".to_string())?;
+    let lock = HeldRunLock::try_acquire(control).ok_or_else(|| RUN_LOCK_BUSY.to_string())?;
     control.cancelled.store(false, Ordering::SeqCst);
     reset_remote_state(control);
     let home = dirs_home()?;
@@ -614,8 +619,8 @@ fn reset_remote_state(control: &InstallControl) {
 /// 0.13 s); it runs on the install's worker, never the main thread.
 const REMOTE_CANCEL_TIMEOUT_MS: u64 = 2_000;
 
-/// What the IPC side hands the remote install's worker.
-pub(crate) struct RemoteInstallStart {
+/// What the IPC side hands a remote run's worker (any op).
+pub(crate) struct RemoteRunStart {
     lock: HeldRunLock,
     /// Keeps the host's link up for the whole run, even if the workspace that opened it closes.
     hold: crate::remote_link::LinkHold,
@@ -624,35 +629,15 @@ pub(crate) struct RemoteInstallStart {
     pub(crate) root: String,
 }
 
-/// The remote install's synchronous half: take the single-run lock, then validate, in this order:
-/// the host is a remote row's host, its cached substrate is Absent, its link is Up (held, never
-/// brought up: §R.5), and the root is a valid remote path. Every refusal returns before the worker
-/// exists, and the lock (and any hold) it took is released by drop.
-///
-/// Sync and cheap: one small local file read (`projects.json`, as `remote_hosts` does) and lock
-/// reads; no ssh.
-pub(crate) fn begin_remote_install(
-    control: &Arc<InstallControl>,
-    links: &Arc<crate::remote_link::LinkRegistry>,
-    projects: &[crate::config_store::Project],
-    host: &str,
-    sandbox_root: Option<String>,
-) -> Result<RemoteInstallStart, String> {
-    begin_remote_run(
-        control,
-        links,
-        projects,
-        host,
-        sandbox_root,
-        RemoteOp::Install,
-    )
-}
-
-/// [`begin_remote_install`]'s checks for any remote run (M18 WP7): the same order and the same
-/// release-by-drop, with the cached state each op acts on. Install acts on an Absent host;
-/// Uninstall (and Update) on a Managed one. The cache only gates the OFFER: the run itself
-/// re-reads the host before acting (Install's host re-check; Uninstall's guard over a fresh
-/// observation).
+/// A remote run's synchronous half (M18 WP6, generalised to every op at WP7): take the single-run
+/// lock, then validate, in this order: the host is a remote row's host, its cached substrate is
+/// the state the op acts on, its link is Up (held, never brought up: §R.5), and the root is a
+/// valid remote path. Every refusal returns before the worker exists, and the lock (and any hold)
+/// it took is released by drop. Sync and cheap: one small local file read (`projects.json`, as
+/// `remote_hosts` does) and lock reads; no ssh. The cached state per op: Install acts on an
+/// Absent host, Uninstall and Update on a Managed one. The cache only gates the OFFER: the run
+/// itself re-reads the host before acting (Install's host re-check; the guard over a fresh
+/// observation for Uninstall and Update).
 pub(crate) fn begin_remote_run(
     control: &Arc<InstallControl>,
     links: &Arc<crate::remote_link::LinkRegistry>,
@@ -660,10 +645,9 @@ pub(crate) fn begin_remote_run(
     host: &str,
     sandbox_root: Option<String>,
     op: RemoteOp,
-) -> Result<RemoteInstallStart, String> {
+) -> Result<RemoteRunStart, String> {
     use crate::remote_substrate::HostSubstrate;
-    let lock = HeldRunLock::try_acquire(control)
-        .ok_or_else(|| "a workflow-system install or uninstall is already running".to_string())?;
+    let lock = HeldRunLock::try_acquire(control).ok_or_else(|| RUN_LOCK_BUSY.to_string())?;
     reset_remote_state(control);
     let target = crate::remote_link::commands::remote_hosts_of(projects)
         .into_iter()
@@ -710,7 +694,7 @@ pub(crate) fn begin_remote_run(
             "the host's home folder {root:?} is not an absolute, normalized path"
         ));
     }
-    Ok(RemoteInstallStart {
+    Ok(RemoteRunStart {
         lock,
         hold,
         target,
@@ -809,7 +793,7 @@ fn stream_with_cancel(
         &argv[1..],
         None,
         sink,
-        remote_runner::REMOTE_INSTALL_DEADLINE,
+        remote_runner::REMOTE_RUN_DEADLINE,
         &abort,
     ) {
         Ok((code, _)) => code,
@@ -868,12 +852,13 @@ pub fn workflow_remote_install_start(
 ) -> Result<(), String> {
     let dir = crate::config_store::commands::resolve_data_dir(&app)?;
     let projects = crate::config_store::read_projects(&dir).map_err(|e| e.to_string())?;
-    let start = begin_remote_install(
+    let start = begin_remote_run(
         control.inner(),
         links.inner(),
         &projects,
         &host,
         crate::remote_cmd::substrate_home_override(),
+        RemoteOp::Install,
     )?;
     mark_active(control.inner(), &host, RemoteOp::Install);
     let record = remote_runner::remote_record(&start.root, &now_rfc3339());
@@ -883,7 +868,7 @@ pub fn workflow_remote_install_start(
     let links = Arc::clone(&links);
 
     std::thread::spawn(move || {
-        let RemoteInstallStart {
+        let RemoteRunStart {
             lock, hold, target, ..
         } = start;
         // The panic boundary, as the local install's: the lock is released and a terminal event
@@ -979,6 +964,17 @@ pub struct RemoteUninstallPreview {
     pub clone_dir: String,
     /// `uninstall.sh --dry-run`'s output.
     pub preview: String,
+    /// The record's bytes the guard approved, hex: the confirm sends it back with `clone_dir`, so
+    /// the run removes only what the operator was shown (WP8 P2.1).
+    pub record_hex: String,
+}
+
+/// What the operator confirmed: the preview's `clone_dir` and `record_hex`, sent back by the
+/// confirm (WP8 P2.1, `SURFACE-2026-11-20-QUALITY-UNINSTALL-CONSENT-NOT-BOUND-TO-PREVIEW`).
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ConfirmedPreview {
+    pub clone_dir: String,
+    pub record_hex: String,
 }
 
 /// How long one observe / dry-run exec may take: the master's ordinary capture window.
@@ -1025,7 +1021,7 @@ pub async fn workflow_remote_uninstall_preview(
     )?;
     let links = Arc::clone(&links);
     crate::blocking::on_blocking_worker("the removal preview", move || {
-        let RemoteInstallStart {
+        let RemoteRunStart {
             lock: _lock,
             hold: _hold,
             target,
@@ -1039,37 +1035,20 @@ pub async fn workflow_remote_uninstall_preview(
             host,
             clone_dir: approved.clone_dir().to_string(),
             preview,
+            record_hex: approved.record_hex().to_string(),
         })
     })
     .await
 }
 
-/// Streams a remote uninstall's output, keeping its result line for the reducer.
-struct UninstallSink {
-    app: AppHandle,
-    host: String,
-    result: std::sync::Mutex<Option<remote_ops::UninstallResult>>,
-}
-
-impl OutputSink for UninstallSink {
-    fn line(&self, line: &str) {
-        match remote_ops::parse_uninstall_line(line) {
-            Some(r) => {
-                if let Ok(mut slot) = self.result.lock() {
-                    slot.get_or_insert(r);
-                }
-            }
-            None => emit_run_line(&self.app, &self.host, RemoteOp::Uninstall, line),
-        }
-    }
-}
-
 /// Uninstall the workflow system from `host` (M18 WP7, §R.3). Returns at once; output arrives on
 /// [`REMOTE_RUN_OUTPUT_EVENT`] and the outcome on [`REMOTE_RUN_FINISHED_EVENT`] with
-/// `op: "uninstall"` (the events are shared until WP7 Phase 4 renames them for all three ops).
+/// `op: "uninstall"`.
 ///
 /// The worker observes the host and runs the remote refuse-guard AGAIN (the freshest state, never
-/// the preview's), then runs `remote_ops::uninstall_script` for the approved target only, then
+/// the preview's), refuses unless that approval is the one the operator confirmed (`confirmed`,
+/// the preview's clone and record: WP8 P2.1), then runs `remote_ops::uninstall_script` for the
+/// approved target only, then
 /// re-probes the host, whose answer decides the outcome. No Cancel (WP7 D7). ⚠️ It never touches
 /// the local workflow-features gate: a host is one of several substrates.
 #[tauri::command]
@@ -1078,6 +1057,7 @@ pub fn workflow_remote_uninstall_start(
     control: State<'_, Arc<InstallControl>>,
     links: State<'_, crate::remote_link::commands::SharedLinks>,
     host: String,
+    confirmed: ConfirmedPreview,
 ) -> Result<(), String> {
     let dir = crate::config_store::commands::resolve_data_dir(&app)?;
     let projects = crate::config_store::read_projects(&dir).map_err(|e| e.to_string())?;
@@ -1090,10 +1070,11 @@ pub fn workflow_remote_uninstall_start(
         RemoteOp::Uninstall,
     )?;
     mark_active(control.inner(), &host, RemoteOp::Uninstall);
+    let ctl = Arc::clone(&control);
     let links = Arc::clone(&links);
 
     std::thread::spawn(move || {
-        let RemoteInstallStart {
+        let RemoteRunStart {
             lock,
             hold,
             target,
@@ -1129,21 +1110,55 @@ pub fn workflow_remote_uninstall_start(
                     return;
                 }
             };
-        let argv = links.master_run_argv(
-            &host,
-            &crate::remote_cmd::login_shell(&remote_ops::uninstall_script(&approved)),
-        );
-        let sink = UninstallSink {
+        // Remove only what the operator was shown: a record or clone that changed since the
+        // preview is refused, nothing run (WP8 P2.1).
+        if let Err(refusal) =
+            remote_ops::confirmed_matches(&approved, &confirmed.clone_dir, &confirmed.record_hex)
+        {
+            guard.finish(remote_runner::RemoteRunFinished {
+                host: host.clone(),
+                op: RemoteOp::Uninstall,
+                ok: false,
+                cancelled: false,
+                message: Some(refusal),
+            });
+            drop(hold);
+            return;
+        }
+        let script = match remote_ops::uninstall_script(&approved) {
+            Ok(s) => s,
+            Err(e) => {
+                // A builder bug, said as one (WP8 P2.4): nothing ran on the host.
+                guard.finish(remote_runner::RemoteRunFinished {
+                    host: host.clone(),
+                    op: RemoteOp::Uninstall,
+                    ok: false,
+                    cancelled: false,
+                    message: Some(format!(
+                        "Claudesk couldn't build the uninstall script ({e}). Nothing was changed."
+                    )),
+                });
+                drop(hold);
+                return;
+            }
+        };
+        let argv = links.master_run_argv(&host, &crate::remote_cmd::login_shell(&script));
+        // The shared sink (WP8 P2.5): its pgid and phase arms stay inert, as the uninstall
+        // script prints neither (it has no Cancel, WP7 D7).
+        let sink = RemoteSink {
             app: app.clone(),
             host: host.clone(),
+            op: RemoteOp::Uninstall,
+            control: Arc::clone(&ctl),
             result: std::sync::Mutex::new(None),
+            parse_result: remote_ops::parse_uninstall_line,
         };
         let exit = match runner::run_streaming_abortable(
             &argv[0],
             &argv[1..],
             None,
             &sink,
-            remote_runner::REMOTE_INSTALL_DEADLINE,
+            remote_runner::REMOTE_RUN_DEADLINE,
             &|| false,
         ) {
             Ok((code, _)) => code,
@@ -1202,7 +1217,7 @@ pub fn workflow_remote_update_start(
     let links = Arc::clone(&links);
 
     std::thread::spawn(move || {
-        let RemoteInstallStart {
+        let RemoteRunStart {
             lock,
             hold,
             target,
@@ -1584,11 +1599,20 @@ mod tests {
             host: "h".into(),
             clone_dir: "/c".into(),
             preview: "x".into(),
+            record_hex: "7b7d".into(),
         })
         .unwrap();
         assert_eq!(
             p,
-            serde_json::json!({"host": "h", "clone_dir": "/c", "preview": "x"})
+            serde_json::json!({"host": "h", "clone_dir": "/c", "preview": "x", "record_hex": "7b7d"})
+        );
+        // WP8 P2.1: the confirm sends the pair back under the same keys.
+        let c: super::ConfirmedPreview =
+            serde_json::from_value(serde_json::json!({"clone_dir": "/c", "record_hex": "7b7d"}))
+                .unwrap();
+        assert_eq!(
+            (c.clone_dir.as_str(), c.record_hex.as_str()),
+            ("/c", "7b7d")
         );
     }
 
@@ -1733,6 +1757,13 @@ mod tests {
             .find("remote_ops::uninstall_script(&approved)")
             .expect("the script is built from the approved target");
         assert!(guard_at < script_at, "the guard comes before the script");
+        let consent_at = start
+            .find("remote_ops::confirmed_matches(")
+            .expect("the worker checks the approval is the one the operator confirmed");
+        assert!(
+            guard_at < consent_at && consent_at < script_at,
+            "guard, then the consent check, then the script"
+        );
         assert_eq!(start.matches("uninstall_script(").count(), 1);
         assert!(start.contains("remote_ops::resolve_uninstall("));
         let preview = body("pub async fn workflow_remote_uninstall_preview");
@@ -1791,11 +1822,7 @@ mod tests {
             ("fn begin_install(", "HeldRunLock::try_acquire("),
             ("fn begin_uninstall(", "HeldRunLock::try_acquire("),
             // M18 WP6: the remote install.
-            (
-                "pub fn workflow_remote_install_start",
-                "begin_remote_install(",
-            ),
-            ("pub(crate) fn begin_remote_install(", "begin_remote_run("),
+            ("pub fn workflow_remote_install_start", "begin_remote_run("),
             (
                 "pub(crate) fn begin_remote_run(",
                 "HeldRunLock::try_acquire(",
@@ -1840,16 +1867,15 @@ mod tests {
         let held = begin_uninstall(&ctl).expect("the first run takes the lock");
 
         let install = begin_install(&ctl, "/tmp/claudesk-vendor");
+        // The literal, not `RUN_LOCK_BUSY`: a reworded constant must fail here (WP8).
+        let busy = "another workflow-system run (install, update or uninstall) is already running";
         assert_eq!(
             install.err().as_deref(),
-            Some("an install is already running"),
+            Some(busy),
             "a second install must be refused while a run holds the lock"
         );
         let uninstall = begin_uninstall(&ctl);
-        assert_eq!(
-            uninstall.err().as_deref(),
-            Some("an install or uninstall is already running")
-        );
+        assert_eq!(uninstall.err().as_deref(), Some(busy));
         assert!(
             ctl.running.load(Ordering::SeqCst),
             "a refused attempt must not release the OTHER run's lock"

@@ -2575,14 +2575,15 @@ fn remote_row(host: &str) -> crate::config_store::Project {
 /// holds the lock. An Absent host with an Up link starts, holding the link, rooted at its `$HOME`
 /// (or the sandbox override).
 #[test]
-fn begin_remote_install_refuses_each_unsafe_start_and_leaves_the_lock_free() {
+fn begin_remote_run_refuses_each_unsafe_install_start_and_leaves_the_lock_free() {
     use crate::remote_substrate::HostSubstrate;
-    use crate::workflow_install::commands::{begin_remote_install, InstallControl};
+    use crate::workflow_install::commands::{begin_remote_run, InstallControl};
+    use crate::workflow_install::remote_runner::RemoteOp;
     let h = harness();
     let ctl = Arc::new(InstallControl::default());
     let rows = [remote_row(HOST)];
     let begin = |rows: &[crate::config_store::Project], host: &str, sandbox: Option<String>| {
-        begin_remote_install(&ctl, &h.reg, rows, host, sandbox)
+        begin_remote_run(&ctl, &h.reg, rows, host, sandbox, RemoteOp::Install)
     };
 
     // (c) no link at all: refused, nothing started.
@@ -2636,7 +2637,10 @@ fn begin_remote_install_refuses_each_unsafe_start_and_leaves_the_lock_free() {
     assert_eq!(h.reg.refs(HOST), 2, "the run holds the link");
     // (d) a second run while the first holds the lock.
     let e = begin(&rows, HOST, None).err().expect("locked");
-    assert!(e.contains("already running"), "{e}");
+    assert_eq!(
+        e,
+        "another workflow-system run (install, update or uninstall) is already running"
+    );
     drop(run);
     assert_eq!(h.reg.refs(HOST), 1, "the run's hold is released with it");
     let sandboxed = begin(&rows, HOST, Some("/Users/me/sandbox".into())).expect("free again");
@@ -2699,7 +2703,10 @@ fn begin_remote_run_for_uninstall_acts_only_on_a_managed_host() {
     let run = begin(HOST).expect("a Managed host with an Up link starts");
     assert_eq!(run.root, "/Users/me");
     let e = begin(HOST).err().expect("locked");
-    assert!(e.contains("already running"), "{e}");
+    assert_eq!(
+        e,
+        "another workflow-system run (install, update or uninstall) is already running"
+    );
     drop(run);
     assert_eq!(h.reg.refs(HOST), 1);
     // Install is still refused on a Managed host, through the same checks.
@@ -2718,7 +2725,8 @@ fn begin_remote_run_for_uninstall_acts_only_on_a_managed_host() {
 #[test]
 fn a_link_that_is_still_connecting_is_not_held_and_install_refuses() {
     use crate::remote_substrate::HostSubstrate;
-    use crate::workflow_install::commands::{begin_remote_install, InstallControl};
+    use crate::workflow_install::commands::{begin_remote_run, InstallControl};
+    use crate::workflow_install::remote_runner::RemoteOp;
     let h = harness();
     *h.t.pre_delay.lock().unwrap() = Duration::from_millis(400);
     let reg = Arc::clone(&h.reg);
@@ -2738,9 +2746,16 @@ fn a_link_that_is_still_connecting_is_not_held_and_install_refuses() {
     );
     h.reg.set_substrate(HOST, HostSubstrate::Absent);
     let ctl = Arc::new(InstallControl::default());
-    let e = begin_remote_install(&ctl, &h.reg, &[remote_row(HOST)], HOST, None)
-        .err()
-        .expect("refused while connecting");
+    let e = begin_remote_run(
+        &ctl,
+        &h.reg,
+        &[remote_row(HOST)],
+        HOST,
+        None,
+        RemoteOp::Install,
+    )
+    .err()
+    .expect("refused while connecting");
     assert!(e.contains("isn't connected"), "{e}");
     let hold = opener.join().unwrap().expect("the opener's link comes up");
     assert!(

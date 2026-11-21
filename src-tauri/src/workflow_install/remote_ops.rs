@@ -28,7 +28,9 @@
 use super::guard::RefusalReason;
 use super::provenance::{self, InstallRecord, RECORD_FILENAME};
 use super::remote_guard::{remote_refuse_guard, HostObservation, RemoteUninstallTarget};
-use super::remote_runner::{fill, valid_root, RemoteOp, RemoteRunFinished, RUN_SENTINEL};
+use super::remote_runner::{
+    fill, state_words, valid_root, RemoteOp, RemoteRunFinished, RUN_SENTINEL,
+};
 use super::DEFAULT_VENDOR_SUBPATH;
 use crate::remote_cmd::{decode_hex, quote, DEV_TOOLS_FIX, DEV_TOOLS_GUARD};
 use crate::remote_substrate::HostSubstrate;
@@ -160,6 +162,25 @@ pub fn observe_and_guard(
     remote_refuse_guard(Some(&record), &second).map_err(|r| words(&r))
 }
 
+/// The approval the run is about to act on is the one the operator confirmed: the preview's clone
+/// folder and record bytes (WP8 P2.1). The guard's own checks already keep every protected root
+/// out; this keeps the run to the folder the operator was SHOWN, should the record change between
+/// the preview and the confirm. `Err` is plain words, and means nothing was run.
+pub fn confirmed_matches(
+    approved: &RemoteUninstallTarget,
+    clone_dir: &str,
+    record_hex: &str,
+) -> Result<(), String> {
+    if approved.clone_dir() == clone_dir && approved.record_hex() == record_hex {
+        return Ok(());
+    }
+    Err(format!(
+        "The install on the host changed after you reviewed the removal (it was {clone_dir}, now \
+         {}). Nothing was changed; open Uninstall again to review it.",
+        approved.clone_dir()
+    ))
+}
+
 /// The two ops that go through the remote refuse-guard (Install never does: it acts only on an
 /// Absent host). Only picks the refusal's words.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -212,11 +233,17 @@ else echo "CLAUDESK-RUN:result:$r"; fi"#;
 /// [`RemoteUninstallTarget`]: the root, the clone and the record's expected bytes all come from
 /// the guard, so the `rm -rf` in it can only ever name a path the guard approved
 /// (`remote_ops_tests::the_deleting_builders_take_only_an_approved_target` pins the signature).
-pub fn uninstall_script(target: &RemoteUninstallTarget) -> String {
-    // The values are guard outputs: a root `valid_root` would refuse cannot reach here (the
-    // observe script refused it), but a fill error still yields a script that does nothing.
+/// `Err` is a builder bug (an unfilled placeholder), reported as such: never a script that
+/// claims the host changed (WP8 P2.4, `SURFACE-2026-11-20-QUALITY-UNINSTALL-SCRIPT-FILL-FAILURE-MISLABELLED`).
+pub fn uninstall_script(target: &RemoteUninstallTarget) -> Result<String, String> {
+    fill_uninstall(UNINSTALL_TEMPLATE, target)
+}
+
+/// [`uninstall_script`]'s filling, with the template a parameter so a test can hand it a broken
+/// one. Its values are still only the approved target's.
+fn fill_uninstall(template: &str, target: &RemoteUninstallTarget) -> Result<String, String> {
     fill(
-        UNINSTALL_TEMPLATE,
+        template,
         &[
             ("__ROOT__", &quote(target.root())),
             ("__TARGET__", &quote(target.clone_dir())),
@@ -225,7 +252,6 @@ pub fn uninstall_script(target: &RemoteUninstallTarget) -> String {
             ("__DOTDIR__", DEFAULT_VENDOR_SUBPATH[0]),
         ],
     )
-    .unwrap_or_else(|_| "echo 'CLAUDESK-RUN:result:changed'".to_string())
 }
 
 /// How an uninstall run ended, as it reported it.
@@ -255,18 +281,6 @@ pub fn parse_uninstall_line(line: &str) -> Option<UninstallResult> {
         "record-failed" => UninstallResult::RecordDeleteFailed,
         _ => UninstallResult::UninstallFailed(r.strip_prefix("uninstall-failed:")?.parse().ok()?),
     })
-}
-
-/// The host's state after a run, in a phrase.
-fn state_words(after: Option<&HostSubstrate>) -> &'static str {
-    match after {
-        Some(HostSubstrate::Managed { .. }) => "installed by Claudesk (Managed)",
-        Some(HostSubstrate::Developer { .. }) => {
-            "Developer (installed, but with no Claudesk record)"
-        }
-        Some(HostSubstrate::Absent) => "Absent (nothing installed)",
-        Some(HostSubstrate::Unknown) | None => "unknown: Claudesk couldn't re-check it",
-    }
 }
 
 /// The ending of an uninstall → what it means. Pure. As for the install, **the re-probe (`after`)

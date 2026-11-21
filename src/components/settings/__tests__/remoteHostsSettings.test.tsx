@@ -646,7 +646,9 @@ describe("Install on a remote host, from its entry", () => {
       },
     });
     await act(async () =>
-      reject("a workflow-system install or uninstall is already running"),
+      reject(
+        "another workflow-system run (install, update or uninstall) is already running",
+      ),
     );
     await settle();
     expect(q(entry(panel), "remote-host-state")?.textContent).toBe("Managed");
@@ -955,6 +957,7 @@ describe("Update and Uninstall on a Managed host, from its entry", () => {
               clone_dir:
                 "/Users/me/.claudesk/vendor/my-claude-code-customization",
               preview: "  [remove] skills/feature-build (dry-run)",
+              record_hex: "7b2261223a317d",
             }
           : undefined,
     });
@@ -970,7 +973,16 @@ describe("Update and Uninstall on a Managed host, from its entry", () => {
     );
     expect(cmds("workflow_remote_uninstall_start")).toEqual([]);
     await click(q(entry(panel), "remote-run-confirm"));
-    expect(cmds("workflow_remote_uninstall_start").length).toBe(1);
+    // WP8 P2.1: the start carries exactly what the preview showed.
+    expect(cmds("workflow_remote_uninstall_start").map((c) => c.args)).toEqual([
+      {
+        host: "me@up-host",
+        confirmed: {
+          clone_dir: "/Users/me/.claudesk/vendor/my-claude-code-customization",
+          record_hex: "7b2261223a317d",
+        },
+      },
+    ]);
     expect(q(entry(panel), "remote-run-cancel"), "no Cancel").toBeNull();
     expect(entry(panel).textContent).toContain("Uninstall can't be cancelled");
     await fire("remote-run-finished", {

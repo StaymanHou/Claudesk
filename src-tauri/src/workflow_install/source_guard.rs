@@ -211,11 +211,18 @@ pub enum Deletion {
     Rmdir,
     /// `unlink`.
     Unlink,
+    /// `rm` named as a program in a string literal: `Command::new("rm")`, `"/bin/rm"`,
+    /// `"/usr/bin/rm"` (WP8 P2.2, `SURFACE-2026-11-20-QUALITY-DELETE-CLASSIFIER-MISSES-COMMAND-FORMS`:
+    /// the shell patterns need whitespace after `rm`, so a quoted program name counted as nothing).
+    RmProgram,
+    /// `git clean` (any options before the subcommand: `-C <dir>`, `-c k=v`, `--flag`), which
+    /// deletes untracked files in a tree.
+    GitClean,
 }
 
 /// Every [`Deletion`] in `code`, with its count. ⚠️ A pattern per kind, not a token list: the
 /// WP6 list (`"rm -rf"`, `"rm -r "`) passed `rm -fr`, `rm -Rf`, `rm -R`, `find -delete` and
-/// `rmdir`.
+/// `rmdir`. The kinds cover the spellings listed on [`Deletion`], not every conceivable delete.
 pub fn deletions(code: &str) -> Vec<(Deletion, usize)> {
     use regex::Regex;
     // `rm`, then any flags, at least one of them recursive. `\b` keeps `rm` a word of its own
@@ -238,6 +245,11 @@ pub fn deletions(code: &str) -> Vec<(Deletion, usize)> {
         (Deletion::FindDelete, count(r"(?:^|\s)-delete\b")),
         (Deletion::Rmdir, count(r"\brmdir\b")),
         (Deletion::Unlink, count(r"\bunlink\b")),
+        (Deletion::RmProgram, count(r#""(?:/usr)?(?:/bin/)?rm""#)),
+        (
+            Deletion::GitClean,
+            count(r#"\bgit"?(?:\s+(?:-[Cc]\s+\S+|--\S+))*\s+clean\b"#),
+        ),
     ]
 }
 
@@ -470,12 +482,25 @@ mod tests {
             ("std::fs::remove_dir_all(&p)?;", Deletion::RemoveDir),
             ("std::fs::remove_dir(&p)?;", Deletion::RemoveDir),
             ("std::fs::remove_file(&p)?;", Deletion::RemoveFile),
+            // WP8 P2.2: rm as a quoted program, and git clean.
+            (r#"Command::new("rm").arg(&p);"#, Deletion::RmProgram),
+            (r#"Command::new("/bin/rm").arg(&p);"#, Deletion::RmProgram),
+            (
+                r#"Command::new("/usr/bin/rm").arg(&p);"#,
+                Deletion::RmProgram,
+            ),
+            (r#"git clean -fdx"#, Deletion::GitClean),
+            (
+                r#""$d/usr/bin/git" -C "$target" clean -fd"#,
+                Deletion::GitClean,
+            ),
+            (r#"git -c core.x=1 --no-pager clean -n"#, Deletion::GitClean),
         ];
         for (line, kind) in cases {
             let src = format!(
                 "const T: &str = r#\"case \"$p\" in\n  ok) ;;\n{line}\nesac\"#;\nfn tail() {{}}\n"
             );
-            let src = if line.starts_with("std::") {
+            let src = if line.starts_with("std::") || line.starts_with("Command::") {
                 format!("fn f() {{\n    {line}\n}}\n")
             } else {
                 src
@@ -498,6 +523,10 @@ mod tests {
             "fn remove_directory_listing() {}",
             r#"let s = "unlinked";"#,
             r#"let s = "a -deleted flag";"#,
+            r#"let s = "the git tree is clean";"#,
+            r#"git status --porcelain # clean"#,
+            r#"let s = "farm";"#,
+            r#"let s = "rmx";"#,
         ] {
             let found: usize = deletions(&production_code(line))
                 .iter()

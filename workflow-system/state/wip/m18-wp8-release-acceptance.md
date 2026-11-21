@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M18 WP8 — release + installed-build acceptance
 
 **Workflow:** feature
-**State:** verify-codify (phase 1 complete)
+**State:** verify-codify (phase 2 complete)
 **Created:** 2026-11-20
 
 ## Problem Statement
@@ -21,6 +21,8 @@ the destructive rows (a disposable host account, or the M17 WP8 dev-build waiver
 
 No new 3rd-party dependency: the on-host behaviours were probed at WP3 (`wbs.md` → "Probe outcomes"); the release path
 (GitHub, Homebrew tap) is the existing `/release` skill.
+
+Problem statement unchanged (2026-11-20, F12 from P2.verify-human.1): the operator asked that the LOCAL lock refusals share the remote wording, since one lock serves both. A copy fix inside Phase 2's scope, not a new problem.
 
 ## Work Tree
 
@@ -53,7 +55,13 @@ No new 3rd-party dependency: the on-host behaviours were probed at WP3 (`wbs.md`
     Test scope: full — suite not long (`runtimes.md` → `pnpm verify:auto` Last 79s)
     — evidence: no new tests needed: every verified behaviour is pinned by a test written at build and mutation-proven at build and verify-self (incl. the consuming-surface test on the real `SettingsPanel`). `pnpm verify:auto` → EXIT=0, 57 s: vitest 4184 passed; cargo lib 1509 passed, 4 ignored.
 
-- [ ] Phase 2: The seven WP7-review MINORs  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [x] Phase 2: The seven WP7-review MINORs  <!-- status: done -->
+  **Relevance check (before Phase 2):**
+  - Requester still needs this: yes — the handoff said the MINORs ride along before `/release`.
+  - Requirements unchanged: yes — Phase 1 touched none of the seven findings' code paths beyond `observe_and_guard`'s signature.
+  - Solution still feasible: yes.
+  - No superior alternative discovered: yes.
+  **Verdict:** proceed
   **Observable outcomes:**
   - CLI: Uninstall start refuses when the previewed `clone_dir` + record hex passed from the confirm step differ from what the guard approves at start (a Rust test changes the host record between preview and start → refusal, nothing deleted); a matching pair proceeds as before.
   - CLI: `source_guard::deletions` counts `Command::new("rm")`, `"/bin/rm"` and `git clean` spellings — one meta-test per new spelling, each fails when its classifier arm is removed.
@@ -65,17 +73,30 @@ No new 3rd-party dependency: the on-host behaviours were probed at WP3 (`wbs.md`
   - CLI: `pnpm verify:auto` exits 0.
   **Alignment questions:**
   - none
-  - [ ] P2.1 Bind Uninstall consent to the preview (`clone_dir` + record hex through start; refuse on mismatch)  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 Delete classifier: quoted `rm` / `/bin/rm` and a `git clean` kind, each with a one-spelling meta-test  <!-- status: NOT-STARTED -->
-  - [ ] P2.3 syn fence: parse `remote_guard.rs` whole and skip `#[cfg(test)]` items (or split on `mod tests`)  <!-- status: NOT-STARTED -->
-  - [ ] P2.4 `uninstall_script` → `Result`, surfaced as a builder error  <!-- status: NOT-STARTED -->
-  - [ ] P2.5 One `state_words` (`pub(crate)`), `RemoteSink<UninstallResult>` replaces `UninstallSink`  <!-- status: NOT-STARTED -->
-  - [ ] P2.6 Rename the install-era names; drop the `begin_remote_install` wrapper; generic lock refusal  <!-- status: NOT-STARTED -->
-  - [ ] P2.7 Drop the stale Phase-4 doc parenthetical  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] P2.1 Bind Uninstall consent to the preview (`clone_dir` + record hex through start; refuse on mismatch)  <!-- status: done -->
+  - [x] P2.2 Delete classifier: quoted `rm` / `/bin/rm` and a `git clean` kind, each with a one-spelling meta-test  <!-- status: done -->
+  - [x] P2.3 syn fence: parse `remote_guard.rs` whole and skip `#[cfg(test)]` items (or split on `mod tests`)  <!-- status: done -->
+  - [x] P2.4 `uninstall_script` → `Result`, surfaced as a builder error  <!-- status: done -->
+  - [x] P2.5 One `state_words` (`pub(crate)`), `RemoteSink<UninstallResult>` replaces `UninstallSink`  <!-- status: done -->
+  - [x] P2.6 Rename the install-era names; drop the `begin_remote_install` wrapper; generic lock refusal  <!-- status: done -->
+  - [x] P2.7 Drop the stale Phase-4 doc parenthetical  <!-- status: done -->
+  - [x] verify-auto  <!-- status: done -->
+    — evidence (re-run after the P2.verify-human.1 fix, `commands.rs` only): `cargo fmt --check` → OK; `cargo clippy --all-targets -D warnings` → clean; `cargo test --lib -- workflow_install remote_link` → 268 passed, 3 ignored.
+    — evidence: `pnpm verify:auto` → EXIT=0, 82 s: vitest 4184 passed; cargo lib 1511 passed, 4 ignored (+24, +17 integration); clippy `--all-targets -D warnings` clean; `cargo fmt --check` clean; `tsc`, `check:link` clean. ESLint: the same pre-existing `XtermPane.tsx:988` warning (file untouched).
+  - [x] verify-self  <!-- status: done -->
+    - [x] O1 consent bound to the preview — evidence: `an_uninstall_proceeds_only_on_the_approval_the_operator_confirmed` passes; mutants each alone: `confirmed_matches` always Ok → 1 failed; the call block deleted from `workflow_remote_uninstall_start` → the order assertion failed; `confirmed` dropped from the panel's `startRemoteRun` → vitest 1 failed ("expected [] to deeply equal [{ host: 'me@up-host', … }]"). Restored, shasums matched.
+    - [x] O2 classifier spellings — evidence: RmProgram arm zeroed → FAILED (`Command::new("rm")` counted 0); GitClean arm zeroed → FAILED; each regex narrowed to one spelling → FAILED on the other spellings. Near-misses ("git tree is clean", "rmx") stay 0.
+    - [x] O3 syn fence — evidence: `grep -c 'find("#[cfg(test)]")'` → 0; filter-skips-everything mutant → FAILED (`left: []`); an injected production `RemoteUninstallTarget` literal in remote_guard.rs → FAILED (`left: [remote_refuse_guard, sneaky_mutant]`).
+    - [x] O4 builder error — evidence: `fill_uninstall` mutated to swallow into a `result:changed` script → `an_unfillable_uninstall_template_is_a_builder_error` FAILED.
+    - [x] O5 one state_words / RemoteSink — evidence: `grep fn state_words` → remote_runner.rs only; `UninstallSink` → 0 hits; the uninstall worker builds `RemoteSink { op: Uninstall, parse_result: parse_uninstall_line }`.
+    - [x] O6 renames + lock refusal — evidence (re-verified after the F12 fix): old names → 0 hits; all 4 `HeldRunLock::try_acquire` refusals (`begin_install`, `begin_uninstall`, `workflow_uninstall_dry_run`, `begin_remote_run`) → `RUN_LOCK_BUSY` = "another workflow-system run (install, update or uninstall) is already running"; no old wording in src / src-tauri/src / src-tauri/tests; no frontend code keys on the text; constant reworded → 3 failed (local + both remote), restored (shasum matched) → 3 passed. (First pass: FAILED-cosmetic on the local refusals; fixed per the operator.)
+    - [x] O7 stale parenthetical — evidence: `grep -rn "until WP7 Phase 4\|events are shared"` over src, src-tauri, docs, workflow-system/product → 0 hits.
+    - [x] O8 gate — evidence: `pnpm verify:auto` → EXIT=0, 74 s; vitest 4184 passed; cargo lib 1511 passed, 4 ignored. Tree identical to its pre-run state after every restore.
+  - [x] verify-human  <!-- status: done -->
+    - [x] P2.verify-human.1: (decision) O6 FAILED-cosmetic — the local lock refusals ("an install or uninstall is already running") can show while a remote run holds the shared lock: fix now or accept?  <!-- status: done — operator 2026-11-20: fix now; fixed (one RUN_LOCK_BUSY for all four lock refusals) and re-verified at verify-self O6 -->
+  - [x] verify-codify  <!-- status: done -->
+    Test scope: full — suite not long (`runtimes.md` → `pnpm verify:auto` Last 82s)
+    — evidence: no new tests needed (every Phase 2 behaviour is pinned by a test mutation-proven at verify-self, incl. the consuming-surface test that the panel's Uninstall start carries `confirmed`). `pnpm verify:auto` → EXIT=0, 75 s: vitest 4184 passed; cargo lib 1511 passed, 4 ignored.
 
 - [ ] Phase 3: Release + installed-build acceptance  <!-- status: NOT-STARTED; depends on Phase 2. ⚠️ OPERATOR-GATED: /release is manual-only, it pushes main (32+ commits) and publishes; the destructive-rows ruling is the operator's (wbs.md WP8 8.2) -->
   **Observable outcomes:**
@@ -98,12 +119,13 @@ No new 3rd-party dependency: the on-host behaviours were probed at WP3 (`wbs.md`
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 2 > P2.1
-- **Active scope:** P2.1 (Phase 1 done: the four MAJORs fixed, verified, approved — Update refusal words kept as built)
-- **Blocked:** none (Phase 3 is operator-gated: `/release` go-ahead + the 8.2 ruling)
-- **Unvisited:** Phase 3 (release + acceptance)
-- **Open discoveries:** none
+- **Path:** Feature > Phase 3 > P3.1
+- **Active scope:** P3.1 (Phases 1–2 done. Phase 3 is OPERATOR-GATED: the Command Line Tools update, the `/release` go-ahead (manual-only; it pushes `main` and publishes), and the 8.2 destructive-rows ruling)
+- **Blocked:** P3.1 `/release` — waits on the operator's go-ahead; P3.2 destructive rows — wait on the 8.2 ruling
+- **Unvisited:** none after Phase 3
+- **Open discoveries:** P2.6 partial (`RemoteUninstallTarget` rename left open)
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
+[SURFACED-2026-11-20] P2.6 — the `RemoteUninstallTarget` → `ApprovedRemoteClone` rename was not done: it is outside this phase's outcomes and touches the `E0451` compile-fail test's type. It stays open in `SURFACE-2026-11-20-QUALITY-INSTALL-ERA-NAMES-SERVE-ALL-OPS` (to be rewritten to that remaining part at close, not deleted). The lock refusal is now "another workflow-system run (install, update or uninstall) is already running" (the plan's outcome forbids "install or uninstall"; this names all three).

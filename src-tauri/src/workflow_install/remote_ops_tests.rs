@@ -163,7 +163,7 @@ fn a_clean_uninstall_removes_links_clone_and_record_and_writes_only_under_the_ro
     assert_eq!(links(&host), 2, "the preview changed nothing");
 
     let before: Vec<PathBuf> = walk(Path::new(&host.root()));
-    let out = exec_on(&host)(&uninstall_script(&t)).unwrap();
+    let out = exec_on(&host)(&uninstall_script(&t).unwrap()).unwrap();
     assert_eq!(uninstall_result(&out), Some(UninstallResult::Ok), "{out}");
     assert!(
         out.contains("[remove] task-plan"),
@@ -205,7 +205,7 @@ fn a_failed_uninstall_sh_keeps_the_clone_and_the_record() {
     let t = guard(&host).unwrap();
     let out = exec_on(&host)(&format!(
         "export FIXTURE_UNINSTALL_FAIL=7\n{}",
-        uninstall_script(&t)
+        uninstall_script(&t).unwrap()
     ))
     .unwrap();
     assert_eq!(
@@ -222,7 +222,7 @@ fn a_clone_that_cannot_be_removed_keeps_the_record() {
     let t = guard(&host).unwrap();
     let vendor = host.sandbox.vendor_dir();
     std::fs::set_permissions(&vendor, std::fs::Permissions::from_mode(0o555)).unwrap();
-    let out = exec_on(&host)(&uninstall_script(&t)).unwrap();
+    let out = exec_on(&host)(&uninstall_script(&t).unwrap()).unwrap();
     std::fs::set_permissions(&vendor, std::fs::Permissions::from_mode(0o755)).unwrap();
     assert_eq!(
         uninstall_result(&out),
@@ -243,7 +243,7 @@ fn a_record_that_cannot_be_deleted_is_reported() {
     // The log must be writable for the run to reach the record delete.
     std::fs::write(dot.join("uninstall.log"), "").unwrap();
     std::fs::set_permissions(&dot, std::fs::Permissions::from_mode(0o555)).unwrap();
-    let out = exec_on(&host)(&uninstall_script(&t)).unwrap();
+    let out = exec_on(&host)(&uninstall_script(&t).unwrap()).unwrap();
     std::fs::set_permissions(&dot, std::fs::Permissions::from_mode(0o755)).unwrap();
     assert_eq!(
         uninstall_result(&out),
@@ -262,7 +262,7 @@ fn a_host_that_changed_after_the_guard_is_left_untouched() {
     let mut bytes = std::fs::read(host.record()).unwrap();
     bytes.push(b' ');
     std::fs::write(host.record(), &bytes).unwrap();
-    let out = exec_on(&host)(&uninstall_script(&t)).unwrap();
+    let out = exec_on(&host)(&uninstall_script(&t).unwrap()).unwrap();
     assert_eq!(
         uninstall_result(&out),
         Some(UninstallResult::Changed),
@@ -280,7 +280,7 @@ fn a_host_that_changed_after_the_guard_is_left_untouched() {
     let moved = PathBuf::from(format!("{}/moved", host.root()));
     std::fs::rename(host.clone_dir(), &moved).unwrap();
     std::os::unix::fs::symlink(decoy.path(), host.clone_dir()).unwrap();
-    let out = exec_on(&host)(&uninstall_script(&t)).unwrap();
+    let out = exec_on(&host)(&uninstall_script(&t).unwrap()).unwrap();
     assert_eq!(
         uninstall_result(&out),
         Some(UninstallResult::Changed),
@@ -440,10 +440,35 @@ fn the_deleting_builders_take_only_an_approved_target() {
             syn::visit::visit_expr_struct(self, e);
         }
     }
-    let src = include_str!("remote_guard.rs");
-    let production = &src[..src.find("#[cfg(test)]").expect("a test module")];
+    // The whole file, parsed; only `#[cfg(test)]` ITEMS are skipped (WP8 P2.3,
+    // `SURFACE-2026-11-20-QUALITY-SYN-FENCE-SPLITS-ON-CFG-TEST`): cutting the text at the first
+    // `#[cfg(test)]` is the split that once truncated a slice to seven lines, right only while the
+    // first such attribute happens to be the test module's.
+    let guard_file = syn::parse_file(include_str!("remote_guard.rs")).expect("parses");
+    let is_test = |attrs: &[syn::Attribute]| {
+        attrs.iter().any(|a| {
+            a.path().is_ident("cfg")
+                && a.parse_args::<syn::Meta>()
+                    .is_ok_and(|m| m.path().is_ident("test"))
+        })
+    };
     let mut lits = Literals(vec![], String::new());
-    lits.visit_file(&syn::parse_file(production).expect("parses"));
+    let mut skipped = 0;
+    for item in &guard_file.items {
+        let attrs: &[syn::Attribute] = match item {
+            syn::Item::Mod(m) => &m.attrs,
+            syn::Item::Fn(f) => &f.attrs,
+            syn::Item::Impl(i) => &i.attrs,
+            syn::Item::Use(u) => &u.attrs,
+            _ => &[],
+        };
+        if is_test(attrs) {
+            skipped += 1;
+            continue;
+        }
+        lits.visit_item(item);
+    }
+    assert!(skipped >= 1, "the test module was found and skipped");
     assert_eq!(lits.0, vec!["remote_refuse_guard"]);
     // And no other module of `workflow_install` names a struct literal of it.
     for (name, other) in [
@@ -749,7 +774,7 @@ fn a_group_kill_inside_the_update_window_cannot_split_it() {
 #[test]
 fn the_uninstall_script_ignores_signals_from_its_first_line() {
     let (host, _repo) = managed_host();
-    let s = uninstall_script(&guard(&host).unwrap());
+    let s = uninstall_script(&guard(&host).unwrap()).unwrap();
     let at = |needle: &str| {
         s.find(needle)
             .unwrap_or_else(|| panic!("`{needle}` missing: {s}"))
@@ -769,6 +794,49 @@ fn the_uninstall_script_ignores_signals_from_its_first_line() {
     assert!(at("rm -f -- \"$rec\"") < at("CLAUDESK-RUN:result:$r"));
 }
 
+/// WP8 P2.1: the run acts only on the approval the operator confirmed. A record that changed
+/// between the preview and the confirm (here: re-written with a new `installed_at`) is refused, and
+/// nothing on the host is touched; the confirmed pair passes.
+#[test]
+fn an_uninstall_proceeds_only_on_the_approval_the_operator_confirmed() {
+    let (host, _repo) = managed_host();
+    let shown = guard(&host).unwrap();
+    assert_eq!(
+        confirmed_matches(&shown, shown.clone_dir(), shown.record_hex()),
+        Ok(())
+    );
+
+    let mut rec: InstallRecord = serde_json::from_slice(&record_bytes(&host)).unwrap();
+    rec.installed_at = "2026-01-01T00:00:00+00:00".to_string();
+    std::fs::write(host.record(), serde_json::to_vec(&rec).unwrap()).unwrap();
+    let now = guard(&host).unwrap();
+    assert_eq!(now.clone_dir(), shown.clone_dir(), "same folder");
+    assert_ne!(now.record_hex(), shown.record_hex(), "different record");
+    let err = confirmed_matches(&now, shown.clone_dir(), shown.record_hex()).unwrap_err();
+    assert!(err.contains("changed after you reviewed"), "{err}");
+    assert!(err.ends_with("open Uninstall again to review it."), "{err}");
+
+    // A different folder is refused too, whatever the record.
+    let other = format!("{}-elsewhere", shown.clone_dir());
+    assert!(confirmed_matches(&now, &other, now.record_hex()).is_err());
+    // Nothing on the host was touched by the check.
+    assert_eq!(links(&host), 2);
+    assert!(host.clone_dir().exists() && host.record().exists());
+}
+
+/// WP8 P2.4: a template the filler cannot complete is a builder error, returned as one. It never
+/// becomes a script that reports `result:changed` (which would tell the operator the host changed).
+#[test]
+fn an_unfillable_uninstall_template_is_a_builder_error() {
+    let (host, _repo) = managed_host();
+    let t = guard(&host).unwrap();
+    let err = fill_uninstall("echo __NOT_A_PLACEHOLDER__", &t).unwrap_err();
+    assert!(err.contains("unfilled placeholder"), "{err}");
+    assert!(!err.contains("result:changed"), "{err}");
+    // And the real template fills: the Ok arm is what the command runs.
+    assert!(uninstall_script(&t).is_ok());
+}
+
 /// The behaviour: a group TERM delivered while a slowed `uninstall.sh` runs is ignored, and the run
 /// finishes, clone and record both gone. The script prints no pgid (it has no Cancel), so the test
 /// prepends the same pgid line Install and Update print, and keys the kill on the line the script
@@ -779,7 +847,7 @@ fn a_group_kill_inside_the_uninstall_cannot_split_it() {
     let (host, _repo) = managed_host();
     let script = format!(
         "echo \"CLAUDESK-RUN:pgid:$(ps -o pgid= -p $$ | tr -d ' ')\"\n{}",
-        uninstall_script(&guard(&host).unwrap())
+        uninstall_script(&guard(&host).unwrap()).unwrap()
     );
     let started = std::time::Instant::now();
     let (lines, _) = run_and_group_kill_at(

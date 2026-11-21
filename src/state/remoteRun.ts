@@ -61,14 +61,43 @@ export interface RemoteUninstallPreview {
   readonly host: string;
   readonly clone_dir: string;
   readonly preview: string;
+  /** The record's bytes the guard approved (hex), sent back by the confirm (WP8 P2.1). */
+  readonly record_hex: string;
 }
 
-/** Start a run on `host` over its open connection. Rejects with a plain-words refusal. */
-export function startRemoteRun(op: RemoteOp, host: string): Promise<void> {
+/** What the operator confirmed for an Uninstall: the preview's folder and record. */
+export interface ConfirmedPreview {
+  readonly clone_dir: string;
+  readonly record_hex: string;
+}
+
+/**
+ * Start a run on `host` over its open connection. Rejects with a plain-words refusal. An Uninstall
+ * carries the preview the operator confirmed, and the backend refuses it if the host's approval
+ * no longer matches (WP8 P2.1).
+ */
+export function startRemoteRun(
+  op: RemoteOp,
+  host: string,
+  confirmed?: ConfirmedPreview,
+): Promise<void> {
+  if (op === "uninstall") {
+    if (!confirmed) {
+      return Promise.reject(
+        "Claudesk has no reviewed removal to run. Open Uninstall again to review it.",
+      );
+    }
+    return invoke<void>("workflow_remote_uninstall_start", {
+      host,
+      confirmed: {
+        clone_dir: confirmed.clone_dir,
+        record_hex: confirmed.record_hex,
+      },
+    });
+  }
   const cmd = {
     install: "workflow_remote_install_start",
     update: "workflow_remote_update_start",
-    uninstall: "workflow_remote_uninstall_start",
   }[op];
   return invoke<void>(cmd, { host });
 }
