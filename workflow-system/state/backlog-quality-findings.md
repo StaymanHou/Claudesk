@@ -179,15 +179,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-16-QUALITY-M17WP3-BLOCKING-GUARD-NAME-HEURISTIC-SHAPES-PRODUCTION
-- **Severity:** MINOR
-- **Location:** src-tauri/src/cc_session/mod.rs (`ExitHook`, `finish_output`); src-tauri/src/subprocess/mod.rs (`killpg`)
-- **Finding:** Three production shapes exist only to dodge `sync_commands_do_not_block.rs`'s resolve-by-name heuristic.
-- **Why it matters:** The guard's false positives are now shaping production code.
-- **Suggested action:** A backlog item against the guard (e.g. resolve method calls by receiver type where `syn` can, or a per-call-site cut list).
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-11-16-QUALITY-M17WP3-INJECT-REFUSAL-AS-CALLBACK
 - **Severity:** MINOR
 - **Location:** src/components/workspace/autoResumeFire.ts `injectCommand`; recycleSession.ts `injectRefusal`

@@ -5,6 +5,9 @@
 - **Feature shipped:** Both workspace pickers now focus "Filter projects…" as they appear, so typing filters straight away instead of reaching the CC pane; dismissing the "+" overlay hands focus back to the pane, and the overlay card is a bounded flex column whose project list is its only scroller at any window size.
 - **Backlog resolved:** SURFACE-2026-11-18-PICKER-SEARCH-BOX-NOT-AUTOFOCUSED — the filter `autoFocus`es on every picker mount (first-open scene and each "+" summon), pinned through the real `App`.
 - **Backlog resolved:** SURFACE-2026-11-18-PICKER-OVERLAY-NESTED-SCROLLBARS — the overlay card no longer scrolls; the list takes the leftover height and is the only scroller, measured live at short and tall windows.
+- **Task closed:** Backlog-paydown 2026-11-27 WP1, bookkeeping: two entries deleted, three low-value items buried in `backlog-archived.md`, and the two never-sent upstream items (the F10b classifier, the `install.sh` backup loss) sent to mccc's inbox after re-checking both still exist there.
+- **Backlog resolved:** SURFACE-2026-11-09-NEXT-OPEN-INDICATOR-PREDICTS-CONTINUE-WITH-NO-TRANSCRIPT — dropped by the operator at the paydown sweep; the display-only mis-prediction for no-transcript projects stays as built.
+- **Backlog resolved:** SURFACE-2026-11-17-APP-TSX-FAST-REFRESH-CLOSES-REMOTE-WORKSPACES — its action (close remote workspaces before an `App.tsx` edit) is already carried by the remote-verify hygiene memory, so the entry is retired.
 
 ## 2026-11-20
 

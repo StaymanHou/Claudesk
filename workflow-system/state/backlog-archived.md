@@ -458,3 +458,35 @@ changes (e.g. the prerequisite toolchain lands for another reason).
 - **WP3 measurement (2026-10-27, M16.5 WP3 task 3.5; the question was KEPT):** five candidate questions were tuned on a seeded dev split (seed 20261026, 146 rows). The chosen one, v5 (`tooling/adjudicator-probe/candidates.ts`, hash `7c3133ebe6f3384a`), scored **0.830 waits held / 0.801 breaks fired** on the untouched held-out split (145 rows, mean of 3 runs). The shipped question scores 0.869 / 0.695 on the same split. That misses AC-18's waits-held floor of ≥0.85, so `adjudicationPrompt` was not changed. Across the five, raising breaks fired cost waits held almost one-for-one. The labels turn on context the tail does not carry: a "ready for your review" stop before verify-human is a break, and the verify-human checklist turn is a wait. ⚠️ So another wording pass on tail-only input is unlikely to clear the bar. A next attempt would need more input (for example the emitted transition id, or whether the next step's skill presents its own checklist), or a change to the bar, which is the operator's call.
 - **Priority:** low (lowered from high 2026-10-27 per design prior `simple-version-first-when-the-source-fix-shrank-the-problem`: breaks are now rare at source, and the next lever, richer adjudicator input, is an advanced minor-gain enhancement)
 - **Status:** buried 2026-11-08 (R2). Was open after the M16.5 WP3 (3.5) re-measure, where the question was KEPT per AC-18.
+
+## SURFACE-2026-11-17-REMOTE-EXEC-COUNT-NEEDS-A-BEHAVIOURAL-HARNESS  `← Buried 2026-11-27 (backlog-paydown-2026-11-27 WP1)`
+- **Buried because:** the disposition model (backlog-paydown-2026-11-27, D3) scored this low impact, medium effort and low risk (the meh zone). The source guards stand and their residual is already stated; an injectable ssh path plus AppHandle-free workers is real work for a guard swap.
+- **Source:** feature:verify-self (M17 WP5 Phase 2, AC-8.2)
+- **Target level:** product:arch
+- **Type:** tech-debt
+- **Summary:** "An open asks the remote host at most twice" (the open check's one exec, then the spawn's one exec) is pinned only by SOURCE guards (`remote_link::commands::assert_remote_reach_is_closed` + the downstream scan in `cc_session`'s `a_remote_close_ends_its_session_and_a_respawn_waits_for_it`). Five fresh verify-self rounds each found one new route for a second exec; all are closed by class now, with a stated residual (a retry around the one allowed exec; a brand-new ssh spawner under a new name, imported bare).
+- **Context:** The commands take an `AppHandle`, and `LinkRegistry::exec` spawns a real `/usr/bin/ssh` outside the `Transport` seam, so no fake can count execs behaviourally. Operator ruling 2026-11-17: accept the guards, log this.
+- **Suggested action:** Make the ssh binary path injectable for tests (or route `LinkRegistry::exec` through `Transport`), split `remote_open_check` / `cc_spawn_remote` into AppHandle-free worker functions, and replace the source guards' exec count with a test that drives an open and counts real ssh invocations.
+- **Priority:** low
+- **Status:** buried 2026-11-27 (D3). Was: deferred — carry to next cycle *(M17 close, 2026-11-17)*
+
+## SURFACE-2026-11-17-REMOTE-SETTLE-COULD-BE-READINESS-ONLY  `← Buried 2026-11-27 (backlog-paydown-2026-11-27 WP1)`
+- **Buried because:** the disposition model (backlog-paydown-2026-11-27, D3) scored this low impact, medium effort: a ~1.2 s saving per remote resume that needs ten or more cold remote opens to probe, and an unreliable inject is invisible to the suite.
+- **Source:** feature:build (M17 WP5 P2.4, AC-7)
+- **Target level:** product:arch
+- **Type:** tech-debt
+- **Summary:** A remote auto-resume waits `INJECT_SETTLE_MS` (1500 ms) after `cc_ready` AND for the pane's `#{bracket_paste_flag}`. Measured live (5 instrumented cold opens, 2026-11-17): the pane is ready 0.4–0.5 s after its tmux session exists, and the inject lands 1.1–1.3 s after readiness, so the settle alone costs ~1.2 s per remote resume.
+- **Context:** WP5 kept 1500 ms because no run fired on readiness alone; the local cliff (350 ms unreliable) is why the margin exists.
+- **Suggested action:** Probe ≥10 cold remote opens with the settle at 0 (readiness only) through `cc_inject`; if all land, drop the settle for remote panes only.
+- **Priority:** low
+- **Status:** buried 2026-11-27 (D3). Was: deferred — carry to next cycle *(M17 close, 2026-11-17)*
+
+## SURFACE-2026-11-16-QUALITY-M17WP3-BLOCKING-GUARD-NAME-HEURISTIC-SHAPES-PRODUCTION  `← Buried 2026-11-27 (backlog-paydown-2026-11-27 WP1)`
+- **Buried because:** the disposition model (backlog-paydown-2026-11-27, D3) scored this low impact, medium effort: a `syn` receiver-type resolver is not cheap, and the three production shapes it would remove are harmless.
+- **Severity:** MINOR
+- **Location:** src-tauri/src/cc_session/mod.rs (`ExitHook`, `finish_output`); src-tauri/src/subprocess/mod.rs (`killpg`)
+- **Finding:** Three production shapes exist only to dodge `sync_commands_do_not_block.rs`'s resolve-by-name heuristic.
+- **Why it matters:** The guard's false positives are now shaping production code.
+- **Suggested action:** A backlog item against the guard (e.g. resolve method calls by receiver type where `syn` can, or a per-call-site cut list).
+- **Priority:** low
+- **Status:** buried 2026-11-27 (D3). Was: pending

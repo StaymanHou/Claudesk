@@ -544,16 +544,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (one dev-build sighting, and one clean deliberate probe; raise to medium on any installed-build sighting, since a blank pane hides an awaiting question)
 - **Status:** open — watch
 
-## SURFACE-2026-11-09-NEXT-OPEN-INDICATOR-PREDICTS-CONTINUE-WITH-NO-TRANSCRIPT
-- **Source:** feature:verify-self (paydown-2026-11-08 WP5 Phase 1, reproducing the side observation in `SURFACE-2026-11-03-AUTO-RESUME-FIRES-INTO-THE-FOLDER-TRUST-PROMPT`)
-- **Target level:** task
-- **Type:** bug (prediction surface)
-- **Summary:** The workspace header's next-open indicator (`nextOpenIndicator` in `sessionStartButton.ts`, fed by `picker_announce_actions`) shows `↻ will continue` whenever the unclean flag is set, and the flag is set at spawn by design. But the spawn drops `--continue` when the project has no transcript under its config root (`cc_session` → `guard_continue_against_transcripts`, F-b P1.1), so for such a project the label predicts a continue that will not happen. Because the flag outranks `.session.md` in `predictAction`, the prediction also displaces the `/session-restore` arm. Seen live 2026-11-09 on `claudesk-scratch/restore-test` (never trusted, no `~/.claude/projects/…` dir): the header read `↻ will continue` right after open.
-- **Context:** Display-only today: the action is re-derived at open time, so nothing is typed wrongly. The cost is a false promise, plus a reopen after an unclean exit that runs neither arm. The picker's batch announce has the same blind spot: it reads the flag but not the transcript guard.
-- **Suggested action:** Have `announce_actions` apply the same transcript check the spawn uses (one predicate shared by both, never a copy), so a no-transcript project predicts the `.session.md` arm or nothing. Decide whether the flag should then still outrank `.session.md` when `--continue` cannot run (likely: fall through to `/session-restore`, which needs a matching change in `resolve_resume_arm`).
-- **Priority:** low (display-only mis-prediction; most real projects have transcripts)
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-
 ## SURFACE-2026-11-09-F10B-MEASUREMENT-COUNTS-A-CORRECT-FSD-CHAIN-AS-A-STOP
 - **Source:** task:act (backlog-paydown-2026-11-08 WP1, the F10b re-measure)
 - **Target level:** upstream (mccc) — `tools/analysis/measure-f10b-handback-rate.py`
@@ -562,7 +552,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** A reading of 8.1% would have triggered the "rate climbing back toward 7% reopens the upstream ask" branch of the close rule on a pure instrument artifact. ⚠️ The pre-fix baselines in `tests/results/M-PROSE-SHIP-BASELINE.md` may carry the same inflation, wherever FSD sessions fall inside their windows.
 - **Suggested action:** In FSD context, count a `feature-verify-codify` invocation as the chain, or more generally accept the mode's next skill. Add a fixture with one FSD F10b → codify turn that must read as chained. Then re-derive the pre-fix baselines to see whether any moved.
 - **Priority:** low (the F10b entry it was measuring is resolved; this matters only for future readings)
-- **Status:** open — upstream (mccc); not yet sent
+- **Status:** open — upstream (mccc); **sent 2026-11-27** (`HANDOFF-to-mccc-2026-11-27-f10b-classifier-and-install-sh-backup.md`, §1; re-checked present at mccc `f8e8873`). Stays open until mccc applies or declines it.
 
 ## Code-quality findings — paydown-2026-11-08-wp6-subprocess-primitives (2026-11-09)
 
@@ -698,36 +688,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** the silent-failure toast also settles the duplicated cap. The test-fake consolidation fits any later `XtermPane` test touch.
 
-## SURFACE-2026-11-17-REMOTE-EXEC-COUNT-NEEDS-A-BEHAVIOURAL-HARNESS
-- **Source:** feature:verify-self (M17 WP5 Phase 2, AC-8.2)
-- **Target level:** product:arch
-- **Type:** tech-debt
-- **Summary:** "An open asks the remote host at most twice" (the open check's one exec, then the spawn's one exec) is pinned only by SOURCE guards (`remote_link::commands::assert_remote_reach_is_closed` + the downstream scan in `cc_session`'s `a_remote_close_ends_its_session_and_a_respawn_waits_for_it`). Five fresh verify-self rounds each found one new route for a second exec; all are closed by class now, with a stated residual (a retry around the one allowed exec; a brand-new ssh spawner under a new name, imported bare).
-- **Context:** The commands take an `AppHandle`, and `LinkRegistry::exec` spawns a real `/usr/bin/ssh` outside the `Transport` seam, so no fake can count execs behaviourally. Operator ruling 2026-11-17: accept the guards, log this.
-- **Suggested action:** Make the ssh binary path injectable for tests (or route `LinkRegistry::exec` through `Transport`), split `remote_open_check` / `cc_spawn_remote` into AppHandle-free worker functions, and replace the source guards' exec count with a test that drives an open and counts real ssh invocations.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-
-## SURFACE-2026-11-17-REMOTE-SETTLE-COULD-BE-READINESS-ONLY
-- **Source:** feature:build (M17 WP5 P2.4, AC-7)
-- **Target level:** product:arch
-- **Type:** tech-debt
-- **Summary:** A remote auto-resume waits `INJECT_SETTLE_MS` (1500 ms) after `cc_ready` AND for the pane's `#{bracket_paste_flag}`. Measured live (5 instrumented cold opens, 2026-11-17): the pane is ready 0.4–0.5 s after its tmux session exists, and the inject lands 1.1–1.3 s after readiness, so the settle alone costs ~1.2 s per remote resume.
-- **Context:** WP5 kept 1500 ms because no run fired on readiness alone; the local cliff (350 ms unreliable) is why the margin exists.
-- **Suggested action:** Probe ≥10 cold remote opens with the settle at 0 (readiness only) through `cc_inject`; if all land, drop the settle for remote panes only.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-
-## SURFACE-2026-11-17-APP-TSX-FAST-REFRESH-CLOSES-REMOTE-WORKSPACES
-- **Source:** feature:build (M17 WP6 Phase 3 verify-self)
-- **Target level:** product:arch
-- **Type:** gap
-- **Summary:** Editing `src/App.tsx` while `pnpm tauri:dev` runs makes React Fast Refresh reset App's workspace list, so every open workspace unmounts and closes through the normal path, which ENDS a remote session (R-1).
-- **Context:** Hit twice in one phase (an App.tsx edit, then App.tsx mutants). The close was clean (no orphaned ssh master or tmux session), but a live remote check silently lost its workspace and needed a reopen; a real (non-scratch) remote session would be ended by a dev edit.
-- **Suggested action:** Add to the remote-verify hygiene memory: close remote workspaces (or use a scratch row) before editing `App.tsx` or running App.tsx mutants. Optionally move App's workspace state into a module that Fast Refresh preserves.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-
 ## SURFACE-2026-11-17-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE
 - **Source:** feature:verify-human (M17 WP8 P3.2a, installed v0.9.0)
 - **Target level:** task
@@ -747,7 +707,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Context:** M18 WP7's Update runs `install.sh` again on a Managed install, so every Update carries this. The 0600 mode is harmless for the owning user. The lost `.bak` is the real cost: a user's own backup under that name, or the backup from an earlier `[update]` run, is destroyed silently. Not a Claudesk bug; Claudesk only runs the script (the scripts are the source of truth, `arch/claude-substrate.md` §R.3).
 - **Suggested action:** upstream (mccc): write the backup to a fresh name (`CLAUDE.md.bak.<timestamp>`), or only `cp` to `.bak` when the result differs, and keep the original file's mode (`cat "$updated_tmp" > "$GLOBAL_CLAUDE_MD"` instead of `mv`). Send it in the next mccc handoff. Claudesk side: no change; WP7's Update stays as designed (the probe found no duplicate block and no prompt).
 - **Priority:** low
-- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*: an upstream (mccc) `install.sh` fix; Claudesk only re-runs it
+- **Status:** open — upstream (mccc); **sent 2026-11-27** (`HANDOFF-to-mccc-2026-11-27-f10b-classifier-and-install-sh-backup.md`, §2; re-checked present at mccc `f8e8873`). Claudesk only re-runs the script. Stays open until mccc applies or declines it.
 ## Code-quality findings — m18-wp4-substrate-detection-and-funnel (2026-11-20)
 
 - **Pointer:** **5 MINOR** open from the review of the WP4 window (`9ce4810^..d57aa15`). The stale arch-wording MINOR was resolved at WP4 finalize; the guard MAJOR and the optional-`onOpenSettings` MINOR were resolved at M18 WP5 (CHANGELOG 2026-11-20).
