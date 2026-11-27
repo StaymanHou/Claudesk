@@ -480,9 +480,15 @@ pub fn parse_spawn_facts(out: &str, stored: &str) -> SpawnFacts {
 /// Prefix of every line the open check prints, so rc-file noise before it is ignored.
 pub const OPEN_SENTINEL: &str = "CLAUDESK-OPEN:";
 
-/// The drive modes a session can be spawned under (the closed four; `transitions.md`). A stored
-/// [`MODE_OPTION`] outside this set reads as unknown, never as a mode.
-const DRIVE_MODES: [&str; 4] = ["stepping", "orchestrated", "autopilot", "fsd"];
+/// Whether `v` is one of the drive modes a session can be spawned under: exactly the wire strings
+/// [`crate::config_store::DriveMode`] deserializes, so there is no second copy of the closed set
+/// to drift. A stored [`MODE_OPTION`] outside it reads as unknown, never as a mode.
+fn is_drive_mode(v: &str) -> bool {
+    serde_json::from_value::<crate::config_store::DriveMode>(serde_json::Value::String(
+        v.to_string(),
+    ))
+    .is_ok()
+}
 
 /// M17 WP5 — the open check's ONE exec (AC-3.1): does the folder exist, is the workspace's tmux
 /// session live, and (if live) which drive mode was it spawned under. Run by [`login_shell`]
@@ -930,7 +936,7 @@ fn is_sha(v: &str) -> bool {
 fn parse_mode_value(v: &str) -> Option<Option<String>> {
     if v == NO_MODE {
         Some(None)
-    } else if DRIVE_MODES.contains(&v) {
+    } else if is_drive_mode(v) {
         Some(Some(v.to_string()))
     } else {
         None
@@ -1216,6 +1222,12 @@ pub(crate) mod tests {
         assert!(s.starts_with(&format!("p={}\n", quote(hostile))), "{s}");
         // The token's expansion is in the constant, literally; no token VALUE can be here.
         assert!(s.contains("\"$(cat ~/.claudesk/cc-oauth-token)\""));
+        // ...and it reads THE token file the rest of the code writes and checks, not a second
+        // spelling of it that could drift.
+        assert!(
+            AUTH_CHECK.contains(&format!("\"$(cat {TOKEN_FILE})\"")),
+            "AUTH_CHECK must read TOKEN_FILE ({TOKEN_FILE}): {AUTH_CHECK}"
+        );
         // The whole thing as the remote login shell receives it.
         let wrapped = login_shell(&s);
         assert!(wrapped.starts_with("zsh -lc '"));
@@ -2118,6 +2130,31 @@ pub(crate) mod tests {
         // A start does not read it (its line is absent), whatever tmux holds.
         assert_eq!(mode(false, Some("orchestrated")), None);
         assert!(!spawn_facts_command("s", "cd-1", here, false).contains("show-options"));
+    }
+
+    /// The reconnect's stored mode is read against `DriveMode` itself: every wire string the enum
+    /// serializes to parses as that mode, and the near-misses no workflow skill recognizes do not.
+    #[test]
+    fn a_stored_mode_is_exactly_the_drive_mode_wire_set() {
+        use crate::config_store::DriveMode;
+        for m in [
+            DriveMode::StepByStep,
+            DriveMode::Orchestrated,
+            DriveMode::Autopilot,
+            DriveMode::FullAutopilot,
+        ] {
+            let wire = serde_json::to_value(m).unwrap();
+            let wire = wire.as_str().unwrap();
+            assert_eq!(
+                parse_mode_value(wire),
+                Some(Some(wire.to_string())),
+                "{wire}"
+            );
+        }
+        for not_a_mode in ["step-by-step", "full-autopilot", "Autopilot", ""] {
+            assert_eq!(parse_mode_value(not_a_mode), None, "{not_a_mode:?}");
+        }
+        assert_eq!(parse_mode_value(NO_MODE), Some(None));
     }
 
     /// M17 WP5: the attach checks for the session FIRST and exits [`EXIT_NO_SESSION`] when it is

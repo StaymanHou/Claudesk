@@ -556,7 +556,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — paydown-2026-11-08-wp6-subprocess-primitives (2026-11-09)
 
-- **Pointer:** **4 MINOR** from the review of `1ccf9c4` (its MAJOR, the unbounded kill-exit drain, was resolved 2026-11-09). `MAX_OUTPUT` carries three meanings; the truncation note implies arrival order; `SPAWN_BOUNDARIES` misses `on_blocking_worker` (its docs half was resolved by paydown-2026-11-27 WP2); a long line is cut without a marker.
+- **Pointer:** **3 MINOR** from the review of `1ccf9c4` (its MAJOR, the unbounded kill-exit drain, was resolved 2026-11-09). `MAX_OUTPUT` carries three meanings; the truncation note implies arrival order; a long line is cut without a marker. (The `spawn_blocking` docs item was resolved by paydown-2026-11-27 WP2 + WP4.)
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-08-wp6-subprocess-primitives — 2026-11-09`.
 - **Priority:** low (all)
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
@@ -564,7 +564,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — paydown-2026-11-08-wp5-auto-resume-folder-trust (2026-11-09)
 
-- **Pointer:** **2 MINOR** remain from the review of `80128a4`: `apply_trust` re-parses `.claude.json` per row; the shared resolver's tests live in `transcript`. (The `announceRow.ts` header and the `PickerRow` comment were resolved by paydown-2026-11-27 WP2.)
+- **Pointer:** **1 MINOR** remains from the review of `80128a4`: `apply_trust` re-parses `.claude.json` per row. (The resolver tests moved to `profiles.rs` at paydown-2026-11-27 WP4.) (The `announceRow.ts` header and the `PickerRow` comment were resolved by paydown-2026-11-27 WP2.)
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-08-wp5-auto-resume-folder-trust — 2026-11-09`.
 - **Priority:** low (all)
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
@@ -572,12 +572,10 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m17-wp2-remote-rows (2026-11-16)
 
-- **Pointer:** **4 MINOR** remain from the review of `d871473` (paydown-2026-11-27 WP2 resolved the `remote_preflight` caller note and the history notes). WP3 resolved the MAJOR (store validation), path normalization, and the runner move, and half of the `$HOME` read (2026-11-16, see CHANGELOG).
+- **Pointer:** **2 MINOR** remain from the review of `d871473` (paydown-2026-11-27 WP2 resolved the `remote_preflight` caller note and the history notes; WP4 the token-path pin and the cwd-trap debris). WP3 resolved the MAJOR (store validation), path normalization, and the runner move, and half of the `$HOME` read (2026-11-16, see CHANGELOG).
   - MINORs:
-    - the token path is duplicated;
     - the preflight's `$HOME` read is intolerant of rc-file output;
-    - the check names are mislabelled;
-    - the cwd-trap test writes under `src-tauri/`.
+    - the check names are mislabelled.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp2-remote-rows — 2026-11-16`.
 - **Priority:** low
@@ -631,12 +629,11 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m17-wp4-status-over-the-link (2026-11-16)
 
-- **Pointer:** **4 MINOR** open from the review of the WP4 ship commit (`feat(m17-wp4): remote status over the link`). The MAJOR (the link-down quit freeze) was resolved 2026-11-16; WP5 resolved the overlay-key and two-spawn-execs MINORs (2026-11-17, CHANGELOG).
+- **Pointer:** **3 MINOR** open from the review of the WP4 ship commit (`feat(m17-wp4): remote status over the link`) (the brittle pin + stale docs: docs fixed at paydown-2026-11-27 WP2, the pin already gone since M17 WP5). The MAJOR (the link-down quit freeze) was resolved 2026-11-16; WP5 resolved the overlay-key and two-spawn-execs MINORs (2026-11-17, CHANGELOG).
   - MINORs:
     - the realpath alias is never cleared;
     - the hook warning shares the inject toast (WP5 added three more writers; see the item's update);
-    - a stale-overlay emit race;
-    - a brittle source pin plus stale docs.
+    - a stale-overlay emit race.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp4-status-over-the-link — 2026-11-16`.
 - **Priority:** low
@@ -645,9 +642,9 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m17-wp5-lifecycle (2026-11-17)
 
-- **Pointer:** **1 MAJOR + 4 MINOR** open from the review of the WP5 ship commit (`67dec33`) (paydown-2026-11-27 WP2 resolved the announce comment, the displaced doc blocks and the `SessionExists` comment); 2 more MINORs were appended to existing WP3/WP4 items (the shared workspace toast; WIP labels in comments). The review's CRITICAL (the `remote_record` lost-update race) goes to `/feature-refactor` before finalize.
+- **Pointer:** **1 MAJOR + 2 MINOR** open from the review of the WP5 ship commit (`67dec33`) (paydown-2026-11-27 WP2 resolved the announce comment, the displaced doc blocks and the `SessionExists` comment; WP4 the `DRIVE_MODES` copy and the dense-body helpers); 2 more MINORs were appended to existing WP3/WP4 items (the shared workspace toast; WIP labels in comments). The review's CRITICAL (the `remote_record` lost-update race) goes to `/feature-refactor` before finalize.
   - MAJOR: the reconnect drive mode as nested `Option`s + a redundant `attach` flag.
-  - MINORs: the close-not-ended toast's cause/project; the "no such session" text coupling; a second `DRIVE_MODES` copy; three dense-body helpers.
+  - MINORs: the close-not-ended toast's cause/project; the "no such session" text coupling.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp5-lifecycle — 2026-11-17`.
 - **Priority:** medium (the MAJOR), low (the rest)
@@ -656,17 +653,17 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m18-wp2-fresh-account-hardening (2026-11-18)
 
-- **Pointer:** **2 MINOR** open from the review of the WP2 ship commit (`1a71d1b`): `withheldNotice`'s defaulted `cause`; an indent-bound source guard. The 2 MAJORs (the stale remote bypass answer across Recycle; the `setup-token` hint) and the "is showing" MINOR were resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-fresh-account-hardening — 2026-11-18`.
+- **Pointer:** **1 MINOR** open from the review of the WP2 ship commit (`1a71d1b`): `withheldNotice`'s defaulted `cause` (the indent-bound guard was resolved by paydown-2026-11-27 WP4). The 2 MAJORs (the stale remote bypass answer across Recycle; the `setup-token` hint) and the "is showing" MINOR were resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-fresh-account-hardening — 2026-11-18`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** paydown polish.
 
 ## Code-quality findings — m18-wp2-5-remote-copy-to-mac-clipboard (2026-11-18)
 
-- **Pointer:** **2 MINOR** open from the review of the WP2.5 ship commit (`e38cdc7`): a failed or refused copy is silent (the operator pastes the previous clipboard); one conf assert has no message. (The cap pin and the shared `Terminal` fake were resolved by paydown-2026-11-27 WP3.) The paste-jacking MAJOR was resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18`.
+- **Pointer:** **1 MINOR** open from the review of the WP2.5 ship commit (`e38cdc7`): a failed or refused copy is silent (the operator pastes the previous clipboard). (The conf assert message was added at paydown-2026-11-27 WP4.) (The cap pin and the shared `Terminal` fake were resolved by paydown-2026-11-27 WP3.) The paste-jacking MAJOR was resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
-- **Pickup shape:** paydown-2026-11-27 WP8 (the silent-failure toast) and WP4 (the conf assert).
+- **Pickup shape:** paydown-2026-11-27 WP8 (the silent-failure toast).
 
 ## SURFACE-2026-11-17-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE
 - **Source:** feature:verify-human (M17 WP8 P3.2a, installed v0.9.0)
@@ -714,7 +711,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m18-wp8-release-acceptance (2026-11-20)
 
-- **Pointer:** **4 MINOR** open from the review of the WP8 window (`22bcec6^..b015868`): the consent refusal can name an unchanged folder twice; `GitClean` misses the Rust `Command` form; the syn `#[cfg(test)]` fence is hand-copied three times; the run panel's listener count is hard-coded.
+- **Pointer:** **2 MINOR** open from the review of the WP8 window (`22bcec6^..b015868`) (paydown-2026-11-27 WP4 resolved the `GitClean` Command form and the hand-copied `#[cfg(test)]` fence): the consent refusal can name an unchanged folder twice; the run panel's listener count is hard-coded.
   - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp8-release-acceptance — 2026-11-20`.
 - **Priority:** low (all)
 - **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*

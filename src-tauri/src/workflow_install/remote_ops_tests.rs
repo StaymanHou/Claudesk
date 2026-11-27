@@ -445,24 +445,10 @@ fn the_deleting_builders_take_only_an_approved_target() {
     // `#[cfg(test)]` is the split that once truncated a slice to seven lines, right only while the
     // first such attribute happens to be the test module's.
     let guard_file = syn::parse_file(include_str!("remote_guard.rs")).expect("parses");
-    let is_test = |attrs: &[syn::Attribute]| {
-        attrs.iter().any(|a| {
-            a.path().is_ident("cfg")
-                && a.parse_args::<syn::Meta>()
-                    .is_ok_and(|m| m.path().is_ident("test"))
-        })
-    };
     let mut lits = Literals(vec![], String::new());
     let mut skipped = 0;
     for item in &guard_file.items {
-        let attrs: &[syn::Attribute] = match item {
-            syn::Item::Mod(m) => &m.attrs,
-            syn::Item::Fn(f) => &f.attrs,
-            syn::Item::Impl(i) => &i.attrs,
-            syn::Item::Use(u) => &u.attrs,
-            _ => &[],
-        };
-        if is_test(attrs) {
+        if crate::test_support::is_cfg_test(crate::test_support::item_attrs(item)) {
             skipped += 1;
             continue;
         }

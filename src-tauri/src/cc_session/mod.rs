@@ -2709,7 +2709,7 @@ mod tests {
         // `spawn_argv` reaches `CommandBuilder` and a real PTY. Whitespace is flattened so a
         // Prettier-equivalent rustfmt reflow cannot silently stop it matching.
         let src = include_str!("mod.rs");
-        let production = src.split("mod tests").next().unwrap_or(src);
+        let production = crate::test_support::production_text(src);
         let flat = production.split_whitespace().collect::<Vec<_>>().join(" ");
         assert!(
             flat.contains("&shell_spawn_env(), \"exit\""),
@@ -2950,7 +2950,7 @@ mod tests {
         // Source-level: `CommandBuilder` is not observable from a unit test. The CC spawn must
         // pass CONFIG_DIR_ENV as the removal list; the shell spawn must pass an empty one.
         let src = include_str!("mod.rs");
-        let production = src.split("mod tests").next().unwrap_or(src);
+        let production = crate::test_support::production_text(src);
         // Trailing commas are normalized away: rustfmt adds or drops one when it reflows a call
         // between one line and many, and a guard that depends on which it chose breaks silently
         // on the next `cargo fmt` (it did, once, in this very test).
@@ -3041,7 +3041,7 @@ mod tests {
     #[test]
     fn profile_spawn_caller_orders_its_profile_decisions() {
         let src = include_str!("mod.rs");
-        let production = src.split("mod tests").next().unwrap_or(src);
+        let production = crate::test_support::production_text(src);
         let start = production
             .find("    pub fn spawn(\n        &mut self,")
             .expect("SessionRegistry::spawn moved; re-scope this guard");
@@ -3095,9 +3095,15 @@ mod tests {
             call.lines().any(|l| l.trim() == "argv_mode,"),
             "the spawn must pass the profile-aware permission mode: {call}"
         );
+        // Anchored INSIDE the `RegisteredSession { … }` literal (not indentation-bound across the
+        // whole body): another struct literal gaining a `permission,` field must not satisfy it.
+        let registered = &code[at("RegisteredSession {")..];
+        let registered = &registered[..registered
+            .find("\n            },")
+            .expect("the RegisteredSession literal closes")];
         assert!(
-            code.contains("                permission,\n"),
-            "the registered session must record the spawn's permission"
+            registered.lines().any(|l| l.trim() == "permission,"),
+            "the registered session must record the spawn's permission: {registered}"
         );
     }
 
@@ -3547,20 +3553,13 @@ mod tests {
     /// with the spawn's own result and remote-ness, BEFORE the `?` that returns a failed spawn.
     #[test]
     fn a_remote_spawn_records_running_through_record_remote_spawn() {
-        let src = include_str!("mod.rs");
-        let production = src.split("mod tests").next().unwrap_or(src);
-        let start = production
-            .find("    pub fn spawn(\n        &mut self,")
-            .expect("SessionRegistry::spawn moved; re-scope this guard");
-        let body = &production[start..];
-        let body = &body[..body.find("\n    pub fn spawn_shell(").expect("spawn ends")];
-        let dense: String = body
-            .lines()
-            .filter(|l| !l.trim_start().starts_with("//"))
-            .collect::<String>()
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect();
+        use crate::test_support::{dense, production_text, span, without_comment_lines};
+        let body = span(
+            production_text(include_str!("mod.rs")),
+            "    pub fn spawn(\n        &mut self,",
+            "\n    pub fn spawn_shell(",
+        );
+        let dense = dense(&without_comment_lines(body));
         // Every argument, including the mode the start records (verify-self re-run: a `None`
         // there survived when the prefix stopped at `attached_mode`).
         let call = dense
@@ -3622,30 +3621,18 @@ mod tests {
     /// `running_drive_mode`'s answer.
     #[test]
     fn a_reconnect_spawn_attaches_and_registers_its_running_mode() {
-        let src = include_str!("mod.rs");
-        let production = src.split("mod tests").next().unwrap_or(src);
-        let dense: String = production
-            .lines()
-            .filter(|l| !l.trim_start().starts_with("//"))
-            .collect::<String>()
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect();
+        use crate::test_support::{dense, production_text, without_comment_lines};
+        let dense = dense(&without_comment_lines(production_text(include_str!(
+            "mod.rs"
+        ))));
         assert!(dense.contains("letargv=remote::session_argv(remote.attach,"));
         assert!(dense.contains(
             "letspawned_drive_mode=running_drive_mode(attached_mode.as_ref(),resolved_env.drive_mode);"
         ));
         assert!(dense.contains("drive_mode:spawned_drive_mode,"));
-        let commands: String = include_str!("commands.rs")
-            .split("mod tests")
-            .next()
-            .unwrap()
-            .lines()
-            .filter(|l| !l.trim_start().starts_with("//"))
-            .collect::<String>()
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect();
+        let commands = crate::test_support::dense(&crate::test_support::without_comment_lines(
+            crate::test_support::production_text(include_str!("commands.rs")),
+        ));
         let attach = commands
             .find("letattach=intent==Some(OpenIntent::Reconnect);")
             .expect("cc_spawn_remote decides attach from the Reconnect door");
@@ -4229,9 +4216,9 @@ mod tests {
             .iter()
             .any(|s| matches!(s, KillStep::CleanExitAttempt(_))));
         // `kill` and `hang_up` walk the SAME executor, each with its own sequence.
-        let src = include_str!("mod.rs");
-        let production = src.split("#[cfg(test)]\nmod tests").next().unwrap_or(src);
-        let dense: String = production.chars().filter(|c| !c.is_whitespace()).collect();
+        let dense = crate::test_support::dense(crate::test_support::production_text(include_str!(
+            "mod.rs"
+        )));
         assert!(dense.contains(
             "fnkill(&self)->Result<(),CcError>{self.run_teardown(&kill_steps(DEFAULT_KILL_TIMING))}"
         ));
@@ -4346,7 +4333,7 @@ mod tests {
     #[test]
     fn cc_detach_takes_a_detachable_session_and_detaches_it_on_a_worker() {
         let src = include_str!("commands.rs");
-        let production = src.split("#[cfg(test)]").next().unwrap_or(src);
+        let production = crate::test_support::production_text(src);
         let start = production
             .find("pub fn cc_detach(")
             .expect("cc_detach moved; re-scope this guard");
@@ -4681,7 +4668,7 @@ mod tests {
     /// `profile_spawn_caller_orders_its_profile_decisions` uses).
     fn registry_spawn_code() -> String {
         let src = include_str!("mod.rs");
-        let production = src.split("mod tests").next().unwrap_or(src);
+        let production = crate::test_support::production_text(src);
         let start = production
             .find("    pub fn spawn(\n        &mut self,")
             .expect("SessionRegistry::spawn moved; re-scope this guard");
@@ -4913,7 +4900,7 @@ mod tests {
         // needs a real PTY: in the production `kill`, comment-stripped, the cancel comes before the
         // exit command is sent, inside the clean-exit step.
         let src = include_str!("mod.rs");
-        let production = src.split("mod tests").next().unwrap_or(src);
+        let production = crate::test_support::production_text(src);
         let start = production
             // M17 WP5: the walk moved into `run_teardown` (shared by `kill` and Detach's
             // `hang_up`); `kill` runs it with `kill_steps`, whose clean-exit step is this one.
@@ -5021,7 +5008,7 @@ mod tests {
     #[test]
     fn a_remote_close_ends_its_session_and_a_respawn_waits_for_it() {
         let flat = |src: &str, sig: &str| -> String {
-            let production = src.split("mod tests").next().unwrap_or(src);
+            let production = crate::test_support::production_text(src);
             let start = production
                 .find(sig)
                 .unwrap_or_else(|| panic!("{sig} moved; re-scope this guard"));
@@ -5111,7 +5098,7 @@ mod tests {
         let fn_at = |src: &str, at: &str| -> String {
             // Cut at the TEST MODULE, not the first `#[cfg(test)]`: `mod.rs` has test-only
             // methods above `SessionRegistry::spawn`.
-            let production = src.split("#[cfg(test)]\nmod tests").next().unwrap_or(src);
+            let production = crate::test_support::production_text(src);
             let start = production
                 .find(at)
                 .unwrap_or_else(|| panic!("`{at}` moved; re-scope this guard"));

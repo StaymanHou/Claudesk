@@ -390,6 +390,66 @@ mod tests {
         }
     }
 
+    // ── config_target / live_or_stored_reference (moved here from `transcript`, their first
+    //    consumer, so their tests sit beside them) ──
+
+    #[test]
+    fn config_target_default_never_reads_the_list() {
+        let t = config_target(Ok(None), || {
+            panic!("a default row must not read the profile list")
+        });
+        assert_eq!(t, Some(ConfigTarget::Default));
+    }
+
+    #[test]
+    fn config_target_follows_a_listed_profile() {
+        let t = config_target(Ok(Some("neo".into())), || {
+            Ok(vec![listed("neo", "/u/.config/claude-neo")])
+        });
+        assert_eq!(
+            t,
+            Some(ConfigTarget::Dir(PathBuf::from("/u/.config/claude-neo")))
+        );
+    }
+
+    #[test]
+    fn config_target_is_none_for_unlisted_or_unreadable_never_default() {
+        assert_eq!(config_target(Ok(Some("gone".into())), || Ok(vec![])), None);
+        let unreadable = config_target(Ok(Some("neo".into())), || {
+            Err(ConfigError::Io(std::io::Error::other("bad")))
+        });
+        assert_eq!(unreadable, None);
+        let unreadable_row =
+            config_target(Err(ConfigError::Io(std::io::Error::other("bad"))), || {
+                panic!("an unreadable row reads no list")
+            });
+        assert_eq!(unreadable_row, None);
+    }
+
+    #[test]
+    fn a_live_session_reference_wins_and_never_reads_the_stored_row() {
+        let stored = || -> Result<Option<String>, ConfigError> {
+            panic!("a known live session must not read the stored row")
+        };
+        assert_eq!(
+            live_or_stored_reference(Some(None), stored).unwrap(),
+            None,
+            "a live DEFAULT session beats a row switched to a profile"
+        );
+        assert_eq!(
+            live_or_stored_reference(Some(Some("neo".into())), || Ok(None)).unwrap(),
+            Some("neo".into())
+        );
+    }
+
+    #[test]
+    fn no_live_session_falls_back_to_the_stored_row() {
+        assert_eq!(
+            live_or_stored_reference(None, || Ok(Some("neo".into()))).unwrap(),
+            Some("neo".into())
+        );
+    }
+
     #[test]
     fn profile_resolve_maps_absent_blank_and_default_to_default() {
         let list = vec![listed("neo", "/x/claude-neo")];

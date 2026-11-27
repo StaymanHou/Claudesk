@@ -216,7 +216,9 @@ pub enum Deletion {
     /// the shell patterns need whitespace after `rm`, so a quoted program name counted as nothing).
     RmProgram,
     /// `git clean` (any options before the subcommand: `-C <dir>`, `-c k=v`, `--flag`), which
-    /// deletes untracked files in a tree.
+    /// deletes untracked files in a tree. Also the Rust `Command` form: a quoted `"clean"`
+    /// argument in the same statement as a git program (`Command::new("git")` / `GIT_BIN`), the
+    /// way `runner.rs` calls git.
     GitClean,
 }
 
@@ -248,7 +250,10 @@ pub fn deletions(code: &str) -> Vec<(Deletion, usize)> {
         (Deletion::RmProgram, count(r#""(?:/usr)?(?:/bin/)?rm""#)),
         (
             Deletion::GitClean,
-            count(r#"\bgit"?(?:\s+(?:-[Cc]\s+\S+|--\S+))*\s+clean\b"#),
+            count(r#"\bgit"?(?:\s+(?:-[Cc]\s+\S+|--\S+))*\s+clean\b"#)
+                // The `Command` form: no `;` between the git program and its `"clean"` argument,
+                // so a `"clean"` in a later statement is not attributed to it.
+                + count(r#"(?:Command::new\(\s*"git"\s*\)|\bGIT_BIN\b)[^;]*?"clean""#),
         ),
     ]
 }
@@ -338,14 +343,6 @@ mod tests {
         })
     }
 
-    fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
-        attrs.iter().any(|a| {
-            a.path().is_ident("cfg")
-                && a.parse_args::<syn::Meta>()
-                    .is_ok_and(|m| m.path().is_ident("test"))
-        })
-    }
-
     #[test]
     fn every_tail_anchor_names_its_files_last_production_item() {
         // WP8 P1.1 (`SURFACE-2026-11-20-QUALITY-REMOTE-OPS-TAIL-ANCHOR-STALE`): an anchor is
@@ -360,19 +357,7 @@ mod tests {
                 .items
                 .iter()
                 .rev()
-                .filter(|i| {
-                    let attrs: &[syn::Attribute] = match i {
-                        syn::Item::Mod(m) => &m.attrs,
-                        syn::Item::Fn(f) => &f.attrs,
-                        syn::Item::Use(u) => &u.attrs,
-                        syn::Item::Impl(x) => &x.attrs,
-                        syn::Item::Const(c) => &c.attrs,
-                        syn::Item::Struct(s) => &s.attrs,
-                        syn::Item::Enum(e) => &e.attrs,
-                        _ => &[],
-                    };
-                    !is_cfg_test(attrs)
-                })
+                .filter(|i| !crate::test_support::is_cfg_test(crate::test_support::item_attrs(i)))
                 .find_map(last_name)
                 .unwrap_or_else(|| panic!("{name}: no production item"));
             // The anchor's identifier: its last word, minus a trailing `(`.
@@ -495,6 +480,15 @@ mod tests {
                 Deletion::GitClean,
             ),
             (r#"git -c core.x=1 --no-pager clean -n"#, Deletion::GitClean),
+            // The Rust `Command` forms (each spelling alone).
+            (
+                r#"Command::new("git").args(["clean", "-fd"]);"#,
+                Deletion::GitClean,
+            ),
+            (
+                r#"Command::new(GIT_BIN).arg("-C").arg(&d).arg("clean");"#,
+                Deletion::GitClean,
+            ),
         ];
         for (line, kind) in cases {
             let src = format!(
@@ -525,6 +519,9 @@ mod tests {
             r#"let s = "a -deleted flag";"#,
             r#"let s = "the git tree is clean";"#,
             r#"git status --porcelain # clean"#,
+            // A `"clean"` after the git statement ended is not its argument.
+            r#"Command::new("git").arg("status"); let s = "clean";"#,
+            r#"let mode = "clean";"#,
             r#"let s = "farm";"#,
             r#"let s = "rmx";"#,
         ] {

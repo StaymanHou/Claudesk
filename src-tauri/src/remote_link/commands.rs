@@ -737,19 +737,9 @@ mod tests {
     use tempfile::TempDir;
 
     /// `src` from `sig` to its top-level `}` (production code only), comments dropped, whitespace
-    /// removed: a `cargo fmt` reflow can neither break nor satisfy a guard over it.
+    /// removed. The one rule lives in [`crate::test_support::dense_production_fn`].
     fn dense_body(src: &str, sig: &str) -> String {
-        let production = src.split("#[cfg(test)]").next().unwrap_or(src);
-        let start = production
-            .find(sig)
-            .unwrap_or_else(|| panic!("{sig} moved; re-scope this guard"));
-        let body = &production[start..];
-        let end = body.find("\n}\n").expect("terminates");
-        body[..end]
-            .lines()
-            .filter(|l| !l.trim_start().starts_with("//"))
-            .flat_map(|l| l.chars().filter(|c| !c.is_whitespace()))
-            .collect()
+        crate::test_support::dense_production_fn(src, sig)
     }
 
     /// Every `links.<method>(` call in a dense body, in order.

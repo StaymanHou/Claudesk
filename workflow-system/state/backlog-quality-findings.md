@@ -37,15 +37,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-09-QUALITY-WP6-DOCS-STILL-NAME-SPAWN-BLOCKING
-- **Severity:** MINOR
-- **Location:** the doc headers of `supervisor_adjudicate`, `time_analytics_query`, `trash_path`, `profile_delete`, `workflow_uninstall_dry_run`; `src-tauri/tests/sync_commands_do_not_block.rs` `ASYNC_COMMANDS` reasons and `SPAWN_BOUNDARIES`.
-- **Finding:** `SPAWN_BOUNDARIES` does not list `on_blocking_worker`, the one hop every async command now calls. *(The docs half, the five command headers and the `ASYNC_COMMANDS` reasons naming `spawn_blocking`, was resolved by paydown-2026-11-27 WP2.)*
-- **Why it matters:** a grep by the documented name misses the call sites. Harmless today (async bodies are not scanned); a sync path reaching `on_blocking_worker` would be a loud false positive.
-- **Suggested action:** add `on_blocking_worker` to `SPAWN_BOUNDARIES` (paydown-2026-11-27 WP4).
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-11-09-QUALITY-WP6-LONG-LINE-CUT-WITHOUT-MARKER
 - **Severity:** MINOR
 - **Location:** `src-tauri/src/workflow_install/runner.rs`, `read_bounded_line` / `start_line_reader`.
@@ -68,26 +59,9 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-09-QUALITY-WP5-SHARED-RESOLVER-TESTS-LIVE-IN-TRANSCRIPT
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/transcript/commands.rs` tests (the `config_root_for_project` shim); `src-tauri/src/config_store/profiles.rs` (`config_target`, `live_or_stored_reference`).
-- **Finding:** the moved functions' tests stayed in one of their two consumers, behind a test-only shim named after the deleted function; `profiles.rs` has no tests of its own for them.
-- **Why it matters:** the next maintainer of `profiles.rs` will not find the tests.
-- **Suggested action:** move the `config_target` / `live_or_stored_reference` cases into `profiles.rs`'s tests; keep one `transcript_root` case in transcript.
-- **Priority:** low
-- **Status:** pending
-
 # m17-wp2-remote-rows — 2026-11-16
 
 *(feature-review-quality on ship commit `d871473`, window `5ac8819..d871473`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 7 MINOR, all auto-backlogged. The MAJOR, the path-normalization and the runner MINORs were resolved by M17 WP3 (2026-11-16); the `$HOME` MINOR is partly resolved.)*
-
-## SURFACE-2026-11-16-QUALITY-M17WP2-AUTH-CHECK-HARDCODES-TOKEN-PATH
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/remote_cmd/mod.rs`: `AUTH_CHECK` vs `TOKEN_FILE`.
-- **Finding:** `AUTH_CHECK` repeats `~/.claudesk/cc-oauth-token` literally instead of deriving it from `TOKEN_FILE`, and the only test asserts the literal, so the two can drift silently.
-- **Suggested action:** `assert!(AUTH_CHECK.contains(TOKEN_FILE))`, or build the fragment with `concat!`.
-- **Priority:** low
-- **Status:** pending
 
 ## SURFACE-2026-11-16-QUALITY-M17WP2-PRINT-HOME-INTOLERANT-OF-RC-NOISE
 - **Severity:** MINOR
@@ -103,14 +77,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Location:** `src-tauri/src/remote_cmd/preflight.rs`: `run_preflight` / `parse_check_lines`.
 - **Finding:** A transport failure on the check-script exec is labelled `"tools"`, and "stopped early" is labelled `"auth"`, whatever step was actually reached.
 - **Suggested action:** Use a `"connect"` / `"script"` name for transport failures, and name the next unreported check when the script stops early.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-16-QUALITY-M17WP2-CWD-TRAP-TEST-WRITES-UNDER-SRC-TAURI
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/status_broadcaster/mod.rs`: `canonical_key_passes_a_remote_key_through_even_when_a_cwd_relative_match_exists`.
-- **Finding:** The test creates `ssh:/claudesk-ck-<pid>/a` under the process cwd (`src-tauri/`). The Drop guard cleans it up, but a killed run leaves debris, and a running `tauri:dev` watcher may rebuild on it.
-- **Suggested action:** Add a `.gitignore` entry for `src-tauri/ssh:` plus a comment about the watcher interaction (or a cwd-scoped harness).
 - **Priority:** low
 - **Status:** pending
 
@@ -181,14 +147,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-16-QUALITY-M17WP4-BRITTLE-PIN-AND-STALE-DOCS
-- **Source:** feature-review-quality (M17 WP4, MINOR)
-- **Location:** src-tauri/src/cc_session/mod.rs: `a_remote_session_reports_its_link_edges_through_the_sink`; src-tauri/src/status_broadcaster/mod.rs: module doc ("canonicalizes both"), the `to_update` doc's inserted `time_store` sentence
-- **Finding:** The test pins the whole `emit_exit` body as one whitespace-free `starts_with` string. The module doc's canonicalization claim is now true only for local scope, and one inserted doc sentence is an unwrapped run-on.
-- **Suggested action:** narrow the pin to "Ended is inside the latch" (paydown-2026-11-27 WP4). *(The two docs were fixed by paydown-2026-11-27 WP2.)* The behavioural seam itself stays with `…M17WP3-RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM`.
-- **Priority:** low
-- **Status:** pending
-
 # m17-wp5-lifecycle — 2026-11-17
 
 ## SURFACE-2026-11-17-QUALITY-M17WP5-RECONNECT-MODE-NESTED-OPTIONS
@@ -215,22 +173,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-17-QUALITY-M17WP5-DRIVE-MODES-SECOND-COPY
-- **Source:** feature-review-quality (M17 WP5, MINOR)
-- **Location:** `src-tauri/src/remote_cmd/mod.rs` (`DRIVE_MODES`)
-- **Finding:** A second hand-kept copy of the closed drive-mode set `config_store::DriveMode` already defines; drift would make a valid mode read as "unknown" on a reconnect.
-- **Suggested action:** derive from `DriveMode` (or test the two sets equal).
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-17-QUALITY-M17WP5-DENSE-BODY-HELPERS-TRIPLICATED
-- **Source:** feature-review-quality (M17 WP5, MINOR)
-- **Location:** `src-tauri/src/remote_link/commands.rs` (`dense_body`), `src-tauri/src/cc_session/mod.rs` (`fn_at` + an inline copy)
-- **Finding:** Three "dense production body" helpers with different cut rules (`#[cfg(test)]` vs `#[cfg(test)]\nmod tests` vs `mod tests`; `\n}\n` vs `\n    }\n`); one cut at the wrong place during this WP and failed on the clean tree.
-- **Suggested action:** one shared test helper with one cut rule, tested once.
-- **Priority:** low
-- **Status:** pending
-
 # m18-wp2-fresh-account-hardening — 2026-11-18
 
 ## SURFACE-2026-11-18-QUALITY-WITHHELD-NOTICE-CAUSE-DEFAULT
@@ -238,13 +180,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** tech-debt (API shape)
 - **Summary:** `autoResumeFire.ts` → `withheldNotice`'s `cause` defaults to `{ untrusted: true, bypass: false }`. Production always passes it; only one older test relies on the default, and a future caller that forgets it silently gets trust-only behaviour.
 - **Suggested action:** make `cause` required and update the one test.
-- **Priority:** low
-
-## SURFACE-2026-11-18-QUALITY-SPAWN-PERMISSION-GUARD-INDENT-BOUND
-- **Source:** feature-review-quality (M18 WP2, MINOR)
-- **Type:** test precision (source guard)
-- **Summary:** `cc_session::tests::profile_spawn_caller_orders_its_profile_decisions` checks `code.contains("                permission,\n")`, which is indentation-bound and not anchored to the `RegisteredSession {` literal. Any other struct literal in `spawn` gaining a `permission,` field at that depth would satisfy it with registration deleted.
-- **Suggested action:** find the `RegisteredSession {` literal inside `spawn` first and assert `permission,` inside that span (see `docs/lessons/source-text-guards.md`).
 - **Priority:** low
 
 # m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18
@@ -256,13 +191,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** UX gap (silent failure)
 - **Summary:** an oversize copy is dropped in `osc52Text` before it reaches Rust (so `clipboard.rs`'s "refused with an error" is unreachable from its only caller). An IPC or `pbcopy` failure goes only to `console.warn`, which is unobservable in this app. Either way the operator pastes the PREVIOUS clipboard believing it is the new selection: the "pastes as if whole" harm `clipboard.rs` says it prevents.
 - **Suggested action:** surface a failed or refused copy as a workspace toast (the existing toast surface), and soften security-posture's "refused, not truncated (both sides)" to say what the operator actually sees.
-- **Priority:** low
-
-## SURFACE-2026-11-18-QUALITY-CONF-ASSERT-NO-MESSAGE
-- **Source:** feature-review-quality (M18 WP2.5, MINOR)
-- **Type:** cosmetic (test diagnostics)
-- **Summary:** in `remote_link/tests.rs` → `the_tmux_conf_lets_in_pane_osc52_through_and_is_safe_to_re_source`, the `!TMUX_CONF.contains("-ga ") && !TMUX_CONF.contains(" -a ")` assert has no failure message, unlike its siblings, which print `{TMUX_CONF}`.
-- **Suggested action:** add `"{TMUX_CONF}"`.
 - **Priority:** low
 
 # m18-wp4-substrate-detection-and-funnel — 2026-11-20
@@ -322,20 +250,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** copy (on the safety surface)
 - **Summary:** `remote_ops::confirmed_matches`'s refusal reads "(it was {clone_dir}, now {approved.clone_dir()})". When only the record changed (the case its test drives), it prints the same folder twice and shows a "change" the operator cannot see.
 - **Suggested action:** name the folder pair only when the folders differ; otherwise say the install record changed. Pin both wordings in `an_uninstall_proceeds_only_on_the_approval_the_operator_confirmed`.
-- **Priority:** low
-
-## SURFACE-2026-11-20-QUALITY-GITCLEAN-MISSES-THE-COMMAND-FORM
-- **Source:** feature-review-quality (M18 WP8, MINOR)
-- **Type:** gap (guard coverage)
-- **Summary:** `Deletion::GitClean` matches only the shell spelling. `Command::new("git").args(["clean", …])` and the `GIT_BIN, vec!["clean".to_string(), …]` style this module uses to call git (`runner.rs`) count as zero, unlike `RmProgram`, which was added for exactly the Rust `Command` form.
-- **Suggested action:** add a `"clean"`-as-an-argument form scoped to a git invocation (or a quoted `"clean"` next to `GIT_BIN` / `"git"`), with one-spelling meta-tests and a near-miss.
-- **Priority:** low
-
-## SURFACE-2026-11-20-QUALITY-CFG-TEST-FENCE-HAND-COPIED
-- **Source:** feature-review-quality (M18 WP8, MINOR)
-- **Type:** tech-debt (duplication)
-- **Summary:** the syn `#[cfg(test)]` item detector now exists twice (`source_guard::tests::is_cfg_test` and the `is_test` closure in `remote_ops_tests::the_deleting_builders_take_only_an_approved_target`), each with its own `Item`-variant → attrs match covering DIFFERENT variants; a third copy lives in `tests/sync_commands_do_not_block.rs`.
-- **Suggested action:** one `pub(crate)` test helper in `source_guard` (`fn item_attrs(&syn::Item) -> &[Attribute]` + `is_cfg_test`) covering every variant, used by all three.
 - **Priority:** low
 
 ## SURFACE-2026-11-20-QUALITY-RUN-PANEL-LISTENER-COUNT-HARDCODED

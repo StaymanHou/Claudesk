@@ -79,6 +79,8 @@ mod status_log;
 mod sublime;
 // Process-group primitives shared by the subprocess runners (`workflow_install`, `adjudicator`).
 mod subprocess;
+#[cfg(test)]
+mod test_support;
 // Supervisor activity record: one JSONL line per supervisor turn-end decision, in the app-data
 // dir. File IO only (R-4); the schema and the decision live TS-side in `activityRecord.ts`.
 mod supervisor_activity;

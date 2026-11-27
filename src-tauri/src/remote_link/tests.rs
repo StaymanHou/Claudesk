@@ -204,7 +204,10 @@ fn the_tmux_conf_lets_in_pane_osc52_through_and_is_safe_to_re_source() {
         "{TMUX_CONF}"
     );
     assert!(!TMUX_CONF.contains(" -as "), "{TMUX_CONF}");
-    assert!(!TMUX_CONF.contains("-ga ") && !TMUX_CONF.contains(" -a "));
+    assert!(
+        !TMUX_CONF.contains("-ga ") && !TMUX_CONF.contains(" -a "),
+        "{TMUX_CONF}"
+    );
     // No drag-end rebinding: `copy-pipe-no-clear` swallows the next typed keys (R-b).
     assert!(!TMUX_CONF.contains("MouseDragEnd"), "{TMUX_CONF}");
     assert!(!TMUX_CONF.contains("no-clear"), "{TMUX_CONF}");

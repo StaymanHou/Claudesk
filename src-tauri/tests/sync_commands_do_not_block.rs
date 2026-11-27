@@ -248,8 +248,9 @@ const SEEDS: &[(&str, Option<usize>)] = &[
 ];
 
 /// Calls whose closure arguments run on a WORKER thread. Not `run_on_main_thread`; see the module
-/// doc, "What is cut".
-const SPAWN_BOUNDARIES: &[&str] = &["spawn", "spawn_blocking"];
+/// doc, "What is cut". `on_blocking_worker` is the crate's one hop onto the blocking pool
+/// (`blocking.rs`), which every async command now calls instead of `spawn_blocking` directly.
+const SPAWN_BOUNDARIES: &[&str] = &["spawn", "spawn_blocking", "on_blocking_worker"];
 
 #[derive(Default)]
 struct FnFacts {
@@ -322,29 +323,13 @@ impl<'ast> Visit<'ast> for CallCollector<'_> {
     fn visit_item_fn(&mut self, _: &'ast syn::ItemFn) {}
 }
 
-/// Whether an item is compiled ONLY under test: `#[cfg(test)]`, or `#[cfg(all(test, …))]`.
-///
-/// ⚠️ Parsed, not tokenized. Matching any `test` token dropped `#[cfg(not(test))]` and
-/// `#[cfg(any(test, …))]` items, which are production code, from the call graph.
-fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
-    attrs.iter().any(|a| {
-        a.path().is_ident("cfg")
-            && a.parse_args::<syn::Meta>()
-                .is_ok_and(|m| cfg_is_test_only(&m))
-    })
-}
-
-fn cfg_is_test_only(meta: &syn::Meta) -> bool {
-    match meta {
-        syn::Meta::Path(p) => p.is_ident("test"),
-        syn::Meta::List(l) if l.path.is_ident("all") => l
-            .parse_args_with(
-                syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
-            )
-            .is_ok_and(|parts| parts.iter().any(cfg_is_test_only)),
-        _ => false,
-    }
-}
+/// Whether an item is compiled ONLY under test: the crate's one rule, shared by path (an
+/// integration test cannot reach the crate's `#[cfg(test)]` modules).
+// The source-guard helpers this file does not call are unused here, not dead.
+#[allow(dead_code)]
+#[path = "../src/test_support.rs"]
+mod test_support;
+use test_support::is_cfg_test;
 
 /// The file a `#[path = "…"]` attribute names, if the item carries one.
 fn path_attr(attrs: &[syn::Attribute]) -> Option<String> {
@@ -774,6 +759,20 @@ fn work_handed_to_a_worker_is_not_flagged_but_the_same_call_inline_is() {
         "#,
     );
     assert!(inline.contains_key("cmd"), "got {inline:?}");
+}
+
+#[test]
+fn work_handed_to_on_blocking_worker_is_not_flagged() {
+    // The crate's own blocking-pool hop is a boundary like `spawn_blocking`: its closure runs on
+    // a worker. (The positive control is the inline call in the test above.)
+    let found = flag_fixture(
+        r#"
+        fn slow() { std::thread::sleep(std::time::Duration::from_millis(1)); }
+        #[tauri::command]
+        pub fn cmd() { let _ = crate::blocking::on_blocking_worker("x", move || { slow(); Ok(()) }); }
+        "#,
+    );
+    assert!(found.is_empty(), "got {found:?}");
 }
 
 #[test]

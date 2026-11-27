@@ -128,78 +128,29 @@ mod tests {
     // ⚠️ Imported HERE, not at the top under `#[cfg(test)]`: `hook_install`'s caller guard reads
     // this file's production text as everything before the FIRST `#[cfg(test)]`, so a test-only
     // import above the code would cut that text down to the imports and blind the guard.
-    use crate::config_store::profiles::{config_target, live_or_stored_reference};
+    use crate::config_store::profiles::config_target;
 
-    /// The pre-WP5 `config_root_for_project`, composed from the two pieces that replaced it.
-    fn config_root_for_project(
-        home: &Path,
-        reference: Result<Option<String>, crate::config_store::ConfigError>,
-        list: impl FnOnce() -> Result<
-            Vec<crate::config_store::profiles::Profile>,
-            crate::config_store::ConfigError,
-        >,
-    ) -> Option<PathBuf> {
-        config_target(reference, list).map(|t| transcript_root(home, t))
-    }
-
-    fn profile(name: &str, dir: &str) -> crate::config_store::profiles::Profile {
-        crate::config_store::profiles::Profile {
-            name: name.to_string(),
-            config_dir: PathBuf::from(dir),
-            provenance: crate::config_store::profiles::Provenance::Adopted,
-        }
-    }
-
+    // `config_target` and `live_or_stored_reference` are tested in `config_store/profiles.rs`,
+    // where they live. This file keeps the one case that is its own: how a resolved target maps
+    // to the TRANSCRIPT root (the default profile's transcripts sit under `~/.claude`).
     #[test]
-    fn profile_config_root_default_is_home_dot_claude_and_never_reads_the_list() {
-        let root = config_root_for_project(Path::new("/h"), Ok(None), || {
-            panic!("a default row must not read the profile list")
-        });
-        assert_eq!(root, Some(PathBuf::from("/h/.claude")));
-    }
-
-    #[test]
-    fn profile_config_root_follows_a_listed_profile() {
-        let root = config_root_for_project(Path::new("/h"), Ok(Some("neo".into())), || {
-            Ok(vec![profile("neo", "/u/.config/claude-neo")])
-        });
-        assert_eq!(root, Some(PathBuf::from("/u/.config/claude-neo")));
-    }
-
-    #[test]
-    fn profile_config_root_is_none_for_unlisted_or_unreadable_never_home() {
-        let unlisted =
-            config_root_for_project(Path::new("/h"), Ok(Some("gone".into())), || Ok(vec![]));
-        assert_eq!(unlisted, None);
-        let unreadable = config_root_for_project(Path::new("/h"), Ok(Some("neo".into())), || {
-            Err(crate::config_store::ConfigError::Io(std::io::Error::other(
-                "bad",
-            )))
-        });
-        assert_eq!(unreadable, None);
-    }
-
-    #[test]
-    fn a_live_session_reference_wins_and_never_reads_the_stored_row() {
-        let stored = || -> Result<Option<String>, crate::config_store::ConfigError> {
-            panic!("a known live session must not read the stored row")
-        };
+    fn a_resolved_target_maps_to_its_transcript_root() {
+        let home = Path::new("/h");
+        let default = config_target(Ok(None), || panic!("the default reads no list"));
         assert_eq!(
-            live_or_stored_reference(Some(None), stored).unwrap(),
-            None,
-            "a live DEFAULT session beats a row switched to a profile"
+            default.map(|t| transcript_root(home, t)),
+            Some(PathBuf::from("/h/.claude"))
         );
+        let listed = config_target(Ok(Some("neo".into())), || {
+            Ok(vec![crate::config_store::profiles::Profile {
+                name: "neo".into(),
+                config_dir: PathBuf::from("/u/.config/claude-neo"),
+                provenance: crate::config_store::profiles::Provenance::Adopted,
+            }])
+        });
         assert_eq!(
-            live_or_stored_reference(Some(Some("neo".into())), || Ok(None)).unwrap(),
-            Some("neo".into())
-        );
-    }
-
-    #[test]
-    fn no_live_session_falls_back_to_the_stored_row() {
-        assert_eq!(
-            live_or_stored_reference(None, || Ok(Some("neo".into()))).unwrap(),
-            Some("neo".into())
+            listed.map(|t| transcript_root(home, t)),
+            Some(PathBuf::from("/u/.config/claude-neo"))
         );
     }
     use std::path::Path;

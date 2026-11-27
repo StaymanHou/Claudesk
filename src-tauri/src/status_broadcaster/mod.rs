@@ -2688,7 +2688,9 @@ mod tests {
 
     /// ⚠️ The trap D2 closes: `Path::new("ssh://h/p")` is RELATIVE, so without the pass-through
     /// `canonicalize` resolves it against the cwd and, when `./ssh:/h/p` exists, re-keys the
-    /// remote workspace onto a LOCAL absolute path. This test creates exactly that directory.
+    /// remote workspace onto a LOCAL absolute path. This test creates exactly that directory,
+    /// under the test cwd (`src-tauri/`). A killed run leaves it behind (`src-tauri/.gitignore`
+    /// covers `/ssh:/`), and a running `pnpm tauri:dev` watcher may rebuild on its creation.
     #[test]
     fn canonical_key_passes_a_remote_key_through_even_when_a_cwd_relative_match_exists() {
         let cwd = std::env::current_dir().unwrap();
