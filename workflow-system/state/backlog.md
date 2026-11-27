@@ -591,18 +591,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
-## SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN
-- **Source:** feature:verify-self (M17 WP3 Phase 4; a `window` `unhandledrejection` tap in the agent-launched dev app)
-- **Target level:** feature (frontend, `useTauriListen`)
-- **Type:** bug (pre-existing, dev build at least)
-- **Summary:** Opening a workspace, LOCAL as well as remote, raises several unhandled rejections `TypeError: undefined is not an object (evaluating 'listeners[eventId].handlerId')` (≈5–6 per open; 23 over one session). Stack: Tauri's injected `unregisterListener` (a user-script) ← `@tauri-apps/api/event` `_unlisten` ← `src/useTauriListen.ts` (the `cancelled` branch's `fn()`, i.e. the StrictMode first-mount cleanup unlistening after `listen` resolves). Closing a workspace raised none.
-- **Context:** Not WP3's: `useTauriListen.ts` is untouched since 2026-06-30, the `tauri` crate (2.11.2) and `@tauri-apps/api` are unchanged by WP3 (it added only `sha2`), and a local scratch-c open reproduces it. Odd: the identical tap read `[]` across WP3 Phase 3's session, so either the tap missed them there or the trigger is newer; not established. Behavior looked unaffected (sends, status, closes all worked).
-- **Suggested action:** Reproduce in a HEAD build with the same tap (positive control), check whether a prod build (no StrictMode) raises it, and look upstream for the Tauri unlisten-twice race. If confirmed, swallow the double-unlisten in `useTauriListen` (or guard it) so real rejections stay visible.
-- **Update 2026-11-20 (M18 WP6 Phase 3 verify-self): it is not just noise, it DUPLICATES event delivery in dev.** The remote install panel's streamed log showed every line exactly twice (158 lines, 73 unique, 73 adjacent duplicates), on a freshly reloaded webview too (so not HMR residue). The fit: StrictMode's first-mount cleanup runs `fn()` in `useTauriListen`'s `cancelled` branch, that unlisten throws the `handlerId` rejection, the listener stays attached, and both listeners call the same instance's `handlerRef` (StrictMode keeps state and refs across the double mount). Expected in dev only (React does not double-invoke effects in a production build), but every `useTauriListen` consumer (13 files) is exposed: anything that APPENDS per event (the local and remote install logs) doubles, and anything that is not idempotent per event acts twice. Not verified on an installed build yet.
-- **Suggested action (revised):** (1) a positive control on an installed `.app` (WP8's release) to confirm prod is single-delivery; (2) fix `useTauriListen`: catch the unlisten failure AND guard the handler with the effect's own `cancelled` flag, so a leaked listener calls nothing; a jsdom test under `<StrictMode>` counting handler calls per emitted event.
-- **Priority:** medium *(raised from low 2026-11-20: duplicate delivery, not just a console rejection)*
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-
 ## Code-quality findings — m17-wp3-remote-terminal (2026-11-16)
 
 - **Pointer:** **4 MINOR** remain from the review of `7f96ce3` (paydown-2026-11-27 WP1 buried the guard-heuristic MINOR; WP2 + WP3 resolved the WIP labels) (WP4 resolved the two link-lifecycle MAJORs and the unused `remote_link_ensure`; WP5 resolved the reconnect-seam MAJOR and the `cc_session` module split, 2026-11-17, CHANGELOG).
@@ -685,22 +673,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** upstream (mccc): write the backup to a fresh name (`CLAUDE.md.bak.<timestamp>`), or only `cp` to `.bak` when the result differs, and keep the original file's mode (`cat "$updated_tmp" > "$GLOBAL_CLAUDE_MD"` instead of `mv`). Send it in the next mccc handoff. Claudesk side: no change; WP7's Update stays as designed (the probe found no duplicate block and no prompt).
 - **Priority:** low
 - **Status:** open — upstream (mccc); **sent 2026-11-27** (`HANDOFF-to-mccc-2026-11-27-f10b-classifier-and-install-sh-backup.md`, §2; re-checked present at mccc `f8e8873`). Claudesk only re-runs the script. Stays open until mccc applies or declines it.
-## Code-quality findings — m18-wp4-substrate-detection-and-funnel (2026-11-20)
-
-- **Pointer:** **3 MINOR** open from the review of the WP4 window (`9ce4810^..d57aa15`) (paydown-2026-11-27 WP2 resolved the setter-ordering doc and the wide doc line). The stale arch-wording MINOR was resolved at WP4 finalize; the guard MAJOR and the optional-`onOpenSettings` MINOR were resolved at M18 WP5 (CHANGELOG 2026-11-20).
-  - MINOR: the host-store latch never retries after a failed `listen`; a third inline gate-hook call in `Workspace`; `shortHost` is imported across layers.
-  - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp4-substrate-detection-and-funnel — 2026-11-20`.
-- **Priority:** low (all)
-- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
-- **Pickup shape:** paydown polish.
-
-## Code-quality findings — m18-wp5-remote-hosts-readout (2026-11-20)
-
-- **Pointer:** **1 MINOR** open from the review of the WP5 window (`e3926dc^..9fd2c46`): the drift copy says "GitHub" for any origin. The MAJOR (a refresh writing `Unknown` over a known host) and the `Drift::Behind` → `Differs` MINOR were resolved at M18 WP6, the stale §R.4 wording at WP5 finalize (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp5-remote-hosts-readout — 2026-11-20`.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
-- **Pickup shape:** copy polish.
-
 ## Code-quality findings — m18-wp7-remote-update-uninstall (2026-11-20)
 
 - **Pointer:** **1 MINOR** still open from the review of the WP7 window (`a33f7ba^..753f5cf`): `RemoteUninstallTarget` also feeds Update, so it wants a rename. The other 4 MAJOR + 6 MINOR were resolved at M18 WP8 (CHANGELOG 2026-11-20).
@@ -711,19 +683,11 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m18-wp8-release-acceptance (2026-11-20)
 
-- **Pointer:** **2 MINOR** open from the review of the WP8 window (`22bcec6^..b015868`) (paydown-2026-11-27 WP4 resolved the `GitClean` Command form and the hand-copied `#[cfg(test)]` fence): the consent refusal can name an unchanged folder twice; the run panel's listener count is hard-coded.
+- **Pointer:** **1 MINOR** open from the review of the WP8 window (`22bcec6^..b015868`) (paydown-2026-11-27 WP4 resolved the `GitClean` Command form and the hand-copied `#[cfg(test)]` fence; WP5 the run panel's listener count): the consent refusal can name an unchanged folder twice.
   - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp8-release-acceptance — 2026-11-20`.
 - **Priority:** low (all)
 - **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** four small, independent polish items in `workflow_install/` and `RemoteRunPanel`; any can ride along with the next remote-substrate change.
-
-## Code-quality findings — picker-qol-focus-and-scroll (2026-11-27)
-
-- **Pointer:** **1 MAJOR** remains from the review of `8c019bf` (its 3 MINORs were resolved by paydown-2026-11-27 WP2 + WP3). MAJOR: an overlay dismiss can restore focus to a BACKGROUND workspace's pane after a ⌘⇧digit switch while the overlay is open (keys then reach a hidden CC session; reviewer's reading, not yet reproduced).
-  - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# picker-qol-focus-and-scroll — 2026-11-27`.
-- **Priority:** medium (the MAJOR), low (the rest)
-- **Status:** pending
-- **Pickup shape:** paydown-2026-11-27 WP5. Reproduce the MAJOR live, then guard the restore target with an App-level test.
 
 ## SURFACE-2026-11-27-HOOK-LISTENER-ONE-STUCK-CONNECTION-DEAFENS-ALL
 - **Source:** operator report during paydown-2026-11-27 WP5 ("The prod's status dot lost track"), investigated from the logs
@@ -735,3 +699,11 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** serve each connection off the accept thread, or set a read timeout per connection (a hook writes one line and closes; a few seconds is generous), and log a timed-out client with its peer info. Pin it with a test that holds one connection open and asserts a second client's event still arrives. Also log workspace register/deregister in `status-channel.log` so a future `resolved=none` turn is explainable.
 - **Priority:** high (it silently blinds every status surface; the operator reports it recurring)
 - **Status:** pending
+
+## Code-quality findings — paydown-2026-11-27-wp5-input-and-listeners (2026-11-27)
+
+- **Pointer:** **2 MAJOR + 5 MINOR** from the review of `bc161e8`. MAJOR: the `restoreFocus` fallback selects the CC pane by a test hook + xterm class, and both its tests hand-build that DOM; the StrictMode test fakes a sync throw, so the async-rejection branch that fixes the live symptom is unpinned. MINOR: a redundant `workflowFeaturesEnabled` + stale comment; the host-store retry needs a later subscriber; the listener-count regex misses inferred calls; two over-wide doc lines; uneven "origin" wording. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-27-wp5-input-and-listeners — 2026-11-27`.
+- **Priority:** medium (the 2 MAJORs), low (the rest)
+- **Status:** pending
+- **Pickup shape:** one small test-precision follow-up task; the two MAJORs are both "test against the real shape" fixes.
+

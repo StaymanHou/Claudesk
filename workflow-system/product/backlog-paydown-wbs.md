@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-11-27
 created: 2026-11-27
-status: not-started
+status: in-progress
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 ---
 
@@ -116,7 +116,7 @@ biggest, at S–M.
   `cancelled`-guard the handler + a `<StrictMode>` jsdom count test) goes in WP5 now. Its installed-build
   positive control rides the pending v0.10.0 installed-build acceptance; it doesn't block WP5.
 
-## WP1: Bookkeeping (delete, bury, send upstream)  `[impact: Low–Med · effort: XS · risk: Lowest]` · task
+## WP1: Bookkeeping (delete, bury, send upstream)  `[impact: Low–Med · effort: XS · risk: Lowest]` · task ✅ SHIPPED 2026-11-27 (commit cde2dc9)
 
 Pure subtraction plus one outbound message.
 
@@ -135,7 +135,7 @@ Pure subtraction plus one outbound message.
   they stay open until mccc applies them. Write only the inbox file in mccc, and never commit there.
 - ⚠️ Check the payload before the send (`test -s` + `head`, `[[check-payload-before-outward-send]]`).
 
-## WP2: Comments and docs only  `[impact: Med · effort: S · risk: Lowest (comments only)]` · task
+## WP2: Comments and docs only  `[impact: Med · effort: S · risk: Lowest (comments only)]` · task ✅ SHIPPED 2026-11-27 (commit 8b0c4f7)
 
 No executable change; proven by the parser-token diff. Groups the comment MINORs by file.
 
@@ -160,7 +160,7 @@ No executable change; proven by the parser-token diff. Groups the comment MINORs
   + the `ASYNC_COMMANDS` reasons). The `SPAWN_BOUNDARIES` entry → WP4.
 - BL `11-16-PRUNE-COMMENT-CLAIMS-UNCHANGED-FILE-BUT-IT-RE-SORTS`.
 
-## WP3: Frontend test scaffolding + precision  `[impact: Med · effort: S · risk: Low (test-only)]` · task
+## WP3: Frontend test scaffolding + precision  `[impact: Med · effort: S · risk: Low (test-only)]` · task ✅ SHIPPED 2026-11-27 (commit d9e637f)
 
 - QF `11-18-QUALITY-LIVE-PANE-XTERM-MOCKS-DUPLICATED` + QF `11-18-QUALITY-TERMINAL-FAKE-TRIPLICATED`
   (one theme): one configurable `Terminal` fake + the ResizeObserver/rAF shims in
@@ -174,7 +174,7 @@ No executable change; proven by the parser-token diff. Groups the comment MINORs
 - `singleAuthority` absent-rule widened to the TS modules from QF `…M17WP3-WIP-LABELS…` (D10), once
   WP2 has scrubbed them. Mutation-prove: re-add one label and watch it fail.
 
-## WP4: Rust test + guard precision  `[impact: Med · effort: S · risk: Low (test-only)]` · task
+## WP4: Rust test + guard precision  `[impact: Med · effort: S · risk: Low (test-only)]` · task ✅ SHIPPED 2026-11-27 (commit f9efd06)
 
 - QF `11-17-QUALITY-M17WP5-DENSE-BODY-HELPERS-TRIPLICATED` + QF `11-20-QUALITY-CFG-TEST-FENCE-HAND-COPIED`
   (one theme): one `pub(crate)` test helper in `source_guard` (dense body with one cut rule;
@@ -192,7 +192,7 @@ No executable change; proven by the parser-token diff. Groups the comment MINORs
 - QF `11-18-QUALITY-CONF-ASSERT-NO-MESSAGE`.
 - QF `11-16-QUALITY-M17WP2-CWD-TRAP-TEST-WRITES-UNDER-SRC-TAURI`: a `.gitignore` entry + comment.
 
-## WP5: Frontend input + listener correctness  `[impact: Med–High · effort: S · risk: Low–Med]` · feature
+## WP5: Frontend input + listener correctness  `[impact: Med–High · effort: S · risk: Low–Med]` · feature ✅ SHIPPED 2026-11-27 (commit bc161e8)
 
 Holds the sweep's highest-impact item (keystrokes routed to a hidden yolo session).
 

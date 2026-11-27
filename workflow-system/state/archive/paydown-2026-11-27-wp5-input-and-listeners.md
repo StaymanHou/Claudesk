@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: paydown-2026-11-27 WP5 — frontend input + listener correctness
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed (2026-11-27)
 **Created:** 2026-11-27
 
 ## Problem Statement
@@ -85,8 +85,8 @@ any origin.
     Test scope: full — last phase
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality
+- **Path:** Feature > closed
+- **Active scope:** none (archived)
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** none
@@ -126,6 +126,46 @@ any origin.
 - Full suite: reused the last-phase codify run (`Test scope: full — last phase`, `pnpm verify:auto` EXIT=0 in 66 s); only `runtimes.md` and this WIP changed after it.
 - Dev stack stopped by PID (74751 / 74927 / 74879 / 74885, all launched 10:47 by this session); prod untouched and its listener confirmed live afterwards.
 
+## Code-Quality Review — paydown-2026-11-27-wp5-input-and-listeners
+
+*(feature-review-quality on ship commit `bc161e8`, window `bc161e8^..bc161e8`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 5 MINOR, all auto-backlogged.)*
+
+### Strengths
+- Every behaviour change has a regression test shown to fail on HEAD's code, and both live defects were reproduced on the unfixed dev build before the fix and re-checked after.
+- The `shortHost` move removes a workspace→picker import, with no importer left pointing at the old module.
+- `Workspace` reads the gate once, guarded in both directions; each direction was mutation-tested on its own.
+- The handler-side `cancelled` check in `useTauriListen` is the right fix in the right place and covers every consumer of the shared hook.
+- The WP3 archive record was corrected rather than left wrong.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`PickerOverlay.tsx` → `restoreFocus`] The fallback selects the CC pane by a test hook (`data-testid="xterm-pane"`) plus xterm's internal `.xterm-helper-textarea`, beside an existing handle-based focus path (`ccPaneRef.current?.focus()`). Both new tests build that DOM themselves, so the fallback could silently stop working while they stay green.
+- [`useTauriListenStrictMode.test.tsx` mock / `useTauriListen.ts` → `safeUnlisten`] The fake's unlisten throws synchronously; Tauri's real unlisten is async, so the live failure is a REJECTED promise handled by the `r instanceof Promise` branch, which the test never reaches. Deleting that branch keeps the test green while the live `unhandledrejection` returns.
+
+**MINOR**
+- [`Workspace.tsx` → `workflowFeaturesEnabled`] Now the same expression as `workflowEnabled` (redundant second derivation); a comment above `workspaceProfile` still mentions "the second hook call further down".
+- [`useHostSubstrate.ts` → `ensureStarted`] After a failed listen, retry waits for the next `subscribe`; the mounted workspace that hit the failure stays closed until then. The comment overstates the fix.
+- [`remoteRunPanelListenerCount.test.ts`] The count regex matches only `useTauriListen<…>`; a call with an inferred type would not count (`[<(]` closes it). `RUN_LISTENERS` lives in the component body, not module scope.
+- [`workspaceSurfaces.ts` → `shortHost` doc; `workflowApplicableGuard.test.ts` → `checkCall` doc] Edited first lines run past the wrap width.
+- [`RemoteHostsSettings.tsx` → `driftLine`] "the clone's origin" vs "its origin" vs "origin" is slightly uneven in one readout.
+
+### Assessment
+A tidy, well-evidenced paydown: small, targeted fixes with stated reasons, and the layering move plus gate-once consolidation leave the code cleaner. The two weak spots come from testing against stand-ins (the focus fallback's hand-built DOM; the sync-throw fake for an async rejection), so both are guards that would stay green through a plausible regression. Neither breaks anything today, since live verify-self confirmed both fixes. The rest is light cleanup.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives the WIP.
+
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
+
+## Retrospect
+- **What changed in our understanding:** the review's MAJOR ("keys reach a hidden yolo session") does not happen live: background workspaces are `inert`, which jsdom does not enforce, so a code reading saw a misroute where the real defect was focus stranded on `<body>`. Reproducing before fixing changed the fix (fall back to the center-stage pane, operator decision A). The `useTauriListen` double delivery reproduced exactly in a StrictMode test.
+- **Assumptions that held:** all seven items were small and frontend-only; every one could be pinned by a test that fails on HEAD.
+- **Assumptions that were wrong:** that the dev app from the previous session was safe to reuse (it had rebuilt during WP4's Rust mutants; relaunched clean). Separately, the operator's prod status dots went stale mid-WP; the logs showed prod alive but deaf from 09:54:14 (a one-connection-at-a-time hook listener with no read timeout), backlogged as `SURFACE-2026-11-27-HOOK-LISTENER-ONE-STUCK-CONNECTION-DEAFENS-ALL`, with a "never touch prod" memory.
+- **Approach delta:** the review found two of the new guards test against stand-ins (the focus fallback's hand-built DOM; a sync-throw fake for an async rejection); both backlogged at medium.
+
+**Feature complete:** Requester = operator — closure notice for self-record. Paydown WP5 shipped in `bc161e8`: the "+" overlay dismiss keeps the keyboard live after a workspace switch, dev listeners deliver once, and four small store/layering/copy fixes landed.

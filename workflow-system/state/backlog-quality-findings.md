@@ -193,43 +193,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** surface a failed or refused copy as a workspace toast (the existing toast surface), and soften security-posture's "refused, not truncated (both sides)" to say what the operator actually sees.
 - **Priority:** low
 
-# m18-wp4-substrate-detection-and-funnel — 2026-11-20
-
-*(feature-review-quality on the WP4 window `9ce4810^..d57aa15`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 7 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-11-20-QUALITY-HOST-STORE-LATCH-NEVER-RETRIES
-- **Source:** feature-review-quality (M18 WP4, MINOR)
-- **Type:** hardening
-- **Summary:** `useHostSubstrate.ts` sets `started = true` before `listen` resolves and never resets it. A rejected `listen` leaves every remote host `undefined` for the session, and `absentHostNote` shows nothing for `undefined`, so the skill row silently vanishes with no note.
-- **Suggested action:** reset `started` in the `catch` (retry on the next subscriber), or surface the failed state distinctly.
-- **Priority:** low
-
-## SURFACE-2026-11-20-QUALITY-WORKSPACE-THIRD-GATE-HOOK-CALL
-- **Source:** feature-review-quality (M18 WP4, MINOR)
-- **Type:** tech-debt
-- **Summary:** `Workspace.tsx` now calls `useWorkflowFeaturesEnabled()` inline three times. Each call seeds and listens separately: one more IPC round-trip per workspace, and a brief window where the note's copy and the row's copy disagree.
-- **Suggested action:** read the gate once into a binding and feed both funnel wrappers. `workflowApplicableGuard`'s binding shape already accepts it.
-- **Priority:** low
-
-## SURFACE-2026-11-20-QUALITY-SHORTHOST-CROSS-LAYER-IMPORT
-- **Source:** feature-review-quality (M18 WP4, MINOR)
-- **Type:** tech-debt
-- **Summary:** `components/workspace/absentHostNote.ts` imports `shortHost` from `components/picker/remoteRow.ts`, a picker module with its own runtime imports. That is a layering inversion.
-- **Suggested action:** move `shortHost` beside `remoteAuthority` in `state/workspaceSurfaces.ts` and import it from there in both the picker and the workspace (`autoResumeFire.ts` imports it the same way).
-- **Priority:** low
-
-# m18-wp5-remote-hosts-readout — 2026-11-20
-
-*(feature-review-quality on the WP5 window `e3926dc^..9fd2c46`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 3 MINOR. The MAJOR and two MINORs are auto-backlogged here; the stale §R.4 drift-URL wording MINOR was resolved at WP5 finalize.)*
-
-## SURFACE-2026-11-20-QUALITY-DRIFT-COPY-SAYS-GITHUB-FOR-ANY-ORIGIN
-- **Source:** feature-review-quality (M18 WP5, MINOR)
-- **Type:** cosmetic (copy)
-- **Summary:** every drift string ("Checking GitHub…", "Up to date with GitHub.", "Behind GitHub…") and the group hint say "GitHub", but D1 compares against the clone's own `origin`, which can be any server.
-- **Context:** a Developer clone whose origin is not GitHub gets a verdict naming the wrong server. Polish: today's real hosts all clone from GitHub.
-- **Suggested action:** say "its origin" (or name the origin's host) when the origin is not GitHub, or accept as-is and record that the copy assumes the published repo.
-- **Priority:** low
-
 # m18-wp7-remote-update-uninstall — 2026-11-20
 
 *(feature-review-quality on the WP7 window `a33f7ba^..753f5cf`; drive_mode=autopilot. 0 CRITICAL, 4 MAJOR, 7 MINOR, all auto-backlogged. WP8 resolved all but one part of one MINOR, 2026-11-20.)*
@@ -252,22 +215,51 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** name the folder pair only when the folders differ; otherwise say the install record changed. Pin both wordings in `an_uninstall_proceeds_only_on_the_approval_the_operator_confirmed`.
 - **Priority:** low
 
-## SURFACE-2026-11-20-QUALITY-RUN-PANEL-LISTENER-COUNT-HARDCODED
-- **Source:** feature-review-quality (M18 WP8, MINOR)
-- **Type:** tech-debt (implicit coupling)
-- **Summary:** `RemoteRunPanel`'s `const listening = subscribed >= 3;` hard-codes the number of `useTauriListen` calls. A fourth listener would let the run-state query fire after only three subscribe, bringing back the race WP8 P1.2 closed.
-- **Suggested action:** name the count beside the three listen calls (e.g. `const LISTENERS = 3`) with a comment tying them, or count the registrations.
+# paydown-2026-11-27-wp5-input-and-listeners — 2026-11-27
+
+*(feature-review-quality on ship commit `bc161e8`, window `bc161e8^..bc161e8`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 5 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-27-QUALITY-RESTOREFOCUS-FALLBACK-USES-TEST-HOOK-SELECTOR
+- **Source:** feature-review-quality (paydown-2026-11-27 WP5, MAJOR)
+- **Type:** tech-debt (guard + seam)
+- **Summary:** `PickerOverlay.tsx` → `restoreFocus`'s fallback selects `.workspace[data-visible="true"] [data-testid="xterm-pane"] .xterm-helper-textarea`: a test hook (`XtermPane`'s default `testId`) plus an xterm-internal class, beside the existing `ccPaneRef.current?.focus()` path `Workspace` uses on its visible edge. Both new tests (`pickerFocusLive` unit case, `pickerFocusWiring` App case) hand-build that DOM, so an explicit CC-pane `testId` or an xterm class rename would silently strand focus on `<body>` again with both tests green.
+- **Suggested action:** route the fallback through the existing handle (e.g. a center-stage "focus the CC pane" callback App or the workspace store can call), or at least a dedicated non-test attribute on the CC pane; add a test that mounts the real `XtermPane` under jsdom (`[[real-xtermpane-mounts-under-jsdom]]`) so the selector's assumption is checked against the real component.
+- **Priority:** medium
+
+## SURFACE-2026-11-27-QUALITY-STRICTMODE-TEST-FAKES-A-SYNC-THROW-NOT-THE-REAL-REJECTION
+- **Source:** feature-review-quality (paydown-2026-11-27 WP5, MAJOR)
+- **Type:** test precision (guard reports green on the wrong shape)
+- **Summary:** `useTauriListenStrictMode.test.tsx`'s fake unlisten throws synchronously, but Tauri's real unlisten is `async () => _unlisten(…)`, so the live failure is a rejected promise, handled in `useTauriListen.ts` → `safeUnlisten` by the `r instanceof Promise` branch the test never reaches. Deleting that branch leaves the test green while the live `unhandledrejection` returns. The test header's "reproduces exactly that" is wrong about the mechanism.
+- **Suggested action:** make the fake async (resolve to `async () => { throw … }`) or run both shapes; mutation-prove by deleting the `.catch` branch (the async case must fail on the `rejections` assertion). Correct the header.
+- **Priority:** medium
+
+## SURFACE-2026-11-27-QUALITY-WORKSPACE-REDUNDANT-WORKFLOW-DERIVATION
+- **Source:** feature-review-quality (paydown-2026-11-27 WP5, MINOR)
+- **Summary:** `Workspace.tsx` → `workflowFeaturesEnabled` is now the same `isWorkflowApplicable(workflowGate, workspaceProfile, workspaceHost)` as `workflowEnabled`; the comment above `workspaceProfile` still mentions "the second hook call further down".
+- **Suggested action:** one name, and fix the stale comment.
 - **Priority:** low
 
-# picker-qol-focus-and-scroll — 2026-11-27
+## SURFACE-2026-11-27-QUALITY-HOST-STORE-RETRY-NEEDS-A-LATER-SUBSCRIBER
+- **Source:** feature-review-quality (paydown-2026-11-27 WP5, MINOR)
+- **Summary:** `useHostSubstrate.ts` → `ensureStarted`: after a failed listen the retry happens on the next `subscribe`; the mounted workspace that hit the failure keeps reading closed until something else subscribes. The comment reads as if that workspace is covered.
+- **Suggested action:** state the dependence in the comment, or retry the listen once on a short timer.
+- **Priority:** low
 
-*(feature-review-quality on ship commit `8c019bf`, window `8c019bf^..8c019bf`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 3 MINOR, all auto-backlogged.)*
+## SURFACE-2026-11-27-QUALITY-LISTENER-COUNT-REGEX-MISSES-INFERRED-CALLS
+- **Source:** feature-review-quality (paydown-2026-11-27 WP5, MINOR)
+- **Summary:** `remoteRunPanelListenerCount.test.ts` counts `\buseTauriListen\s*<`, so a `useTauriListen("evt", …)` with an inferred type would not count; `RUN_LISTENERS` is declared inside the component body.
+- **Suggested action:** `\buseTauriListen\s*[<(]` plus a one-spelling near-miss; hoist the constant to module scope.
+- **Priority:** low
 
-## SURFACE-2026-11-27-QUALITY-PICKER-DISMISS-RESTORES-FOCUS-TO-A-BACKGROUND-WORKSPACE
-- **Source:** feature-review-quality (picker-qol-focus-and-scroll, MAJOR)
-- **Type:** bug (input misrouting, narrow trigger)
-- **Summary:** `PickerOverlay`'s `restoreFocus` returns focus to whatever had it when the overlay opened, without checking that the element is still in the CENTER-STAGE workspace. The ⌘⇧digit switch handler in `App` does not check `showPicker`, so "+" from workspace A, ⌘⇧2 to B, then Esc refocuses A's xterm helper textarea. Background workspaces are parked off-viewport (`.workspace` `left: -99999px`), not `display: none`, so that textarea is still focusable and passes the `isConnected` guard. The next keystrokes (Enter included) go to a hidden yolo-mode CC session.
-- **Context:** Reviewer's reading of the code; not yet reproduced live. Before this feature the overlay never took focus, so A's pane kept it across the switch and the same misrouting already existed (keys typed into the overlay went to A). The feature narrowed the window to "switch while the overlay is open", but did not close it.
-- **Suggested action:** reproduce first in the dev app via the bridge (seed two workspaces, focus A's pane, "+", ⌘⇧2 via the real handler, Esc, read `activeElement`). Then either skip a restore target outside the focused workspace (`el.closest('.workspace')` vs the focused one) or gate the ⌘⇧digit switch while the picker overlay is open. Pin with a `pickerFocusWiring` case through the real `App`.
-- **Priority:** medium
+## SURFACE-2026-11-27-QUALITY-WP5-DOC-LINES-PAST-WRAP-WIDTH
+- **Source:** feature-review-quality (paydown-2026-11-27 WP5, MINOR)
+- **Summary:** the edited first lines of `workspaceSurfaces.ts` → `shortHost`'s doc and `workflowApplicableGuard.test.ts` → `checkCall`'s doc run past the wrap width.
+- **Suggested action:** rewrap by hand.
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-DRIFT-COPY-UNEVEN-ORIGIN-WORDING
+- **Source:** feature-review-quality (paydown-2026-11-27 WP5, MINOR)
+- **Summary:** `RemoteHostsSettings.tsx` → `driftLine` mixes "the clone's origin", "its origin" and "origin" in one readout.
+- **Suggested action:** pick one wording (the operator approved "origin" at WP5 verify-human; keep the decision, even the phrasing).
+- **Priority:** low
 
