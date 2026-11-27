@@ -5,7 +5,8 @@ drive_mode: autopilot
 # Feature: paydown-2026-11-27 WP6 — Rust small correctness + copy
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete)
+**Completed:** 2026-11-27
 **Created:** 2026-11-27
 **Source:** `workflow-system/product/backlog-paydown-wbs.md` §WP6 (8 QF items, bodies in `backlog-quality-findings.md`)
 
@@ -118,13 +119,50 @@ arch doc land together in P1.8 anyway.
     — evidence: `pnpm verify:auto` → exit 0 in 68s (vitest 332 files / 4205 tests; cargo test lib 1534 passed, 0 failed)
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship
+- **Path:** Feature > complete
+- **Active scope:** none (finalized; review MAJOR resolved at finalize by the §H resync, 3 MINOR backlogged)
 - **Blocked:** none
-- **Unvisited:** review-quality → finalize
+- **Unvisited:** none
 - **Open discoveries:** none
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
 [SHORTCUT-2026-11-27] P1.verify-self rename-grep — a history note ("it was `RemoteUninstallTarget` until …") in `ApprovedRemoteClone`'s doc comment (`remote_guard.rs`) was the only extra grep hit (cosmetic, comment-only). Dropped in place (the arch doc already records the rename); re-verified by re-running the outcome's exact grep → only the deliberate `claude-substrate.md:323` hit, and `cargo fmt --check` clean.
+
+## Code-Quality Review
+
+*(feature-review-quality, ship commit `7f14181`, window `d26df84..7f14181`; drive_mode=autopilot → MAJOR + MINOR auto-backlogged under `# paydown-2026-11-27-wp6-rust-small-correctness — 2026-11-27` in `backlog-quality-findings.md`, pointer in `backlog.md`.)*
+
+### Strengths
+- One writer / one parser for the `$HOME` sentinel (`remote_link::print_home_command` + `parse_home`), shared by the preflight and `pre_connect_script`, with a test asserting both use the same command.
+- The constant split is real separation: `CAPTURED_PIPE_MAX`, `OUTPUT_BUDGET`, `MAX_LINE_BYTES` each document their own reason and dependents; `remote_fs` gained a compile-time assertion.
+- `read_bounded_line`'s edge cases are pinned exactly (terminator-only overflow incl. a `\r` split across chunks, one-byte cut, over-long last line at EOF, exactly-the-limit), plus an end-to-end real-pipe test.
+- User-visible strings pinned with literal `assert_eq`; every pin mutation-proven; the `E0451` fence re-proven after the rename.
+- `apply_trust` checks the action first and parses once, pinned by per-thread counters; `is_trusted` stays a thin composition.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`workflow-system/product/arch/remote-workspaces.md` §H "WP2 as-built"] still says the first preflight exec is `printf '%s' "$HOME"`, and omits the A2 `$HOME` rule and the `script` check name. The `arch/` set is the as-built authority, so it now contradicts the code on exactly what this WP changed. → `SURFACE-2026-11-27-QUALITY-WP6-ARCH-H-STILL-DESCRIBES-PRINT-HOME`
+
+**MINOR**
+- [`remote_fs/mod.rs` const assertion] weaker than its comment ("plus its answer framing"): passes at 4 MiB − 1. → `…-WP6-REMOTE-READ-ASSERT-WEAKER-THAN-ITS-COMMENT`
+- [`remote_cmd/preflight.rs` `CheckResult.name` doc] omits the zsh-127 → `tools` exception. → `…-WP6-CHECKRESULT-NAME-DOC-OMITS-ZSH-127`
+- [`subprocess/mod.rs` and five other doc lines] "an [`RunError::OutputTooLarge`]" → "a"; over-long doc lines left by the rename. → `…-WP6-RENAME-LEFT-LONG-DOC-LINES`
+
+### Assessment
+A well-built paydown: each of the eight findings is fixed at the right layer (shared helpers, a compile-time assertion, a type fence kept through the rename), each pinned by a mutation-proven test. The one real gap is documentation drift in `arch/remote-workspaces.md` §H; the rest is wording polish.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** the run_captured per-pipe cap had a fourth dependent the finding never named: `remote_fs`'s remote read rides one exec's stdout, so `REMOTE_READ_MAX_BYTES` was coupled to it (now a const assertion). The runner's tail byte cap evicts a 64 KB-sized cut line as soon as any later line arrives, so an end-to-end marker test must end on the cut line.
+- **Assumptions that held:** all eight fixes stayed behavior-preserving outside their own pins; one phase was enough; the compiler caught every rename consumer and the `E0451` fence survived it; the preflight could reuse the link's `parse_home` as-is (the stricter `$HOME` rule was accepted by the operator).
+- **Assumptions that were wrong:** the existing truncation-note tests compared the note against `truncation_note()` itself (tautological), so the wording change needed a new literal pin, not "update its two tests". A history note in a doc comment tripped the plan's own zero-hit rename grep (cosmetic, fixed in place). The as-built §H in `arch/remote-workspaces.md` described the retired connect exec; the plan named only `claude-substrate.md` (the review caught it; resynced at finalize).
+- **Approach delta:** `read_bounded_line` grew terminator-aware handling (a lone `\n`/`\r\n` past the limit is put back, not marked) that the finding did not ask for, because a naive marker would have flagged whole lines. `folder_trust` gained `trusted_folders` + `is_trusted_in` and a generic `trust_covers`. The live preflight used the repo's existing ignored `live_preflight_against_a_real_host` (env-var host) instead of a throwaway test.
+
+**Closure:** Requester = operator — closure notice for self-record. **Feature complete:** paydown-2026-11-27 WP6 has shipped (`7f14181`): eight small Rust correctness and copy fixes (separate output caps, a marked line cut, honest truncation and refusal wording, a parse-once trust check, a noise-tolerant preflight with true check names, and the `ApprovedRemoteClone` rename). Each is pinned by a mutation-proven test; see the Work Tree's verify-self evidence.

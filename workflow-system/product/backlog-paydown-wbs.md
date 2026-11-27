@@ -206,7 +206,7 @@ Holds the sweep's highest-impact item (keystrokes routed to a hidden yolo sessio
 - QF `11-20-QUALITY-RUN-PANEL-LISTENER-COUNT-HARDCODED`: a named count tied to the listen calls.
 - QF `11-20-QUALITY-DRIFT-COPY-SAYS-GITHUB-FOR-ANY-ORIGIN`: "its origin" when the origin is not GitHub.
 
-## WP6: Rust small correctness + copy  `[impact: Med · effort: S · risk: Low]` · feature
+## WP6: Rust small correctness + copy  `[impact: Med · effort: S · risk: Low]` · feature ✅ SHIPPED 2026-11-27 (commit 7f14181)
 
 Subprocess / runner / announce / preflight / remote_ops. Each item comes with a pinning test.
 

@@ -523,7 +523,7 @@ remote. Code, UI copy and tests use these two words for these two cases only.
   The row is written only after all of them pass.
 
   ✅ **WP2 as-built (2026-11-16):**
-  - The checks run as **two** one-shot `ssh -o BatchMode=yes -o ConnectTimeout=10 -- <host>` execs, with no ControlMaster (WP3 owns the master). The first is `printf '%s' "$HOME"`, which proves the key and supplies `$HOME`. The second is one constant check script under `zsh -lc` that prints `ok:<check>` / `fail:<check>` lines and always exits 0, so a non-zero exit means ssh or zsh failed, never a check.
+  - The checks run as **two** one-shot `ssh -o BatchMode=yes -o ConnectTimeout=10 -- <host>` execs, with no ControlMaster (WP3 owns the master). The first proves the key and supplies `$HOME`. The second is one constant check script under `zsh -lc` that prints `ok:<check>` / `fail:<check>` lines and always exits 0, so a non-zero exit means ssh or zsh failed, never a check.
   - A path typed as `~/…` is expanded with the **remote** `$HOME` and stored absolute (operator ruling).
   - The host is validated against an allow-list before any spawn.
   - The checks run inside the async `add_remote_project`, so the UI cannot skip them.
@@ -532,6 +532,16 @@ remote. Code, UI copy and tests use these two words for these two cases only.
     prepend `$HOME/.local/bin` to PATH when `command -v claude` fails (`remote_cmd::CLAUDE_PATH_FALLBACK`). The usual
     cause is a PATH line that lives only in `~/.zshrc`, which `zsh -lc` never reads. If `claude` is in neither place, the
     `tools` check says so and names the `~/.zprofile` fix.
+  - ✅ **paydown-2026-11-27 WP6: the connect exec shares the link's `$HOME` line.** The first exec is
+    `remote_link::print_home_command` (it prints `remote_link::HOME_SENTINEL` + `$HOME`, the same command the link's
+    `pre_connect_script` ends with), and its stdout is read by the link's own `remote_link::parse_home` (the LAST
+    sentinel line). One writer, one parser: rc-file noise from the remote's `.zshenv` can no longer fail connect.
+    ⚠️ It inherits `parse_home`'s rule (operator-accepted): a remote `$HOME` that is not absolute or holds whitespace
+    or `:` fails here, at "Add remote project…", instead of at the first open (it could never carry the `-R` forward).
+  - **Check names** (`CheckResult.name`): `host` · `connect` · `path-format` · `script` · `tools` · `path` · `token` ·
+    `auth`. `script` = the check script's exec failed as a transport (dropped, timed out), so none of its checks ran;
+    a zsh exit 127 stays `tools` (zsh is a missing tool). A script that stopped early is named for the FIRST check it
+    did not report (`tools` → `path` → `token` → `auth`), never for whichever comes last.
 - Hosts are ordinary `ssh` destinations, so the operator's `~/.ssh/config`, agent and Tailscale
   MagicDNS all apply. ⚠️ **A stopped Tailscale on the main box presents as "could not resolve hostname"**
   (hit during research). The preflight and the link's `Lost` state say so in plain words.

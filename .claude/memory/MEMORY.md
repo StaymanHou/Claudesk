@@ -79,6 +79,7 @@
 - [Trash via Finder](verify-trash-via-finder-not-ls.md) — `~/.Trash` is TCC-blocked; read-only Finder osascript query.
 - [Mini account](mini-remote-user-is-stayman.md) — Which account to use (never root-ops; the dev `projects.json` row is still root-ops, so never take ssh's user from it), token location, the pre-push identifier grep list. Gitignored: names real accounts.
 - [Remote verify hygiene](remote-verify-hygiene.md) — Real commands only in a scratch remote folder; check open remote workspaces before stopping the app; rebuilds and App.tsx edits are hard stops; the mini's dev account HAS the workflow skills (HTTPS origin, `git pull` works since 2026-11-18); seed a scratch WIP before a live Recycle; probe a host without Claudesk via your own `ssh -M` (socket in a short `/tmp` dir, scripts on stdin); a hand-added dev `projects.json` row needs integer timestamps (null breaks the whole list); the open check's 20 s grace gives an Up link without spawning CC.
+- [Live preflight harness](remote-preflight-live-test-harness.md) — Check the add-time preflight on a real host via the ignored `live_preflight_against_a_real_host` + `CLAUDESK_TEST_REMOTE_HOST/_PATH`; no source edit.
 - [Trust dialog exits](cc-trust-dialog-defaults-to-exit.md) — Defaults to "No, exit"; read the pane, answer ↓ then \r.
 - [Drive the real hook](drive-status-channel-with-real-hook-script.md) — Pipe a payload into the working-tree hook script at the dev socket.
 - [WKWebView perf](wp4-macos-perf-measurement.md) — How to measure CPU, RAM and frame time on macOS.

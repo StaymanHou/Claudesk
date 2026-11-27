@@ -15,71 +15,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §B.6
 
-# paydown-2026-11-08-wp6-subprocess-primitives — 2026-11-09
-
-*(feature-review-quality on ship commit `1ccf9c4`, window `1ccf9c4^..1ccf9c4`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged. The MAJOR was resolved 2026-11-09 by task `wp6-kill-exit-drain-bound`; the 4 MINORs below remain.)*
-
-## SURFACE-2026-11-09-QUALITY-WP6-MAX-OUTPUT-CARRIES-THREE-MEANINGS
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/subprocess/mod.rs`, `MAX_OUTPUT`; used by `adjudicator` (per-pipe cap), `run_streaming` (combined budget) and `read_bounded_line` (per-line limit).
-- **Finding:** one constant, three meanings; its doc ("the most output a runner keeps") fits none exactly, and the adjudicator's own reason ("a verdict is a few hundred bytes") was dropped in the move.
-- **Why it matters:** tuning the runner's budget silently changes the adjudicator's `OutputTooLarge` threshold.
-- **Suggested action:** separate named constants (or one doc that names all three uses), and restore the adjudicator's reason at its use.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-09-QUALITY-WP6-TRUNCATION-NOTE-IMPLIES-ARRIVAL-ORDER
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/workflow_install/runner.rs`, `truncation_note`.
-- **Finding:** "the last {shown} follow" reads as the last N dropped lines in arrival order; the tail is stdout's tail, then stderr's.
-- **Why it matters:** a reader of the wizard output could take the stdout-then-stderr block for the real order.
-- **Suggested action:** reword to e.g. "the last lines of each stream follow" (update the two tests that pin the note).
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-09-QUALITY-WP6-LONG-LINE-CUT-WITHOUT-MARKER
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/workflow_install/runner.rs`, `read_bounded_line` / `start_line_reader`.
-- **Finding:** a line longer than `MAX_OUTPUT` is cut silently; the kept part has no marker, unlike the budget's note.
-- **Why it matters:** rare, but a cut line reads as a complete one.
-- **Suggested action:** append a short marker (e.g. ` […line cut]`) when the remainder was discarded.
-- **Priority:** low
-- **Status:** pending
-
-# paydown-2026-11-08-wp5-auto-resume-folder-trust — 2026-11-09
-
-*(feature-review-quality on ship commit `80128a4`, window `80128a4^..80128a4`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 4 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-11-09-QUALITY-WP5-APPLY-TRUST-REPARSES-PER-ROW
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/announce/mod.rs`, `apply_trust` (calls `folder_trust::is_trusted` per row).
-- **Finding:** `trusted` is computed for every row before the `action == ACTION_RESTORE` check, and `is_trusted` takes the raw text, so each row re-parses the whole `.claude.json` (~247 KB here) plus a `canonicalize`, continue rows included, inside a sync (main-thread) command.
-- **Why it matters:** the "read once" doc covers the file read, not the parse; the cost grows with the record and the project list.
-- **Suggested action:** check the action first, and parse once (e.g. an `is_trusted_in(projects: &Map, path)` that both `is_trusted` and `apply_trust` call).
-- **Priority:** low
-- **Status:** pending
-
-# m17-wp2-remote-rows — 2026-11-16
-
-*(feature-review-quality on ship commit `d871473`, window `5ac8819..d871473`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 7 MINOR, all auto-backlogged. The MAJOR, the path-normalization and the runner MINORs were resolved by M17 WP3 (2026-11-16); the `$HOME` MINOR is partly resolved.)*
-
-## SURFACE-2026-11-16-QUALITY-M17WP2-PRINT-HOME-INTOLERANT-OF-RC-NOISE
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/remote_cmd/preflight.rs`: the connect step.
-- **Finding:** The connect step requires the whole stdout of `PRINT_HOME` to be one `/…` line, while the check-script parser deliberately ignores rc-file noise. A remote `.zshenv` that prints anything fails connect with "$HOME looked wrong".
-- **Partly resolved (2026-11-16, M17 WP3):** the LINK's pre-connect now prints `$HOME` behind `remote_link::HOME_SENTINEL` and parses the last sentinel line, so it tolerates rc noise. **Remaining:** the add-time preflight's connect step (`remote_cmd::preflight`, `PRINT_HOME`) still requires the whole stdout to be one path line.
-- **Suggested action:** Take the last line, or wrap `$HOME` in a sentinel.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-16-QUALITY-M17WP2-PREFLIGHT-CHECK-NAMES-MISLABEL
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/remote_cmd/preflight.rs`: `run_preflight` / `parse_check_lines`.
-- **Finding:** A transport failure on the check-script exec is labelled `"tools"`, and "stopped early" is labelled `"auth"`, whatever step was actually reached.
-- **Suggested action:** Use a `"connect"` / `"script"` name for transport failures, and name the next unreported check when the script stops early.
-- **Priority:** low
-- **Status:** pending
-
 # m17-wp3-remote-terminal — 2026-11-16
 
 *(feature-review-quality on ship commit `7f96ce3`, window `7f96ce3^..7f96ce3`; drive_mode=autopilot. 0 CRITICAL, 3 MAJOR, 8 MINOR, all auto-backlogged.)*
@@ -193,28 +128,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** surface a failed or refused copy as a workspace toast (the existing toast surface), and soften security-posture's "refused, not truncated (both sides)" to say what the operator actually sees.
 - **Priority:** low
 
-# m18-wp7-remote-update-uninstall — 2026-11-20
-
-*(feature-review-quality on the WP7 window `a33f7ba^..753f5cf`; drive_mode=autopilot. 0 CRITICAL, 4 MAJOR, 7 MINOR, all auto-backlogged. WP8 resolved all but one part of one MINOR, 2026-11-20.)*
-
-## SURFACE-2026-11-20-QUALITY-INSTALL-ERA-NAMES-SERVE-ALL-OPS
-- **Source:** feature-review-quality (M18 WP7, MINOR)
-- **Type:** naming
-- **Summary (remaining open work, rewritten at M18 WP8 finalize 2026-11-20):** `RemoteUninstallTarget` also feeds Update, so its name now misdescribes one of its two uses. (WP8 renamed `RemoteRunStart` / `REMOTE_RUN_DEADLINE`, dropped the `begin_remote_install` wrapper and unified the lock refusal; CHANGELOG 2026-11-20.)
-- **Suggested action:** rename it (e.g. `ApprovedRemoteClone`) together with the `E0451` compile-fail test's expected type and the docs that name it (`arch/claude-substrate.md` → R.3).
-- **Priority:** low
-
-# m18-wp8-release-acceptance — 2026-11-20
-
-*(feature-review-quality on the WP8 window `22bcec6^..b015868`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 4 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-11-20-QUALITY-CONSENT-REFUSAL-NAMES-AN-UNCHANGED-FOLDER
-- **Source:** feature-review-quality (M18 WP8, MINOR)
-- **Type:** copy (on the safety surface)
-- **Summary:** `remote_ops::confirmed_matches`'s refusal reads "(it was {clone_dir}, now {approved.clone_dir()})". When only the record changed (the case its test drives), it prints the same folder twice and shows a "change" the operator cannot see.
-- **Suggested action:** name the folder pair only when the folders differ; otherwise say the install record changed. Pin both wordings in `an_uninstall_proceeds_only_on_the_approval_the_operator_confirmed`.
-- **Priority:** low
-
 # paydown-2026-11-27-wp5-input-and-listeners — 2026-11-27
 
 *(feature-review-quality on ship commit `bc161e8`, window `bc161e8^..bc161e8`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 5 MINOR, all auto-backlogged.)*
@@ -309,3 +222,27 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** rename to "received" in the doc, or count only parsed lines.
 - **Priority:** low
 
+# paydown-2026-11-27-wp6-rust-small-correctness — 2026-11-27
+
+*(feature-review-quality on ship commit `7f14181`, window `d26df84..7f14181`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 3 MINOR, all auto-backlogged; the MAJOR (§H doc drift) was resolved at this feature's finalize.)*
+
+## SURFACE-2026-11-27-QUALITY-WP6-REMOTE-READ-ASSERT-WEAKER-THAN-ITS-COMMENT
+- **Source:** feature-review-quality (paydown-2026-11-27 WP6, MINOR)
+- **Type:** guard precision
+- **Summary:** `remote_fs`'s `const _: () = assert!(REMOTE_READ_MAX_BYTES < CAPTURED_PIPE_MAX as u64)` says a read at the limit *plus its answer framing* must fit one exec's stdout, but it passes at 4 MiB − 1, where the `read:ok:<len>` line would overflow. Safe today (1 MiB headroom).
+- **Suggested action:** assert with an explicit framing margin, or reword the comment to "strictly below".
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-WP6-CHECKRESULT-NAME-DOC-OMITS-ZSH-127
+- **Source:** feature-review-quality (paydown-2026-11-27 WP6, MINOR)
+- **Type:** doc precision
+- **Summary:** `remote_cmd::preflight::CheckResult.name`'s doc says a check-script transport failure is named `script`, without the exception that a zsh exit 127 stays `tools` (pinned by `a_missing_zsh_is_named`).
+- **Suggested action:** add the one clause.
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-WP6-RENAME-LEFT-LONG-DOC-LINES
+- **Source:** feature-review-quality (paydown-2026-11-27 WP6, MINOR)
+- **Type:** style
+- **Summary:** `subprocess::CAPTURED_PIPE_MAX`'s doc reads "an [`RunError::OutputTooLarge`]" (should be "a"), and the mechanical `MAX_OUTPUT` → `CAPTURED_PIPE_MAX` rename left over-long doc lines in `adjudicator/mod.rs`, `subprocess/captured.rs` (two), `remote_fs/mod.rs` and `remote_cmd/mod.rs` (rustfmt does not wrap comments).
+- **Suggested action:** fix the article and rewrap those doc lines.
+- **Priority:** low

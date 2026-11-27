@@ -55,6 +55,16 @@
 - **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-WIP-LABELS-IN-PRODUCTION-COMMENTS — `singleAuthority` now forbids WIP node labels in `Workspace.tsx` and `injectFailure.ts`, completing the rewording WP2 did.
 - **Feature shipped:** The status channel's hook listener now drops a connection that stays silent for 2 s, so one stuck client (a remote host's forwarded channel, seen live) can no longer silence every workspace's status dot until restart, and each drop is logged with the client's pid and process name.
 - **Backlog resolved:** SURFACE-2026-11-27-HOOK-LISTENER-ONE-STUCK-CONNECTION-DEAFENS-ALL — closed by the 2 s idle read timeout plus `HOOKSOCK` peer logging and timestamped `REGISTRY` lines; the forwarded channel's root cause moves to SURFACE-2026-11-27-QUALITY-HOOK-LISTENER-STALLS-STILL-ADD-UP.
+- **Feature shipped:** Backlog-paydown 2026-11-27 WP6, Rust small correctness + copy: the one 4 MiB output cap is split into three named limits, a cut runner line ends with ` […line cut]`, the truncation note and the uninstall refusal no longer misstate what happened, the trust check parses `.claude.json` once, the "Add remote project…" preflight tolerates remote rc-file output and names the check that actually failed, and `RemoteUninstallTarget` is now `ApprovedRemoteClone`.
+- **Backlog resolved:** SURFACE-2026-11-09-QUALITY-WP6-MAX-OUTPUT-CARRIES-THREE-MEANINGS — split into `CAPTURED_PIPE_MAX` (run_captured, per pipe), and the runner's own `OUTPUT_BUDGET` and `MAX_LINE_BYTES`; the adjudicator's reason is back at its run site.
+- **Backlog resolved:** SURFACE-2026-11-09-QUALITY-WP6-TRUNCATION-NOTE-IMPLIES-ARRIVAL-ORDER — the note now says its lines are the last of stdout, then the last of stderr, pinned literally.
+- **Backlog resolved:** SURFACE-2026-11-09-QUALITY-WP6-LONG-LINE-CUT-WITHOUT-MARKER — a line cut at the per-line limit ends with ` […line cut]`; a line whose only overflow is its terminator is left whole.
+- **Backlog resolved:** SURFACE-2026-11-09-QUALITY-WP5-APPLY-TRUST-REPARSES-PER-ROW — `apply_trust` parses the record once and walks only restore rows, pinned by call counters.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP2-PRINT-HOME-INTOLERANT-OF-RC-NOISE — the preflight's connect exec prints `$HOME` through the link's own sentinel command and reads it with the link's `parse_home`.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP2-PREFLIGHT-CHECK-NAMES-MISLABEL — a check-script transport failure is named `script`, and a script that stopped early is named for the first check it did not report.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-CONSENT-REFUSAL-NAMES-AN-UNCHANGED-FOLDER — the refusal names the folder pair only when the folders differ, and says the install record changed otherwise; both wordings pinned.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-INSTALL-ERA-NAMES-SERVE-ALL-OPS — `RemoteUninstallTarget` renamed `ApprovedRemoteClone` in the code and `arch/claude-substrate.md`, with the `E0451` fence re-proven.
+- **Backlog resolved:** SURFACE-2026-11-27-QUALITY-WP6-ARCH-H-STILL-DESCRIBES-PRINT-HOME — `arch/remote-workspaces.md` §H now records the shared sentinel connect step, the stricter remote `$HOME` rule and the preflight's check names.
 
 ## 2026-11-20
 

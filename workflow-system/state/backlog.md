@@ -554,33 +554,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (the F10b entry it was measuring is resolved; this matters only for future readings)
 - **Status:** open — upstream (mccc); **sent 2026-11-27** (`HANDOFF-to-mccc-2026-11-27-f10b-classifier-and-install-sh-backup.md`, §1; re-checked present at mccc `f8e8873`). Stays open until mccc applies or declines it.
 
-## Code-quality findings — paydown-2026-11-08-wp6-subprocess-primitives (2026-11-09)
-
-- **Pointer:** **3 MINOR** from the review of `1ccf9c4` (its MAJOR, the unbounded kill-exit drain, was resolved 2026-11-09). `MAX_OUTPUT` carries three meanings; the truncation note implies arrival order; a long line is cut without a marker. (The `spawn_blocking` docs item was resolved by paydown-2026-11-27 WP2 + WP4.)
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-08-wp6-subprocess-primitives — 2026-11-09`.
-- **Priority:** low (all)
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-- **Pickup shape:** one small doc/naming cleanup task.
-
-## Code-quality findings — paydown-2026-11-08-wp5-auto-resume-folder-trust (2026-11-09)
-
-- **Pointer:** **1 MINOR** remains from the review of `80128a4`: `apply_trust` re-parses `.claude.json` per row. (The resolver tests moved to `profiles.rs` at paydown-2026-11-27 WP4.) (The `announceRow.ts` header and the `PickerRow` comment were resolved by paydown-2026-11-27 WP2.)
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-08-wp5-auto-resume-folder-trust — 2026-11-09`.
-- **Priority:** low (all)
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-- **Pickup shape:** one small cleanup task; the parse fix wants a "parsed once" test.
-
-## Code-quality findings — m17-wp2-remote-rows (2026-11-16)
-
-- **Pointer:** **2 MINOR** remain from the review of `d871473` (paydown-2026-11-27 WP2 resolved the `remote_preflight` caller note and the history notes; WP4 the token-path pin and the cwd-trap debris). WP3 resolved the MAJOR (store validation), path normalization, and the runner move, and half of the `$HOME` read (2026-11-16, see CHANGELOG).
-  - MINORs:
-    - the preflight's `$HOME` read is intolerant of rc-file output;
-    - the check names are mislabelled.
-
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp2-remote-rows — 2026-11-16`.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-- **Pickup shape:** one small cleanup task (could ride with the m17-wp3 MINORs).
 ## SURFACE-2026-11-16-REMOTE-LINK-MASTER-ORPHANED-WHEN-THE-APP-IS-KILLED
 - **Source:** feature:verify-human (M17 WP3 Phase 3; observed while stopping the dev app with SIGTERM)
 - **Target level:** product:wbs (M17 WP5 lifecycle)
@@ -673,22 +646,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** upstream (mccc): write the backup to a fresh name (`CLAUDE.md.bak.<timestamp>`), or only `cp` to `.bak` when the result differs, and keep the original file's mode (`cat "$updated_tmp" > "$GLOBAL_CLAUDE_MD"` instead of `mv`). Send it in the next mccc handoff. Claudesk side: no change; WP7's Update stays as designed (the probe found no duplicate block and no prompt).
 - **Priority:** low
 - **Status:** open — upstream (mccc); **sent 2026-11-27** (`HANDOFF-to-mccc-2026-11-27-f10b-classifier-and-install-sh-backup.md`, §2; re-checked present at mccc `f8e8873`). Claudesk only re-runs the script. Stays open until mccc applies or declines it.
-## Code-quality findings — m18-wp7-remote-update-uninstall (2026-11-20)
-
-- **Pointer:** **1 MINOR** still open from the review of the WP7 window (`a33f7ba^..753f5cf`): `RemoteUninstallTarget` also feeds Update, so it wants a rename. The other 4 MAJOR + 6 MINOR were resolved at M18 WP8 (CHANGELOG 2026-11-20).
-  - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp7-remote-update-uninstall — 2026-11-20`.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
-- **Pickup shape:** one rename plus the compile-fail test's expected type and the arch doc.
-
-## Code-quality findings — m18-wp8-release-acceptance (2026-11-20)
-
-- **Pointer:** **1 MINOR** open from the review of the WP8 window (`22bcec6^..b015868`) (paydown-2026-11-27 WP4 resolved the `GitClean` Command form and the hand-copied `#[cfg(test)]` fence; WP5 the run panel's listener count): the consent refusal can name an unchanged folder twice.
-  - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp8-release-acceptance — 2026-11-20`.
-- **Priority:** low (all)
-- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
-- **Pickup shape:** four small, independent polish items in `workflow_install/` and `RemoteRunPanel`; any can ride along with the next remote-substrate change.
-
 ## Code-quality findings — paydown-2026-11-27-wp5-input-and-listeners (2026-11-27)
 
 - **Pointer:** **2 MAJOR + 5 MINOR** from the review of `bc161e8`. MAJOR: the `restoreFocus` fallback selects the CC pane by a test hook + xterm class, and both its tests hand-build that DOM; the StrictMode test fakes a sync throw, so the async-rejection branch that fixes the live symptom is unpinned. MINOR: a redundant `workflowFeaturesEnabled` + stale comment; the host-store retry needs a later subscriber; the listener-count regex misses inferred calls; two over-wide doc lines; uneven "origin" wording. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-27-wp5-input-and-listeners — 2026-11-27`.
@@ -703,3 +660,9 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** pending
 - **Pickup shape:** the MAJOR waits for the next stall's `HOOKSOCK` line (evidence first); the MINORs fit one small cleanup task.
 
+## Code-quality findings — paydown-2026-11-27-wp6-rust-small-correctness (2026-11-27)
+
+- **Pointer:** **3 MINOR** open from the review of `7f14181` (its MAJOR, the §H doc drift, was resolved at the feature's finalize): the `remote_fs` const assertion is weaker than its comment; `CheckResult.name`'s doc omits the zsh-127 → `tools` exception; an article + over-long doc lines left by the rename. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-27-wp6-rust-small-correctness — 2026-11-27`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** one small comments-only task.
