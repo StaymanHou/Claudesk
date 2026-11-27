@@ -53,6 +53,8 @@
 - **Backlog resolved:** SURFACE-2026-11-27-QUALITY-OVERLAY-PICKER-RULE-SPLIT-IN-TWO — `.picker-overlay-panel .picker`'s layout and padding are one rule.
 - **Backlog resolved:** SURFACE-2026-11-18-QUALITY-CLIPBOARD-CAP-DUPLICATED-UNPINNED — a test reads `clipboard.rs` and fails when its cap differs from `osc52.ts`'s.
 - **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-WIP-LABELS-IN-PRODUCTION-COMMENTS — `singleAuthority` now forbids WIP node labels in `Workspace.tsx` and `injectFailure.ts`, completing the rewording WP2 did.
+- **Feature shipped:** The status channel's hook listener now drops a connection that stays silent for 2 s, so one stuck client (a remote host's forwarded channel, seen live) can no longer silence every workspace's status dot until restart, and each drop is logged with the client's pid and process name.
+- **Backlog resolved:** SURFACE-2026-11-27-HOOK-LISTENER-ONE-STUCK-CONNECTION-DEAFENS-ALL — closed by the 2 s idle read timeout plus `HOOKSOCK` peer logging and timestamped `REGISTRY` lines; the forwarded channel's root cause moves to SURFACE-2026-11-27-QUALITY-HOOK-LISTENER-STALLS-STILL-ADD-UP.
 
 ## 2026-11-20
 

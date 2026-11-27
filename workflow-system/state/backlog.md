@@ -689,21 +689,17 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** four small, independent polish items in `workflow_install/` and `RemoteRunPanel`; any can ride along with the next remote-substrate change.
 
-## SURFACE-2026-11-27-HOOK-LISTENER-ONE-STUCK-CONNECTION-DEAFENS-ALL
-- **Source:** operator report during paydown-2026-11-27 WP5 ("The prod's status dot lost track"), investigated from the logs
-- **Target level:** feature (hook channel robustness)
-- **Type:** bug (prod, live)
-- **Summary:** `hook_socket::accept_loop` serves ONE connection at a time and reads it to EOF with no read timeout before the next `accept()`. A single hook client that connects and never closes blocks the listener for every Claude Code session on the machine until the app restarts. Observed 2026-11-27: prod's `status-channel.log` has an event at 09:54:14.116 (a PreToolUse from another local session), then nothing from ANY session for 39 minutes; the matching PostToolUse 89 ms later reached the dev app's log but not prod's; the prod process stayed alive (its only `Process death` is the operator's restart at 10:33:21).
-- **Context:** the stuck client was not identified (the app was restarted before inspection). Plausible: a stalled forwarded channel from a remote host's hook (prod's `ssh -M … -R …/com.claudesk.app/hook.sock`); remote tank events were among the last before the gap. Separately, prod's routing turned `resolved=none` for every cwd at 09:51:09 while its webview kept running normally; cause not established (no register/deregister is logged).
-- **Local hooks ruled out as the stuck client (checked 2026-11-27):** `claudesk-hook.pl` reads its whole stdin payload BEFORE connecting, connects with `Timeout => 1`, prints one line and closes, so a local hook cannot hold the socket open idle (and a killed one closes its fd). A forwarded channel from a remote host (`ssh -R`) is the remaining candidate: it keeps the local connection open while the network stalls.
-- **Suggested action:** serve each connection off the accept thread, or set a read timeout per connection (a hook writes one line and closes; a few seconds is generous), and log a timed-out client with its peer info. Pin it with a test that holds one connection open and asserts a second client's event still arrives. Also log workspace register/deregister in `status-channel.log` so a future `resolved=none` turn is explainable.
-- **Priority:** high (it silently blinds every status surface; the operator reports it recurring)
-- **Status:** pending
-
 ## Code-quality findings — paydown-2026-11-27-wp5-input-and-listeners (2026-11-27)
 
 - **Pointer:** **2 MAJOR + 5 MINOR** from the review of `bc161e8`. MAJOR: the `restoreFocus` fallback selects the CC pane by a test hook + xterm class, and both its tests hand-build that DOM; the StrictMode test fakes a sync throw, so the async-rejection branch that fixes the live symptom is unpinned. MINOR: a redundant `workflowFeaturesEnabled` + stale comment; the host-store retry needs a later subscriber; the listener-count regex misses inferred calls; two over-wide doc lines; uneven "origin" wording. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-27-wp5-input-and-listeners — 2026-11-27`.
 - **Priority:** medium (the 2 MAJORs), low (the rest)
 - **Status:** pending
 - **Pickup shape:** one small test-precision follow-up task; the two MAJORs are both "test against the real shape" fixes.
+
+## Code-quality findings — hook-listener-read-timeout (2026-11-27)
+
+- **Pointer:** **1 MAJOR + 5 MINOR** from the review of `e96e3b4`. MAJOR: the 2 s timeout caps one stall, but a byte-every-2-s client holds the loop and stalls add up on a bad shared `ssh -R` link (the backlog can fill again); why the forwarded channel never closed is still unknown. MINOR: a per-connection `try_clone` the doc says is free; the EINVAL check's call site is unpinned; a third `now_ms`; a stale writer list in the `status_log` doc; `lines=` counts garbage lines. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# hook-listener-read-timeout — 2026-11-27`.
+- **Priority:** medium (the MAJOR), low (the rest)
+- **Status:** pending
+- **Pickup shape:** the MAJOR waits for the next stall's `HOOKSOCK` line (evidence first); the MINORs fit one small cleanup task.
 

@@ -263,3 +263,49 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** pick one wording (the operator approved "origin" at WP5 verify-human; keep the decision, even the phrasing).
 - **Priority:** low
 
+# hook-listener-read-timeout — 2026-11-27
+
+*(feature-review-quality on ship commit `e96e3b4`, window `e96e3b4^..e96e3b4`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 5 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-27-QUALITY-HOOK-LISTENER-STALLS-STILL-ADD-UP
+- **Source:** feature-review-quality (hook-listener-read-timeout, MAJOR)
+- **Type:** gap (residual risk + open root cause)
+- **Summary:** The 2 s idle read timeout (`hook_socket::HOOK_READ_TIMEOUT`) caps ONE stalled connection, but two shapes of the same failure remain. (1) The timeout is per read, so a client that sends a byte at least every 2 s holds the serial loop with no limit. (2) Stalls add up: if the single `ssh -R` link carrying every remote hook goes bad, each forwarded event costs every session 2 s, and at more than one remote event per 2 s the 128-connection listen backlog fills again (`HOOK write-failed`). The root cause of the 2026-11-27 incident is still open: the stuck client was most likely a forwarded channel, and why it delivered its line and never closed is unknown.
+- **Suggested action:** on the next stall, read the `HOOKSOCK read-timeout` lines (`peer=ssh` + `lines=1` confirms the forwarded-channel hypothesis) and find why the forward does not close. Then consider a total per-connection cap (a hook writes one line; e.g. 5 s wall-clock from accept), and decide whether remote-forwarded connections need their own lane (ordering is per session, so a per-session ordered handoff would keep the order guarantee).
+- **Priority:** medium
+
+## SURFACE-2026-11-27-QUALITY-PEER-TRY-CLONE-ON-EVERY-CONNECTION
+- **Source:** feature-review-quality (hook-listener-read-timeout, MINOR)
+- **Type:** tech-debt (doc overclaim)
+- **Summary:** `accept_loop` calls `stream.try_clone()` on every accepted connection (an fd dup + close) although the peer is only needed on timeout, which contradicts `peer_info`'s "the hot path pays nothing".
+- **Suggested action:** keep the `BufReader`, loop on `read_line`, and use `reader.get_ref()` at timeout.
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-EINVAL-CALL-SITE-UNPINNED
+- **Source:** feature-review-quality (hook-listener-read-timeout, MINOR)
+- **Type:** test precision (machine pinned, caller not)
+- **Summary:** The EINVAL test pins the `peer_already_closed` classifier, but deleting the `!peer_already_closed(&e)` check in `accept_loop` passes every test and brings back one stderr line per local hook event.
+- **Suggested action:** extract the per-connection timeout setup into a function that returns whether to warn, and test that function, or accept the gap (stderr noise only).
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-THIRD-NOW-MS-HELPER
+- **Source:** feature-review-quality (hook-listener-read-timeout, MINOR)
+- **Type:** tech-debt (duplication)
+- **Summary:** `status_log::now_ms` is a third copy beside `time_store::now_ms` (same clamp-to-0 contract, already `pub`) and `config_store::now_ms` (different fallback).
+- **Suggested action:** reuse `time_store::now_ms`, or note why `status_log` keeps its own (a leaf module that should not depend on `time_store`).
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-STATUS-LOG-WRITER-LIST-STALE
+- **Source:** feature-review-quality (hook-listener-read-timeout, MINOR)
+- **Type:** doc drift
+- **Summary:** The `status_log` module doc's "Concurrency-safe" bullet names the drain thread + register/deregister commands as the writers; the hook-listener thread is now a third.
+- **Suggested action:** add the listener thread to that bullet.
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-HOOKSOCK-LINES-COUNTS-GARBAGE
+- **Source:** feature-review-quality (hook-listener-read-timeout, MINOR)
+- **Type:** doc/semantics mismatch
+- **Summary:** The `lines=` field of `HOOKSOCK read-timeout` counts every non-empty line, including ones that fail `parse_line`; the format doc calls them lines the connection "had already delivered".
+- **Suggested action:** rename to "received" in the doc, or count only parsed lines.
+- **Priority:** low
+

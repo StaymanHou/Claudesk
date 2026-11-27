@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: Hook listener read timeout (one stuck connection must not deafen every session)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-11-27
 **Created:** 2026-11-27
 **Resolves:** `SURFACE-2026-11-27-HOOK-LISTENER-ONE-STUCK-CONNECTION-DEAFENS-ALL` (high)
 
@@ -84,11 +84,42 @@ inserted high-priority fix taken ahead of paydown-2026-11-27 WP6, by operator ch
     Full suite at ship: reused the last-phase codify run (Test scope: full — last phase; `pnpm verify:auto` exit 0, 71 s). Since then only the WIP and `runtimes.md` changed; `format:check` + `cargo fmt --check` re-run at ship → 0
     — dev app (PIDs launched 11:09:22: tauri cli 20985, vite 21120, esbuild 21128, claudesk 45841) stopped by PID; prod untouched
 
+## Code-Quality Review
+
+*(ship commit `e96e3b4`; 0 CRITICAL, 1 MAJOR, 5 MINOR; all auto-backlogged per drive_mode=autopilot → `backlog-quality-findings.md` `# hook-listener-read-timeout — 2026-11-27`.)*
+
+### Strengths
+- Serial-on-purpose is explained in all three places a reader looks (the constant, the `accept_loop` doc, the arch doc).
+- The tests have bounded waits, cover the real 2 s production path through `spawn_listener_fanout`, and are each mutation-proven.
+- The FFI is tight: small `unsafe` blocks with SAFETY comments, `try_from` instead of `as`, failures fall back to `None`; the peer lookup only runs on timeout.
+- The live-found EINVAL case is handled soundly, and its test asserts the kernel premise itself.
+- The `REGISTRY` timestamp is a small, well-aimed diagnostic, and nothing parses the old shape.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`hook_socket/mod.rs` `HOOK_READ_TIMEOUT`] The timeout caps one stalled connection, but a client that trickles a byte every 2 s holds the loop, and stalls add up on a bad shared `ssh -R` link (the backlog can fill again). Why the forwarded channel never closed is still unknown. → SURFACE-2026-11-27-QUALITY-HOOK-LISTENER-STALLS-STILL-ADD-UP
+
+**MINOR**
+- [`accept_loop`] `try_clone()` on every connection contradicts "the hot path pays nothing". → …-PEER-TRY-CLONE-ON-EVERY-CONNECTION
+- [`accept_loop`] the `!peer_already_closed` call site is untested (only the classifier is). → …-EINVAL-CALL-SITE-UNPINNED
+- [`status_log::now_ms`] a third `now_ms` helper. → …-THIRD-NOW-MS-HELPER
+- [`status_log` module doc] the writer list omits the listener thread. → …-STATUS-LOG-WRITER-LIST-STALE
+- [`HOOKSOCK lines=`] counts lines that failed to parse. → …-HOOKSOCK-LINES-COUNTS-GARBAGE
+
+### Assessment
+A tight, well-reasoned fix: the smallest mechanism that bounds the observed failure, keeps the event order, and makes the next stall explain itself. The main gap is follow-up, not code: indefinite deafness became a per-stall cost that can add up, and the forwarded channel's root cause stays open (now backlogged).
+
+### If you disagree
+Mark a finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality
+- **Path:** Feature > complete
+- **Active scope:** none (archived)
 - **Blocked:** none
-- **Unvisited:** review-quality → finalize (then paydown-2026-11-27 WP6)
+- **Unvisited:** none (next: paydown-2026-11-27 WP6) (then paydown-2026-11-27 WP6)
 - **Open discoveries:** none
 
 ## Discoveries
@@ -96,3 +127,13 @@ inserted high-priority fix taken ahead of paydown-2026-11-27 WP6, by operator ch
      Each entry is also logged to workflow-system/state/backlog.md -->
 - [SURFACED-2026-11-27] plan — prod only gets this fix from a release; until then a stuck forwarded channel can still deafen the installed app (restart clears it). Note at ship; do not cut a release from this feature (`/release` is manual-only).
 - [SHORTCUT-2026-11-27] P1.1 — verify-self found live that macOS `setsockopt(SO_RCVTIMEO)` returns EINVAL when the client closed BEFORE `accept()` (the common local-hook case: 62 stderr lines in minutes). Confirmed with a python socket repro (closed peer → errno 22, line still readable; open peer → ok). Fixed in place: `peer_already_closed` classifies EINVAL as benign (no log; such a connection reaches EOF and cannot stall). Pinned by `a_client_closed_before_accept_refuses_the_timeout_benignly_and_still_delivers` (mutant `→ false` FAILS it). Live discriminator: 3 probe events after the rebuild → 3 STATUS lines, 0 new EINVAL lines. Re-verified by a fresh verify-self runner subagent.
+
+## Retrospect
+- **What changed in our understanding:** the backlog's open sub-question ("`resolved=none` from 09:51:09, cause not established") was not a routing bug. Those were the 128 events queued in the listen backlog, processed at the 10:33 quit after the workspaces had deregistered, and logged with their SEND timestamps. Register/deregister were already logged; the missing piece was a timestamp on those lines.
+- **Assumptions that held:** a serial loop with an idle read timeout bounds the observed failure and keeps event order; LOCAL_PEERPID + `proc_name` give a usable peer name.
+- **Assumptions that were wrong:** that `set_read_timeout` always succeeds. macOS refuses `SO_RCVTIMEO` with EINVAL when the peer closed before `accept()`, which is the NORMAL local-hook case. The unit tests (all with live peers) could not see it; the live dev-app run found it within minutes (62 stderr lines).
+- **Approach delta:** the peer lookup moved from accept time to timeout time (zero cost on the hot path); an EINVAL classifier was added in place at verify-self; verify-codify added two production-wiring tests (real 2 s via `spawn_listener_fanout`, the log path via `listener_log`) that the injected-timeout tests could not cover.
+
+**Closure (requester = operator; closure notice for self-record):**
+> **Feature complete:** the hook listener now drops a connection that stays silent for 2 s, so one stuck client (seen live: a remote host's forwarded channel) can no longer silence every workspace's status dot until restart. Each drop leaves a `HOOKSOCK read-timeout peer_pid=… peer=…` line in `status-channel.log`; it reaches the installed app with the next release.
+
