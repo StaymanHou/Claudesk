@@ -53,8 +53,8 @@ pub fn init(app: &AppHandle) -> Result<SharedLinks, String> {
 
 /// The validated remote target of the stored row keyed `project_path`. ⚠️ THE way a stored row
 /// reaches ssh: the row is re-validated here (`RemoteTarget::validated`), so a hand-edited
-/// `projects.json` is refused with the reason rather than passed through (operator decision A,
-/// WP3 P1.verify-human.1: such a row stays listed and refuses to open).
+/// `projects.json` is refused with the reason rather than passed through (operator decision,
+/// M17 WP3: such a row stays listed and refuses to open).
 pub(crate) fn target_for(data_dir: &Path, project_path: &str) -> Result<ValidTarget, String> {
     let projects = config_store::read_projects(data_dir).map_err(|e| e.to_string())?;
     let row = projects
@@ -75,7 +75,7 @@ pub(crate) fn target_for(data_dir: &Path, project_path: &str) -> Result<ValidTar
 /// the spawn finds the link Up instead of a torn-down one (M17 WP4 AC-0).
 pub const OPEN_CHECK_GRACE: Duration = Duration::from_secs(20);
 
-/// What the picker learns before it opens a remote row (P3.3;
+/// What the picker learns before it opens a remote row (
 /// `SURFACE-2026-11-16-REMOTE-OPEN-MUST-CHECK-THE-FOLDER-STILL-EXISTS`), and since M17 WP5 what the
 /// open DOES (AC-3). Each kind that stops the open carries its plain-words message. ⚠️ A missing
 /// folder and an unreachable host are DIFFERENT kinds on purpose: only the first may offer Remove,
@@ -769,7 +769,7 @@ mod tests {
             .collect()
     }
 
-    /// M17 WP5 (P2.verify-self.1, AC-3.1/AC-8.2) caller guard over `remote_open_check`'s worker:
+    /// M17 WP5 (AC-3.1/AC-8.2) caller guard over `remote_open_check`'s worker:
     /// - the remote is asked in ONE exec, and the ONLY `links.` calls are the hold, that exec, and
     ///   the identifier (an allow-list, so a second remote call under ANY method name fails;
     ///   counting the text `.exec(` let `links.close_exec(` through);
@@ -802,7 +802,7 @@ mod tests {
             "no outcome skips the settle: {worker}"
         );
         // The WHOLE command, not just the worker: a registry copy made before the worker is a
-        // use too (P2 re-verify #3, M9).
+        // use too (a live re-verify found this route).
         super::assert_remote_reach_is_closed(
             &body,
             &[
@@ -922,7 +922,7 @@ mod tests {
         );
     }
 
-    /// M17 WP5 P4.2 — the dialogs' End: a delivered end records `ended`; a failed one writes
+    /// M17 WP5 — the dialogs' End: a delivered end records `ended`; a failed one writes
     /// nothing and says why.
     #[test]
     fn ending_the_session_records_ended_only_when_the_end_ran() {
@@ -956,7 +956,7 @@ mod tests {
         );
     }
 
-    /// M17 WP5 P4.2 caller guard: the End runs inside a close mark (a racing respawn waits),
+    /// M17 WP5 caller guard: the End runs inside a close mark (a racing respawn waits),
     /// cancels copy-mode before the end, and settles the record from the end's own result.
     #[test]
     fn remote_end_session_marks_the_close_cancels_then_ends_and_settles() {
@@ -1092,7 +1092,7 @@ mod tests {
 
     #[test]
     fn the_open_check_grace_is_the_operator_ruled_20_seconds() {
-        // Operator ruling, M17 WP4 P1.verify-human.1 (2026-11-16): keep 20 s. The live open
+        // Operator ruling, M17 WP4 (2026-11-16): keep 20 s. The live open
         // reached the link ~1 s after the click, so a shorter grace buys little, and a change
         // here should be a decision, not a drive-by.
         assert_eq!(OPEN_CHECK_GRACE, Duration::from_secs(20));

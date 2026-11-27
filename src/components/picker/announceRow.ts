@@ -8,15 +8,15 @@
 // (`[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`).
 //
 // ═══════════════════════════════════════════════════════════════════════════════
-// ⚠️ ONE CONDITIONAL GOVERNS BOTH THE LABEL AND THE BUTTON
+// ⚠️ ONE DECISION GOVERNS BOTH THE LABEL AND THE BUTTON
 //
-// The `⊘` no-fire door appears ONLY WITH an announcement, because with no predicted action
-// both doors are identical and `⊘` would be a control that provably does nothing. The same
-// reason drops it from a MANUAL row (paydown-2026-11-08 WP5): on a folder Claude Code has not
-// trusted, the fire withholds the command, so the row click types nothing either. Such a row
-// keeps its announcement (the command you will type) and loses only the door. [`rowAffordances`] returns both from a single decision so the component cannot
-// render one without the other — the alternative (two independent `action !== null` checks
-// in JSX) is two places to forget.
+// The door appears only with an announcement, and only when the two doors differ. With no
+// predicted action both doors are identical, so the `⊘` no-fire door would be a control that
+// provably does nothing. The same reason drops it from a MANUAL row: on a folder Claude Code
+// has not trusted, the fire withholds the command, so the row click types nothing either.
+// Such a row keeps its announcement (the command you will type) and loses only the door.
+// [`rowAffordances`] returns both from a single decision so the component cannot drift — the
+// alternative (two independent `action !== null` checks in JSX) is two places to forget.
 //
 // ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️ THE WORKFLOW GATE APPLIES PER ARM, NOT TO THE WHOLE ROW (2026-08-05)
@@ -27,8 +27,8 @@
 // CLI flag, so it serves every CC user and is UNGATED; the `/session-restore` arm promises
 // something about `workflow-system/` files and stays GATED.
 //
-// The pairing above is unaffected: within whichever arm survives, the label and the door
-// still appear together or not at all.
+// The rule above is unaffected: within whichever arm survives, the door appears only with an
+// announcement, and only when the two doors differ.
 
 import {
   actionFromAnnounced,

@@ -8,6 +8,23 @@
 - **Task closed:** Backlog-paydown 2026-11-27 WP1, bookkeeping: two entries deleted, three low-value items buried in `backlog-archived.md`, and the two never-sent upstream items (the F10b classifier, the `install.sh` backup loss) sent to mccc's inbox after re-checking both still exist there.
 - **Backlog resolved:** SURFACE-2026-11-09-NEXT-OPEN-INDICATOR-PREDICTS-CONTINUE-WITH-NO-TRANSCRIPT — dropped by the operator at the paydown sweep; the display-only mis-prediction for no-transcript projects stays as built.
 - **Backlog resolved:** SURFACE-2026-11-17-APP-TSX-FAST-REFRESH-CLOSES-REMOTE-WORKSPACES — its action (close remote workspaces before an `App.tsx` edit) is already carried by the remote-verify hygiene memory, so the entry is retired.
+- **Task closed:** Backlog-paydown 2026-11-27 WP2, comments and docs only: 16 stale, false or label-citing comments fixed across the picker, workspace, remote and session modules, proven comments-only by a parser-token diff against HEAD with a positive control.
+- **Backlog resolved:** SURFACE-2026-11-09-QUALITY-WP5-ANNOUNCEROW-HEADER-CONTRADICTS-MANUAL-ROWS — the `announceRow.ts` header now states the rule the code follows (the door appears only with an announcement, and only when the two doors differ), in both places.
+- **Backlog resolved:** SURFACE-2026-11-09-QUALITY-WP5-PICKERROW-COMMENT-CARRIES-REVIEW-HISTORY — the untrusted-badge comment keeps only its reason.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP2-HISTORY-NOTES-IN-CODE-COMMENTS — the `config_store` ledger note and a `remote_cmd` test comment state the rule instead of the WP history.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP2-REMOTE-PREFLIGHT-HAS-NO-FRONTEND-CALLER — `remote_preflight` is documented as a deliberate diagnostic surface for bridge verification; the add form runs the same preflight through `add_remote_project`.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-WIP-LABELS-IN-PRODUCTION-COMMENTS — **partially**: the M17-added WIP node labels in the remote, session and workspace comments are reworded to their decision content; widening the `singleAuthority` rule over the TS modules remains open.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP4-BRITTLE-PIN-AND-STALE-DOCS — **partially**: the status broadcaster's module doc now says canonicalization is local-only and the run-on `to_update` sentence is rewrapped; narrowing the pin remains open.
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP5-STALE-ANNOUNCE-REMOTE-COMMENT — the remote-row announce comment describes the as-built rule (announce from the local record; the click re-decides over the link).
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP5-DISPLACED-DOC-BLOCKS-AND-FUNNEL-INVARIANT — `take`'s and `handleOpenRecent`'s docs sit on their own functions again, and the funnel invariant names the dialogs' Reconnect as the one other open path.
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP5-SESSION-EXISTS-RECORD-COMMENT — the `SessionExists` arm's comment says the record already reads `running` and what that means for the next open.
+- **Backlog resolved:** SURFACE-2026-11-18-QUALITY-XTERMPANE-LIFECYCLE-FLAG-BLOCK-STALE-COUNT — the pane's lifecycle-flag warning counts four flags, points the right way, and `doorUsedRef` has its own comment.
+- **Backlog resolved:** SURFACE-2026-11-18-QUALITY-STUB-RELAUNCH-ASSUMES-COMMITTED-FIRST-SPAWN — the live-workspace stub's `relaunch()` states its committed-first-spawn assumption.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-CC-SESSION-DOC-LINE-WIDTH — the `resolve_profile_spawn_env` doc line is rewrapped.
+- **Backlog resolved:** SURFACE-2026-11-20-QUALITY-SUBSTRATE-SINK-SETTER-SHAPE — `set_substrate_sink` documents its ordering invariant (install before the first `set_substrate`).
+- **Backlog resolved:** SURFACE-2026-11-27-QUALITY-PANEL-COMMENT-SAYS-ONE-CHILD — the overlay panel comment says one in-flow child and names the positioned × button.
+- **Backlog resolved:** SURFACE-2026-11-09-QUALITY-WP6-DOCS-STILL-NAME-SPAWN-BLOCKING — **partially**: the five async commands' docs and the `ASYNC_COMMANDS` reasons name `on_blocking_worker`; adding it to `SPAWN_BOUNDARIES` remains open.
+- **Backlog resolved:** SURFACE-2026-11-16-PRUNE-COMMENT-CLAIMS-UNCHANGED-FILE-BUT-IT-RE-SORTS — `prune_missing`'s and `remove`'s comments say the always-write keeps the rows but may reorder the bytes (the read sorts by recency).
 
 ## 2026-11-20
 

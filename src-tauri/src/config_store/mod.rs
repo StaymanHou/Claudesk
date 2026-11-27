@@ -37,12 +37,8 @@
 //! transfers: attribute **per item** and name the consumer, never a module-wide
 //! `#![allow(dead_code)]` (per `session_state/mod.rs:47`, where a blanket allow with an
 //! expiry note masked a test-only helper sitting in production until code review caught it).
-//! A future placeholder field in this module should re-open the ledger in this shape.
-//!
-//! ⚠️ **Re-opened and re-closed by M17 WP2 (2026-11-16):** [`add_remote`] carried one per-item
-//! attribute through Phase 1, naming `remote_cmd::commands::add_remote_project` as its consumer.
-//! That command landed in Phase 2 and the attribute was deleted with clippy green — the ledger
-//! working as designed.
+//! A future placeholder field in this module should re-open the ledger in this shape, and
+//! delete the attribute the moment its named consumer lands.
 
 pub mod commands;
 pub mod profile_create;
@@ -782,8 +778,9 @@ fn normalize_model(model: Option<String>) -> Option<String> {
 /// Persists the resulting list.
 pub fn remove(data_dir: &Path, path: &Path) -> Result<(), ConfigError> {
     // ⚠️ Goes through the funnel even though the original skipped the write when nothing
-    // changed. The funnel always writes, so an absent path now rewrites an identical file —
-    // a no-op rename, not a behavior change (the list is byte-identical). Keeping the
+    // changed. The funnel always writes, so an absent path now rewrites the same ROWS — not
+    // byte-identical: the read sorts by recency, so a file not already in recency order comes
+    // back reordered. Not a behavior change for any reader. Keeping the
     // short-circuit would mean a second write path outside the funnel, which is the thing
     // this WP exists to remove.
     update_projects(data_dir, |projects| {
@@ -796,17 +793,17 @@ pub fn remove(data_dir: &Path, path: &Path) -> Result<(), ConfigError> {
 ///
 /// A project's folder can be deleted, renamed, or unmounted between sessions; such
 /// an entry is a dead click in the picker. This reads the list, partitions it into
-/// survivors (path still exists) and dropped (path gone), persists the survivors
-/// **only if any were dropped** (no needless write on the common all-present case),
-/// and returns the dropped records so the caller can name them in a toast.
+/// survivors (path still exists) and dropped (path gone), persists the survivors, and
+/// returns the dropped records so the caller can name them in a toast.
 ///
 /// Existence is tested with [`Path::exists`], which follows symlinks and treats any
 /// stat error (including permission denied) as "does not exist". For the picker that
 /// is the right call: an entry we cannot stat is one we cannot open either.
 pub fn prune_missing(data_dir: &Path) -> Result<Vec<Project>, ConfigError> {
     // ⚠️ Like `remove`, this now always writes (the funnel does), where before it skipped the
-    // write when nothing was dropped. The file content is identical in that case, so this is a
-    // redundant atomic rename rather than a behavior change — and it buys a single write path.
+    // write when nothing was dropped. The ROWS are identical in that case, but the bytes may not
+    // be: the read sorts by recency, so the rewrite reorders a file not already in recency order.
+    // Not a behavior change for any reader — and it buys a single write path.
     update_projects(data_dir, |projects| {
         // ⚠️ M17 — A REMOTE ROW IS NEVER PRUNED. Its `path` is an `ssh://` key that never exists
         // on the local disk, so without this exemption every remote row would be SILENTLY DELETED

@@ -556,7 +556,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — paydown-2026-11-08-wp6-subprocess-primitives (2026-11-09)
 
-- **Pointer:** **4 MINOR** from the review of `1ccf9c4` (its MAJOR, the unbounded kill-exit drain, was resolved 2026-11-09). `MAX_OUTPUT` carries three meanings; the truncation note implies arrival order; docs still name `spawn_blocking`; a long line is cut without a marker.
+- **Pointer:** **4 MINOR** from the review of `1ccf9c4` (its MAJOR, the unbounded kill-exit drain, was resolved 2026-11-09). `MAX_OUTPUT` carries three meanings; the truncation note implies arrival order; `SPAWN_BOUNDARIES` misses `on_blocking_worker` (its docs half was resolved by paydown-2026-11-27 WP2); a long line is cut without a marker.
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-08-wp6-subprocess-primitives — 2026-11-09`.
 - **Priority:** low (all)
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
@@ -564,7 +564,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — paydown-2026-11-08-wp5-auto-resume-folder-trust (2026-11-09)
 
-- **Pointer:** **4 MINOR** from the review of `80128a4`: `apply_trust` re-parses `.claude.json` per row; the shared resolver's tests live in `transcript`; the `announceRow.ts` header contradicts manual rows (and has a merged line); a `PickerRow` comment carries review history.
+- **Pointer:** **2 MINOR** remain from the review of `80128a4`: `apply_trust` re-parses `.claude.json` per row; the shared resolver's tests live in `transcript`. (The `announceRow.ts` header and the `PickerRow` comment were resolved by paydown-2026-11-27 WP2.)
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-08-wp5-auto-resume-folder-trust — 2026-11-09`.
 - **Priority:** low (all)
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
@@ -572,28 +572,17 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m17-wp2-remote-rows (2026-11-16)
 
-- **Pointer:** **6 MINOR** remain from the review of `d871473`. WP3 resolved the MAJOR (store validation), path normalization, and the runner move, and half of the `$HOME` read (2026-11-16, see CHANGELOG).
+- **Pointer:** **4 MINOR** remain from the review of `d871473` (paydown-2026-11-27 WP2 resolved the `remote_preflight` caller note and the history notes). WP3 resolved the MAJOR (store validation), path normalization, and the runner move, and half of the `$HOME` read (2026-11-16, see CHANGELOG).
   - MINORs:
     - the token path is duplicated;
     - the preflight's `$HOME` read is intolerant of rc-file output;
     - the check names are mislabelled;
-    - `remote_preflight` has no frontend caller;
-    - the cwd-trap test writes under `src-tauri/`;
-    - history notes sit in code comments.
+    - the cwd-trap test writes under `src-tauri/`.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp2-remote-rows — 2026-11-16`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** one small cleanup task (could ride with the m17-wp3 MINORs).
-## SURFACE-2026-11-16-PRUNE-COMMENT-CLAIMS-UNCHANGED-FILE-BUT-IT-RE-SORTS
-- **Source:** session-reflect (M17 WP2 verify-self evidence)
-- **Target level:** product:arch (doc accuracy, `config_store`)
-- **Type:** tech-debt (stale comment)
-- **Summary:** `prune_missing`'s comment says the always-write funnel leaves "the file content … identical" when nothing is dropped. It is not: `read_projects` sorts by recency, so the rewrite reorders any file not already in recency order. Measured 2026-11-16: the dev `projects.json` shasum changed across a launch with the same row set. `remove` has the same funnel and the same effect.
-- **Suggested action:** Correct the comment (the rows are identical, the order is recency). Optionally note it at `read_projects`.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-
 ## SURFACE-2026-11-16-REMOTE-LINK-MASTER-ORPHANED-WHEN-THE-APP-IS-KILLED
 - **Source:** feature:verify-human (M17 WP3 Phase 3; observed while stopping the dev app with SIGTERM)
 - **Target level:** product:wbs (M17 WP5 lifecycle)
@@ -618,14 +607,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m17-wp3-remote-terminal (2026-11-16)
 
-- **Pointer:** **6 MINOR** remain from the review of `7f96ce3` (WP4 resolved the two link-lifecycle MAJORs and the unused `remote_link_ensure`; WP5 resolved the reconnect-seam MAJOR and the `cc_session` module split, 2026-11-17, CHANGELOG).
+- **Pointer:** **5 MINOR** remain from the review of `7f96ce3` (paydown-2026-11-27 WP1 buried the guard-heuristic MINOR; WP2 reworded the M17 WIP labels, leaving that item's guard widening) (WP4 resolved the two link-lifecycle MAJORs and the unused `remote_link_ensure`; WP5 resolved the reconnect-seam MAJOR and the `cc_session` module split, 2026-11-17, CHANGELOG).
   - MINORs:
     - a stale `master_pid` after reap;
     - the remote dispatch sits inside the PTY constructor;
     - the remote host is stored twice;
-    - the blocking guard's name heuristic shapes production code;
     - the inject refusal comes back as a callback, not a value;
-    - WIP labels appear in production comments (WP5 added more; see the item's update).
+    - widen the `singleAuthority` label rule to the reworded TS modules.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp3-remote-terminal — 2026-11-16`.
 - **Priority:** low
@@ -658,9 +646,9 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m17-wp5-lifecycle (2026-11-17)
 
-- **Pointer:** **1 MAJOR + 7 MINOR** open from the review of the WP5 ship commit (`67dec33`); 2 more MINORs were appended to existing WP3/WP4 items (the shared workspace toast; WIP labels in comments). The review's CRITICAL (the `remote_record` lost-update race) goes to `/feature-refactor` before finalize.
+- **Pointer:** **1 MAJOR + 4 MINOR** open from the review of the WP5 ship commit (`67dec33`) (paydown-2026-11-27 WP2 resolved the announce comment, the displaced doc blocks and the `SessionExists` comment); 2 more MINORs were appended to existing WP3/WP4 items (the shared workspace toast; WIP labels in comments). The review's CRITICAL (the `remote_record` lost-update race) goes to `/feature-refactor` before finalize.
   - MAJOR: the reconnect drive mode as nested `Option`s + a redundant `attach` flag.
-  - MINORs: a stale announce comment; displaced doc blocks + the funnel invariant; the close-not-ended toast's cause/project; the "no such session" text coupling; a second `DRIVE_MODES` copy; the `SessionExists` record comment; three dense-body helpers.
+  - MINORs: the close-not-ended toast's cause/project; the "no such session" text coupling; a second `DRIVE_MODES` copy; three dense-body helpers.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp5-lifecycle — 2026-11-17`.
 - **Priority:** medium (the MAJOR), low (the rest)
@@ -669,7 +657,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m18-wp1-remote-recycle-respawn (2026-11-18)
 
-- **Pointer:** **4 MINOR** open from the review of the WP1 ship commit (`411bff8`): a stale lifecycle-flag count and pointer in `XtermPane`; the real-pane test's `not.toBe` should be an exact `toEqual`; the live-pane xterm mocks copied twice; the stub `relaunch()`'s unstated assumption. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp1-remote-recycle-respawn — 2026-11-18`.
+- **Pointer:** **2 MINOR** open from the review of the WP1 ship commit (`411bff8`): the real-pane test's `not.toBe` should be an exact `toEqual`; the live-pane xterm mocks copied twice. (The lifecycle-flag comment and the stub assumption were resolved by paydown-2026-11-27 WP2.) Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp1-remote-recycle-respawn — 2026-11-18`.
 - **Priority:** low (all)
 - **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** one small test-and-comment polish pass. The mock dedupe fits whenever a third live-pane test appears.
@@ -710,8 +698,8 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** open — upstream (mccc); **sent 2026-11-27** (`HANDOFF-to-mccc-2026-11-27-f10b-classifier-and-install-sh-backup.md`, §2; re-checked present at mccc `f8e8873`). Claudesk only re-runs the script. Stays open until mccc applies or declines it.
 ## Code-quality findings — m18-wp4-substrate-detection-and-funnel (2026-11-20)
 
-- **Pointer:** **5 MINOR** open from the review of the WP4 window (`9ce4810^..d57aa15`). The stale arch-wording MINOR was resolved at WP4 finalize; the guard MAJOR and the optional-`onOpenSettings` MINOR were resolved at M18 WP5 (CHANGELOG 2026-11-20).
-  - MINOR: the host-store latch never retries after a failed `listen`; a third inline gate-hook call in `Workspace`; `shortHost` is imported across layers; the substrate sink uses a setter shape; one doc-comment line is too wide.
+- **Pointer:** **3 MINOR** open from the review of the WP4 window (`9ce4810^..d57aa15`) (paydown-2026-11-27 WP2 resolved the setter-ordering doc and the wide doc line). The stale arch-wording MINOR was resolved at WP4 finalize; the guard MAJOR and the optional-`onOpenSettings` MINOR were resolved at M18 WP5 (CHANGELOG 2026-11-20).
+  - MINOR: the host-store latch never retries after a failed `listen`; a third inline gate-hook call in `Workspace`; `shortHost` is imported across layers.
   - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp4-substrate-detection-and-funnel — 2026-11-20`.
 - **Priority:** low (all)
 - **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
@@ -742,7 +730,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — picker-qol-focus-and-scroll (2026-11-27)
 
-- **Pointer:** **1 MAJOR + 3 MINOR** from the review of `8c019bf`. MAJOR: an overlay dismiss can restore focus to a BACKGROUND workspace's pane after a ⌘⇧digit switch while the overlay is open (keys then reach a hidden CC session; reviewer's reading, not yet reproduced). MINOR: the CSS tripwire parses braces before stripping comments; `.picker-overlay-panel .picker` is split across two rules; the panel comment says "one child".
+- **Pointer:** **1 MAJOR + 2 MINOR** from the review of `8c019bf` (the panel comment was resolved by paydown-2026-11-27 WP2). MAJOR: an overlay dismiss can restore focus to a BACKGROUND workspace's pane after a ⌘⇧digit switch while the overlay is open (keys then reach a hidden CC session; reviewer's reading, not yet reproduced). MINOR: the CSS tripwire parses braces before stripping comments; `.picker-overlay-panel .picker` is split across two rules.
   - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# picker-qol-focus-and-scroll — 2026-11-27`.
 - **Priority:** medium (the MAJOR), low (the rest)
 - **Status:** pending

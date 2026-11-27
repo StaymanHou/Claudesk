@@ -196,13 +196,13 @@ export function Workspace({
   // "none" on hide prevents a stale accent if a workspace is demoted while focused.
   const rootRef = useRef<HTMLDivElement>(null);
   const [focusHalf, setFocusHalf] = useState<FocusHalf>("none");
-  // M17 WP3 P4.verify-human.2 (operator decision A) — the "not sent" toast. Set by the skill row
+  // The "not sent" toast (operator decision, M17 WP3). Set by the skill row
   // and the Prompt panel when `cc_inject` REFUSES (a remote pane that never got ready); the
   // text is the backend's own reason (`injectFailure.ts`). Scoped to THIS workspace, like
   // `.drivemode-confirm`, because backgrounded workspaces stay mounted. Dismissed by ×; a later
   // failure replaces it.
   //
-  // M17 WP6 (P3.verify-human.2, operator decision B) — the toast also carries INFORMATIONAL
+  // Since M17 WP6 (operator decision) the toast also carries INFORMATIONAL
   // notices (a chord / menu item for a surface a remote workspace does not have). Nothing failed
   // there, so it renders in a neutral style (`is-info`, the picker's info-toast look) and as a
   // `status`, not an `alert`; failures keep the red alert. A later notice of either kind replaces it.
@@ -214,7 +214,7 @@ export function Workspace({
     /** Who raised it: `"docs"` for the remote Docs catch-up (see `showDocsNotice`). */
     source?: "docs";
   } | null>(null);
-  // M17 WP7 P3.verify-human.2 — a toast that asks to clear itself does, unless something replaced it
+  // M17 WP7 — a toast that asks to clear itself does, unless something replaced it
   // first (the effect re-runs on every new toast object, cancelling the old timer).
   useEffect(() => {
     if (toast?.autoDismissMs === undefined) return;
@@ -406,7 +406,7 @@ export function Workspace({
     // Fetch-only, like the indicator effect below. Re-read on every `visible` edge: workspaces
     // stay mounted forever (the standing invariant), so a mount-only read would go stale for
     // the app's whole life — and the picker can change this value while the workspace is open.
-    // ⚠️ The drive mode ALSO re-syncs on its broadcast (the P3.2 effect below); the supervisor
+    // ⚠️ The drive mode ALSO re-syncs on its broadcast (its broadcast listener); the supervisor
     // toggle has no broadcast, so for it this refresh-on-reveal is the only re-read from disk.
     if (!workflowEnabled || !visible) return;
     let cancelled = false;
@@ -466,7 +466,7 @@ export function Workspace({
     surfaces.supervisor,
   ]);
 
-  // ── M13.5 WP4 P3.3–P3.5 — the selector ───────────────────────────────────────────
+  // ── M13.5 WP4 — the selector ───────────────────────────────────────────────────────
   const [editingDriveMode, setEditingDriveMode] = useState(false);
   const driveModeSelectRef = useRef<HTMLSelectElement>(null);
   // M14 WP0 — same ref-mirroring reason: `useSupervisor`'s turn-end callback is registered once,
@@ -541,7 +541,7 @@ export function Workspace({
    *
    * Error surfacing: `console.warn` for diagnosis (inside `injectCommand`), NO error overlay —
    * replacing a working terminal with an error, over a command the user can simply type, would
-   * be worse — and, since M17 WP3 (operator decision A), the dismissible `injectFailure` toast
+   * be worse — and, since M17 WP3, the dismissible `injectFailure` toast
    * when `cc_inject` refuses (a remote pane that never got ready).
    */
   const fireSkill = (command: string) => {
@@ -572,7 +572,7 @@ export function Workspace({
     </button>
   ) : null;
 
-  // M13 WP3 P3.1 — the live session id, mirrored into a ref so `awaitFreshSessionId` can watch
+  // M13 WP3 — the live session id, mirrored into a ref so `awaitFreshSessionId` can watch
   // it CHANGE after a relaunch. The id arrives by a push (XtermPane's `onSessionId` → App state
   // → back down as this prop), which a promise cannot await; a ref updated every render is the
   // only place a polling closure can read the current value without going stale.
@@ -593,7 +593,7 @@ export function Workspace({
     ccSessionIdRef.current = workspace.cc_session_id;
   }, [workspace.cc_session_id]);
 
-  // M13 WP3 P3.1 — one Recycle at a time. Guards the double-click: the sequence takes tens of
+  // M13 WP3 — one Recycle at a time. Guards the double-click: the sequence takes tens of
   // seconds (figures: `RECYCLE_TIMEOUT_MS`, the single authority), so a second click mid-run
   // would start a competing operation against the same session and both would race the same
   // signals.
@@ -651,7 +651,7 @@ export function Workspace({
       // into a killed PTY, failing silently.
       awaitFreshSessionId: () =>
         waitForFreshSessionId(ccSessionIdRef, sessionId),
-      // M17 WP3 P4.6 — a refused handoff / restore injection shows the "not sent" toast.
+      // M17 WP3 — a refused handoff / restore injection shows the "not sent" toast.
       onInjectFailure: (step, reason) =>
         setInjectFailure(recycleInjectFailure(step, reason)),
       // ⚠️ No `onProgress`. It exists on the interface for a caller that renders progress, and
@@ -683,7 +683,7 @@ export function Workspace({
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // M15 WP4 P4.1/P4.2 — THE SUPERVISOR'S FIRST PRODUCTION CALLER.
+  // M15 WP4 — THE SUPERVISOR'S FIRST PRODUCTION CALLER.
   //
   // ⚠️ **THE RECYCLE REUSES `fireRecycle` — THERE IS NO SECOND RECYCLE CALL SITE.**
   // `recycleSession`'s own header rule is "every caller enters here", and the standing local
@@ -1037,7 +1037,7 @@ export function Workspace({
             along: it is fixed at spawn for the process's life and stays picker-row-only. */}
         {driveModeReadout &&
           (editingDriveMode ? (
-            /* M13.5 WP4 P3.3 — the editor. ⚠️ A native <select> is CORRECT here, and the model
+            /* M13.5 WP4 — the editor. ⚠️ A native <select> is CORRECT here, and the model
                override's "do NOT validate" rule must NOT be generalized to it: the four modes are
                a CLOSED set, and one bad string fails serde on read and takes the WHOLE project
                list down (not just this row). See `cc/driveMode.ts`'s blast-radius table.
@@ -1072,7 +1072,7 @@ export function Workspace({
               ))}
             </select>
           ) : (
-            /* ⚠️ P3.4 — ITS OWN HIT REGION. The header now carries several adjacent clickable
+            /* ⚠️ ITS OWN HIT REGION. The header now carries several adjacent clickable
                affordances (skill row, recycle, turn-nav, split control), which is the same
                structural risk M12 hit in the picker cell: a click meant for one control routed
                into another "presents as 'the control does nothing' and no unit test can see it."
@@ -1124,7 +1124,7 @@ export function Workspace({
                   ⚠
                 </span>
               )}
-              {/* ⚠️ P4.4 — the QUEUED state must be visible. An apply that is waiting on a busy
+              {/* ⚠️ The QUEUED state must be visible. An apply that is waiting on a busy
                   agent otherwise looks like a click that did nothing, which is the write-only
                   problem this whole surface exists to fix. */}
               {respawnWanted && (
@@ -1158,7 +1158,7 @@ export function Workspace({
             </button>
           </div>
         )}
-        {/* M13.5 WP4 P4.1 — the confirm. Rendered inside the header so it is scoped to THIS
+        {/* M13.5 WP4 — the confirm. Rendered inside the header so it is scoped to THIS
             workspace (backgrounded workspaces stay mounted, so an app-level dialog would need a
             workspace id to disambiguate). ⚠️ Gated on `pendingDriveMode` alone: it can only be
             non-null via `chooseDriveMode`, which is itself only reachable from the gated
@@ -1426,7 +1426,7 @@ export function Workspace({
               if (w !== null) setInjectFailure(w);
             });
           }}
-          // M17 WP5 (operator ruling, P2.verify-human.3) — an untrusted REMOTE folder held back the
+          // M17 WP5 (operator ruling) — an untrusted REMOTE folder held back the
           // auto-fired command: say so, in the same toast (a silent non-fire reads as "nothing to
           // resume").
           onAutoResumeWithheld={setInjectFailure}
@@ -1445,7 +1445,7 @@ export function Workspace({
             // is not (only) the supervisor's, so the pending origin is dropped.
             cancelOrigin(workspace.id);
           }}
-          // M13.5 WP3 P3.3 — only the CC pane records turn-start markers. Same exclusion
+          // M13.5 WP3 — only the CC pane records turn-start markers. Same exclusion
           // reasoning as `pendingAction` below: `TerminalPane` mounts this component for a
           // login SHELL, which has no turns, so it never opts in (the prop defaults false).
           markTurnStarts
@@ -1468,12 +1468,12 @@ export function Workspace({
           // SHELL, not CC, so injecting a CC slash command there would type it at a bash
           // prompt. That pane simply never receives this prop (it defaults to `null`).
           pendingAction={workspace.pending_action}
-          // P4.6 — the door that opened this workspace, for the backend's argv-arm gate. Rides
+          // The door that opened this workspace, for the backend's argv-arm gate. Rides
           // the same workspace record as `pending_action` for the same reason, but stays a
           // DISTINCT field: `pending_action === null` cannot distinguish the no-fire door from
           // "no signal", and the argv arm needs that distinction.
           openIntent={workspace.open_intent}
-          // ⚠️ M13.5 WP4 P4.5 — a drive-mode apply's respawn spawns ONCE as `turn-respawn`
+          // ⚠️ M13.5 WP4 — a drive-mode apply's respawn spawns ONCE as `turn-respawn`
           // through this ref; every other relaunch (`cc-relaunch`, Recycle) keeps the door above.
           // Why the difference is load-bearing: `cc/spawnArgs.ts`.
           spawnIntentRef={spawnIntentRef}

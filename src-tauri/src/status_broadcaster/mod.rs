@@ -36,12 +36,13 @@
 //! live states or is dropped. `Unknown` is the registry/frontend initial value.
 //!
 //! ## cwd→workspace mapping
-//! [`WorkspaceRegistry::resolve`] canonicalizes both the event's `cwd` and each
-//! registered project path before comparing (the M2 WP11 path-keying lesson —
-//! symlinks / `.` / relative segments must not defeat the match; see
-//! `git_status/mod.rs`). An event whose `cwd` matches no open workspace is **dropped,
-//! not an error**. The actual open→register / close→deregister wiring is WP6's
-//! concern; WP4 defines the seam and tests the mapping in isolation.
+//! For a LOCAL event, [`WorkspaceRegistry::resolve`] canonicalizes both the event's `cwd` and
+//! each registered project path before comparing (the M2 WP11 path-keying lesson — symlinks /
+//! `.` / relative segments must not defeat the match; see `git_status/mod.rs`). A REMOTE event
+//! (one carrying an `origin`) is matched on `(origin, path)` without local canonicalization,
+//! through the remote realpath alias when the spawn recorded one. An event whose `cwd` matches
+//! no open workspace is **dropped, not an error**. The actual open→register / close→deregister
+//! wiring is WP6's concern; WP4 defines the seam and tests the mapping in isolation.
 //!
 //! ## Serde shape
 //! [`WorkspaceStatusUpdate`] is **snake_case end-to-end** — NO `rename_all`, no field
@@ -917,8 +918,9 @@ pub type SharedRegistry = Mutex<WorkspaceRegistry>;
 /// (`time_store::commands::drain_loop`) deliberately does **NOT** filter by workspace: time
 /// analytics is machine-global by design and records every Claude Code session on the machine,
 /// including projects Claudesk has never opened. ⚠️ THIS machine only: since M17 WP4 it refuses
-/// any event carrying an `origin` (a remote host's session) in `write_gated`. Neither side used to say so, which reads as one of them
-/// being buggy. (`SURFACE-2026-08-01-TWO-HOOK-DRAINS-FILTER-DIFFERENTLY-UNDOCUMENTED`.)
+/// any event carrying an `origin` (a remote host's session) in `write_gated`. Neither side used
+/// to say so, which reads as one of them being buggy.
+/// (`SURFACE-2026-08-01-TWO-HOOK-DRAINS-FILTER-DIFFERENTLY-UNDOCUMENTED`.)
 pub fn to_update(event: &HookEvent, registry: &WorkspaceRegistry) -> Option<WorkspaceStatusUpdate> {
     let state = event_to_state(event)?;
     let workspace_id = registry.resolve(event.origin.as_deref(), &event.cwd)?;

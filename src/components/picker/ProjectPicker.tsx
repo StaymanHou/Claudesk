@@ -311,21 +311,6 @@ export function ProjectPicker({
     };
   }, []);
 
-  /**
-   * Open a project via one of the two doors.
-   *
-   * ⚠️ **BOTH doors funnel through here** — the row click (`"fire"`) and the ⊘
-   * (`"no-fire"`). That is deliberate: a second open path would be a second place for the
-   * recency stamp, the error handling, and the re-derivation to drift, and only one of them
-   * would get fixed when a bug appeared. `intent` is the ONLY difference between them.
-   *
-   * ⚠️ The action is **re-derived here, at click time**, from the current announce map —
-   * never read back from the rendered label. WP1 Verdict (b): *the announcement is a
-   * prediction, never the input to the action.* `.session.md` can vanish while the picker
-   * is open, so the label can be stale; re-deriving makes that harmless (a label that
-   * promised something and nothing fires) instead of wrong (firing a restore whose pointer
-   * is gone).
-   */
   /** M17 WP5 — attach to a live remote session (the reconnect door): stamp recency, open. */
   async function openReconnect(projectPath: string) {
     try {
@@ -363,6 +348,23 @@ export function ProjectPicker({
     await handleOpenRecent(ask.projectPath, ask.intent);
   }
 
+  /**
+   * Open a project via one of the two doors.
+   *
+   * ⚠️ **BOTH row doors funnel through here** — the row click (`"fire"`) and the ⊘
+   * (`"no-fire"`). The one other open path is the remote dialogs' Reconnect
+   * ([`openReconnect`]), which attaches to a session that is already running, so it has no
+   * action to re-derive; it keeps its own recency stamp and error toast. That is deliberate: a second open path would be a second place for the
+   * recency stamp, the error handling, and the re-derivation to drift, and only one of them
+   * would get fixed when a bug appeared. `intent` is the ONLY difference between them.
+   *
+   * ⚠️ The action is **re-derived here, at click time**, from the current announce map —
+   * never read back from the rendered label. WP1 Verdict (b): *the announcement is a
+   * prediction, never the input to the action.* `.session.md` can vanish while the picker
+   * is open, so the label can be stale; re-deriving makes that harmless (a label that
+   * promised something and nothing fires) instead of wrong (firing a restore whose pointer
+   * is gone).
+   */
   async function handleOpenRecent(
     projectPath: string,
     intent: OpenIntent = "fire",

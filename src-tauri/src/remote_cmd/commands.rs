@@ -12,6 +12,10 @@ use crate::config_store::{self, commands::resolve_data_dir, Project, RemoteTarge
 
 /// Run the §H preflight for `host` + `path` without writing anything. Read-only on both ends:
 /// the remote side runs only `printf`, `command -v`, `test` and `claude auth status`.
+///
+/// ⚠️ No frontend code calls this, deliberately: it is a DIAGNOSTIC surface, invoked over the
+/// MCP bridge during verification to read the per-check report. The add form shows a static
+/// "Checking…" line and calls [`add_remote_project`], which runs the same preflight itself.
 #[tauri::command]
 pub async fn remote_preflight(host: String, path: String) -> Result<PreflightReport, String> {
     crate::blocking::on_blocking_worker("the remote preflight", move || {
@@ -157,7 +161,7 @@ mod tests {
     }
 
     /// `~/p/` and `/Users/u/p` are the same remote project: one row, touched on the second add
-    /// (operator ruling P2.verify-human.1: keep the `~` expansion).
+    /// (an operator ruling at M17 WP2 kept the `~` expansion).
     #[test]
     fn tilde_and_trailing_slash_spellings_add_one_row() {
         let dir = TempDir::new().unwrap();

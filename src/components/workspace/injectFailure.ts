@@ -1,4 +1,4 @@
-// M17 WP3 P4.verify-human.2 (operator decision A, 2026-11-16) — the words of the workspace's
+// The words of the workspace's
 // "your injection did not go through" toast.
 //
 // ⚠️ WHY THIS EXISTS. Since Phase 4 every Claudesk injection goes through `cc_inject`, which for
@@ -11,8 +11,8 @@
 // `message`: the backend's refusal is already written for a person, and the diagnostic's
 // label/command strings ("staging could not run staged prompt (auto-submit)") are not.
 //
-// Recycle IS a caller (P4.6). P4.5 first left it out on the belief that recycle's own outcome
-// already reported a refused handoff; verify-self showed that was wrong (the outcome arrived 180 s
+// Recycle IS a caller. An earlier version left it out on the belief that recycle's own outcome
+// already reported a refused handoff; a live check showed that was wrong (the outcome arrived 180 s
 // later as a `console.warn`, and a refused restore was reported as success).
 
 /** Toast text for a skill-button command that did not go through. */

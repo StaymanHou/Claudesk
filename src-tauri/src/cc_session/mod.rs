@@ -637,8 +637,8 @@ fn resolve_spawn_profile(
 /// ⚠️ **Ruling 4 — the gate is passed through `workflow_applicable` BEFORE it reaches the
 /// drive-mode resolution**, so a profile spawn gets no `CLAUDESK_DRIVE_MODE` (and reports no
 /// effective mode) even with the gate ON. M18 WP4: so does a remote spawn whose host has no
-/// workflow substrate (`host`, the funnel's third input; unknown fails closed). A read ERROR is preserved as an error — the existing
-/// fail-closed handling downstream still owns it.
+/// workflow substrate (`host`, the funnel's third input; unknown fails closed). A read ERROR is
+/// preserved as an error — the existing fail-closed handling downstream still owns it.
 fn resolve_profile_spawn_env(
     gate_read: Option<Result<bool, crate::config_store::ConfigError>>,
     mode_read: Option<
@@ -1636,7 +1636,7 @@ struct RegisteredSession {
     profile: Option<String>,
     /// M17 WP3 — the host a REMOTE session runs on (`None` locally), for the per-host cap.
     remote_host: Option<String>,
-    /// M17 WP3 P4.3 — what `cc_inject` needs to prepare a REMOTE pane (`None` locally).
+    /// M17 WP3 — what `cc_inject` needs to prepare a REMOTE pane (`None` locally).
     remote: Option<RemoteExit>,
 }
 
@@ -2050,16 +2050,6 @@ impl SessionRegistry {
     // `take()` and own the decision of WHERE to run the teardown. `kill_all` keeps its own
     // (already-threaded) path.
 
-    /// Remove a session from the registry and hand back ownership **without killing it**.
-    ///
-    /// The caller becomes responsible for calling `kill()` on it — the point being that the
-    /// caller can do so *off* the main thread while this method's registry-lock hold stays
-    /// O(1). [`CcSession`] is `Send` (the supertrait), so the returned box moves into a worker
-    /// freely; this is the same ownership move [`Self::kill_all`] already makes per session.
-    ///
-    /// ⚠️ Removal is the commit point: once this returns `Ok`, the session is out of the map
-    /// and nothing else can reach it, so a caller that drops the box without calling `kill()`
-    /// leaks the child process. Kill it or hand it to something that will.
     /// M17 WP5 (Detach) — take session `id` out ONLY if it can detach. A session that cannot (a
     /// local one) stays registered and the call fails, so a Detach never removes a session that
     /// then has no kill (it would leak its process).
@@ -2073,6 +2063,16 @@ impl SessionRegistry {
         }
     }
 
+    /// Remove a session from the registry and hand back ownership **without killing it**.
+    ///
+    /// The caller becomes responsible for calling `kill()` on it — the point being that the
+    /// caller can do so *off* the main thread while this method's registry-lock hold stays
+    /// O(1). [`CcSession`] is `Send` (the supertrait), so the returned box moves into a worker
+    /// freely; this is the same ownership move [`Self::kill_all`] already makes per session.
+    ///
+    /// ⚠️ Removal is the commit point: once this returns `Ok`, the session is out of the map
+    /// and nothing else can reach it, so a caller that drops the box without calling `kill()`
+    /// leaks the child process. Kill it or hand it to something that will.
     pub fn take(&mut self, id: &str) -> Result<Box<dyn CcSession>, CcError> {
         self.sessions
             .remove(id)
@@ -4305,7 +4305,7 @@ mod tests {
         }
     }
 
-    /// M17 WP5 (P4.verify-self.1, R-1) — a QUIT ends every session, remote ones included: it
+    /// M17 WP5 (R-1) — a QUIT ends every session, remote ones included: it
     /// `kill`s them (the remote kill ends the session, or records `end-pending` when it cannot),
     /// never `detach`es them, though they can detach (a detach would leave them running with no
     /// record of the quit).
@@ -4937,7 +4937,7 @@ mod tests {
         assert!(code.contains("if let Some(remote) = &self.remote_exit {"));
     }
 
-    /// M17 WP5 AC-6 (P2.3) — the unclean flag across a PASSIVE drop, end to end through the real
+    /// M17 WP5 AC-6 — the unclean flag across a PASSIVE drop, end to end through the real
     /// stores and the real deciders: the spawn's writes (flag default-set, record `running`), a
     /// drop that writes nothing (`remote::tests::a_drop_records_nothing_the_session_is_still_running`
     /// pins the session side; a killed Claudesk runs nothing at all), then the reopen:
@@ -5107,7 +5107,7 @@ mod tests {
         // ...and DOWNSTREAM: the registry travels on in `RemoteSpawn`, through
         // `SessionRegistry::spawn`, the session dispatcher and `RemoteCcSession::spawn`, none of
         // which may ask the remote anything (an exec there would also run under the session
-        // registry lock; P2 re-verify #4, survivor 1). Their remote I/O is the terminal itself.
+        // registry lock; a live re-verify found this route). Their remote I/O is the terminal itself.
         let fn_at = |src: &str, at: &str| -> String {
             // Cut at the TEST MODULE, not the first `#[cfg(test)]`: `mod.rs` has test-only
             // methods above `SessionRegistry::spawn`.

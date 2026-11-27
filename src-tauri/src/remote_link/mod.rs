@@ -902,7 +902,7 @@ impl LinkRegistry {
     /// ⚠️ The baseline is read here, under the registry lock and BEFORE a new worker exists
     /// (so 0 for a new link). Read after the worker started, it could already include that
     /// worker's first failure, and [`Self::ensure`] would then miss it and wait through the next
-    /// attempt (a verify-self flake, WP3 P2.verify-self.F1).
+    /// attempt (seen as a flake in a live check).
     ///
     /// ⚠️ Takes the caller's `links` guard: [`Self::start_and_hold`] must find-or-start AND count
     /// its hold under ONE lock (`SURFACE-2026-11-16-QUALITY-M17WP3-ENSURE-THEN-HOLD-IS-NOT-ATOMIC`).
@@ -1380,7 +1380,7 @@ impl LinkRegistry {
         self.close_exec(target, &cmd, EXEC_TIMEOUT_MS).map(|_| ())
     }
 
-    /// Before an injection into `session`'s pane (P4.2): wait for the pane's bracketed-paste mode,
+    /// Before an injection into `session`'s pane: wait for the pane's bracketed-paste mode,
     /// then leave copy-mode, in one exec. `Err` in plain words when the pane never got ready or
     /// the exec failed; the caller then sends NOTHING (a split send or a swallowed command would
     /// be worse than a refusal). ⚠️ Blocks up to `max_polls` × 0.2 s + [`EXEC_TIMEOUT_MS`].
@@ -1513,6 +1513,10 @@ impl LinkRegistry {
     }
 
     /// M18 WP4: report every substrate change to `sink` (the app's `remote-substrate` emit).
+    ///
+    /// ⚠️ Ordering invariant: install the sink BEFORE the first `set_substrate`. A change reported
+    /// while no sink is installed is dropped silently. Today `init` installs it synchronously,
+    /// before any link can probe a host, so nothing is lost.
     pub fn set_substrate_sink(&self, sink: SubstrateSink) {
         if let Ok(mut s) = self.substrate_sink.lock() {
             *s = Some(sink);
@@ -1591,7 +1595,7 @@ impl Drop for ClosingGuard {
 
 /// Dropping the registry stops every link, so a master never outlives its owner: at app exit
 /// (belt to `perform_quit_teardown`), and in a test that panics mid-way (a failing live test once
-/// left an `ssh -M` running, WP3 P2.verify-self.F4).
+/// left an `ssh -M` running).
 impl Drop for LinkRegistry {
     fn drop(&mut self) {
         self.stop_all();

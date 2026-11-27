@@ -344,11 +344,12 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     // FIRST activation only — a re-activation (panel/center-stage switch-back) is inert.
     // Reset to false on a real teardown/relaunch so a fresh spawn is allowed again.
     const hasSpawnedRef = useRef(false);
+    // The open door is spent once the first spawn commits; NOT reset by a relaunch (see below).
     const doorUsedRef = useRef(false);
     // M12 WP3 follow-up — the auto-resume CONSUME-ONCE latch. True once the fire has been
     // scheduled for this pane; the fire arm refuses to schedule a second one.
     //
-    // ⚠️ THIS PANE NOW HAS THREE LIFECYCLE FLAGS AND THEY ARE NOT INTERCHANGEABLE. Merging any
+    // ⚠️ THIS PANE NOW HAS FOUR LIFECYCLE FLAGS AND THEY ARE NOT INTERCHANGEABLE. Merging any
     // two of them re-introduces a shipped defect — read this before "simplifying":
     //
     //   • `cancelled` (per-run CLOSURE var in the spawn effect) — orphan de-dup. MUST stay a
@@ -357,7 +358,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     //     LIFECYCLE block). It is `false` on a relaunch run, so it cannot express consume-once.
     //   • `hasSpawnedRef` (per-PANE ref) — spawn-once across `active` false→true edges.
     //     DELIBERATELY CLEARED by `handleRelaunch`, because a relaunch *should* spawn again.
-    //   • `doorUsedRef` (per-PANE ref, declared below) — M18 WP1: the open DOOR is spent once
+    //   • `doorUsedRef` (per-PANE ref, declared above) — M18 WP1: the open DOOR is spent once
     //     the first spawn commits. NOT cleared by `handleRelaunch`: every later spawn is a
     //     relaunch, and a relaunch must not re-send `reconnect` (`relaunchIntent`).
     //   • `hasFiredRef` (per-PANE ref, this one) — inject-once for the pane's whole lifetime.

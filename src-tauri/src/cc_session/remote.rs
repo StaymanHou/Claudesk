@@ -122,7 +122,7 @@ pub fn short_host(host: &str) -> &str {
     h.split('.').next().unwrap_or(h)
 }
 
-/// The dim line written into a remote pane while it reconnects (P5.4). ⚠️ Claudesk's own bytes on
+/// The dim line written into a remote pane while it reconnects. ⚠️ Claudesk's own bytes on
 /// the `cc-output-<id>` path, never parsed back; tmux's redraw on re-attach replaces it.
 pub fn reconnect_notice(host: &str) -> String {
     format!(
@@ -165,8 +165,8 @@ pub const STABLE_TERMINAL: Duration = Duration::from_secs(10);
 /// How many terminals in a row may fail to START before a reconnect gives up and ends the session.
 pub const MAX_SPAWN_FAILURES: u32 = 5;
 
-/// How long a re-attached terminal must hold before the link overlay clears (M17 WP4,
-/// P4.verify-self.F1). An attach that fails dies in milliseconds (`ssh` exits 255 at once when the
+/// How long a re-attached terminal must hold before the link overlay clears (M17 WP4, found by
+/// a live check). An attach that fails dies in milliseconds (`ssh` exits 255 at once when the
 /// master behind a stale Up is gone), so reporting `Attached` at SPAWN cleared the overlay for a
 /// failed attempt and replaced the last hue with Unknown. Only a terminal still in place after this
 /// window counts as attached.
@@ -577,7 +577,10 @@ pub(crate) fn on_inner_exit(shared: Arc<RemoteShared>) {
             shared.emit_exit()
         }
         InnerExit::SessionExists => {
-            // Nothing was started; the live session (and its record) are untouched.
+            // Nothing was started, and the live session is untouched. ⚠️ Its RECORD is not: the
+            // local ssh's start already wrote `running` (`record_remote_spawn`), so the next open
+            // reconnects to a session Claudesk did not start. Narrow window (both opens racing);
+            // the sibling race, tmux's own `duplicate session`, records `Ended` and asks instead.
             shared.emit_final_notice(session_exists_notice(&shared.host));
             shared.emit_exit()
         }

@@ -529,7 +529,7 @@ pub fn profile_create(
 /// F-b D.24 — move a `Created` profile's directory to the macOS Trash, then drop it from the
 /// list. Refuses an `Adopted` profile.
 ///
-/// ⚠️ **`async` + `spawn_blocking`, never a sync command** — a sync command runs on the MAIN
+/// ⚠️ **`async` + `on_blocking_worker`, never a sync command** — a sync command runs on the MAIN
 /// thread, and a Trash move goes through Finder / `NSFileManager` with no upper bound on how long
 /// it takes (`tests/sync_commands_do_not_block.rs`).
 #[tauri::command]

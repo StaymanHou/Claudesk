@@ -387,7 +387,7 @@ impl Drop for HeldRunLock {
 /// second (it iterates symlinks and prints). Refusals surface as the guard's own user-facing
 /// explanation.
 ///
-/// ⚠️ **`async` + `spawn_blocking`.** The script lives in another repo, so "well under a second"
+/// ⚠️ **`async` + `on_blocking_worker`.** The script lives in another repo, so "well under a second"
 /// is not a bound Claudesk can enforce:
 /// - As a sync command, a hung script froze the UI (paydown 2026-09-23 WP9).
 /// - As a `(async)` sync body, it held an async-runtime worker for the same time instead

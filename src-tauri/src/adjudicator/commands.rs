@@ -16,11 +16,11 @@ use super::{run_adjudicator, AdjudicateError};
 /// (`ADJUDICATOR_MODEL` in `supervisor/adjudicator.ts`). Two copies of a pinned constant is
 /// how a pin silently stops pinning.
 ///
-/// ⚠️ **`async` + `spawn_blocking`, never a sync command.** `run_adjudicator` waits on `claude -p`
-/// for up to `timeout_ms`, and a sync command would hold the main thread for all of it.
-/// `spawn_blocking` rather than a bare `async fn` body, because the wait is long enough to starve
-/// an async-runtime worker. `tests/sync_commands_do_not_block.rs` fails if this goes back to sync
-/// (its module doc carries the main-thread rationale).
+/// ⚠️ **`async` + `on_blocking_worker`, never a sync command.** `run_adjudicator` waits on
+/// `claude -p` for up to `timeout_ms`, and a sync command would hold the main thread for all of
+/// it. The blocking-pool hop rather than a bare `async fn` body, because the wait is long enough
+/// to starve an async-runtime worker. `tests/sync_commands_do_not_block.rs` fails if this goes
+/// back to sync (its module doc carries the main-thread rationale).
 #[tauri::command]
 pub async fn supervisor_adjudicate(
     model: String,
@@ -49,7 +49,7 @@ mod tests {
 
     #[test]
     fn the_worker_hop_turns_each_failure_into_a_rejection() {
-        // The command's own `spawn_blocking` hop and error mapping, driven with programs whose
+        // The command's own `on_blocking_worker` hop and error mapping, driven with programs whose
         // outcome does not depend on what is installed (the old test forked the real `claude`
         // when it was on PATH, and accepted either of two outcomes).
         let missing = tauri::async_runtime::block_on(on_worker(|| {

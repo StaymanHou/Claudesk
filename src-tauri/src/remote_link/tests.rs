@@ -816,7 +816,7 @@ fn a_link_stopped_during_its_pre_connect_never_spawns_a_master() {
 
 #[test]
 fn ensure_and_hold_never_misses_a_first_attempt_that_fails_instantly() {
-    // P2.verify-self.F1: with the baseline read after the worker started, an instant first
+    // With the baseline read after the worker started, an instant first
     // failure could be counted as "before I started", and `ensure` then waited through the
     // backoff into a SUCCESSFUL retry (the queue is empty after one Err). The pause seam puts
     // the worker's failure inside that window EVERY round, so a late-read baseline fails this
@@ -845,7 +845,7 @@ fn ensure_and_hold_never_misses_a_first_attempt_that_fails_instantly() {
 
 #[test]
 fn a_stale_control_path_is_removed_before_every_master_spawn() {
-    // P2.verify-self.F3: a master killed hard leaves its ControlPath behind, and ssh then
+    // A master killed hard leaves its ControlPath behind, and ssh then
     // refuses to create one ("ControlSocket … already exists"). Before this test only the live
     // test noticed the removal missing.
     let h = harness();
@@ -864,7 +864,7 @@ fn a_stale_control_path_is_removed_before_every_master_spawn() {
 
 #[test]
 fn stop_kills_the_master_process_even_while_the_worker_is_busy() {
-    // P2.verify-self.F2: at QUIT the process exits right after `stop_all`, before a busy worker
+    // At QUIT the process exits right after `stop_all`, before a busy worker
     // gets back to its loop, so the direct kill in `halt` is the only thing between the app and
     // an orphaned `ssh -M`. Here the worker sits in a 3 s `check` when `stop` is called.
     let h = harness();
@@ -899,7 +899,7 @@ fn stop_kills_the_master_process_even_while_the_worker_is_busy() {
 
 #[test]
 fn dropping_the_registry_stops_its_links() {
-    // P2.verify-self.F4: a registry dropped mid-way (a panicking test; the app at exit) must not
+    // A registry dropped mid-way (a panicking test; the app at exit) must not
     // leave a master running.
     // Started and Up but held by nothing, so `h.reg` is the registry's only owner.
     let h = harness();
@@ -1382,7 +1382,7 @@ fn live_cancel_and_folder_check() {
     assert!(!none.live, "exact match: a prefix is not the session");
 }
 
-/// `prepare_inject` against a real host (P4.2): a pane whose app enables bracketed paste at +2 s
+/// `prepare_inject` against a real host: a pane whose app enables bracketed paste at +2 s
 /// is ready only after it; a pane that never enables it is refused at the bound; a ready pane in
 /// copy-mode leaves it. Throwaway `cd-wp3prep*` sessions on the dev tmux server, killed at the end.
 ///
@@ -2068,7 +2068,7 @@ fn two_closes_of_one_session_hold_until_both_end() {
     assert!(h.reg.wait_not_closing("cd-x", Duration::from_millis(100)));
 }
 
-/// M17 WP5 Phase 2 (P2.verify-self.1 GAP 1) — the FIRE-TIME trust read of a remote row: what
+/// M17 WP5 — the FIRE-TIME trust read of a remote row: what
 /// `folder_trusted` answers is the LAST open check's answer for that key, and every gap is
 /// untrusted. ⚠️ This answer withholds the auto-fired `/session-restore` in an untrusted folder.
 #[test]

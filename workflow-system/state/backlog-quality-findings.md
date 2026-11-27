@@ -40,9 +40,9 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-11-09-QUALITY-WP6-DOCS-STILL-NAME-SPAWN-BLOCKING
 - **Severity:** MINOR
 - **Location:** the doc headers of `supervisor_adjudicate`, `time_analytics_query`, `trash_path`, `profile_delete`, `workflow_uninstall_dry_run`; `src-tauri/tests/sync_commands_do_not_block.rs` `ASYNC_COMMANDS` reasons and `SPAWN_BOUNDARIES`.
-- **Finding:** they say "the work runs on `spawn_blocking`"; the call sites now call `on_blocking_worker`, which `SPAWN_BOUNDARIES` does not list.
+- **Finding:** `SPAWN_BOUNDARIES` does not list `on_blocking_worker`, the one hop every async command now calls. *(The docs half, the five command headers and the `ASYNC_COMMANDS` reasons naming `spawn_blocking`, was resolved by paydown-2026-11-27 WP2.)*
 - **Why it matters:** a grep by the documented name misses the call sites. Harmless today (async bodies are not scanned); a sync path reaching `on_blocking_worker` would be a loud false positive.
-- **Suggested action:** name `on_blocking_worker` in those docs/reasons, and add it to `SPAWN_BOUNDARIES`.
+- **Suggested action:** add `on_blocking_worker` to `SPAWN_BOUNDARIES` (paydown-2026-11-27 WP4).
 - **Priority:** low
 - **Status:** pending
 
@@ -77,24 +77,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-09-QUALITY-WP5-ANNOUNCEROW-HEADER-CONTRADICTS-MANUAL-ROWS
-- **Severity:** MINOR (verified: the defect is real)
-- **Location:** `src/components/picker/announceRow.ts` module header (the "ONE CONDITIONAL GOVERNS BOTH THE LABEL AND THE BUTTON" section and the "label and the door still appear together or not at all" line under the gate section).
-- **Finding:** the WP5 edit merged two sentences onto one ~157-char line, and the heading plus the "together or not at all" claim are now false for a manual row (label shown, no door).
-- **Why it matters:** a header stating a rule the code no longer follows misleads the next edit to `rowAffordances`.
-- **Suggested action:** re-wrap the merged line; restate the rule as "the door appears only with an announcement, and only when the two doors differ" in both places.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-09-QUALITY-WP5-PICKERROW-COMMENT-CARRIES-REVIEW-HISTORY
-- **Severity:** MINOR
-- **Location:** `src/components/picker/PickerRow.tsx`, the JSX comment above the badge text.
-- **Finding:** the comment records verify-human history (the rejected `⌨︎`); the WHY ("`↻` would promise a re-run") is enough on its own.
-- **Why it matters:** comment budget.
-- **Suggested action:** trim to the WHY.
-- **Priority:** low
-- **Status:** pending
-
 # m17-wp2-remote-rows — 2026-11-16
 
 *(feature-review-quality on ship commit `d871473`, window `5ac8819..d871473`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 7 MINOR, all auto-backlogged. The MAJOR, the path-normalization and the runner MINORs were resolved by M17 WP3 (2026-11-16); the `$HOME` MINOR is partly resolved.)*
@@ -124,27 +106,11 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-16-QUALITY-M17WP2-REMOTE-PREFLIGHT-HAS-NO-FRONTEND-CALLER
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/remote_cmd/commands.rs`: `remote_preflight`.
-- **Finding:** The command is registered and listed in `ASYNC_COMMANDS`, but no frontend code calls it. `AddRemoteForm` shows a static "Checking…" line, although P2.4 justified the command as "the UI's progress line". Its only use so far is MCP-bridge verification.
-- **Suggested action:** Wire it up for per-check progress, or document it as a deliberate diagnostic surface (or delete it).
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-11-16-QUALITY-M17WP2-CWD-TRAP-TEST-WRITES-UNDER-SRC-TAURI
 - **Severity:** MINOR
 - **Location:** `src-tauri/src/status_broadcaster/mod.rs`: `canonical_key_passes_a_remote_key_through_even_when_a_cwd_relative_match_exists`.
 - **Finding:** The test creates `ssh:/claudesk-ck-<pid>/a` under the process cwd (`src-tauri/`). The Drop guard cleans it up, but a killed run leaves debris, and a running `tauri:dev` watcher may rebuild on it.
 - **Suggested action:** Add a `.gitignore` entry for `src-tauri/ssh:` plus a comment about the watcher interaction (or a cwd-scoped harness).
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-16-QUALITY-M17WP2-HISTORY-NOTES-IN-CODE-COMMENTS
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/config_store/mod.rs` module doc ("Re-opened and re-closed by M17 WP2"); `src-tauri/src/remote_cmd/commands.rs` test comment citing `P2.verify-human.1`.
-- **Finding:** Per-WP history in code comments, citing WIP-local ruling IDs that get archived.
-- **Suggested action:** Trim the history note and state the rule.
 - **Priority:** low
 - **Status:** pending
 
@@ -193,7 +159,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Location:** Workspace.tsx, injectFailure.ts, remote_link/*.rs, cc_session/mod.rs
 - **Finding:** 42 added production-comment references to WIP node labels (`P4.verify-human.2`, `P2.verify-self.F1`–`F4`, `P4.3`, `F9b`, …); `singleAuthority.test.ts` already forbids them per module (recycleSession.ts had to be scrubbed).
 - **Why it matters:** Once the WIP is archived these labels point nowhere; the decision content already carries the meaning.
-- **Suggested action:** Reword to the decision content; consider widening the `singleAuthority` absent-rule to these modules.
+- **Suggested action:** ~~Reword to the decision content~~ (done for the M17-added labels, paydown-2026-11-27 WP2; the older M12/M13.5 node labels in `cc_session/mod.rs` predate this finding and were left). **Remaining:** widen the `singleAuthority` absent-rule to `Workspace.tsx` and `injectFailure.ts` (paydown-2026-11-27 WP3).
 - **Priority:** low
 - **Status:** pending
 - **Update 2026-11-17 (M17 WP5 review):** WP5 added ~23 more comment lines citing WIP node labels (`P4.verify-self.1`, `P2 re-verify #4, survivor 1`, `F9b`, `P4.2`) across `cc_session/mod.rs` tests, `remote.rs`, `remote_link/commands.rs`.
@@ -229,7 +195,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Source:** feature-review-quality (M17 WP4, MINOR)
 - **Location:** src-tauri/src/cc_session/mod.rs: `a_remote_session_reports_its_link_edges_through_the_sink`; src-tauri/src/status_broadcaster/mod.rs: module doc ("canonicalizes both"), the `to_update` doc's inserted `time_store` sentence
 - **Finding:** The test pins the whole `emit_exit` body as one whitespace-free `starts_with` string. The module doc's canonicalization claim is now true only for local scope, and one inserted doc sentence is an unwrapped run-on.
-- **Suggested action:** narrow the pin to "Ended is inside the latch", fix the two docs. The behavioural seam itself stays with `…M17WP3-RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM`.
+- **Suggested action:** narrow the pin to "Ended is inside the latch" (paydown-2026-11-27 WP4). *(The two docs were fixed by paydown-2026-11-27 WP2.)* The behavioural seam itself stays with `…M17WP3-RECONNECT-LOOP-HAS-NO-BEHAVIOURAL-SEAM`.
 - **Priority:** low
 - **Status:** pending
 
@@ -241,22 +207,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** The reconnect's drive mode is `Option<Option<String>>` (and `Option<&Option<Option<String>>>` at two sites) with four positional meanings (start / reconnect-unknown / reconnect-spawned-with-none / reconnect-under-X), and `RemoteSpawn.attach: bool` duplicates `running_mode.is_some()`, kept in step by hand in `cc_spawn_remote`. Same shape as WP3 `…REMOTE-HOST-STORED-TWICE`; the semantics are load-bearing (A9) and a verify-self mutant on them survived (B6).
 - **Suggested action:** `enum SessionMode { Unknown, None, Mode(DriveMode) }` + `enum RemoteOpen { Start, Attach(SessionMode) }`; re-spell the exact-text caller guards that pin today's shape in the same change.
 - **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-11-17-QUALITY-M17WP5-STALE-ANNOUNCE-REMOTE-COMMENT
-- **Source:** feature-review-quality (M17 WP5, MINOR)
-- **Location:** `src-tauri/src/announce/mod.rs` (the remote branch of the announce batch)
-- **Finding:** The comment "⚠️ M17 WP2 — a REMOTE row announces nothing yet … No prediction is the safe direction here" sits directly above the WP5 code that does announce remote rows.
-- **Suggested action:** rewrite the comment to the as-built rule (remote rows announce from the local record; a prediction the click re-decides).
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-17-QUALITY-M17WP5-DISPLACED-DOC-BLOCKS-AND-FUNNEL-INVARIANT
-- **Source:** feature-review-quality (M17 WP5, MINOR)
-- **Location:** `src-tauri/src/cc_session/mod.rs` (`take_detachable` inserted between `take`'s doc and `take`); `src/components/picker/ProjectPicker.tsx` (`openReconnect` / `resolveAsk` inserted between `handleOpenRecent`'s JSDoc and the function)
-- **Finding:** Both doc blocks now attach to the wrong function. The orphaned `handleOpenRecent` JSDoc states "BOTH doors funnel through here", which `openReconnect` (its own `record_open` + error toast, reached by the dialogs' Reconnect without the funnel) now breaks.
-- **Suggested action:** move both docs back; route the dialogs' Reconnect through the funnel (e.g. a `reconnect` door) or amend the invariant to name the reconnect door explicitly.
-- **Priority:** low
 - **Status:** pending
 
 ## SURFACE-2026-11-17-QUALITY-M17WP5-CLOSE-NOT-ENDED-TOAST-CAUSE-AND-PROJECT
@@ -283,14 +233,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-17-QUALITY-M17WP5-SESSION-EXISTS-RECORD-COMMENT
-- **Source:** feature-review-quality (M17 WP5, MINOR)
-- **Location:** `src-tauri/src/cc_session/remote.rs` (`InnerExit::SessionExists` arm); `remote_cmd/mod.rs` (`tmux_new_command`)
-- **Finding:** The arm's comment says "the live session (and its record) are untouched", but `record_remote_spawn` already wrote `running` when the local ssh started, so the next open silently reconnects to a session Claudesk did not start; the sibling race (tmux's own `duplicate session`, exit 1) records `Ended` and asks via dialog B. Narrow window.
-- **Suggested action:** correct the comment (or, if A8 should cover it, record `Ended` on `SessionExists` too so the next open asks).
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-11-17-QUALITY-M17WP5-DENSE-BODY-HELPERS-TRIPLICATED
 - **Source:** feature-review-quality (M17 WP5, MINOR)
 - **Location:** `src-tauri/src/remote_link/commands.rs` (`dense_body`), `src-tauri/src/cc_session/mod.rs` (`fn_at` + an inline copy)
@@ -300,13 +242,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Status:** pending
 
 # m18-wp1-remote-recycle-respawn — 2026-11-18
-
-## SURFACE-2026-11-18-QUALITY-XTERMPANE-LIFECYCLE-FLAG-BLOCK-STALE-COUNT
-- **Source:** feature-review-quality (M18 WP1, MINOR)
-- **Type:** tech-debt (comment)
-- **Summary:** In `XtermPane.tsx`, the lifecycle-flag warning block still says "THIS PANE NOW HAS THREE LIFECYCLE FLAGS" but now lists four (`cancelled`, `hasSpawnedRef`, `doorUsedRef`, `hasFiredRef`). The new `doorUsedRef` bullet says "declared below" when it is declared above (beside `hasSpawnedRef`), and that declaration has no comment of its own, unlike its neighbours.
-- **Suggested action:** fix the count and the pointer, and add a one-line comment on the `doorUsedRef` declaration. The block is the "read before simplifying" warning, so its accuracy matters.
-- **Priority:** low
 
 ## SURFACE-2026-11-18-QUALITY-RELAUNCH-LIVE-TEST-ASSERTS-NOT-EQUAL
 - **Source:** feature-review-quality (M18 WP1, MINOR)
@@ -320,13 +255,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** tech-debt (test scaffolding)
 - **Summary:** The `@xterm/*` mocks and the ResizeObserver / rAF shims are now copied verbatim in two live-pane tests (`autoResumeFireLive.test.tsx`, `remoteRelaunchIntentLive.test.tsx`). A change to the Terminal surface `XtermPane` uses then has to be made in N places.
 - **Suggested action:** move the mock factories into `liveWorkspace.tsx`, beside `bootIpc`. `vi.mock` hoisting limits how they can be shared: factories can be imported, the `vi.mock` calls stay per file.
-- **Priority:** low
-
-## SURFACE-2026-11-18-QUALITY-STUB-RELAUNCH-ASSUMES-COMMITTED-FIRST-SPAWN
-- **Source:** feature-review-quality (M18 WP1, MINOR)
-- **Type:** tech-debt (comment)
-- **Summary:** The `liveWorkspace.tsx` stub's `relaunch()` always passes `isRelaunch = true`, which assumes the pane's first spawn already committed. That is right for every current consumer, but nothing says so. A stub test that relaunches after a "failed" first spawn would get `fire` where the real pane sends `reconnect`.
-- **Suggested action:** add a one-line comment stating the assumption.
 - **Priority:** low
 
 # m18-wp2-fresh-account-hardening — 2026-11-18
@@ -400,20 +328,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** tech-debt
 - **Summary:** `components/workspace/absentHostNote.ts` imports `shortHost` from `components/picker/remoteRow.ts`, a picker module with its own runtime imports. That is a layering inversion.
 - **Suggested action:** move `shortHost` beside `remoteAuthority` in `state/workspaceSurfaces.ts` and import it from there in both the picker and the workspace (`autoResumeFire.ts` imports it the same way).
-- **Priority:** low
-
-## SURFACE-2026-11-20-QUALITY-SUBSTRATE-SINK-SETTER-SHAPE
-- **Source:** feature-review-quality (M18 WP4, MINOR)
-- **Type:** tech-debt
-- **Summary:** `LinkRegistry` takes its link sink as a constructor argument but its substrate sink through a post-construction `set_substrate_sink` (a second `Mutex<Option<…>>`). A `set_substrate` before installation drops its event silently. Harmless today (`init` is synchronous), but it is two shapes for one kind of dependency.
-- **Suggested action:** fold it into the constructor (5 call sites, tests pass a no-op), or document the ordering invariant on the setter.
-- **Priority:** low
-
-## SURFACE-2026-11-20-QUALITY-CC-SESSION-DOC-LINE-WIDTH
-- **Source:** feature-review-quality (M18 WP4, MINOR)
-- **Type:** cosmetic
-- **Summary:** the M18 WP4 sentence added to `resolve_profile_spawn_env`'s doc comment (`cc_session/mod.rs`) runs past the file's wrap width; rustfmt does not reflow doc comments.
-- **Suggested action:** rewrap by hand.
 - **Priority:** low
 
 # m18-wp5-remote-hosts-readout — 2026-11-20
@@ -497,9 +411,3 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** merge the two rules; the tripwire's `rulesFor` already concatenates both, so it keeps passing.
 - **Priority:** low
 
-## SURFACE-2026-11-27-QUALITY-PANEL-COMMENT-SAYS-ONE-CHILD
-- **Source:** feature-review-quality (picker-qol-focus-and-scroll, MINOR)
-- **Type:** copy (comment)
-- **Summary:** the `.picker-overlay-panel` comment says "its one child (`.picker`)", but the panel also holds the absolutely-positioned × button.
-- **Suggested action:** say "its one in-flow child".
-- **Priority:** low

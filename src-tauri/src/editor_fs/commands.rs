@@ -118,7 +118,7 @@ pub fn delete_file(app: AppHandle, root: String, path: String) -> Result<(), Str
 /// for the folder-delete blast radius. Returns the error as a `String` so a failed
 /// trash is surfaced in the UI, never swallowed. WP5b wires it to directory rows.
 ///
-/// ⚠️ **`async` + `spawn_blocking`, never a sync command.** On macOS `trash::delete` asks the
+/// ⚠️ **`async` + `on_blocking_worker`, never a sync command.** On macOS `trash::delete` asks the
 /// Finder over `osascript`, which takes seconds, and as a sync command that froze the UI for more
 /// than 7 s (`SURFACE-2026-11-02-TRASH-PATH-BLOCKS-THE-MAIN-THREAD`). The sync-blocking guard
 /// cannot see it, because the subprocess is inside an external crate, so its `ASYNC_COMMANDS`

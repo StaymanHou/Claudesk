@@ -4051,8 +4051,9 @@ body,
 /* M4 WP2 — the picker shown as a modal panel inside `command-palette-backdrop`
    (the filmstrip "+" re-entry). Constrains the otherwise full-page `.picker` to a
    centered card and tones down its top padding. Dark tokens only.
-   A flex column that never scrolls itself: its one child (`.picker`) shrinks to fit the
-   80% cap and the project list inside scrolls instead (see `.picker-overlay-panel .picker`). */
+   A flex column that never scrolls itself: its one in-flow child (`.picker`; the × button is
+   absolutely positioned) shrinks to fit the 80% cap and the project list inside scrolls
+   instead (see `.picker-overlay-panel .picker`). */
 .picker-overlay-panel {
   position: relative;
   width: min(92%, 640px);

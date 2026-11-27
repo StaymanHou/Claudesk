@@ -122,85 +122,85 @@ const ASYNC_COMMANDS: &[(&str, &str)] = &[
     (
         "time_analytics_query",
         "CPU-bound: the Day build ran ~600 ms on a 14-day window (analytics-week-export P2.1c); \
-         the work runs on `spawn_blocking`",
+         the work runs on `on_blocking_worker`",
     ),
     (
         "trash_path",
         "`trash::delete` asks the Finder over `osascript` inside the crate, >7 s measured \
-         (M16.5 WP5); the work runs on `spawn_blocking`",
+         (M16.5 WP5); the work runs on `on_blocking_worker`",
     ),
     (
         "profile_delete",
-        "a Trash move through the Finder, unbounded; the work runs on `spawn_blocking`",
+        "a Trash move through the Finder, unbounded; the work runs on `on_blocking_worker`",
     ),
     (
         "workflow_uninstall_dry_run",
         "waits on `uninstall.sh --dry-run` up to `DRY_RUN_DEADLINE` (60 s); the work runs on \
-         `spawn_blocking`",
+         `on_blocking_worker`",
     ),
     (
         "workflow_remote_uninstall_preview",
         "M18 WP7: two observe execs + `uninstall.sh --dry-run` over the host's master, each up to \
-         `EXEC_TIMEOUT_MS`; the work runs on `spawn_blocking` (`on_blocking_worker`)",
+         `EXEC_TIMEOUT_MS`; the work runs on `on_blocking_worker`",
     ),
     (
         "clipboard_write",
         "M18 WP2.5: waits on `pbcopy` up to `WRITE_TIMEOUT_MS` (5 s) via `run_captured`; the work \
-         runs on `spawn_blocking` (`on_blocking_worker`)",
+         runs on `on_blocking_worker`",
     ),
     (
         "supervisor_adjudicate",
-        "waits on `claude -p` up to `timeout_ms`; the work runs on `spawn_blocking`",
+        "waits on `claude -p` up to `timeout_ms`; the work runs on `on_blocking_worker`",
     ),
     (
         "docs_list",
         "M17 WP7: routed by target; a remote list is one exec over the host's master (up to \
-         `remote_fs::LIST_TIMEOUT_MS`). Both branches run on `spawn_blocking` (`on_blocking_worker`)",
+         `remote_fs::LIST_TIMEOUT_MS`). Both branches run on `on_blocking_worker`",
     ),
     (
         "docs_read",
         "M17 WP7: routed by target; a remote read moves up to `REMOTE_READ_MAX_BYTES` over the \
-         master (up to `remote_fs::READ_TIMEOUT_MS`). Both branches run on `spawn_blocking`",
+         master (up to `remote_fs::READ_TIMEOUT_MS`). Both branches run on `on_blocking_worker`",
     ),
     (
         "docs_stat",
         "M17 WP7: routed by target (Recycle's baseline); a remote stat is one exec over the master \
-         (up to `remote_fs::LIST_TIMEOUT_MS`). Both branches run on `spawn_blocking`",
+         (up to `remote_fs::LIST_TIMEOUT_MS`). Both branches run on `on_blocking_worker`",
     ),
     (
         "remote_poll_catch_up",
         "M17 WP7 P3.verify-human.2: waits for the host poll worker's next tick (the worker runs the \
-         exec, not this command), bounded by `CATCH_UP_TIMEOUT`; the wait runs on `spawn_blocking`",
+         exec, not this command), bounded by `CATCH_UP_TIMEOUT`; the wait runs on `on_blocking_worker`",
     ),
     (
         "remote_open_check",
         "brings up the host link and runs a `test -d` over it (up to `LINK_UP_TIMEOUT` + \
-         `EXEC_TIMEOUT_MS`); the work runs on `spawn_blocking`",
+         `EXEC_TIMEOUT_MS`); the work runs on `on_blocking_worker`",
     ),
     (
         "remote_substrate_refresh",
         "M18 WP5 Settings → Remote hosts: one exec over an already-Up master (up to \
-         `EXEC_TIMEOUT_MS`; it never brings a link up); the work runs on `spawn_blocking`",
+         `EXEC_TIMEOUT_MS`; it never brings a link up); the work runs on `on_blocking_worker`",
     ),
     (
         "remote_bypass_refresh",
         "M18 WP6 Recycle: one exec over an already-Up master (up to `EXEC_TIMEOUT_MS`; it \
-         never brings a link up); the work runs on `spawn_blocking`",
+         never brings a link up); the work runs on `on_blocking_worker`",
     ),
     (
         "remote_end_session",
         "M17 WP5 dialogs: brings up the host link and ends the tmux session over it (up to \
-         `LINK_UP_TIMEOUT` + the end's polls); the work runs on `spawn_blocking`",
+         `LINK_UP_TIMEOUT` + the end's polls); the work runs on `on_blocking_worker`",
     ),
     (
         "cc_inject",
         "a remote session waits (one ssh exec, up to `READY_POLLS` x 0.2 s + `EXEC_TIMEOUT_MS`) for \
-         the pane's readiness before the write; the work runs on `spawn_blocking`",
+         the pane's readiness before the write; the work runs on `on_blocking_worker`",
     ),
     (
         "cc_spawn_remote",
         "brings up the host link before the (non-blocking) PTY spawn; the work, including the \
-         registry lock, runs on `spawn_blocking`",
+         registry lock, runs on `on_blocking_worker`",
     ),
     (
         "supervisor_activity_append",
@@ -213,12 +213,12 @@ const ASYNC_COMMANDS: &[(&str, &str)] = &[
     (
         "remote_preflight",
         "two one-shot `ssh` execs, each up to `EXEC_TIMEOUT_MS` (30 s) (M17 WP2); the work runs \
-         on `spawn_blocking`",
+         on `on_blocking_worker`",
     ),
     (
         "add_remote_project",
         "the same `ssh` preflight, then one `projects.json` write (M17 WP2); the work runs on \
-         `spawn_blocking`",
+         `on_blocking_worker`",
     ),
     (
         "updater_check",

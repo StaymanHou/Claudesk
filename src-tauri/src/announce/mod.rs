@@ -271,11 +271,12 @@ pub fn announce_actions(
 
     let mut out = AnnounceMap::new();
     for project in projects {
-        // ⚠️ M17 WP2 — a REMOTE row announces nothing yet. Its `path` is an `ssh://` key, so
-        // `has_session_md` would stat `ssh:/host/…/.session.md` RELATIVE TO THE PROCESS CWD (a
-        // local read that means nothing), and the resume rule's remote checks (a live tmux
-        // session first, then the remote `.session.md`) are WP5/WP7's, read over the host link.
-        // No prediction is the safe direction here: a missed announcement costs a click.
+        // ⚠️ A REMOTE row announces from Claudesk's LOCAL record of its session (plus the unclean
+        // flag and the row's gated drive mode), never from the disk: its `path` is an `ssh://`
+        // key, so `has_session_md` would stat `ssh:/host/…/.session.md` RELATIVE TO THE PROCESS
+        // CWD (a local read that means nothing). The label is a prediction; the click re-decides
+        // over the host link (`remote_open_check`), so a stale record costs a wrong label, never a
+        // wrong action.
         if project.is_remote() {
             let key = project.path.to_string_lossy().to_string();
             let unclean = session_state::is_unclean_keyed(&flags, &key);

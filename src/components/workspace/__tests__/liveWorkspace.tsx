@@ -146,6 +146,9 @@ function XtermPaneStub(props: StubPaneProps, ref: Ref<unknown>) {
             rec.relaunches += 1;
             // The real relaunch spawns asynchronously, but nothing writes the override
             // between the call and the spawn, so taking it here reads the same value.
+            // ⚠️ `isRelaunch = true` assumes the pane's FIRST spawn already committed, which holds
+            // for every current consumer. A stub relaunch after a "failed" first spawn would get
+            // `fire` where the real pane sends `reconnect`.
             const { intent } = takeSpawnArgs(
               "cc_spawn",
               "/stub",

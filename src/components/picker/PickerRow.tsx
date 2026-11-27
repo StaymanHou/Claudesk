@@ -153,11 +153,9 @@ export function PickerRow({
                             : `Opening this project will run ${announcement}`)
                         }
                       >
-                        {/* paydown-2026-11-08 WP5: an untrusted folder's badge carries NO glyph
-                           — `↻` would promise a re-run that will not happen. The amber tone and
-                           the tooltip carry the meaning. A `⌨︎` stood here at verify-human and
-                           was rejected (operator, 2026-11-09): at 0.72rem it reads as a tiny
-                           box, i.e. as something broken. */}
+                        {/* An untrusted folder's badge carries NO glyph — `↻` would promise a
+                           re-run that will not happen. The amber tone and the tooltip carry the
+                           meaning. */}
                         {manual ? announcement : `↻ ${announcement}`}
                       </span>
                     )}

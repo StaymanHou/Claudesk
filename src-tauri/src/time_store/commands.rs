@@ -659,7 +659,7 @@ pub enum TimeAnalyticsResult {
 /// on a fresh install the DB is empty and the payload is empty — that is correct, and
 /// proves the read path. WP5's toggle turns writing on.
 ///
-/// ⚠️ **`async` + `spawn_blocking`, never a sync command.** A sync `#[tauri::command]` runs on the
+/// ⚠️ **`async` + `on_blocking_worker`, never a sync command.** A sync `#[tauri::command]` runs on the
 /// MAIN thread, so every analytics query froze the whole app (every workspace, every terminal)
 /// for as long as the read + build took. That was 600+ ms for the Day view's 14-day window before
 /// the 2026-09-28 interval hoist, and it grows with the window and the DB. The work is CPU-bound,
