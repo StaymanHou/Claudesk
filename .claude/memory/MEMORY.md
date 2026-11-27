@@ -57,6 +57,7 @@
 - [PTY via ps/screencapture](verify-native-pty-via-ps-screencapture-stderr.md) — When Playwright can't see the WKWebView.
 - [Main-thread freeze](verify-main-thread-freeze-via-sample.md) — `sample` during a fire-then-poll invoke, plus a HEAD positive control.
 - [HEAD control vs moved exports](positive-control-from-head-can-break-on-moved-exports.md) — Blanks the app; revert only the behavior.
+- [jsdom ignores inert](jsdom-does-not-enforce-inert.md) — Focus into a background workspace "works" in jsdom, is refused live (lands on `<body>`); reproduce live, check `closest("[inert]")`.
 - [Background focus sets no :focus-within](background-webview-focus-sets-no-focus-within.md) — Hover/focus-revealed controls stay hidden to the bridge; reveal inline to capture; `el.click()` still works.
 - [No real keystrokes](agent-cannot-send-real-keystrokes-to-dev-app.md) — Synthetic keydowns skip native defaults; ⌘R-type checks go to the operator.
 - [Drive the native menu](drive-native-menu-via-event-emit.md) — Emit `menu` via `plugin:event|emit` from the webview; it reaches App's real listener.
