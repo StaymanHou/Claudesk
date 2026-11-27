@@ -28,24 +28,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-16-QUALITY-M17WP3-REMOTE-DISPATCH-INSIDE-PTY-CONSTRUCTOR
-- **Severity:** MINOR
-- **Location:** src-tauri/src/cc_session/mod.rs: `PtyCcSession::spawn`
-- **Finding:** `PtyCcSession::spawn` returns `Box<dyn CcSession>` and builds `RemoteCcSession` itself, so the local/remote dispatch lives inside one implementation's constructor rather than in `SessionRegistry::spawn`, which owns `SpawnTarget`.
-- **Why it matters:** A reader of the `CcSession` seam must look inside the PTY type to find the remote one.
-- **Suggested action:** Move the dispatch to `SessionRegistry::spawn` (mind the source guards that pin the `PtyCcSession::spawn(` call).
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-16-QUALITY-M17WP3-REMOTE-HOST-STORED-TWICE
-- **Severity:** MINOR
-- **Location:** src-tauri/src/cc_session/mod.rs: `RegisteredSession`
-- **Finding:** `RegisteredSession` carries both `remote_host: Option<String>` and `remote: Option<RemoteExit>` for one fact; the test-only `insert_remote` sets one without the other.
-- **Why it matters:** Two fields for one fact can drift.
-- **Suggested action:** Derive the host from `remote` (`remote.as_ref().map(|r| r.target.host())`).
-- **Priority:** low
-- **Status:** pending
-
 # m17-wp4-status-over-the-link — 2026-11-16
 
 ## SURFACE-2026-11-16-QUALITY-M17WP4-REALPATH-ALIAS-NEVER-CLEARED
@@ -62,16 +44,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** A hook update stamped with the overlay can be emitted after `Attached` has already emitted Unknown, leaving a stale dimmed tile until the next hook event.
 - **Suggested action:** emit under a per-workspace sequence (drop an update older than the last emitted), or re-stamp at emit time.
 - **Priority:** low
-- **Status:** pending
-
-# m17-wp5-lifecycle — 2026-11-17
-
-## SURFACE-2026-11-17-QUALITY-M17WP5-RECONNECT-MODE-NESTED-OPTIONS
-- **Source:** feature-review-quality (M17 WP5, MAJOR)
-- **Location:** `cc_session/mod.rs` (`running_drive_mode`, `record_remote_spawn`), `cc_session/remote.rs` (`RemoteSpawn.{attach, running_mode}`), `remote_cmd/mod.rs` (`OpenFacts.mode`, `SpawnFacts.mode`)
-- **Finding:** The reconnect's drive mode is `Option<Option<String>>` (and `Option<&Option<Option<String>>>` at two sites) with four positional meanings (start / reconnect-unknown / reconnect-spawned-with-none / reconnect-under-X), and `RemoteSpawn.attach: bool` duplicates `running_mode.is_some()`, kept in step by hand in `cc_spawn_remote`. Same shape as WP3 `…REMOTE-HOST-STORED-TWICE`; the semantics are load-bearing (A9) and a verify-self mutant on them survived (B6).
-- **Suggested action:** `enum SessionMode { Unknown, None, Mode(DriveMode) }` + `enum RemoteOpen { Start, Attach(SessionMode) }`; re-spell the exact-text caller guards that pin today's shape in the same change.
-- **Priority:** medium
 - **Status:** pending
 
 # paydown-2026-11-27-wp5-input-and-listeners — 2026-11-27
@@ -244,4 +216,43 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** guard precision
 - **Summary:** `the_close_not_ended_event_matches_its_ts_mirror`'s new TS-side checks (`project: string;`, the `reason` union) are whole-file `contains`, not scoped to the `RemoteCloseNotEnded` declaration. They would still pass if the field moved to another interface in the file. Same pattern as the existing `projectPath` / `host` checks.
 - **Suggested action:** slice the interface body (`export interface RemoteCloseNotEnded {` … `}`) and assert within it; mutation-prove by moving one field out.
+- **Priority:** low
+
+# paydown-2026-11-27-wp9-cc-session-shape — 2026-11-27
+
+*(feature-review-quality on ship commit `ee37ae3`, window `ee37ae3^..ee37ae3`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 5 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-27-QUALITY-WP9-DRIVE-MODE-WIRE-THIRD-COPY
+- **Source:** feature-review-quality (paydown-2026-11-27 WP9, MINOR)
+- **Type:** duplication + inconsistent failure handling
+- **Summary:** `cc_session::drive_mode_wire` is the third `DriveMode` → wire-string conversion, beside the inline `serde_json::to_string` in `cc_spawn_env` and the inline `to_value` chain in `announce` (`remote_cmd::drive_mode_of` is the inverse). They fail differently: `cc_spawn_env` logs a serialize failure (the WP8 M2.2 "say so, never drop silently" ruling), while `drive_mode_wire` returns `None` silently, which would record `Attach(Mode(m))` as "no mode".
+- **Suggested action:** one `DriveMode::wire()` in `config_store` (via serde, so the set still has one copy), used by all three; keep the logging on failure. Pin it against `drive_mode_serializes_to_these_literal_strings`.
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-WP9-ENV-DRIVE-MODE-LOOKUP-TWICE
+- **Source:** feature-review-quality (paydown-2026-11-27 WP9, MINOR)
+- **Type:** duplication of two values that must agree
+- **Summary:** `env.iter().find(|(k, _)| k == DRIVE_MODE_ENV)` is written in `record_remote_spawn` (the mode the start records locally) and in `RemoteCcSession::spawn_cc` (the mode put on the remote command line). The record must equal what the session runs under, but only identical code ties them together.
+- **Suggested action:** one `env_drive_mode(&[(String, String)]) -> Option<&str>` helper used by both; extend the record test to assert the two agree.
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-WP9-SPAWN-PARALLEL-TARGET-MATCHES
+- **Source:** feature-review-quality (paydown-2026-11-27 WP9, MINOR)
+- **Type:** parallel derivation
+- **Summary:** `SessionRegistry::spawn` opens with four sibling `match &target` blocks (admit, `remote_open`, `remote_transcript`, `remote_handle`) before the dispatch match. `RemoteExit` is also built from `RemoteSpawn` fields in two places (`SessionRegistry::spawn` and `remote.rs`).
+- **Suggested action:** one `if let SpawnTarget::Remote(r)` that yields a small struct, or a `RemoteSpawn::exit_handle()`. Re-spell the caller guards that pin these `let` lines (`a_reconnect_spawn_attaches_…`, `remote_spawn_caller_admits_first_…`) in the same change.
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-WP9-GUARD-FAILURE-MESSAGES-DUMP-BODY
+- **Source:** feature-review-quality (paydown-2026-11-27 WP9, MINOR)
+- **Type:** guard precision (diagnostics)
+- **Summary:** Several asserts re-spelled at WP9 in `profile_spawn_caller_orders_its_profile_decisions` and `remote_spawn_caller_admits_first_and_never_continues_from_local_transcripts` use `"{code}"` as their only message, so a red guard dumps the whole `SessionRegistry::spawn` body without naming the property that broke.
+- **Suggested action:** a one-line property statement in front of each dump, as their neighbouring asserts already have.
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-WP9-ARCH-SPAWNTARGET-PARENT-STALE
+- **Source:** feature-review-quality (paydown-2026-11-27 WP9, MINOR)
+- **Type:** doc drift
+- **Summary:** `arch/remote-workspaces.md` §C: WP9's new "As built" sub-bullet sits under a parent that still reads `SpawnTarget::{Local { cwd }, Remote { target }}`, while the real shape is `Local` / `Remote(Box<RemoteSpawn>)`. A reader sees two spellings one line apart.
+- **Suggested action:** correct the parent line to the as-built shape (or mark it as the design-time sketch). Doc-only.
 - **Priority:** low

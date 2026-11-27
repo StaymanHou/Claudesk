@@ -248,7 +248,7 @@ wins), and several of them aren't failures at all.
 - QF `11-16-QUALITY-M17WP3-INJECT-REFUSAL-AS-CALLBACK`: `injectCommand` resolves to `string | null`.
 - QF `11-17-QUALITY-M17WP5-UNKNOWN-SESSION-TEXT-COUPLING`: a Rust↔TS mirror test (or a typed code).
 
-## WP9: `cc_session` session shape  `[impact: Med–High · effort: S–M · risk: Med]` · feature
+## WP9: `cc_session` session shape  `[impact: Med–High · effort: S–M · risk: Med]` · feature ✅ SHIPPED 2026-11-27 (commit ee37ae3)
 
 Load-bearing reconnect semantics, pinned by exact-text caller guards. Re-spell the guards in the
 same change.

@@ -113,3 +113,12 @@ rejects. Adding the row through the app's "Add remote project…" form avoids th
   testing the link-down path. A UI-level check (a Settings readout that refreshes on mount) still needs a real open workspace,
   because the panel open comes after the window.
 
+**10. A live close-while-UNREACHABLE check: kill only the dev link master, then close at once** (paydown-2026-11-27 WP9,
+verified: the `unreachable` toast and the record `end-pending`).
+- **How to apply:** with the scratch workspace open, resolve the dev app's master by its `-S` ControlPath under the DEV
+  identifier's `ssh/` dir (`…/com.claudesk.app.dev/ssh/<hash8>`), matching the argv exactly (rule 3's `awk`), and check that
+  its PPID is the dev app's PID. Kill only that PID, then click × straight away: the link worker restarts a master after a
+  ≥1 s backoff, so a slow close finds the link Up again and ends the session normally. (About 1.2 s from kill to click worked.)
+- Afterwards the remote tmux session is STILL RUNNING (that is the point: the end could not be sent). End it through
+  your own ControlMaster (rule 7, `tmux -L claudesk-dev kill-session -t '=<session>'`), then restore `remote-sessions.json`
+  from its backup (the record is left `end-pending`).

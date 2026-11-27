@@ -19,7 +19,9 @@ The app-spawned CC then **writes a transcript** (verified 2026-09-28: scratch-c'
 agent-injected prompt) and **emits real hook events** (`UserPromptSubmit`/`Stop` in `status-channel.log`,
 first seen 2026-09-25). An agent can drive REAL turns with
 `__TAURI_INTERNALS__.invoke('cc_input', {sessionId, data: btoa("…")})` via `webview_execute_js`
-(fire-and-forget; the PTY session id is the fiber prop `ccSessionId`, e.g. `cc-5`).
+(fire-and-forget). ⚠️ **CORRECTED 2026-11-27 (paydown WP9):** the PTY session id (e.g. `cc-5`) is
+`workspace.cc_session_id`. Walk `.return` up from `[data-testid="xterm-pane"]`'s `__reactFiber…` until
+`memoizedProps.workspace` exists. There is NO `ccSessionId` fiber prop any more (a walk for it returns null).
 ⚠️ **CORRECTED 2026-10-20 (M16.5 WP1):** send the text and the submitting `\r` as **two separate
 writes** (e.g. `\r` ~700 ms later). A long message with its `\r` in the SAME write arrives as one
 burst, CC treats it as a paste, and the `\r` becomes a **newline in the input box** — the prompt sits

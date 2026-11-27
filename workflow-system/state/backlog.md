@@ -566,11 +566,8 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m17-wp3-remote-terminal (2026-11-16)
 
-- **Pointer:** **3 MINOR** remain from the review of `7f96ce3` (paydown-2026-11-27 WP1 buried the guard-heuristic MINOR; WP2 + WP3 resolved the WIP labels; WP8 resolved the inject refusal callback) (WP4 resolved the two link-lifecycle MAJORs and the unused `remote_link_ensure`; WP5 resolved the reconnect-seam MAJOR and the `cc_session` module split, 2026-11-17, CHANGELOG).
-  - MINORs:
-    - a stale `master_pid` after reap;
-    - the remote dispatch sits inside the PTY constructor;
-    - the remote host is stored twice.
+- **Pointer:** **1 MINOR** remains from the review of `7f96ce3` (paydown-2026-11-27 WP1 buried the guard-heuristic MINOR; WP2 + WP3 resolved the WIP labels; WP8 resolved the inject refusal callback; WP9 resolved the remote dispatch in the PTY constructor and the host stored twice) (WP4 resolved the two link-lifecycle MAJORs and the unused `remote_link_ensure`; WP5 resolved the reconnect-seam MAJOR and the `cc_session` module split, 2026-11-17, CHANGELOG).
+  - MINOR: a stale `master_pid` after reap (paydown WP10).
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp3-remote-terminal — 2026-11-16`.
 - **Priority:** low
@@ -588,25 +585,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-27-CLOSE-NOT-ENDED-PROJECT-NOT-LIVE-CHECKED
-- **Source:** feature:verify-human (paydown-2026-11-27 WP8 Phase 2, P2.verify-human.2)
-- **Target level:** task
-- **Type:** gap (verification)
-- **Summary:** The close-not-ended toast now names the project and the cause (`reason: "unreachable" | "failed"`). `AppPorts::close_not_ended` fills `project` from `cc_session::remote::project_label(target.path())` through a real `AppHandle` emit, which no unit test reaches. `project_label` and the payload shape are each pinned (`project_label_is_the_paths_last_segment`, `the_close_not_ended_event_matches_its_ts_mirror`), but the assembled emit has never been seen live.
-- **Context:** Operator accepted the gap at verify-human (2026-11-27) and deferred it to the WP9/WP10 remote session, which needs the mini anyway.
-- **Suggested action:** In the WP9/WP10 remote session, with a SCRATCH remote row open (never the admin-account row, see `remote-verify-hygiene`), take its link down (e.g. stop the dev app's link master for that host only, or block the host), close the workspace with ×. The app toast must read "Couldn't end the Claude Code session for <scratch folder name>: <host> isn't reachable, …". Optional: the `failed` cause, by making the end exec fail with the link up.
-- **Priority:** low
-- **Status:** pending — rides WP9/WP10
-
-## SURFACE-2026-11-16-TRAY-REMOTE-LOST-SESSION-ALARM-NOT-VERIFIED-LIVE
-- **Source:** feature:verify-human (M17 WP4 P4.verify-human.4, operator decision); narrowed at paydown-2026-11-27 WP7
-- **Target level:** feature (dev tooling / verification debt)
-- **Type:** gap
-- **Summary:** One M17 WP4 tray behaviour is still accepted on unit tests alone: a REMOTE workspace that was `AwaitingInput` when its session was lost keeps the menu-bar alarm lit. (Its sibling, "closing an awaiting workspace clears the alarm", was verified live at paydown-2026-11-27 WP7, and the readout that blocked both now exists: the debug-only `tray_debug_state` command, called through the webview's `__TAURI_INTERNALS__.invoke`.)
-- **Context:** WP7 did not run it: the dev profile has no scratch remote row, and its one remote row is the operator's real repo under the admin account, which must never be used (`[[mini-remote-user-is-stayman]]`, `[[remote-verify-hygiene]]`).
-- **Suggested action:** with a temporary scratch remote row (`<user>@<mini-host>:~/claudesk-scratch-remote`, added and removed per `[[remote-verify-hygiene]]`): open it, drive it to `AwaitingInput` (the real hook script with `CLAUDESK_ORIGIN`), lose the session (end the remote tmux session or drop the link), and read `tray_debug_state` → `attention` with the workspace still `awaiting_input`. Ride along with WP9 or WP10's remote checks.
-- **Priority:** low
-- **Status:** pending
 ## Code-quality findings — m17-wp4-status-over-the-link (2026-11-16)
 
 - **Pointer:** **2 MINOR** open from the review of the WP4 ship commit (`feat(m17-wp4): remote status over the link`) (the brittle pin + stale docs: docs fixed at paydown-2026-11-27 WP2, the pin already gone since M17 WP5; the shared toast resolved at paydown-2026-11-27 WP8). The MAJOR (the link-down quit freeze) was resolved 2026-11-16; WP5 resolved the overlay-key and two-spawn-execs MINORs (2026-11-17, CHANGELOG).
@@ -618,16 +596,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** the alias/emit-race MINORs are one status-path cleanup.
-
-## Code-quality findings — m17-wp5-lifecycle (2026-11-17)
-
-- **Pointer:** **1 MAJOR** open from the review of the WP5 ship commit (`67dec33`) (paydown-2026-11-27 WP2 resolved the announce comment, the displaced doc blocks and the `SessionExists` comment; WP4 the `DRIVE_MODES` copy and the dense-body helpers; WP8 the close-not-ended toast's cause/project and the "no such session" text coupling); 2 more MINORs were appended to existing WP3/WP4 items (the shared workspace toast, since resolved at WP8; WIP labels in comments). The review's CRITICAL (the `remote_record` lost-update race) goes to `/feature-refactor` before finalize.
-  - MAJOR: the reconnect drive mode as nested `Option`s + a redundant `attach` flag.
-
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp5-lifecycle — 2026-11-17`.
-- **Priority:** medium
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-- **Pickup shape:** one reconnect-mode cleanup.
 
 ## SURFACE-2026-11-20-INSTALL-SH-RERUN-DELETES-AN-EXISTING-CLAUDE-MD-BAK
 - **Source:** feature:build (M18 WP3 probe, P1.3, after verify-self caught the first record's gap)
@@ -665,3 +633,10 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** one small task. The CSS click-through fix is the only one a person would notice; the rest are typing, duplication and guard precision.
+
+## Code-quality findings — paydown-2026-11-27-wp9-cc-session-shape (2026-11-27)
+
+- **Pointer:** **5 MINOR** from the review of `ee37ae3`: a third `DriveMode` → wire-string conversion (with failure handling that differs from the other two); the env's drive-mode lookup is written twice; `SessionRegistry::spawn` has four parallel `match &target` blocks; some re-spelled guards' failure messages dump the whole body; arch §C's `SpawnTarget` parent line is stale. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-27-wp9-cc-session-shape — 2026-11-27`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** one small task. The arch line is a doc fix; the other four are duplication and guard precision inside `cc_session`, best taken together (two of them re-spell the same caller guards).

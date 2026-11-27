@@ -75,6 +75,12 @@
 - **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-INJECT-REFUSAL-AS-CALLBACK — `injectCommand` resolves to `{ message, reason } | null`; the `onIpcError` callback and Recycle's object-cell workaround are gone.
 - **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP5-UNKNOWN-SESSION-TEXT-COUPLING — a Rust test reads Detach's `NO_SUCH_SESSION` literal and fails if `CcError::UnknownSession`'s text stops starting with it.
 - **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP5-CLOSE-NOT-ENDED-TOAST-CAUSE-AND-PROJECT — the event carries `reason` (unreachable or failed) and `project`, and the toast words them, pinned on both sides of the wire.
+- **Feature shipped:** Backlog-paydown 2026-11-27 WP9: a remote session's open is one typed value (`RemoteOpen::{Start, Attach(SessionMode)}`, the mode Unknown, NoMode or a `DriveMode`) instead of nested `Option`s plus a hand-synced `attach` flag, the per-host cap reads the host from the session's one remote handle, and `SessionRegistry::spawn` dispatches local vs remote itself; no behaviour change, verified live on a scratch remote row (start, reconnect keeping the live mode, Recycle).
+- **Backlog resolved:** SURFACE-2026-11-17-QUALITY-M17WP5-RECONNECT-MODE-NESTED-OPTIONS — `SessionMode` + `RemoteOpen` replace `Option<Option<String>>` and `attach: bool`, and the B6 mutant (the recorded start mode → `None`) now dies on a behavioural test driven by the real `cc_spawn_env`.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-REMOTE-HOST-STORED-TWICE — `RegisteredSession.remote_host` is gone; the per-host cap reads `RemoteExit::host`.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-REMOTE-DISPATCH-INSIDE-PTY-CONSTRUCTOR — `SessionRegistry::spawn` builds one `cc_argv` and calls `PtyCcSession::spawn` (now local-only) or `RemoteCcSession::spawn_cc`.
+- **Backlog resolved:** SURFACE-2026-11-16-TRAY-REMOTE-LOST-SESSION-ALARM-NOT-VERIFIED-LIVE — verified live: a remote workspace driven to awaiting-input through the deployed remote hook kept `tray_debug_state` at `attention` after its tmux session was ended.
+- **Backlog resolved:** SURFACE-2026-11-27-CLOSE-NOT-ENDED-PROJECT-NOT-LIVE-CHECKED — verified live: with only the dev link master killed, closing the scratch workspace showed the toast naming the project and the unreachable cause, and the record went to `end-pending` (the optional `failed` cause was not driven).
 
 ## 2026-11-20
 
