@@ -554,6 +554,16 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (the F10b entry it was measuring is resolved; this matters only for future readings)
 - **Status:** open — upstream (mccc); **sent 2026-11-27** (`HANDOFF-to-mccc-2026-11-27-f10b-classifier-and-install-sh-backup.md`, §1; re-checked present at mccc `f8e8873`). Stays open until mccc applies or declines it.
 
+## SURFACE-2026-11-27-UNLISTEN-FIX-INSTALLED-BUILD-POSITIVE-CONTROL
+- **Source:** paydown-2026-11-27 "Fold back and delete" (carried from WP5 / D11)
+- **Target level:** task (release acceptance)
+- **Type:** gap (verification)
+- **Summary:** The `useTauriListen` fix for `SURFACE-2026-11-16-TAURI-UNLISTEN-REJECTION-ON-WORKSPACE-OPEN` (WP5, `bc161e8`: the handler checks its effect's `cancelled` flag, and a failed late unlisten is swallowed) is proven in jsdom (`<StrictMode>` count `[1, 1, 2, 2]` → `[1, 2]`) and in a live dev workspace, but not in an INSTALLED build, where the original unhandled `unlisten` rejection was seen.
+- **Context:** The fix landed after `v0.10.0`, so no installed `.app` contains it yet. A release is a verification prerequisite (project CLAUDE.md), and a silent console is not evidence: the check needs a positive observable.
+- **Suggested action:** At the next release's installed-build acceptance, open a workspace in the installed `.app` and confirm no `unlisten`-rejection error reaches the console/log on open, with a positive control (the same check against the last pre-fix install, or the error seen when the fix is absent).
+- **Priority:** low
+- **Status:** pending — blocked on the next release
+
 ## SURFACE-2026-11-27-APPBOOT-PIP-MOUNT-TEST-FLAKY-UNDER-GATE-LOAD
 - **Source:** feature:verify-auto (paydown-2026-11-27 WP10 Phase 2, full `pnpm verify:auto`)
 - **Target level:** task
