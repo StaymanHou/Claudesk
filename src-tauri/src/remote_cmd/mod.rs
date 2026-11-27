@@ -68,10 +68,6 @@ pub fn login_shell(script: &str) -> String {
     format!("zsh -lc {}", quote(script))
 }
 
-/// Constant fragment: print the remote `$HOME`. The first preflight exec, which also proves the
-/// host resolves and accepts the key. The `$HOME` expands remotely (it is a constant).
-pub const PRINT_HOME: &str = "printf '%s' \"$HOME\"";
-
 /// M18 WP2 — constant fragment (no variable value): when `claude` is not on the login shell's
 /// PATH, look in `$HOME/.local/bin`, where Claude Code's native installer puts it.
 ///
@@ -160,7 +156,7 @@ pub fn validate_host(host: &str) -> Result<String, HostError> {
 }
 
 /// Normalize a remote path as typed, to the ONE form a remote row's identity key is built from.
-/// `~` / `~/…` are expanded with the REMOTE `home` (read by the preflight's [`PRINT_HOME`]); the
+/// `~` / `~/…` are expanded with the REMOTE `home` (read by the preflight's connect exec, `remote_link::print_home_command`); the
 /// result must be absolute and free of control characters. Empty and `.` segments are dropped
 /// (`/a//b/./c/` → `/a/b/c`), so every spelling of one folder gives one key.
 ///

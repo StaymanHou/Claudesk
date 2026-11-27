@@ -33,7 +33,7 @@ fn managed_host() -> (Host, TempDir) {
     (host, repo)
 }
 
-fn guard(host: &Host) -> Result<RemoteUninstallTarget, String> {
+fn guard(host: &Host) -> Result<ApprovedRemoteClone, String> {
     observe_and_guard(&host.root(), GuardedOp::Uninstall, &exec_on(host))
 }
 
@@ -379,7 +379,7 @@ fn result_lines_parse_and_anything_else_is_output() {
 // ── The type-level fence ─────────────────────────────────────────────────────────────────
 
 /// The deleting builders take ONLY an approved target, and nothing but the guard constructs one.
-/// The compiler already refuses a `RemoteUninstallTarget { … }` outside `remote_guard.rs`
+/// The compiler already refuses an `ApprovedRemoteClone { … }` outside `remote_guard.rs`
 /// (`error[E0451]`, proven by a verify-self mutation, WP7 D10); this pins the two halves the
 /// compiler cannot: the builders' signatures, and that inside `remote_guard.rs` the one struct
 /// literal sits in `remote_refuse_guard`.
@@ -401,10 +401,10 @@ fn the_deleting_builders_take_only_an_approved_target() {
                 if matches!(&*t.ty, syn::Type::Reference(r)
                     if r.mutability.is_none()
                         && matches!(&*r.elem, syn::Type::Path(p)
-                            if p.path.is_ident("RemoteUninstallTarget"))));
+                            if p.path.is_ident("ApprovedRemoteClone"))));
         assert!(
             only_an_approved_target,
-            "{name} takes exactly one `&RemoteUninstallTarget`"
+            "{name} takes exactly one `&ApprovedRemoteClone`"
         );
     }
     // The `rm -rf` lives in UNINSTALL_TEMPLATE, which only `uninstall_script` reads.
@@ -434,7 +434,7 @@ fn the_deleting_builders_take_only_an_approved_target() {
             self.1 = prev;
         }
         fn visit_expr_struct(&mut self, e: &'ast syn::ExprStruct) {
-            if e.path.is_ident("RemoteUninstallTarget") {
+            if e.path.is_ident("ApprovedRemoteClone") {
                 self.0.push(self.1.clone());
             }
             syn::visit::visit_expr_struct(self, e);
@@ -466,7 +466,7 @@ fn the_deleting_builders_take_only_an_approved_target() {
         l.visit_file(&syn::parse_file(other).expect("parses"));
         assert!(
             l.0.is_empty(),
-            "{name} builds a RemoteUninstallTarget: {:?}",
+            "{name} builds an ApprovedRemoteClone: {:?}",
             l.0
         );
     }
@@ -799,12 +799,24 @@ fn an_uninstall_proceeds_only_on_the_approval_the_operator_confirmed() {
     assert_eq!(now.clone_dir(), shown.clone_dir(), "same folder");
     assert_ne!(now.record_hex(), shown.record_hex(), "different record");
     let err = confirmed_matches(&now, shown.clone_dir(), shown.record_hex()).unwrap_err();
-    assert!(err.contains("changed after you reviewed"), "{err}");
-    assert!(err.ends_with("open Uninstall again to review it."), "{err}");
+    // Same folder, new record: the words name the record, never the same folder twice.
+    assert_eq!(
+        err,
+        "The install on the host changed after you reviewed the removal (its install record \
+         changed). Nothing was changed; open Uninstall again to review it."
+    );
 
-    // A different folder is refused too, whatever the record.
+    // A different folder is refused too, whatever the record, and the words name both folders.
     let other = format!("{}-elsewhere", shown.clone_dir());
-    assert!(confirmed_matches(&now, &other, now.record_hex()).is_err());
+    let err = confirmed_matches(&now, &other, now.record_hex()).unwrap_err();
+    assert_eq!(
+        err,
+        format!(
+            "The install on the host changed after you reviewed the removal (it was {other}, now \
+             {}). Nothing was changed; open Uninstall again to review it.",
+            now.clone_dir()
+        )
+    );
     // Nothing on the host was touched by the check.
     assert_eq!(links(&host), 2);
     assert!(host.clone_dir().exists() && host.record().exists());

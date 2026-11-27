@@ -1,8 +1,10 @@
 //! M17 WP2 — the "Add remote project…" preflight (`arch/remote-workspaces.md` §H).
 //!
 //! Two one-shot `ssh` execs, in order, stopping at the first failure:
-//! 1. **connect** — [`super::PRINT_HOME`]: the host resolves, accepts the key without a prompt
-//!    (`BatchMode=yes`), and tells us its `$HOME` (for a `~/…` path);
+//! 1. **connect** — [`crate::remote_link::print_home_command`]: the host resolves, accepts the
+//!    key without a prompt (`BatchMode=yes`), and tells us its `$HOME` (for a `~/…` path). The
+//!    answer is read by the link's own [`crate::remote_link::parse_home`] (the last sentinel line),
+//!    so a remote rc file that prints something cannot fail it;
 //! 2. **the check script** — [`super::preflight_script`] under `zsh -lc`: `tmux`/`claude`/`perl`
 //!    resolve, the path is a directory, the token file is non-empty, and CC is logged in with it.
 //!
@@ -15,7 +17,8 @@
 
 use serde::Serialize;
 
-use super::{login_shell, normalize_remote_path, preflight_script, validate_host, PRINT_HOME};
+use super::{login_shell, normalize_remote_path, preflight_script, validate_host};
+use crate::remote_link::{parse_home, print_home_command};
 use crate::subprocess::{run_captured, RunError};
 
 /// ssh's own connect timeout, seconds (`-o ConnectTimeout`).
@@ -79,7 +82,9 @@ impl RemoteExec for SshExec {
 /// One check's outcome, for the picker's progress/error line.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CheckResult {
-    /// `host` · `connect` · `path-format` · `tools` · `path` · `token` · `auth`.
+    /// `host` · `connect` · `path-format` · `script` · `tools` · `path` · `token` · `auth`.
+    /// `script` is the check script's exec failing as a transport (it never ran its checks); a
+    /// script that stopped early is named for the first check it did not report.
     pub name: &'static str,
     pub ok: bool,
     /// Plain words. On a failure, what failed and how to fix it.
@@ -140,18 +145,16 @@ pub fn run_preflight(exec: &dyn RemoteExec, host: &str, path: &str) -> Preflight
     report.host = host.clone();
 
     // 1. connect: resolve, key, and the remote $HOME.
-    let home = match exec.exec(&host, PRINT_HOME) {
-        ExecResult::Ok(out) if out.starts_with('/') && !out.contains('\n') => out,
-        ExecResult::Ok(out) => {
-            report.checks.push(fail(
-                "connect",
-                format!(
-                    "{host} answered, but its $HOME looked wrong ({:?})",
-                    out.trim()
-                ),
-            ));
-            return report;
-        }
+    let home = match exec.exec(&host, &print_home_command()) {
+        ExecResult::Ok(out) => match parse_home(&out) {
+            Ok(home) => home,
+            Err(e) => {
+                report
+                    .checks
+                    .push(fail("connect", format!("{host} answered, but {e}")));
+                return report;
+            }
+        },
         other => {
             report
                 .checks
@@ -188,7 +191,7 @@ pub fn run_preflight(exec: &dyn RemoteExec, host: &str, path: &str) -> Preflight
         other => {
             report
                 .checks
-                .push(fail("tools", connect_failure(&host, &other)));
+                .push(fail("script", connect_failure(&host, &other)));
             return report;
         }
     };
@@ -246,12 +249,20 @@ fn parse_check_lines(out: &str, host: &str, path: &str, checks: &mut Vec<CheckRe
             }
         }
     }
+    // Named for the first check the script did not report, not for whichever comes last.
+    let next = SCRIPT_CHECKS
+        .into_iter()
+        .find(|name| !checks.iter().any(|c| c.name == *name))
+        .unwrap_or("auth");
     checks.push(fail(
-        "auth",
-        format!("the checks on {host} stopped early (no result line came back)"),
+        next,
+        format!("the checks on {host} stopped early, before the {next} check (no result line came back)"),
     ));
     false
 }
+
+/// The check script's checks, in the order it runs them.
+const SCRIPT_CHECKS: [&str; 4] = ["tools", "path", "token", "auth"];
 
 /// The plain-words failure for a tool the preflight did not find (M18 WP2). `claude` gets its own
 /// message: the usual cause is a PATH line that lives only in `~/.zshrc`, which Claudesk's
@@ -349,6 +360,11 @@ mod tests {
         }
     }
 
+    /// The connect exec's answer: `$HOME` behind the link's sentinel, as the real command prints it.
+    fn home_line(home: &str) -> ExecResult {
+        ok(&format!("{}{home}\n", crate::remote_link::HOME_SENTINEL))
+    }
+
     fn ok(s: &str) -> ExecResult {
         ExecResult::Ok(s.into())
     }
@@ -376,7 +392,7 @@ mod tests {
 
     #[test]
     fn the_happy_path_runs_two_execs_and_resolves_the_path() {
-        let fake = Fake::new(vec![ok("/Users/u"), ok(ALL_OK)]);
+        let fake = Fake::new(vec![home_line("/Users/u"), ok(ALL_OK)]);
         let r = run_preflight(&fake, " user@mini-host ", "~/proj/");
         assert!(r.resolved_path.is_some(), "{r:?}");
         assert_eq!(r.host, "user@mini-host");
@@ -384,7 +400,15 @@ mod tests {
         let names: Vec<_> = r.checks.iter().map(|c| c.name).collect();
         assert_eq!(names, ["connect", "tools", "path", "token", "auth"]);
         let calls = fake.calls.borrow();
-        assert_eq!(calls[0], ("user@mini-host".into(), PRINT_HOME.into()));
+        assert_eq!(
+            calls[0],
+            ("user@mini-host".into(), print_home_command()),
+            "the connect exec is the link's own sentinel command"
+        );
+        assert!(
+            crate::remote_link::pre_connect_script("id").contains(&print_home_command()),
+            "one writer: the link's pre-connect prints $HOME with the same command"
+        );
         assert_eq!(
             calls[1].1,
             login_shell(&preflight_script("/Users/u/proj")),
@@ -435,9 +459,48 @@ mod tests {
         assert!(r.failure().unwrap().contains("did not answer within 30s"));
     }
 
+    /// A remote rc file that prints (a banner, a `.zshenv` echo) before or after the sentinel line
+    /// cannot fail connect: the last sentinel line is `$HOME` (the link's own `parse_home`).
+    #[test]
+    fn rc_noise_around_the_home_line_still_connects() {
+        let s = crate::remote_link::HOME_SENTINEL;
+        let out = format!("Welcome to the mini!\n/not/home\n{s}/Users/u\nzshenv says hi\n");
+        let fake = Fake::new(vec![ok(&out), ok(ALL_OK)]);
+        let r = run_preflight(&fake, "mini", "~/proj");
+        assert_eq!(r.resolved_path.as_deref(), Some("/Users/u/proj"), "{r:?}");
+    }
+
+    /// No sentinel line (or an unusable `$HOME`) is a `connect` failure in plain words, and no
+    /// check script runs.
+    #[test]
+    fn a_missing_or_unusable_home_line_fails_connect_in_plain_words() {
+        let s = crate::remote_link::HOME_SENTINEL;
+        for (out, want) in [
+            (
+                "/Users/u".to_string(),
+                "mini answered, but the host did not report its home folder",
+            ),
+            (
+                format!("{s}/Users/a b\n"),
+                "mini answered, but the host's home folder",
+            ),
+        ] {
+            let fake = Fake::new(vec![ok(&out)]);
+            let r = run_preflight(&fake, "mini", "/p");
+            assert_eq!(r.checks.len(), 1, "{out:?}");
+            assert_eq!(r.checks[0].name, "connect");
+            assert!(
+                r.checks[0].message.starts_with(want),
+                "{:?}",
+                r.checks[0].message
+            );
+            assert_eq!(fake.calls.borrow().len(), 1, "{out:?}: no check script");
+        }
+    }
+
     #[test]
     fn a_relative_path_fails_after_connect_and_before_the_script() {
-        let fake = Fake::new(vec![ok("/Users/u")]);
+        let fake = Fake::new(vec![home_line("/Users/u")]);
         let r = run_preflight(&fake, "mini", "proj");
         assert_eq!(r.checks.last().unwrap().name, "path-format");
         assert_eq!(
@@ -472,10 +535,14 @@ mod tests {
                 "auth",
                 "claude setup-token",
             ),
-            ("Last login: banner\nok:tools\n", "auth", "stopped early"),
+            (
+                "Last login: banner\nok:tools\n",
+                "path",
+                "stopped early, before the path check",
+            ),
         ];
         for (out, name, want) in cases {
-            let fake = Fake::new(vec![ok("/Users/u"), ok(out)]);
+            let fake = Fake::new(vec![home_line("/Users/u"), ok(out)]);
             let r = run_preflight(&fake, "mini", "/p");
             assert!(r.resolved_path.is_none(), "{out:?}");
             let last = r.checks.last().unwrap();
@@ -509,7 +576,7 @@ mod tests {
                 "`ssh -t mini claude setup-token`",
             ),
         ] {
-            let fake = Fake::new(vec![ok("/Users/u"), ok(&out)]);
+            let fake = Fake::new(vec![home_line("/Users/u"), ok(&out)]);
             let r = run_preflight(&fake, "mini", "/p");
             let last = r.checks.last().unwrap();
             assert!(!last.ok, "{out:?}");
@@ -519,14 +586,17 @@ mod tests {
 
     #[test]
     fn a_login_banner_does_not_confuse_the_parser() {
-        let fake = Fake::new(vec![ok("/Users/u"), ok(&format!("Welcome!\n{ALL_OK}"))]);
+        let fake = Fake::new(vec![
+            home_line("/Users/u"),
+            ok(&format!("Welcome!\n{ALL_OK}")),
+        ]);
         assert!(run_preflight(&fake, "mini", "/p").resolved_path.is_some());
     }
 
     #[test]
     fn a_missing_zsh_is_named() {
         let fake = Fake::new(vec![
-            ok("/Users/u"),
+            home_line("/Users/u"),
             ExecResult::Failed {
                 code: Some(127),
                 stderr: "zsh: command not found".into(),
@@ -534,6 +604,49 @@ mod tests {
         ]);
         let r = run_preflight(&fake, "mini", "/p");
         assert!(r.failure().unwrap().contains("zsh was not found"));
+        assert_eq!(
+            r.checks.last().unwrap().name,
+            "tools",
+            "zsh IS a missing tool"
+        );
+    }
+
+    /// The check script's exec failing as a transport (it dropped, it timed out) is named
+    /// `script`: none of its checks ran, so no check's name is true.
+    #[test]
+    fn a_check_script_transport_failure_is_named_script() {
+        for second in [
+            ssh_err("Connection to mini closed by remote host."),
+            ExecResult::TimedOut,
+        ] {
+            let fake = Fake::new(vec![home_line("/Users/u"), second.clone()]);
+            let r = run_preflight(&fake, "mini", "/p");
+            let last = r.checks.last().unwrap();
+            assert_eq!((last.name, last.ok), ("script", false), "{second:?}");
+            assert!(r.resolved_path.is_none());
+        }
+    }
+
+    /// A script that stopped early is named for the first check it did NOT report.
+    #[test]
+    fn a_script_that_stopped_early_names_the_next_unreported_check() {
+        for (out, next) in [
+            ("", "tools"),
+            ("ok:tools\n", "path"),
+            ("ok:tools\nok:path\n", "token"),
+            ("ok:tools\nok:path\nok:token\n", "auth"),
+        ] {
+            let fake = Fake::new(vec![home_line("/Users/u"), ok(out)]);
+            let r = run_preflight(&fake, "mini", "/p");
+            let last = r.checks.last().unwrap();
+            assert_eq!((last.name, last.ok), (next, false), "{out:?}");
+            assert!(
+                last.message
+                    .contains(&format!("stopped early, before the {next} check")),
+                "{:?}",
+                last.message
+            );
+        }
     }
 
     #[test]

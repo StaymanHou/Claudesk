@@ -1095,7 +1095,7 @@ pub fn workflow_remote_uninstall_start(
             .unwrap_or_default(),
         };
         let exec = host_exec(&links, &target);
-        let approved: remote_guard::RemoteUninstallTarget =
+        let approved: remote_guard::ApprovedRemoteClone =
             match remote_ops::observe_and_guard(&root, remote_ops::GuardedOp::Uninstall, &exec) {
                 Ok(t) => t,
                 Err(refusal) => {

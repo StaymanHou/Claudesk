@@ -50,9 +50,7 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use crate::subprocess::{
-    in_own_group, kill_and_reap, kill_group, StopOnDrop, DRAIN_GRACE, MAX_OUTPUT,
-};
+use crate::subprocess::{in_own_group, kill_and_reap, kill_group, StopOnDrop, DRAIN_GRACE};
 
 use thiserror::Error;
 
@@ -211,6 +209,22 @@ pub const DRY_RUN_DEADLINE: Duration = Duration::from_secs(60);
 /// How often the wait loop checks the child and the clock while no output arrives.
 const POLL: Duration = Duration::from_millis(20);
 
+/// The output one [`run_streaming`] call keeps, both streams together, before it starts dropping
+/// lines ([`OutputBudget`]). A real `install.sh` run writes a few KB; the budget exists because a
+/// grandchild can hold a pipe and write without end (an unbounded buffer once grew to 1.9 GB).
+///
+/// ⚠️ Independent of `crate::subprocess::CAPTURED_PIPE_MAX` (`run_captured`'s per-pipe cap) and
+/// of [`MAX_LINE_BYTES`], though all three are 4 MiB today: each can be tuned alone.
+const OUTPUT_BUDGET: usize = 4 * 1024 * 1024;
+
+/// The most bytes of ONE line a reader keeps ([`read_bounded_line`]); the rest of the line is read
+/// and dropped, and the kept part ends with [`LINE_CUT_MARKER`]. It bounds a reader's buffer
+/// against a flood with no newline, which [`OUTPUT_BUDGET`] cannot (it counts whole lines).
+const MAX_LINE_BYTES: usize = 4 * 1024 * 1024;
+
+/// Appended to a line [`read_bounded_line`] cut, so a cut line never reads as a whole one.
+const LINE_CUT_MARKER: &[u8] = " […line cut]".as_bytes();
+
 /// Which pipe a line came from.
 #[derive(Clone, Copy)]
 enum Stream {
@@ -231,8 +245,9 @@ impl Stream {
 ///
 /// ⚠️ The thread never stops reading while the child runs: a pipe nobody empties fills at 64 KB
 /// and the child then blocks on its own write. The channel is unbounded for the same reason.
-/// So a line is bounded at [`MAX_OUTPUT`] bytes (the rest, up to its newline, is read and
-/// dropped), and invalid UTF-8 is decoded lossily rather than ending the read.
+/// So a line is bounded at [`MAX_LINE_BYTES`] bytes (the rest, up to its newline, is read and
+/// dropped, and the kept part is marked), and invalid UTF-8 is decoded lossily rather than ending
+/// the read.
 /// The thread ends at EOF, when the receiver is gone, or at the next line after `stop` is set.
 fn start_line_reader<R: Read + Send + 'static>(
     pipe: Option<R>,
@@ -269,30 +284,49 @@ fn start_line_reader<R: Read + Send + 'static>(
     Ok(())
 }
 
-/// Read one line into `buf`, keeping at most [`MAX_OUTPUT`] bytes of it and discarding the rest
-/// up to its newline. Returns the number of bytes consumed from `reader` (0 at EOF).
+/// Read one line into `buf`, keeping at most [`MAX_LINE_BYTES`] bytes of it and discarding the
+/// rest up to its newline. Returns the number of bytes consumed from `reader` (0 at EOF).
+///
+/// When line CONTENT was discarded, the kept part ends with [`LINE_CUT_MARKER`] and no newline.
+/// When only the terminator was past the limit (`\n`, or `\r\n`), nothing was cut: the terminator
+/// is put back, so the caller strips it as it would on any other line.
 fn read_bounded_line<R: BufRead>(reader: &mut R, buf: &mut Vec<u8>) -> std::io::Result<usize> {
-    let limit = u64::try_from(MAX_OUTPUT).unwrap_or(u64::MAX);
+    let limit = u64::try_from(MAX_LINE_BYTES).unwrap_or(u64::MAX);
     let mut consumed = reader.by_ref().take(limit).read_until(b'\n', buf)?;
     if consumed == 0 || buf.last() == Some(&b'\n') {
         return Ok(consumed);
     }
     // Over-long (or the stream ended without a newline): drop the rest of the line, in chunks.
-    loop {
+    // `cut` counts the dropped bytes before any newline; `cut_ends_cr` whether the last was `\r`.
+    let mut cut = 0usize;
+    let mut cut_ends_cr = false;
+    let newline = loop {
         let available = reader.fill_buf()?;
         if available.is_empty() {
-            return Ok(consumed);
+            break false;
         }
-        let (take, done) = match available.iter().position(|b| *b == b'\n') {
-            Some(i) => (i + 1, true),
-            None => (available.len(), false),
+        let (take, content, done) = match available.iter().position(|b| *b == b'\n') {
+            Some(i) => (i + 1, i, true),
+            None => (available.len(), available.len(), false),
         };
+        if content > 0 {
+            cut += content;
+            cut_ends_cr = available[content - 1] == b'\r';
+        }
         reader.consume(take);
         consumed += take;
         if done {
-            return Ok(consumed);
+            break true;
         }
+    };
+    if newline && cut == 1 && cut_ends_cr {
+        buf.extend_from_slice(b"\r\n");
+    } else if newline && cut == 0 {
+        buf.push(b'\n');
+    } else if cut > 0 {
+        buf.extend_from_slice(LINE_CUT_MARKER);
     }
+    Ok(consumed)
 }
 
 /// How many of the most recent dropped lines a truncated run still shows, per stream.
@@ -302,7 +336,7 @@ const TAIL_BYTES: usize = 64 * 1024;
 
 /// The accumulated-output budget of one [`run_streaming`] call, shared by both streams.
 ///
-/// It keeps a clean PREFIX of [`MAX_OUTPUT`] bytes and, once that is spent, a rolling TAIL of the
+/// It keeps a clean PREFIX of [`OUTPUT_BUDGET`] bytes and, once that is spent, a rolling TAIL of the
 /// most recent dropped lines of EACH stream ([`TAIL_LINES`] / [`TAIL_BYTES`] apiece). The tail is
 /// what still shows why a flooding script died: `set -euo pipefail`'s error is the last thing it
 /// writes, to stderr.
@@ -345,7 +379,7 @@ impl OutputBudget {
     /// tail.
     fn admit(&mut self, stream: Stream, line: &str) -> bool {
         let cost = line.len() + 1;
-        if self.dropped == 0 && self.used + cost <= MAX_OUTPUT {
+        if self.dropped == 0 && self.used + cost <= OUTPUT_BUDGET {
             self.used += cost;
             return true;
         }
@@ -379,10 +413,14 @@ fn last_bytes(line: &str, max: usize) -> &str {
 }
 
 /// Appended once when [`OutputBudget`] dropped output, just before the tail.
+///
+/// ⚠️ It must not imply arrival order: the tail is stdout's last lines, THEN stderr's (one tail per
+/// stream, see [`OutputBudget`]), not the last lines the run wrote.
 fn truncation_note(dropped: usize, shown: usize) -> String {
     format!(
-        "[output truncated at {} MiB; {dropped} later lines were dropped, the last {shown} follow]",
-        MAX_OUTPUT / (1024 * 1024)
+        "[output truncated at {} MiB; {dropped} later lines were dropped. {shown} of them follow: \
+         the last of stdout, then the last of stderr]",
+        OUTPUT_BUDGET / (1024 * 1024)
     )
 }
 
@@ -430,7 +468,7 @@ fn drain_queued(
 /// kill. Lines past the cap are counted in one note.
 ///
 /// ## Output is capped
-/// At most [`MAX_OUTPUT`] bytes of output (both streams together) reach the sink and the result,
+/// At most [`OUTPUT_BUDGET`] bytes of output (both streams together) reach the sink and the result,
 /// in arrival order. Past it, lines are dropped; at the end one truncation note is appended, then
 /// the last dropped lines (see [`OutputBudget`]), so a flooding child cannot grow memory without
 /// bound and a failing one still shows its last words. The pipes are read to the end, never
@@ -1902,7 +1940,7 @@ mod tests {
             "the note names the dropped and shown counts"
         );
         assert!(
-            output.len() <= MAX_OUTPUT + rest[0].len() + 2 * (TAIL_BYTES + TAIL_LINES) + 1,
+            output.len() <= OUTPUT_BUDGET + rest[0].len() + 2 * (TAIL_BYTES + TAIL_LINES) + 1,
             "kept {} bytes",
             output.len()
         );
@@ -1928,7 +1966,7 @@ mod tests {
     #[test]
     fn the_tail_is_bounded_in_lines_and_in_bytes_per_stream() {
         let mut budget = OutputBudget {
-            used: MAX_OUTPUT, // the prefix is already full
+            used: OUTPUT_BUDGET, // the prefix is already full
             ..OutputBudget::default()
         };
         for i in 0..1_000 {
@@ -1955,6 +1993,16 @@ mod tests {
 
         let (note, tail) = budget.finish().expect("something was dropped");
         assert_eq!(note, truncation_note(1_002, tail.len()));
+        // The words themselves: the tail is per stream, so the note must not read as the last
+        // lines in the order the run wrote them.
+        assert_eq!(
+            note,
+            format!(
+                "[output truncated at 4 MiB; 1002 later lines were dropped. {} of them follow: \
+                 the last of stdout, then the last of stderr]",
+                tail.len()
+            )
+        );
         assert_eq!(
             tail.last().map(String::as_str),
             Some("the error"),
@@ -1970,16 +2018,18 @@ mod tests {
     }
 
     #[test]
-    fn a_line_longer_than_the_cap_is_bounded_and_the_next_line_still_arrives() {
-        let mut input = vec![b'x'; MAX_OUTPUT + 10];
+    fn a_line_longer_than_the_cap_is_bounded_marked_and_the_next_line_still_arrives() {
+        let mut input = vec![b'x'; MAX_LINE_BYTES + 10];
         input.extend_from_slice(b"\nnext\n");
         let mut reader = BufReader::new(&input[..]);
         let mut buf = Vec::new();
         let n = read_bounded_line(&mut reader, &mut buf).unwrap();
-        assert_eq!(buf.len(), MAX_OUTPUT, "the kept part is bounded");
+        let (kept, marker) = buf.split_at(MAX_LINE_BYTES);
+        assert!(kept.iter().all(|b| *b == b'x'), "the kept part is bounded");
+        assert_eq!(marker, " […line cut]".as_bytes(), "a cut line says so");
         assert_eq!(
             n,
-            MAX_OUTPUT + 11,
+            MAX_LINE_BYTES + 11,
             "the rest of the line, newline included, is consumed"
         );
         buf.clear();
@@ -1991,6 +2041,76 @@ mod tests {
             0,
             "then EOF"
         );
+    }
+
+    /// Only the terminator past the limit is not a cut: the line comes back whole, terminator
+    /// included, so the reader strips it as usual. A one-byte cut of real content IS a cut.
+    #[test]
+    fn a_line_cut_only_at_its_terminator_is_whole_and_unmarked() {
+        let at_limit = vec![b'x'; MAX_LINE_BYTES];
+        for (tail, want_tail) in [
+            (&b"\nnext\n"[..], &b"\n"[..]),
+            (&b"\r\nnext\n"[..], &b"\r\n"[..]),
+            (&b"y\nnext\n"[..], " […line cut]".as_bytes()),
+            (&b"\ry\nnext\n"[..], " […line cut]".as_bytes()),
+        ] {
+            let mut input = at_limit.clone();
+            input.extend_from_slice(tail);
+            let mut reader = BufReader::new(&input[..]);
+            let mut buf = Vec::new();
+            read_bounded_line(&mut reader, &mut buf).unwrap();
+            assert_eq!(&buf[..MAX_LINE_BYTES], &at_limit[..], "{tail:?}");
+            assert_eq!(
+                &buf[MAX_LINE_BYTES..],
+                want_tail,
+                "{tail:?}: {:?}",
+                String::from_utf8_lossy(&buf[MAX_LINE_BYTES..])
+            );
+            buf.clear();
+            read_bounded_line(&mut reader, &mut buf).unwrap();
+            assert_eq!(buf, b"next\n", "{tail:?}: the next line is intact");
+        }
+    }
+
+    /// An over-long LAST line (no newline before EOF) is cut and marked; a short one is untouched.
+    #[test]
+    fn an_over_long_last_line_without_a_newline_is_marked() {
+        let mut input = vec![b'x'; MAX_LINE_BYTES + 3];
+        let mut buf = Vec::new();
+        read_bounded_line(&mut BufReader::new(&input[..]), &mut buf).unwrap();
+        assert!(buf.ends_with(" […line cut]".as_bytes()));
+        assert_eq!(buf.len(), MAX_LINE_BYTES + LINE_CUT_MARKER.len());
+
+        input.truncate(MAX_LINE_BYTES);
+        buf.clear();
+        read_bounded_line(&mut BufReader::new(&input[..]), &mut buf).unwrap();
+        assert_eq!(buf, input, "exactly the limit, then EOF: nothing was cut");
+
+        buf.clear();
+        read_bounded_line(&mut BufReader::new(&b"short"[..]), &mut buf).unwrap();
+        assert_eq!(buf, b"short");
+    }
+
+    /// End to end, through a real script and the real reader thread: the cut line reaches the sink
+    /// still marked. At the limit it is past the output budget too, so it arrives in the tail
+    /// after the note, and the tail's byte cap keeps its END, which is where the marker is.
+    #[test]
+    fn a_cut_line_reaches_the_sink_marked() {
+        let ((code, _), lines, _) = run_script_with_watchdog(
+            &format!(
+                "head -c {} /dev/zero | tr '\\0' x; printf '\\r\\n'; exit 0",
+                MAX_LINE_BYTES + 5
+            ),
+            Duration::from_secs(60),
+        );
+        assert_eq!(code, 0);
+        assert_eq!(lines.len(), 2, "{} lines", lines.len());
+        assert!(
+            lines[0].starts_with("[output truncated at 4 MiB;"),
+            "{}",
+            lines[0]
+        );
+        assert!(lines[1].ends_with("x […line cut]"));
     }
 
     #[test]

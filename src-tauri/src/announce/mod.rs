@@ -371,12 +371,16 @@ pub fn apply_trust(
     if !map.values().any(|a| a == ACTION_RESTORE) {
         return map;
     }
-    let record = read_trust_record();
+    // Parsed ONCE for the whole map (the record is ~250 KB and this is a sync command), and a row
+    // is walked only when it reached the restore arm.
+    let trusted = read_trust_record()
+        .as_deref()
+        .map(crate::folder_trust::trusted_folders)
+        .unwrap_or_default();
     for (path, action) in map.iter_mut() {
-        let trusted = record
-            .as_deref()
-            .is_some_and(|text| crate::folder_trust::is_trusted(text, Path::new(path)));
-        if action == ACTION_RESTORE && !trusted {
+        if action == ACTION_RESTORE
+            && !crate::folder_trust::is_trusted_in(&trusted, Path::new(path))
+        {
             *action = ACTION_RESTORE_MANUAL.to_string();
         }
     }
@@ -1095,6 +1099,34 @@ mod tests {
         );
         assert_eq!(reads, 1);
         assert_eq!(out.len(), 2);
+    }
+
+    /// The record is PARSED once too (not once per row), and a continue row costs no trust walk
+    /// (the action is checked first). Counts come from `folder_trust`'s per-thread counters.
+    #[test]
+    fn the_record_is_parsed_once_and_only_restore_rows_are_walked() {
+        use crate::folder_trust::counters::{PARSES, WALKS};
+        PARSES.with(|c| c.set(0));
+        WALKS.with(|c| c.set(0));
+        let out = apply_trust(
+            map_of(&[
+                ("/u/a", ACTION_RESTORE),
+                ("/u/b", ACTION_RESTORE),
+                ("/u/c", ACTION_RESTORE),
+                ("/u/d", ACTION_CONTINUE),
+                ("/u/e", ACTION_CONTINUE),
+            ]),
+            || Some(record(&["/u/a"])),
+        );
+        assert_eq!(PARSES.with(|c| c.get()), 1, "one parse for the whole map");
+        assert_eq!(
+            WALKS.with(|c| c.get()),
+            3,
+            "one walk per RESTORE row, none for continue"
+        );
+        assert_eq!(out["/u/a"], ACTION_RESTORE);
+        assert_eq!(out["/u/b"], ACTION_RESTORE_MANUAL);
+        assert_eq!(out["/u/d"], ACTION_CONTINUE);
     }
 
     #[test]

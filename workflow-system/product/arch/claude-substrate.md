@@ -210,13 +210,13 @@ What the build settled that the design above left open (the WP4 WIP's D1–D10; 
 - **Update (Managed only):** `git -C <clone> pull --ff-only` → `install.sh` → rewrite the record with a new
   `updated_at`. An ff-only failure (local edits on the host clone) stops before `install.sh` and says so.
 - **Uninstall (Managed only)** goes through a **remote refuse-guard of the same shape as local**: a
-  `RemoteUninstallTarget` whose field is private and whose only constructor is `remote_refuse_guard`. The guard is fed
+  `ApprovedRemoteClone` whose field is private and whose only constructor is `remote_refuse_guard`. The guard is fed
   **only** by the host record, plus a host `cd -P && pwd -P` canonicalization of the record's path, and a pure check refuses
   `$HOME`, `~/.claude`, any ancestor of `$HOME`, a non-directory, or a missing `uninstall.sh`. The `E0451` test is copied with it. The
   preview is the host's real `uninstall.sh --dry-run` output, as local. The order is script → clone-dir removal → record
   deleted LAST. ⚠️ The clone-dir removal is a **remote `rm -rf` of a guard-produced path**. It is added to the
   `source_guard` delete allowlist as its own module entry, and a test asserts the command builder accepts only a
-  `RemoteUninstallTarget`.
+  `ApprovedRemoteClone`.
 - **The local gate is never touched by a remote operation.** Local "Uninstall & disable" reverts the gate because it removes the
   only substrate the gate applies to. A host is one of several, so remote Uninstall only changes that host's `HostSubstrate`.
 - **Injected host root.** Every remote substrate command takes the host's root as a parameter. It is never a literal `~`: it is the
@@ -273,7 +273,7 @@ What the build settled (the WP6 WIP's D1–D11, archived as `m18-wp6-remote-inst
 ### R.3 Update + Uninstall as built — ✅ WP7 (2026-11-20)
 
 What the build settled (the WP7 WIP's D1–D12, archived as `m18-wp7-remote-update-uninstall.md`):
-- **The remote refuse-guard** (`workflow_install/remote_guard.rs`): `RemoteUninstallTarget` (private fields; its only constructor is
+- **The remote refuse-guard** (`workflow_install/remote_guard.rs`): `ApprovedRemoteClone` (private fields; its only constructor is
   `remote_refuse_guard`, so a struct literal elsewhere fails with `E0451`, proven by a verify-self mutation; a `syn` test pins the
   builders' signatures and the one constructor). Its inputs are the record AS THE HOST HOLDS IT NOW and a `HostObservation` (one
   read-only `perl` exec: the physical forms of the root, the account's REAL `$HOME`, both `.claude`s and the record's clone path,
@@ -319,8 +319,8 @@ What the build settled (the WP7 WIP's D1–D12, archived as `m18-wp7-remote-upda
 - **The guards**: `source_guard`'s tail anchors are derived (a syn meta-test: each anchor must name its file's last production item);
   the delete classifier adds `RmProgram` (`"rm"` / `"/bin/rm"` as a quoted program) and `GitClean` (shell spelling only, a
   backlogged gap); the deleting-builders test parses `remote_guard.rs` whole and skips `#[cfg(test)]` items.
-- Names: `RemoteRunStart`, `REMOTE_RUN_DEADLINE`; the one-caller `begin_remote_install` wrapper is gone. ⚠️ `RemoteUninstallTarget`
-  keeps its name (it also feeds Update); the rename is backlogged.
+- Names: `RemoteRunStart`, `REMOTE_RUN_DEADLINE`; the one-caller `begin_remote_install` wrapper is gone. The approved target is
+  `ApprovedRemoteClone` (renamed from `RemoteUninstallTarget` at paydown-2026-11-27 WP6, because it feeds Update too).
 
 ### R.4 Drift (Settings only)
 

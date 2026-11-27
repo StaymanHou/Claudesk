@@ -31,7 +31,9 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 71s (2026-11-27, hook-listener-read-timeout Phase 1 verify-codify (full), EXIT=0)
+- **Last:** 68s (2026-11-27, paydown-2026-11-27 WP6 Phase 1 verify-codify (full), EXIT=0)
+- **Prior:** 96s (2026-11-27, paydown-2026-11-27 WP6 Phase 1 verify-auto, EXIT=0)
+- **Prior:** 71s (2026-11-27, hook-listener-read-timeout Phase 1 verify-codify (full), EXIT=0)
 - **Prior:** 89s (2026-11-27, hook-listener-read-timeout Phase 1 verify-self re-run, EXIT=0)
 - **Prior:** 82s (2026-11-27, hook-listener-read-timeout Phase 1 verify-auto, EXIT=0)
 - **Prior:** 66s (2026-11-27, paydown-2026-11-27 WP5 Phase 2 verify-codify (full), EXIT=0)

@@ -82,6 +82,14 @@ pub const SUN_PATH_MAX_LEN: usize = 103;
 /// `.zshenv` can never be mistaken for `$HOME` (the WP2 review's `…-PRINT-HOME-INTOLERANT-OF-RC-NOISE`).
 pub const HOME_SENTINEL: &str = "CLAUDESK-REMOTE-HOME:";
 
+/// The shell command that prints [`HOME_SENTINEL`]`$HOME` on a line of its own: the ONE writer of
+/// the line [`parse_home`] reads. The link's pre-connect script ends with it, and the add-time
+/// preflight (`remote_cmd::preflight`) runs it as its connect exec, so rc-file noise is ignored
+/// the same way on both paths (paydown-2026-11-27 WP6).
+pub fn print_home_command() -> String {
+    format!("printf '%s%s\\n' '{HOME_SENTINEL}' \"$HOME\"")
+}
+
 /// The tmux config every Claudesk session starts with (arch §C.1, ratified 2026-11-14), loaded
 /// with `-f` because `-L` isolates the socket but NOT `~/.tmux.conf`.
 ///
@@ -179,7 +187,7 @@ pub(crate) const HEREDOC_DELIMITER: &str = "CLAUDESK_EOF";
 /// identifier is the only variable value and enters through [`quote`]; the file contents are
 /// written through QUOTED heredocs (`<<'EOF'`), so nothing in them is expanded by this script.
 /// Each file is written to a temp name and renamed, so a concurrent spawn never reads half of
-/// one. Prints [`HOME_SENTINEL`]`$HOME` last.
+/// one. Prints [`HOME_SENTINEL`]`$HOME` last ([`print_home_command`]).
 ///
 /// M18 WP2.5: tmux reads `-f` only when its server STARTS, so a server already running on the host
 /// (a detached workspace keeps it up) would keep the old options forever. After writing the conf,
@@ -205,14 +213,14 @@ h=\"$d/\"{hook}\n\
 cat > \"$h.tmp\" <<'CLAUDESK_EOF'\n\
 {script}CLAUDESK_EOF\n\
 mv -f \"$h.tmp\" \"$h\"\n\
-printf '%s%s\\n' '{sentinel}' \"$HOME\"\n",
+{print_home}\n",
         id = quote(identifier),
         conf = TMUX_CONF,
         reload = conf_reload(identifier),
         launcher = cc_launcher(),
         hook = quote(remote_script_basename(identifier)),
         script = with_final_newline(HOOK_SCRIPT),
-        sentinel = HOME_SENTINEL,
+        print_home = print_home_command(),
     )
 }
 

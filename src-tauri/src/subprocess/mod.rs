@@ -20,7 +20,8 @@
 //! - **A reader whose pipe a quiet grandchild holds stays parked** until that grandchild exits.
 //!   No caller waits on it, and [`StopOnDrop`] ends it at its next read.
 //!
-//! ⚠️ Memory is bounded by DISCARDING past [`MAX_OUTPUT`], never by backpressure on the pipe: a
+//! ⚠️ Memory is bounded by DISCARDING past each runner's own cap ([`CAPTURED_PIPE_MAX`] here, the
+//! streaming runner's budget in `workflow_install::runner`), never by backpressure on the pipe: a
 //! pipe nobody empties fills at 64 KB, and the child then blocks on its own write and never exits.
 
 pub mod captured;
@@ -37,9 +38,17 @@ use std::time::Duration;
 /// pipe is held by something the child left behind, and the caller stops waiting.
 pub const DRAIN_GRACE: Duration = Duration::from_millis(250);
 
-/// The most output a runner keeps. A grandchild can hold a pipe and write without end, and an
-/// unbounded buffer turned that into a measured 1.9 GB allocation. Past it, output is dropped.
-pub const MAX_OUTPUT: usize = 4 * 1024 * 1024;
+/// The most bytes [`run_captured`] keeps PER PIPE. A grandchild can hold a pipe and write without
+/// end, and an unbounded buffer turned that into a measured 1.9 GB allocation. Past it, stdout is
+/// an [`RunError::OutputTooLarge`] and stderr is cut with a note.
+///
+/// ⚠️ Only `run_captured` reads this. The streaming runner has its own budget and line limit
+/// (`workflow_install::runner`), so tuning one never moves the other. What leans on THIS value:
+/// - the adjudicator: a `claude -p` verdict is a few hundred bytes, so the cap only ever ends a
+///   runaway;
+/// - `remote_fs`: a remote file read comes back on one exec's stdout, so
+///   `remote_fs::REMOTE_READ_MAX_BYTES` must stay below this (a `const` assertion there pins it).
+pub const CAPTURED_PIPE_MAX: usize = 4 * 1024 * 1024;
 
 /// Make `cmd`'s child the leader of a new process group, so [`kill_group`] reaches everything it
 /// starts (short of what the module doc lists).

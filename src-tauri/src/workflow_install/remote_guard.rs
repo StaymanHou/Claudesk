@@ -3,7 +3,7 @@
 //!
 //! ## What this is
 //! The single authority on what a remote Uninstall may remove. The deleting script
-//! ([`super::remote_ops::uninstall_script`]) takes a [`RemoteUninstallTarget`], whose fields are
+//! ([`super::remote_ops::uninstall_script`]) takes an [`ApprovedRemoteClone`], whose fields are
 //! private and whose only constructor is [`remote_refuse_guard`]. So "the remote delete goes
 //! through the guard" is enforced by the compiler (`error[E0451]` for a struct literal outside this
 //! module), not by review.
@@ -58,16 +58,17 @@ pub struct HostObservation {
     pub record_hex: String,
 }
 
-/// A remote target the refuse-guard approved. Private fields, one constructor:
+/// A remote clone the refuse-guard approved: what Uninstall removes AND what Update pulls and
+/// re-installs (hence named for neither). Private fields, one constructor:
 /// [`remote_refuse_guard`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RemoteUninstallTarget {
+pub struct ApprovedRemoteClone {
     clone_dir: String,
     root: String,
     record_hex: String,
 }
 
-impl RemoteUninstallTarget {
+impl ApprovedRemoteClone {
     /// The approved clone directory: the host's physical path.
     pub fn clone_dir(&self) -> &str {
         &self.clone_dir
@@ -91,11 +92,11 @@ fn claude_of(observed: &Option<String>, root: &str) -> String {
 }
 
 /// The remote refuse-guard: the host's record + the host's observation → an approved
-/// [`RemoteUninstallTarget`], or a [`RefusalReason`]. Pure.
+/// [`ApprovedRemoteClone`], or a [`RefusalReason`]. Pure.
 pub fn remote_refuse_guard(
     record: Option<&InstallRecord>,
     obs: &HostObservation,
-) -> Result<RemoteUninstallTarget, RefusalReason> {
+) -> Result<ApprovedRemoteClone, RefusalReason> {
     let record = record.ok_or(RefusalReason::NoRecord)?;
     let target = obs
         .target
@@ -132,7 +133,7 @@ pub fn remote_refuse_guard(
     if !obs.has_uninstall {
         return Err(RefusalReason::MissingUninstallScript { resolved });
     }
-    Ok(RemoteUninstallTarget {
+    Ok(ApprovedRemoteClone {
         clone_dir: target.to_string(),
         root: obs.root.clone(),
         record_hex: obs.record_hex.clone(),

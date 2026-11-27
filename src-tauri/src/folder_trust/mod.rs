@@ -55,17 +55,25 @@ pub fn claude_json_path(home: &Path, target: &ConfigTarget) -> PathBuf {
 /// Trusted ⇔ the canonicalized path or any ancestor has `hasTrustDialogAccepted` equal to JSON
 /// `true` (fact 3). Anything else is `false`, including malformed JSON and non-boolean values.
 /// A path that cannot be canonicalized (it does not exist) is used as given.
+///
+/// For several paths against one record, parse once with [`trusted_folders`] and ask
+/// [`is_trusted_in`] per path (`announce::apply_trust` does).
 pub fn is_trusted(claude_json: &str, project_path: &Path) -> bool {
+    is_trusted_in(&trusted_folders(claude_json), project_path)
+}
+
+/// THE parse: the folders a `.claude.json`'s text trusts (its `projects` keys whose
+/// `hasTrustDialogAccepted` is JSON `true`). Malformed JSON, or no `projects` object, trusts none.
+pub fn trusted_folders(claude_json: &str) -> Vec<String> {
+    #[cfg(test)]
+    counters::PARSES.with(|c| c.set(c.get() + 1));
     let Ok(root) = serde_json::from_str::<serde_json::Value>(claude_json) else {
-        return false;
+        return Vec::new();
     };
     let Some(projects) = root.get("projects").and_then(|p| p.as_object()) else {
-        return false;
+        return Vec::new();
     };
-    let physical = project_path
-        .canonicalize()
-        .unwrap_or_else(|_| project_path.to_path_buf());
-    let trusted: Vec<&str> = projects
+    projects
         .iter()
         .filter(|(_, entry)| {
             entry
@@ -73,20 +81,42 @@ pub fn is_trusted(claude_json: &str, project_path: &Path) -> bool {
                 .and_then(serde_json::Value::as_bool)
                 == Some(true)
         })
-        .map(|(key, _)| key.as_str())
-        .collect();
-    trust_covers(&trusted, &physical)
+        .map(|(key, _)| key.clone())
+        .collect()
+}
+
+/// Whether the LOCAL `project_path` is covered by `trusted` (from [`trusted_folders`]): it is
+/// canonicalized (used as given when that fails), then walked by [`trust_covers`].
+pub fn is_trusted_in(trusted: &[String], project_path: &Path) -> bool {
+    #[cfg(test)]
+    counters::WALKS.with(|c| c.set(c.get() + 1));
+    let physical = project_path
+        .canonicalize()
+        .unwrap_or_else(|_| project_path.to_path_buf());
+    trust_covers(trusted, &physical)
+}
+
+/// Per-thread call counts, so a caller's test can pin how often it parses and walks (a test runs
+/// on its own thread, so counts never leak between tests).
+#[cfg(test)]
+pub(crate) mod counters {
+    use std::cell::Cell;
+    thread_local! {
+        pub(crate) static PARSES: Cell<usize> = const { Cell::new(0) };
+        pub(crate) static WALKS: Cell<usize> = const { Cell::new(0) };
+    }
 }
 
 /// THE trust walk (M17 WP5): `physical` is trusted when it, or any ancestor, is one of the
 /// `trusted` folders (keys whose `hasTrustDialogAccepted` is JSON `true`). Shared by the local read
-/// ([`is_trusted`]) and the remote one, whose trusted keys come over the link
+/// ([`is_trusted_in`]) and the remote one, whose trusted keys come over the link
 /// (`remote_cmd::open_check_command`) and whose `physical` path is the REMOTE `pwd -P`, never
 /// canonicalized locally.
-pub fn trust_covers(trusted: &[&str], physical: &Path) -> bool {
-    physical
-        .ancestors()
-        .any(|dir| dir.to_str().is_some_and(|key| trusted.contains(&key)))
+pub fn trust_covers<S: AsRef<str>>(trusted: &[S], physical: &Path) -> bool {
+    physical.ancestors().any(|dir| {
+        dir.to_str()
+            .is_some_and(|key| trusted.iter().any(|t| t.as_ref() == key))
+    })
 }
 
 /// Read the trust record from disk. Any read error is `false` (D4).
@@ -112,7 +142,7 @@ mod tests {
             !trust_covers(&trusted, Path::new("/u/ab")),
             "a sibling sharing a prefix"
         );
-        assert!(!trust_covers(&[], Path::new("/u/a")));
+        assert!(!trust_covers::<&str>(&[], Path::new("/u/a")));
     }
 
     /// A `.claude.json` with the given `(path, value)` trust entries, values as raw JSON.

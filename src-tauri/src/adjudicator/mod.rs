@@ -36,7 +36,7 @@ pub enum AdjudicateError {
     Failed { code: Option<i32>, stderr: String },
     /// The spawn itself failed for some other reason (pipe, permissions, …).
     Spawn(String),
-    /// It succeeded but wrote more than [`MAX_OUTPUT`] bytes to stdout. ⚠️ An error, never a
+    /// It succeeded but wrote more than [`crate::subprocess::CAPTURED_PIPE_MAX`] bytes to stdout. ⚠️ An error, never a
     /// truncated `Ok`: a verdict written after the cap would otherwise vanish from an answer
     /// that looks complete.
     OutputTooLarge(usize),
@@ -91,6 +91,9 @@ pub fn run_adjudicator(
     prompt: &str,
     timeout_ms: u64,
 ) -> Result<String, AdjudicateError> {
+    // A verdict is a few hundred bytes. `run_captured`'s per-pipe cap
+    // ([`crate::subprocess::CAPTURED_PIPE_MAX`]) is megabytes above that, so it only ever ends a
+    // runaway (a grandchild holding the pipe), never a real answer.
     run_captured(adjudicator_command(model), prompt, timeout_ms).map_err(AdjudicateError::from)
 }
 
@@ -114,7 +117,7 @@ fn adjudicator_command(model: &str) -> Command {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::subprocess::MAX_OUTPUT;
+    use crate::subprocess::CAPTURED_PIPE_MAX;
 
     #[test]
     fn timeout_message_carries_the_phrase_the_ts_side_classifies_on() {
@@ -179,7 +182,7 @@ mod tests {
     #[test]
     fn the_too_large_message_cannot_be_classified_as_a_timeout() {
         // The TS diagnostic buckets an error as a timeout by matching /timed? ?out/i.
-        let msg = AdjudicateError::OutputTooLarge(MAX_OUTPUT).to_string();
+        let msg = AdjudicateError::OutputTooLarge(CAPTURED_PIPE_MAX).to_string();
         assert!(!ts_classifies_as_timeout(&msg), "{msg}");
     }
 

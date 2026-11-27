@@ -28,9 +28,13 @@ use crate::subprocess::RunError;
 pub const LINK_DOWN: &str = "The remote host isn't reachable right now.";
 
 /// The largest remote file read as text. ⚠️ Smaller than the local `READ_FILE_MAX_BYTES` (64 MiB):
-/// the bytes come back on the exec's stdout, which `run_captured` caps at `MAX_OUTPUT` (4 MiB). A
+/// the bytes come back on the exec's stdout, which `run_captured` caps at [`crate::subprocess::CAPTURED_PIPE_MAX`] (4 MiB). A
 /// workflow doc is a few hundred KiB at most.
 pub const REMOTE_READ_MAX_BYTES: u64 = 3 * 1024 * 1024;
+
+// A read at the limit plus its answer framing must fit one exec's stdout, or it is refused as
+// "too large" instead of read. `as u64` is exact: the cap is 4 MiB.
+const _: () = assert!(REMOTE_READ_MAX_BYTES < crate::subprocess::CAPTURED_PIPE_MAX as u64);
 
 /// A listing or a stat: one short script.
 pub const LIST_TIMEOUT_MS: u64 = crate::remote_link::EXEC_TIMEOUT_MS;

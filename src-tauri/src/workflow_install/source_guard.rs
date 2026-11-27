@@ -410,7 +410,7 @@ mod tests {
         // removal in `remote_runner.rs`'s template, which runs on the host only after the host
         // re-checked there is no record, the probe reads `no`, and the folder's physical path is
         // exactly `<root>/.claudesk/vendor/<name>`. WP7's Uninstall removal will be a second,
-        // behind a `RemoteUninstallTarget`.
+        // behind an `ApprovedRemoteClone`.
         // WP7 Phase 1: the scan is per KIND of deletion (`deletions`, a pattern per kind), not a
         // token list: WP6's `"rm -rf"` / `"rm -r "` passed every other spelling.
         const ALLOWED: &[(&str, Deletion, usize)] = &[
@@ -418,7 +418,7 @@ mod tests {
             ("provenance.rs", Deletion::RemoveFile, 1),
             ("remote_runner.rs", Deletion::RmRecursive, 1),
             // M18 WP7: the remote Uninstall, inside `remote_ops.rs`'s UNINSTALL_TEMPLATE, which only
-            // `uninstall_script(&RemoteUninstallTarget)` fills (the type's one constructor is
+            // `uninstall_script(&ApprovedRemoteClone)` fills (the type's one constructor is
             // `remote_refuse_guard`): the `rm -rf` of the guard-approved clone, then the record's
             // `rm -f`, LAST. The host re-checks the approval before either runs (D6).
             ("remote_ops.rs", Deletion::RmRecursive, 1),

@@ -73,7 +73,7 @@ pub mod provenance;
 // reducer over its ending. Carries the module's one remote `rm -rf` (a leftover clone, guarded on
 // the host), pinned by `source_guard`.
 pub mod remote_runner;
-// M18 WP7 — the remote refuse-guard: `RemoteUninstallTarget`'s only constructor is
+// M18 WP7 — the remote refuse-guard: `ApprovedRemoteClone`'s only constructor is
 // `remote_refuse_guard`, fed by the host's own record + observation. Built before the remote
 // deleting path, as `guard` was.
 pub mod remote_guard;

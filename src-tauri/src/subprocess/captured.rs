@@ -1,6 +1,6 @@
 //! A child process run to completion with its output captured: stdin written, stdout and stderr
 //! drained while it runs, a hard deadline that kills its whole process group, and output capped
-//! at [`MAX_OUTPUT`].
+//! at [`CAPTURED_PIPE_MAX`].
 //!
 //! Callers: `adjudicator` (`claude -p`, M15) and `remote_cmd` / `remote_link` (one-shot `ssh`
 //! execs, M17). Each picks the program and args and maps [`RunError`] to its own words. Moved
@@ -11,7 +11,7 @@ use std::io::Write;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use super::{in_own_group, kill_and_reap, StopOnDrop, DRAIN_GRACE, MAX_OUTPUT};
+use super::{in_own_group, kill_and_reap, StopOnDrop, CAPTURED_PIPE_MAX, DRAIN_GRACE};
 
 /// Why a captured run produced no output.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,7 +25,7 @@ pub enum RunError {
     Failed { code: Option<i32>, stderr: String },
     /// The spawn itself failed for some other reason (pipe, permissions, a thread spawn, …).
     Spawn(String),
-    /// It succeeded but wrote more than [`MAX_OUTPUT`] bytes to stdout. ⚠️ An error, never a
+    /// It succeeded but wrote more than [`CAPTURED_PIPE_MAX`] bytes to stdout. ⚠️ An error, never a
     /// truncated `Ok`: output past the cap would otherwise vanish from a result that looks whole.
     OutputTooLarge(usize),
 }
@@ -69,7 +69,7 @@ const POLL_MS: u64 = 50;
 /// - **A parked drain or writer** (its pipe held by a quiet grandchild) holds at most one capped
 ///   buffer, or one copy of the prompt (uncapped, as the prompt is the caller's own input).
 /// - **A grandchild writing to the same pipe** during the grace is mixed into the output. If it
-///   floods past [`MAX_OUTPUT`], the result is [`RunError::OutputTooLarge`], not the
+///   floods past [`CAPTURED_PIPE_MAX`], the result is [`RunError::OutputTooLarge`], not the
 ///   answer.
 ///
 pub fn run_captured(mut cmd: Command, prompt: &str, timeout_ms: u64) -> Result<String, RunError> {
@@ -151,7 +151,9 @@ pub fn run_captured(mut cmd: Command, prompt: &str, timeout_ms: u64) -> Result<S
         // stderr says so; it is a diagnostic, so its head is still worth returning.
         let mut stderr = String::from_utf8_lossy(&err).into_owned();
         if stderr_drain.overflowed() {
-            stderr.push_str(&format!("\n[stderr truncated at {MAX_OUTPUT} bytes]"));
+            stderr.push_str(&format!(
+                "\n[stderr truncated at {CAPTURED_PIPE_MAX} bytes]"
+            ));
         }
         return Err(RunError::Failed {
             code: status.code(),
@@ -159,7 +161,7 @@ pub fn run_captured(mut cmd: Command, prompt: &str, timeout_ms: u64) -> Result<S
         });
     }
     if stdout_drain.overflowed() {
-        return Err(RunError::OutputTooLarge(MAX_OUTPUT));
+        return Err(RunError::OutputTooLarge(CAPTURED_PIPE_MAX));
     }
     Ok(String::from_utf8_lossy(&out).into_owned())
 }
@@ -169,12 +171,12 @@ pub fn run_captured(mut cmd: Command, prompt: &str, timeout_ms: u64) -> Result<S
 /// ⚠️ **The thread must never stop reading while the child runs.** A pipe the reader stops
 /// emptying fills (64 KB), and then the CHILD blocks on its own write and never exits. That
 /// deadlock is what a `sync_channel` nobody drained during the wait produced (~45–205 KB of the
-/// child's own output was enough). So memory is bounded by DISCARDING past [`MAX_OUTPUT`], never by
+/// child's own output was enough). So memory is bounded by DISCARDING past [`CAPTURED_PIPE_MAX`], never by
 /// backpressure on the pipe.
 struct Drain {
     buf: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
     done: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    /// Set when bytes past [`MAX_OUTPUT`] were discarded, so a cut result is never mistaken
+    /// Set when bytes past [`CAPTURED_PIPE_MAX`] were discarded, so a cut result is never mistaken
     /// for a whole one.
     overflowed: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
@@ -205,7 +207,7 @@ impl Drain {
                         Ok(n) => n,
                     };
                     if let Ok(mut b) = buf.lock() {
-                        let room = MAX_OUTPUT.saturating_sub(b.len());
+                        let room = CAPTURED_PIPE_MAX.saturating_sub(b.len());
                         if n > room {
                             overflowed.store(true, Ordering::SeqCst);
                         }
@@ -235,7 +237,7 @@ impl Drain {
 }
 
 /// Wait until both drains reach EOF or `until` passes, whichever is first, then take what each
-/// has read (at most [`MAX_OUTPUT`] bytes apiece).
+/// has read (at most [`CAPTURED_PIPE_MAX`] bytes apiece).
 fn collect_both(out: &Drain, err: &Drain, until: Instant) -> (Vec<u8>, Vec<u8>) {
     while !(out.is_done() && err.is_done()) && Instant::now() < until {
         std::thread::sleep(Duration::from_millis(5));
@@ -426,7 +428,7 @@ mod tests {
             .expect("run_captured hung on a flooding grandchild");
         // Past the cap the answer cannot be trusted to be whole, so it is an error, not a
         // truncated `Ok`.
-        assert_eq!(result, Err(RunError::OutputTooLarge(MAX_OUTPUT)));
+        assert_eq!(result, Err(RunError::OutputTooLarge(CAPTURED_PIPE_MAX)));
         assert!(
             start.elapsed() < Duration::from_millis(1_400),
             "{:?}",
@@ -508,12 +510,15 @@ mod tests {
         let d = Drain::spawn(Some(Endless(read.clone())), &stop).expect("thread spawns");
         std::thread::sleep(Duration::from_millis(200));
         let kept = d.buf.lock().expect("lock").len();
-        assert_eq!(kept, MAX_OUTPUT, "the cap was not reached, or not enforced");
+        assert_eq!(
+            kept, CAPTURED_PIPE_MAX,
+            "the cap was not reached, or not enforced"
+        );
         // ⚠️ Well PAST the cap, not merely past it: a drain that quits at the cap still performs
-        // one read beyond it, and `> MAX_OUTPUT` passed that mutant.
+        // one read beyond it, and `> CAPTURED_PIPE_MAX` passed that mutant.
         let kept_reading = (0..100).any(|_| {
             std::thread::sleep(Duration::from_millis(10));
-            read.load(std::sync::atomic::Ordering::SeqCst) > 3 * MAX_OUTPUT
+            read.load(std::sync::atomic::Ordering::SeqCst) > 3 * CAPTURED_PIPE_MAX
         });
         assert!(
             kept_reading,
@@ -530,21 +535,23 @@ mod tests {
     #[test]
     fn output_exactly_at_the_cap_is_whole_and_one_byte_past_it_is_an_error() {
         let at = run_captured(
-            sh(&format!("head -c {MAX_OUTPUT} /dev/zero | tr '\\0' x")),
+            sh(&format!(
+                "head -c {CAPTURED_PIPE_MAX} /dev/zero | tr '\\0' x"
+            )),
             "",
             10_000,
         )
         .expect("exactly the cap is still a whole answer");
-        assert_eq!(at.len(), MAX_OUTPUT);
+        assert_eq!(at.len(), CAPTURED_PIPE_MAX);
         let past = run_captured(
             sh(&format!(
                 "head -c {} /dev/zero | tr '\\0' x",
-                MAX_OUTPUT + 1
+                CAPTURED_PIPE_MAX + 1
             )),
             "",
             10_000,
         );
-        assert_eq!(past, Err(RunError::OutputTooLarge(MAX_OUTPUT)));
+        assert_eq!(past, Err(RunError::OutputTooLarge(CAPTURED_PIPE_MAX)));
     }
 
     #[test]
@@ -552,7 +559,7 @@ mod tests {
         let err = run_captured(
             sh(&format!(
                 "head -c {} /dev/zero | tr '\\0' e >&2; exit 5",
-                MAX_OUTPUT + 10
+                CAPTURED_PIPE_MAX + 10
             )),
             "",
             10_000,
@@ -561,7 +568,9 @@ mod tests {
         match err {
             RunError::Failed { code, stderr } => {
                 assert_eq!(code, Some(5));
-                assert!(stderr.ends_with(&format!("[stderr truncated at {MAX_OUTPUT} bytes]")));
+                assert!(
+                    stderr.ends_with(&format!("[stderr truncated at {CAPTURED_PIPE_MAX} bytes]"))
+                );
             }
             other => panic!("expected Failed, got {other:?}"),
         }

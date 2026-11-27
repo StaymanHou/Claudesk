@@ -140,7 +140,7 @@ mod tests {
             let n = self.calls.get();
             self.calls.set(n + 1);
             ExecResult::Ok(if n.is_multiple_of(2) {
-                "/Users/u".into()
+                format!("{}/Users/u\n", crate::remote_link::HOME_SENTINEL)
             } else {
                 "ok:tools\nok:path\nok:token\nok:auth\n".into()
             })

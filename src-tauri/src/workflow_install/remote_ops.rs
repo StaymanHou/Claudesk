@@ -9,7 +9,7 @@
 //!    the record's clone path. The first read finds the record; the second resolves its clone path
 //!    and re-reads the record, which must not have changed in between.
 //! 2. **Guard** ([`super::remote_guard::remote_refuse_guard`]): the only way to a
-//!    [`RemoteUninstallTarget`].
+//!    [`ApprovedRemoteClone`].
 //! 3. **Preview** ([`dry_run_script`]): the host's own `uninstall.sh --dry-run` in the approved clone.
 //! 4. **Run** ([`uninstall_script`]), built from the approved target ONLY. On the host, under
 //!    `trap '' HUP PIPE TERM INT` from its first line (no Cancel: the run takes well under a second
@@ -27,7 +27,7 @@
 
 use super::guard::RefusalReason;
 use super::provenance::{self, InstallRecord, RECORD_FILENAME};
-use super::remote_guard::{remote_refuse_guard, HostObservation, RemoteUninstallTarget};
+use super::remote_guard::{remote_refuse_guard, ApprovedRemoteClone, HostObservation};
 use super::remote_runner::{
     fill, state_words, valid_root, RemoteOp, RemoteRunFinished, RUN_SENTINEL,
 };
@@ -138,7 +138,7 @@ pub fn observe_and_guard(
     root: &str,
     op: GuardedOp,
     exec: &dyn Fn(&str) -> Result<String, String>,
-) -> Result<RemoteUninstallTarget, String> {
+) -> Result<ApprovedRemoteClone, String> {
     let words = |r: &RefusalReason| match op {
         GuardedOp::Uninstall => r.user_message(),
         GuardedOp::Update => r.update_message(),
@@ -167,17 +167,23 @@ pub fn observe_and_guard(
 /// out; this keeps the run to the folder the operator was SHOWN, should the record change between
 /// the preview and the confirm. `Err` is plain words, and means nothing was run.
 pub fn confirmed_matches(
-    approved: &RemoteUninstallTarget,
+    approved: &ApprovedRemoteClone,
     clone_dir: &str,
     record_hex: &str,
 ) -> Result<(), String> {
     if approved.clone_dir() == clone_dir && approved.record_hex() == record_hex {
         return Ok(());
     }
+    // Name the folders only when they differ: a record-only change printed the same folder twice,
+    // a "change" the operator could not see.
+    let what = if approved.clone_dir() == clone_dir {
+        "its install record changed".to_string()
+    } else {
+        format!("it was {clone_dir}, now {}", approved.clone_dir())
+    };
     Err(format!(
-        "The install on the host changed after you reviewed the removal (it was {clone_dir}, now \
-         {}). Nothing was changed; open Uninstall again to review it.",
-        approved.clone_dir()
+        "The install on the host changed after you reviewed the removal ({what}). Nothing was \
+         changed; open Uninstall again to review it."
     ))
 }
 
@@ -191,7 +197,7 @@ pub enum GuardedOp {
 
 /// The preview: the host's own `uninstall.sh --dry-run` in the approved clone. Read-only (WP3
 /// "Probe outcomes" (3): it changes nothing).
-pub fn dry_run_script(target: &RemoteUninstallTarget) -> String {
+pub fn dry_run_script(target: &ApprovedRemoteClone) -> String {
     format!(
         "cd -- {} && HOME={} ./uninstall.sh --dry-run </dev/null 2>&1",
         quote(target.clone_dir()),
@@ -230,18 +236,18 @@ if [ "$urc" -ne 0 ]; then echo "CLAUDESK-RUN:result:uninstall-failed:$urc"
 else echo "CLAUDESK-RUN:result:$r"; fi"#;
 
 /// The uninstall script for an approved target. ⚠️ Its ONLY input is the
-/// [`RemoteUninstallTarget`]: the root, the clone and the record's expected bytes all come from
+/// [`ApprovedRemoteClone`]: the root, the clone and the record's expected bytes all come from
 /// the guard, so the `rm -rf` in it can only ever name a path the guard approved
 /// (`remote_ops_tests::the_deleting_builders_take_only_an_approved_target` pins the signature).
 /// `Err` is a builder bug (an unfilled placeholder), reported as such: never a script that
 /// claims the host changed (WP8 P2.4, `SURFACE-2026-11-20-QUALITY-UNINSTALL-SCRIPT-FILL-FAILURE-MISLABELLED`).
-pub fn uninstall_script(target: &RemoteUninstallTarget) -> Result<String, String> {
+pub fn uninstall_script(target: &ApprovedRemoteClone) -> Result<String, String> {
     fill_uninstall(UNINSTALL_TEMPLATE, target)
 }
 
 /// [`uninstall_script`]'s filling, with the template a parameter so a test can hand it a broken
 /// one. Its values are still only the approved target's.
-fn fill_uninstall(template: &str, target: &RemoteUninstallTarget) -> Result<String, String> {
+fn fill_uninstall(template: &str, target: &ApprovedRemoteClone) -> Result<String, String> {
     fill(
         template,
         &[
@@ -370,7 +376,7 @@ pub fn resolve_uninstall(
 /// The record an Update writes: the record the guard saw, with `updated_at` set and every other
 /// field kept byte-for-byte (`installed_at`, `clone_path`, `origin_url`). `None` when the guard's
 /// bytes no longer parse (which the guard itself would have refused).
-pub fn updated_record(target: &RemoteUninstallTarget, now: &str) -> Option<InstallRecord> {
+pub fn updated_record(target: &ApprovedRemoteClone, now: &str) -> Option<InstallRecord> {
     let mut record = decode_hex(target.record_hex()).and_then(|b| provenance::parse_record(&b))?;
     record.updated_at = Some(now.to_string());
     Some(record)
@@ -422,7 +428,7 @@ else echo 'CLAUDESK-RUN:result:ok'; fi"#;
 /// The update script for an approved target, writing `record` LAST (built by Rust,
 /// [`updated_record`]; written by a constant-format `printf`, as the install's).
 pub fn update_script(
-    target: &RemoteUninstallTarget,
+    target: &ApprovedRemoteClone,
     record: &InstallRecord,
 ) -> Result<String, String> {
     let json = serde_json::to_string(record).map_err(|e| e.to_string())?;
