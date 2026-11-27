@@ -724,3 +724,14 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** medium (the MAJOR), low (the rest)
 - **Status:** pending
 - **Pickup shape:** paydown-2026-11-27 WP5. Reproduce the MAJOR live, then guard the restore target with an App-level test.
+
+## SURFACE-2026-11-27-HOOK-LISTENER-ONE-STUCK-CONNECTION-DEAFENS-ALL
+- **Source:** operator report during paydown-2026-11-27 WP5 ("The prod's status dot lost track"), investigated from the logs
+- **Target level:** feature (hook channel robustness)
+- **Type:** bug (prod, live)
+- **Summary:** `hook_socket::accept_loop` serves ONE connection at a time and reads it to EOF with no read timeout before the next `accept()`. A single hook client that connects and never closes blocks the listener for every Claude Code session on the machine until the app restarts. Observed 2026-11-27: prod's `status-channel.log` has an event at 09:54:14.116 (a PreToolUse from another local session), then nothing from ANY session for 39 minutes; the matching PostToolUse 89 ms later reached the dev app's log but not prod's; the prod process stayed alive (its only `Process death` is the operator's restart at 10:33:21).
+- **Context:** the stuck client was not identified (the app was restarted before inspection). Plausible: a stalled forwarded channel from a remote host's hook (prod's `ssh -M … -R …/com.claudesk.app/hook.sock`); remote tank events were among the last before the gap. Separately, prod's routing turned `resolved=none` for every cwd at 09:51:09 while its webview kept running normally; cause not established (no register/deregister is logged).
+- **Local hooks ruled out as the stuck client (checked 2026-11-27):** `claudesk-hook.pl` reads its whole stdin payload BEFORE connecting, connects with `Timeout => 1`, prints one line and closes, so a local hook cannot hold the socket open idle (and a killed one closes its fd). A forwarded channel from a remote host (`ssh -R`) is the remaining candidate: it keeps the local connection open while the network stalls.
+- **Suggested action:** serve each connection off the accept thread, or set a read timeout per connection (a hook writes one line and closes; a few seconds is generous), and log a timed-out client with its peer info. Pin it with a test that holds one connection open and asserts a second client's event still arrives. Also log workspace register/deregister in `status-channel.log` so a future `resolved=none` turn is explainable.
+- **Priority:** high (it silently blinds every status surface; the operator reports it recurring)
+- **Status:** pending

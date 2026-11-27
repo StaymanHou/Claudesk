@@ -66,6 +66,7 @@
 - [read_logs console empty](read-logs-console-captures-nothing.md) — Captures nothing for this app; empty is a false green.
 - [Agent-launched dev app](agent-launched-app-cannot-verify-continue.md) — Needs the Claude-marker `env -u` strip; send text, then a separate `\r`.
 - [--continue needs clear flag](turn-respawn-continue-needs-a-clear-unclean-flag.md) — Proves a turn-respawn only with the flag clear; `/exit` leaves it set.
+- [⚠️ Never touch prod](never-touch-the-prod-app-or-its-listener.md) — Kill only PIDs you launched (read the command line); prod carries every session's dots; a dot loss gets a status-channel.log timeline.
 - [Dev vs prod name collision](verify-self-dev-vs-prod-process-name-collision.md) — osascript/bundle-id hits PROD; drive dev via the bridge, kill by PID.
 - [lsof misses IPv6 Vite](lsof-ti-tcp-misses-ipv6-vite.md) — Never kill a `target/debug/claudesk` you didn't launch.
 - [F-b dev profile](dev-profile-for-f-b-verification.md) — Use `~/.config/claude-original-dev`, never real profiles.
