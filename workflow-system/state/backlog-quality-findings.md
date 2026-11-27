@@ -479,3 +479,36 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Summary:** `RemoteRunPanel`'s `const listening = subscribed >= 3;` hard-codes the number of `useTauriListen` calls. A fourth listener would let the run-state query fire after only three subscribe, bringing back the race WP8 P1.2 closed.
 - **Suggested action:** name the count beside the three listen calls (e.g. `const LISTENERS = 3`) with a comment tying them, or count the registrations.
 - **Priority:** low
+
+# picker-qol-focus-and-scroll — 2026-11-27
+
+*(feature-review-quality on ship commit `8c019bf`, window `8c019bf^..8c019bf`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 3 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-27-QUALITY-PICKER-DISMISS-RESTORES-FOCUS-TO-A-BACKGROUND-WORKSPACE
+- **Source:** feature-review-quality (picker-qol-focus-and-scroll, MAJOR)
+- **Type:** bug (input misrouting, narrow trigger)
+- **Summary:** `PickerOverlay`'s `restoreFocus` returns focus to whatever had it when the overlay opened, without checking that the element is still in the CENTER-STAGE workspace. The ⌘⇧digit switch handler in `App` does not check `showPicker`, so "+" from workspace A, ⌘⇧2 to B, then Esc refocuses A's xterm helper textarea. Background workspaces are parked off-viewport (`.workspace` `left: -99999px`), not `display: none`, so that textarea is still focusable and passes the `isConnected` guard. The next keystrokes (Enter included) go to a hidden yolo-mode CC session.
+- **Context:** Reviewer's reading of the code; not yet reproduced live. Before this feature the overlay never took focus, so A's pane kept it across the switch and the same misrouting already existed (keys typed into the overlay went to A). The feature narrowed the window to "switch while the overlay is open", but did not close it.
+- **Suggested action:** reproduce first in the dev app via the bridge (seed two workspaces, focus A's pane, "+", ⌘⇧2 via the real handler, Esc, read `activeElement`). Then either skip a restore target outside the focused workspace (`el.closest('.workspace')` vs the focused one) or gate the ⌘⇧digit switch while the picker overlay is open. Pin with a `pickerFocusWiring` case through the real `App`.
+- **Priority:** medium
+
+## SURFACE-2026-11-27-QUALITY-CSS-TRIPWIRE-PARSES-BRACES-BEFORE-STRIPPING-COMMENTS
+- **Source:** feature-review-quality (picker-qol-focus-and-scroll, MINOR)
+- **Type:** tech-debt (guard fragility)
+- **Summary:** `pickerOverlaySingleScroller.test.ts`'s `rulesFor` matches `{…}` before stripping comments, so a brace inside a CSS comment (`App.css` already has one, the `.file-tree-name { flex: 1 }` comment) breaks the parse. Today it fails loudly ("a rule … must exist"), not falsely green.
+- **Suggested action:** strip comments from the whole sheet before the `matchAll`.
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-OVERLAY-PICKER-RULE-SPLIT-IN-TWO
+- **Source:** feature-review-quality (picker-qol-focus-and-scroll, MINOR)
+- **Type:** tech-debt (readability)
+- **Summary:** `.picker-overlay-panel .picker` is defined in two rules about 30 lines apart in `App.css` (layout in one, `padding` in the other), so the overlay picker's box model is not in one place.
+- **Suggested action:** merge the two rules; the tripwire's `rulesFor` already concatenates both, so it keeps passing.
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-PANEL-COMMENT-SAYS-ONE-CHILD
+- **Source:** feature-review-quality (picker-qol-focus-and-scroll, MINOR)
+- **Type:** copy (comment)
+- **Summary:** the `.picker-overlay-panel` comment says "its one child (`.picker`)", but the panel also holds the absolutely-positioned × button.
+- **Suggested action:** say "its one in-flow child".
+- **Priority:** low

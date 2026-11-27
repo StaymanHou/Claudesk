@@ -739,24 +739,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 
-## SURFACE-2026-11-18-PICKER-SEARCH-BOX-NOT-AUTOFOCUSED
-- **Source:** operator request (2026-11-18)
-- **Target level:** task
-- **Type:** enhancement
-- **Summary:** Focus should land in the picker's search box ("Filter projects…") as soon as the workspace picker opens, so you can type to filter straight away. Today it does not: the `picker-filter` input in `ProjectPicker` has no `autoFocus` or focus call, so you have to click into it first.
-- **Context:** There are two places the picker appears. (1) `PickerOverlay`, summoned by the filmstrip "+" to open another workspace. (2) The first-open picker that `App` renders before any workspace exists. Both render `ProjectPicker`, so a fix in `ProjectPicker` covers both. Precedent: `AddRemoteForm`'s input already uses `autoFocus`. Things to check: (a) whether the overlay is mounted on summon or kept mounted and toggled; if it is kept mounted, `autoFocus` fires only once and needs a focus-on-open effect instead. (b) Focus must move out of the focused workspace's xterm, or keystrokes leak into the CC pane (see `[[wkwebview-button-click-does-not-take-focus]]`). (c) Esc-to-close is registered on the document, so it is unaffected.
-- **Suggested action:** Focus the filter input when the picker mounts or opens, in both places. Add a jsdom test asserting `document.activeElement` is `picker-filter` after the overlay opens, and mutation-prove it by removing the focus.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
-## SURFACE-2026-11-18-PICKER-OVERLAY-NESTED-SCROLLBARS
-- **Source:** operator report (2026-11-18, screenshot of the "+" picker overlay)
-- **Target level:** task
-- **Type:** UX bug
-- **Summary:** The picker opened from the filmstrip "+" shows **two nested vertical scrollbars**: the project list scrolls, and so does the card around it. Scrolling is ambiguous, and the bottom of the card (Open Folder / Add remote) sits behind a second scroll.
-- **Context:** `src/App.css`: `.picker-overlay-panel` is `max-height: 80%; overflow-y: auto`, and `.picker-recents` inside it is capped at `max-height: 60vh` and scrolls itself. The comment on `.picker-recents` explains why: the standalone first-open picker is a flex column where the list takes the leftover height (`flex: 1; min-height: 0`), but "the overlay variant (no flex column) falls back to the 60vh cap". 60vh of list plus the title, filter box, toasts and buttons is more than 80% of the window, so the outer card overflows as well.
-- **Suggested action:** the operator's proposal is to lower the inner list's height cap so the card never overflows. Possibly better, to weigh when this is worked: make the overlay card the same flex column as the standalone picker (`display: flex; flex-direction: column; overflow: hidden` on `.picker-overlay-panel`, the `.picker` inside it `flex: 1; min-height: 0`), so the list takes exactly the leftover height and is the **only** scroller at any window size. A smaller fixed cap would still overflow on short windows and waste space on tall ones. Verify both pickers (first-open and overlay) at a short and a tall window, and that the card's bottom controls stay visible without scrolling the card.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 ## SURFACE-2026-11-20-INSTALL-SH-RERUN-DELETES-AN-EXISTING-CLAUDE-MD-BAK
 - **Source:** feature:build (M18 WP3 probe, P1.3, after verify-self caught the first record's gap)
 - **Target level:** upstream (mccc `install.sh`), with a note for M18 WP7 (Update)
@@ -797,3 +779,11 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (all)
 - **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
 - **Pickup shape:** four small, independent polish items in `workflow_install/` and `RemoteRunPanel`; any can ride along with the next remote-substrate change.
+
+## Code-quality findings — picker-qol-focus-and-scroll (2026-11-27)
+
+- **Pointer:** **1 MAJOR + 3 MINOR** from the review of `8c019bf`. MAJOR: an overlay dismiss can restore focus to a BACKGROUND workspace's pane after a ⌘⇧digit switch while the overlay is open (keys then reach a hidden CC session; reviewer's reading, not yet reproduced). MINOR: the CSS tripwire parses braces before stripping comments; `.picker-overlay-panel .picker` is split across two rules; the panel comment says "one child".
+  - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# picker-qol-focus-and-scroll — 2026-11-27`.
+- **Priority:** medium (the MAJOR), low (the rest)
+- **Status:** pending
+- **Pickup shape:** one small task. Reproduce the MAJOR live, then guard the restore target (or the switch) with an App-level test; the 3 MINORs ride along.

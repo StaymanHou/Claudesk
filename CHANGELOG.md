@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-27
+
+- **Feature shipped:** Both workspace pickers now focus "Filter projects…" as they appear, so typing filters straight away instead of reaching the CC pane; dismissing the "+" overlay hands focus back to the pane, and the overlay card is a bounded flex column whose project list is its only scroller at any window size.
+- **Backlog resolved:** SURFACE-2026-11-18-PICKER-SEARCH-BOX-NOT-AUTOFOCUSED — the filter `autoFocus`es on every picker mount (first-open scene and each "+" summon), pinned through the real `App`.
+- **Backlog resolved:** SURFACE-2026-11-18-PICKER-OVERLAY-NESTED-SCROLLBARS — the overlay card no longer scrolls; the list takes the leftover height and is the only scroller, measured live at short and tall windows.
+
 ## 2026-11-20
 
 - **Feature shipped:** M18 WP3 measured on the mini how a remote install, re-run, cancel and detection probe actually behave, and recorded one answer and design consequence per question in `wbs.md` → "Probe outcomes": a local kill does not stop the host (cancel is one remote group-kill exec, operator ruling A), the `install.sh` re-run is content-idempotent, `HOME=<root>` contains every write, the drafted `SUBSTRATE_PROBE` costs +16 ms, and the CLT preflight must guard an empty `xcode-select -p`.

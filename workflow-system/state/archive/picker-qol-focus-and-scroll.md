@@ -5,7 +5,8 @@ drive_mode: autopilot
 # Feature: Picker QoL — filter autofocus + single scroller in the "+" overlay
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-11-27
+**Shipped:** `8c019bf` on `main`, pushed 2026-11-27. Full suite: reused the last-phase codify run (`Test scope: full — last phase`, `pnpm verify:auto` EXIT=0); only the WIP's scratchpad path was redacted after it. Pre-push identifier grep over the added lines of `origin/main..main` and the staged diff: 0 hits (positive control matched 2/2)
 **Created:** 2026-11-27
 **Backlog items:** SURFACE-2026-11-18-PICKER-SEARCH-BOX-NOT-AUTOFOCUSED, SURFACE-2026-11-18-PICKER-OVERLAY-NESTED-SCROLLBARS
 
@@ -78,11 +79,48 @@ No 3rd-party dependency. No active WBS cycle (`wbs.md` absent — between milest
     — mutants, each alone, all killed: panel `overflow: hidden`→`overflow-y: auto`; panel no `display: flex`; inner `.picker` no `min-height: 0`; inner `.picker` no `flex: 1 1 auto`; list keeps the 60vh cap (each 1/4 failed); App keeps the overlay mounted and toggles `hidden` (wiring 1/2 failed); the open path also restores focus (focusLive 1/7 failed). All files restored, shasum-matched
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship (Phase 1 complete: built, verify-auto/self/human/codify all green)
+- **Path:** Feature > done (archived)
+- **Active scope:** none (finalized 2026-11-27)
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
-- **Open discoveries:** none
+- **Unvisited:** none
+- **Open discoveries:** 4 code-quality findings (backlogged)
+
+## Code-Quality Review
+
+*(feature-review-quality, 2026-11-27, ship commit `8c019bf`, drive_mode=autopilot: 0 CRITICAL, 1 MAJOR, 3 MINOR. All auto-backlogged to `backlog-quality-findings.md` → `# picker-qol-focus-and-scroll — 2026-11-27`, one pointer in `backlog.md`.)*
+
+### Strengths
+- All three dismiss paths go through one `dismiss()`, and the open path stays separate on purpose. The backdrop's `preventDefault` stops the mousedown from moving focus before the restore runs.
+- The scroll fix changes the structure (a bounded flex column with a shrinkable child) rather than tuning a cap, and the stale `.picker-recents` comment was rewritten in the same change.
+- Tests sit at the right layers: the component (`pickerFocusLive`), the real `App` with a 2-round summon (`pickerFocusWiring`, which is what catches keep-mounted-and-toggle), and a CSS tripwire that states the jsdom limit. Each test was mutation-proven.
+- `restoreFocus` guards the null, detached and `<body>` cases.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`PickerOverlay.tsx` `restoreFocus` / `dismiss`] A dismiss restores focus to the element that had it at open, without checking that it is still in the center-stage workspace. ⌘⇧digit (App's switch handler does not check `showPicker`) while the overlay is open, then Esc, refocuses the BACKGROUND workspace's xterm. That textarea is parked off-viewport and still focusable, so keystrokes go to a hidden yolo CC session. → SURFACE-2026-11-27-QUALITY-PICKER-DISMISS-RESTORES-FOCUS-TO-A-BACKGROUND-WORKSPACE
+
+**MINOR**
+- [`pickerOverlaySingleScroller.test.ts` `rulesFor`] Matches braces before stripping comments. Today it fails loudly, not falsely green. → SURFACE-2026-11-27-QUALITY-CSS-TRIPWIRE-PARSES-BRACES-BEFORE-STRIPPING-COMMENTS
+- [`App.css`] `.picker-overlay-panel .picker` is split across two rules. → SURFACE-2026-11-27-QUALITY-OVERLAY-PICKER-RULE-SPLIT-IN-TWO
+- [`App.css`] The panel comment says "one child", but the panel also holds the × button. → SURFACE-2026-11-27-QUALITY-PANEL-COMMENT-SAYS-ONE-CHILD
+
+### Assessment
+A small, well-built QoL change that leaves the codebase better than it found it. The one real gap is the restore target: "whatever had focus at open" rather than "the visible workspace's pane". That is worth a backlog item and a small guard, not a refactor pass.
+
+### If you disagree
+Mark a finding `[DISMISSED]` here before `feature-finalize` archives this file.
+
+## Retrospect
+- **What changed in our understanding:** Autofocusing the picker's filter has a second consequence the backlog entry did not name. Today the "+" click takes no focus, so the CC pane silently kept focus through an overlay dismiss. Moving focus into the overlay would have stranded it on `<body>` after Esc. Restoring focus on dismiss was a necessary half of the feature, not an extra. The review then found that its restore target ("whatever had focus at open") can be a background workspace after a ⌘⇧digit switch (backlogged MAJOR).
+- **Assumptions that held:** both picker surfaces mount `ProjectPicker` fresh per appearance, so a mount-time `autoFocus` covers every summon (pinned through the real `App` with a 2-round test). The flex-column card makes the list the only scroller at any window height (measured live at inner heights 528 and 1018).
+- **Assumptions that were wrong:** the plan's "≥ 12 projects" for the overflow check; the dev list has 8, so overflow was forced by window height instead. A `Promise`-returning `webview_execute_js` script times out on this bridge; synchronous scripts that stash results on `window` work (already in memory).
+- **Approach delta:** one addition at plan time (P1.2, the focus restore on dismiss) beyond the two backlog items; otherwise built as planned. The scroll fix took the backlog entry's flex-column option over the operator's proposed lower cap, and the operator accepted it at verify-human.
+
+## Closure
+> **Feature complete:** Picker QoL has shipped (`8c019bf`). Both pickers now put the cursor in "Filter projects…" so you can type to filter at once, Esc/×/backdrop hand focus back to the pane, and the "+" overlay scrolls only its project list. See it via the filmstrip "+" or the first-open picker. Requester = operator, so this is a closure notice for the record.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
