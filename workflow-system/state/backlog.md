@@ -574,13 +574,23 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** one cleanup task.
 
+## SURFACE-2026-11-27-APPBOOT-PIP-MOUNT-TEST-FLAKY-UNDER-GATE-LOAD
+- **Source:** feature:verify-auto (paydown-2026-11-27 WP10 Phase 2, full `pnpm verify:auto`)
+- **Target level:** task
+- **Type:** tech-debt (flaky test)
+- **Summary:** `src/__tests__/appBoot.test.tsx` › "src/pip/main.tsx mounts the PiP surface" failed once in a full gate: `expected [ 'profiles_list', …(16) ] to include 'pip_get_layout'`, with 8 unhandled `window.__TAURI_INTERNALS__.transformCallback is not a function` errors from `useTauriListen` → `listen`. WP10 changed no frontend file. The test passed 3/3 run alone, and the full `vitest run` re-run passed 4225/4225.
+- **Context:** The unhandled `transformCallback` errors suggest a listener effect from one boot case (or a StrictMode re-mount) running after that case's `mockIPC` teardown or before the next case's setup, so the PiP case reads an IPC log missing its `pip_get_layout`. Like the `hook_socket` flake, a red gate on a timing race trains re-runs.
+- **Suggested action:** Reproduce under load (e.g. `vitest run` with the whole suite, or `--pool=forks --poolOptions.forks.singleFork`); check that each boot case awaits its mount and unmounts before `clearMocks()`, and that the `pip_get_layout` assertion waits for the call instead of reading the log once. Mutation-prove the fixed test still fails when the PiP entry skips `pip_get_layout`.
+- **Priority:** low
+- **Status:** pending
+
 ## SURFACE-2026-11-27-HOOK-SOCKET-CLOSED-PEER-TEST-FLAKY
 - **Source:** feature:verify-codify (paydown-2026-11-27 WP8 Phase 2 full run)
 - **Target level:** task
 - **Type:** tech-debt (flaky test)
 - **Summary:** `hook_socket::tests::a_client_closed_before_accept_refuses_the_timeout_benignly_and_still_delivers` failed once in a full `pnpm verify:auto` (2026-11-27), panicking at its "macOS refuses SO_RCVTIMEO on a socket whose peer already closed: ()" expect. It passed on 2 isolated retries and on a full `cargo test` re-run. The test asserts that the OS REFUSES `set_read_timeout` once the peer has closed, and whether the close has landed before the accept is a kernel-timing race. WP8 touched no `hook_socket` file; the test came in with `e96e3b4` (hook-listener-read-timeout).
 - **Context:** A flaky gate step trains people to re-run on red. The production behaviour it guards (a refused timeout is benign and delivery still happens) is fine either way. Only the test's premise ("macOS always refuses") is timing-dependent.
-- **Frequency (paydown-2026-11-27 WP9, same day):** it failed in 2 of 4 full `pnpm verify:auto` runs (verify-auto passed, codify failed twice, then passed) and in 1 of 10 runner `cargo test --lib` runs. It passed 3/3 run alone and 3/3 as a bare `cargo test --lib`. So it fails under the gate's load more than once in a while: the priority may need raising.
+- **Frequency (paydown-2026-11-27 WP9, same day):** it failed in 2 of 4 full `pnpm verify:auto` runs (verify-auto passed, codify failed twice, then passed) and in 1 of 10 runner `cargo test --lib` runs. It passed 3/3 run alone and 3/3 as a bare `cargo test --lib`. So it fails under the gate's load more than once in a while: the priority may need raising. **WP10 Phase 1 verify-auto (same day):** failed again, the only red in the gate, and the `cargo test` re-run was green. That makes 3 of 5 full gates today.
 - **Suggested action:** Make the test accept both outcomes of `set_read_timeout` (refused → the benign path; accepted → the normal path) while still asserting delivery, or make the close deterministic before the accept (e.g. wait until the peer's close is observable). Mutation-prove that it still fails when delivery breaks.
 - **Priority:** low
 - **Status:** pending

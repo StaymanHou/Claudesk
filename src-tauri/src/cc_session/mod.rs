@@ -5189,9 +5189,13 @@ mod tests {
         // AC-3.3 (verify-codify): the resolved physical path is recorded as the row's alias in the
         // status registry, so its events resolve. The registry test proves the alias works; this
         // pins that the spawn records it, from the same exec.
-        let alias = at("ifletSome(real)=&facts.real_alias{");
-        let record = at("reg.set_remote_realpath(&project_path,real.clone());");
-        assert!(asked < alias && alias < record && record < locked);
+        // paydown-2026-11-27 WP10: UNCONDITIONALLY, so a spawn with no alias clears the old one.
+        assert!(
+            !dense.contains("ifletSome(real)=&facts.real_alias"),
+            "the alias is recorded whether or not the spawn found one"
+        );
+        let record = at("reg.set_remote_realpath(&project_path,facts.real_alias.clone());");
+        assert!(asked < record && record < locked);
         let wait = spawn
             .find("if !links.wait_not_closing(&session, REMOTE_CLOSE_WAIT) { return Err(")
             .expect("waits for the close, and refuses the spawn if it does not end");

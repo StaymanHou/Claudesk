@@ -28,6 +28,8 @@ pub fn init(app: &AppHandle) -> Result<SharedLinks, String> {
         .map_err(|e| format!("could not resolve app data dir: {e}"))?;
     let local_socket = crate::hook_socket::commands::hook_socket_path(app)?;
     let identifier = app.config().identifier.clone();
+    // Before the registry exists, so no link of this run can start first.
+    super::reap_orphaned_masters(&app_data);
     let emitter = app.clone();
     let sink = Arc::new(move |ev: LinkEvent| {
         if let Err(e) = emitter.emit("remote-link", &ev) {
@@ -740,6 +742,21 @@ mod tests {
     /// removed. The one rule lives in [`crate::test_support::dense_production_fn`].
     fn dense_body(src: &str, sig: &str) -> String {
         crate::test_support::dense_production_fn(src, sig)
+    }
+
+    /// paydown-2026-11-27 WP10: the launch reap runs in `init`, BEFORE the registry is built, so no
+    /// link of this run can start a master that the reap would then mistake for nothing (the reap
+    /// only selects orphans, but a registry built first could connect before it ran).
+    #[test]
+    fn init_reaps_orphaned_masters_before_building_the_registry() {
+        let body = dense_body(include_str!("commands.rs"), "pub fn init(");
+        let reap = body
+            .find("super::reap_orphaned_masters(&app_data);")
+            .expect("init reaps this app's orphaned link masters");
+        let build = body
+            .find("LinkRegistry::new(")
+            .expect("init builds the registry");
+        assert!(reap < build, "the reap must come first: {body}");
     }
 
     /// Every `links.<method>(` call in a dense body, in order.

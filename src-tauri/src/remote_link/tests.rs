@@ -2774,3 +2774,301 @@ fn a_link_that_is_still_connecting_is_not_held_and_install_refuses() {
     );
     drop(hold);
 }
+
+// ---------------------------------------------------------------------------------------------
+// paydown-2026-11-27 WP10: orphaned masters, and the master pid after a reap
+// ---------------------------------------------------------------------------------------------
+
+const DEV_DATA: &str = "/Users/me/Library/Application Support/com.claudesk.app.dev";
+const PROD_DATA: &str = "/Users/me/Library/Application Support/com.claudesk.app";
+
+/// One `ps -axww -o pid=,ppid=,pgid=,command=` line for a link master of `data`'s app.
+fn master_line(pid: u32, ppid: u32, pgid: u32, data: &str) -> String {
+    let argv = master_argv(
+        &control_path(Path::new(data), "me@mini-host"),
+        "/Users/me/.claudesk/x/hook.sock",
+        &Path::new(data).join("hook.sock"),
+        "me@mini-host",
+    );
+    format!("{pid:>6} {ppid:>5} {pgid:>6} {}", argv.join(" "))
+}
+
+#[test]
+fn orphaned_masters_selects_only_this_apps_orphaned_group_leading_masters() {
+    let dev = ssh_dir(Path::new(DEV_DATA));
+    let prod = ssh_dir(Path::new(PROD_DATA));
+    let orphan = master_line(4242, 1, 4242, DEV_DATA);
+    // Positive control: the orphan alone is selected, for its own app only.
+    assert_eq!(orphaned_masters(&orphan, &dev), [4242]);
+    assert_eq!(
+        orphaned_masters(&orphan, &prod),
+        [] as [u32; 0],
+        "dev's master is not prod's"
+    );
+
+    // Each near-miss differs from `orphan` in ONE respect.
+    let live_parent = master_line(4243, 777, 4243, DEV_DATA);
+    let not_leader = master_line(4244, 1, 999, DEV_DATA);
+    let prod_orphan = master_line(4245, 1, 4245, PROD_DATA);
+    let check = format!(
+        "  4246     1   4246 {}",
+        check_argv(
+            &control_path(Path::new(DEV_DATA), "me@mini-host"),
+            "me@mini-host"
+        )
+        .join(" ")
+    );
+    let other_binary = orphan.replacen("/usr/bin/ssh ", "/opt/bin/ssh ", 1);
+    // A ControlPath in a sibling dir that only shares the `ssh` prefix: the trailing `/` of the
+    // needle is what keeps it out.
+    let sibling_dir = orphan.replacen("/ssh/", "/ssh2/", 1);
+    assert_ne!(sibling_dir, orphan, "control: the fixture changed");
+    let near_misses = [
+        ("a master whose app is alive", live_parent.as_str()),
+        ("a master that does not lead its group", not_leader.as_str()),
+        ("the other app's orphan", prod_orphan.as_str()),
+        (
+            "a non-master `-O check` on this app's ControlPath",
+            check.as_str(),
+        ),
+        ("another ssh binary", other_binary.as_str()),
+        (
+            "a ControlPath in a sibling `ssh2/` dir",
+            sibling_dir.as_str(),
+        ),
+        ("an empty line", ""),
+        ("a header-ish line", "  PID  PPID  PGID COMMAND"),
+        ("a truncated line", "  4247     1"),
+    ];
+    for (what, line) in near_misses {
+        assert_eq!(
+            orphaned_masters(line, &dev),
+            [] as [u32; 0],
+            "{what}: {line}"
+        );
+    }
+    // The prod dir must not match dev's orphans either (`.app` is a prefix of `.app.dev`).
+    assert_eq!(orphaned_masters(&prod_orphan, &prod), [4245]);
+    assert_eq!(
+        orphaned_masters(&master_line(4248, 1, 4248, DEV_DATA), &prod),
+        [] as [u32; 0],
+        "`com.claudesk.app` must not match `com.claudesk.app.dev`"
+    );
+
+    // All together, in any order: only the orphans of this app.
+    let dump = [
+        live_parent.as_str(),
+        orphan.as_str(),
+        check.as_str(),
+        prod_orphan.as_str(),
+        not_leader.as_str(),
+    ]
+    .join("\n");
+    assert_eq!(orphaned_masters(&dump, &dev), [4242]);
+    assert_eq!(orphaned_masters(&dump, &prod), [4245]);
+}
+
+#[test]
+fn the_reaper_reads_a_real_ps_and_selects_nothing_outside_its_dir() {
+    // The real `ps` runs and its output parses: a dir no process names selects nothing, and the
+    // `ps` columns are the ones `orphaned_masters` parses (every line of it parses).
+    let dir = TempDir::new().unwrap();
+    assert_eq!(reap_orphaned_masters(dir.path()), [] as [u32; 0]);
+    let out = run_captured(
+        {
+            let mut c = Command::new("/bin/ps");
+            c.args(PS_ARGS);
+            c
+        },
+        "",
+        3_000,
+    )
+    .expect("ps runs");
+    let me = std::process::id();
+    let parsed: Vec<_> = out.lines().filter_map(parse_ps_line).collect();
+    assert!(parsed.len() > 5, "ps listed processes: {out}");
+    assert!(
+        parsed.iter().any(|&(pid, ..)| pid == me),
+        "this test process is in the dump"
+    );
+}
+
+/// The worker's published master pid right now.
+fn published_pid(h: &Harness) -> Option<u32> {
+    let links = h.reg.links.lock().unwrap();
+    let l = links.get("me@mini-host").expect("the link exists");
+    let pid = l.shared.inner.lock().unwrap().master_pid;
+    pid
+}
+
+/// A real `sleep` for the next master, so it has a real pid. Killed by the caller.
+fn real_master(h: &Harness) -> Arc<Mutex<std::process::Child>> {
+    let mut cmd = Command::new("/bin/sleep");
+    cmd.arg("30");
+    let child = Arc::new(Mutex::new(in_own_group(&mut cmd).spawn().unwrap()));
+    *h.t.real_child.lock().unwrap() = Some(Arc::clone(&child));
+    child
+}
+
+/// A harness whose back-off is long, so the state after the first failure can be read.
+fn long_backoff_harness(up_timeout: Duration) -> Harness {
+    harness_with(move |r| {
+        r.with_timings(up_timeout, Duration::from_secs(30), Duration::from_secs(30))
+    })
+}
+
+#[test]
+fn the_master_pid_is_unpublished_when_the_master_exits_before_coming_up() {
+    let h = long_backoff_harness(Duration::from_secs(10));
+    let child = real_master(&h);
+    h.t.check_ok.store(false, Ordering::SeqCst);
+    let _ = h.reg.get_or_start("me@mini-host").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while published_pid(&h).is_none() {
+        assert!(
+            Instant::now() < deadline,
+            "the master pid was never published"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    h.t.masters.lock().unwrap()[0].store(true, Ordering::SeqCst);
+    h.wait_for("Lost", 3, |e| {
+        e.iter().any(|e| matches!(e.state, LinkState::Lost { .. }))
+    });
+    assert_eq!(
+        published_pid(&h),
+        None,
+        "a reaped master's pid stays published"
+    );
+    h.reg.stop_all();
+    kill_and_reap(&mut child.lock().unwrap());
+}
+
+#[test]
+fn the_master_pid_is_unpublished_when_the_up_timeout_kills_the_master() {
+    let h = long_backoff_harness(Duration::from_millis(300));
+    let child = real_master(&h);
+    h.t.check_ok.store(false, Ordering::SeqCst);
+    let _ = h.reg.get_or_start("me@mini-host").unwrap();
+    h.wait_for("Lost", 3, |e| {
+        e.iter().any(|e| matches!(e.state, LinkState::Lost { .. }))
+    });
+    assert!(
+        h.t.masters.lock().unwrap()[0].load(Ordering::SeqCst),
+        "control: the up-timeout killed the master"
+    );
+    assert_eq!(
+        published_pid(&h),
+        None,
+        "a killed master's pid stays published"
+    );
+    h.reg.stop_all();
+    kill_and_reap(&mut child.lock().unwrap());
+}
+
+#[test]
+fn the_master_pid_is_unpublished_when_an_up_link_drops() {
+    let h = long_backoff_harness(Duration::from_secs(10));
+    let child = real_master(&h);
+    let _ = h.reg.get_or_start("me@mini-host").unwrap();
+    h.reg.wait_up("me@mini-host", &|| false).unwrap();
+    assert!(
+        published_pid(&h).is_some(),
+        "control: an Up link publishes its pid"
+    );
+    h.t.masters.lock().unwrap()[0].store(true, Ordering::SeqCst);
+    h.wait_for("Lost", 3, |e| {
+        e.iter().any(|e| matches!(e.state, LinkState::Lost { .. }))
+    });
+    assert_eq!(
+        published_pid(&h),
+        None,
+        "a dropped master's pid stays published"
+    );
+    h.reg.stop_all();
+    kill_and_reap(&mut child.lock().unwrap());
+}
+
+/// Whether `pid` exists (a zombie counts); `ps` rather than `kill(pid, 0)`, which this crate keeps
+/// out of its call names (`subprocess::kill_group`).
+fn pid_alive(pid: u32) -> bool {
+    Command::new("/bin/ps")
+        .args(["-o", "pid=", "-p", &pid.to_string()])
+        .output()
+        .map(|o| !String::from_utf8_lossy(&o.stdout).trim().is_empty())
+        .unwrap_or(false)
+}
+
+/// `pid`'s parent, from a real `ps`.
+fn ppid_of(pid: u32) -> Option<u32> {
+    let out = Command::new("/bin/ps")
+        .args(["-o", "ppid=", "-p", &pid.to_string()])
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&out.stdout).trim().parse().ok()
+}
+
+#[test]
+fn the_launch_reap_kills_a_real_orphan_named_as_this_apps_master() {
+    // A real orphan, end to end through the real `ps` and `killpg`: a process that leads its own
+    // group, is reparented to launchd (its spawning shell exits at once), and whose argv reads
+    // `/usr/bin/ssh -c … -M -N -S <this app's ssh dir>/<hash8> …` (a `/bin/sh` exec'd under that
+    // argv[0], so nothing connects anywhere).
+    let data = TempDir::new().unwrap();
+    let ctl = control_path(data.path(), "me@mini-host");
+    let pid_file = data.path().join("orphan.pid");
+    let spawn = format!(
+        r#"/usr/bin/perl -e 'setpgrp(0,0); open(F,">",$ARGV[0]) or die; print F $$; close F; exec {{"/bin/sh"}} "/usr/bin/ssh", "-c", "sleep 30; :", "-M", "-N", "-S", $ARGV[1], "me\@mini-host"' {} {} &"#,
+        quote(&pid_file.display().to_string()),
+        quote(&ctl.display().to_string()),
+    );
+    let status = Command::new("/bin/sh")
+        .arg("-c")
+        .arg(&spawn)
+        .status()
+        .unwrap();
+    assert!(status.success(), "the orphan spawner ran");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let pid: u32 = loop {
+        if let Some(pid) = std::fs::read_to_string(&pid_file)
+            .ok()
+            .and_then(|s| s.trim().parse().ok())
+        {
+            if ppid_of(pid) == Some(1) {
+                break pid;
+            }
+        }
+        assert!(Instant::now() < deadline, "no orphan with ppid 1 appeared");
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    // Cleanup on a failed assertion below: the orphan's group dies with the test either way.
+    struct KillOnDrop(u32);
+    impl Drop for KillOnDrop {
+        fn drop(&mut self) {
+            crate::subprocess::kill_group(self.0);
+        }
+    }
+    let _guard = KillOnDrop(pid);
+
+    // Another app's dir does not see it.
+    let other = TempDir::new().unwrap();
+    assert_eq!(reap_orphaned_masters(other.path()), [] as [u32; 0]);
+    assert!(
+        pid_alive(pid),
+        "control: the orphan survives another app's reap"
+    );
+
+    assert_eq!(
+        reap_orphaned_masters(data.path()),
+        [pid],
+        "this app's reap selects it"
+    );
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while pid_alive(pid) {
+        assert!(
+            Instant::now() < deadline,
+            "the reaped orphan {pid} is still running"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}

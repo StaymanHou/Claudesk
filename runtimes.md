@@ -31,7 +31,11 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 66s (2026-11-27, paydown-2026-11-27 WP9 Phase 1 verify-auto, EXIT=0)
+- **Last:** 73s (2026-11-27, paydown-2026-11-27 WP10 Phase 2 verify-codify (full), EXIT=0)
+- **Prior:** 87s (2026-11-27, paydown-2026-11-27 WP10 Phase 2 verify-auto, EXIT=1: the appBoot PiP flake only; vitest + cargo steps re-run green)
+- **Prior:** 89s (2026-11-27, paydown-2026-11-27 WP10 Phase 1 verify-codify (full), EXIT=0)
+- **Prior:** 67s (2026-11-27, paydown-2026-11-27 WP10 Phase 1 verify-auto, EXIT=101: the flaky hook_socket closed-peer test only; cargo test re-run green)
+- **Prior:** 66s (2026-11-27, paydown-2026-11-27 WP9 Phase 1 verify-auto, EXIT=0)
 - **Prior:** 80s (2026-11-27, paydown-2026-11-27 WP8 Phase 2 verify-auto, EXIT=0)
 - **Prior:** 69s (2026-11-27, paydown-2026-11-27 WP8 Phase 1 verify-codify (full), EXIT=0)
 - **Prior:** 73s (2026-11-27, paydown-2026-11-27 WP8 Phase 1 verify-auto, EXIT=0)

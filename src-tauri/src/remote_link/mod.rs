@@ -142,9 +142,83 @@ pub struct LinkInfo {
 
 pub use crate::remote_cmd::hash8;
 
+/// `<app_data>/ssh`: every ControlPath of this app lives directly under it. Dev and prod have
+/// different app-data dirs, so each app's dir names only its own masters ([`orphaned_masters`]).
+pub fn ssh_dir(app_data: &Path) -> PathBuf {
+    app_data.join("ssh")
+}
+
 /// `<app_data>/ssh/<hash8(host)>`. Short on purpose: see [`SUN_PATH_MAX_LEN`].
 pub fn control_path(app_data: &Path, host: &str) -> PathBuf {
-    app_data.join("ssh").join(hash8(host))
+    ssh_dir(app_data).join(hash8(host))
+}
+
+/// The `ps` columns [`orphaned_masters`] reads: `-axww` (every process, full command lines).
+pub const PS_ARGS: [&str; 3] = ["-axww", "-o", "pid=,ppid=,pgid=,command="];
+
+/// The pids of this app's ORPHANED link masters in a `ps` dump ([`PS_ARGS`]): the masters a
+/// previous run left behind when it died without its quit teardown (SIGTERM, SIGKILL, a crash).
+/// A master runs in its own process group, so nothing else kills it, and it would hold its
+/// connection, its remote sshd session and its `-R` forward until the network drops.
+///
+/// A line is selected only when ALL of these hold:
+/// - `ppid == 1`: reparented to launchd, so its app is gone. ⚠️ A master whose parent is alive
+///   (prod, or a second dev instance) is never selected;
+/// - `pgid == pid`: it leads its own group, as [`in_own_group`] makes every master, so
+///   [`kill_group`] reaches it and nothing else;
+/// - it is `/usr/bin/ssh` with `-M`, so a `-S … -O check` or a terminal is never selected;
+/// - its `-S` names a path directly under `ssh_dir/`. The trailing `/` keeps a sibling such as
+///   `ssh2/` out. `com.claudesk.app` vs `com.claudesk.app.dev` is decided before it, by the `/ssh`
+///   that follows the identifier in both dirs.
+pub fn orphaned_masters(ps_out: &str, ssh_dir: &Path) -> Vec<u32> {
+    let dir = ssh_dir.display().to_string();
+    let needle = format!(" -S {}/", dir.trim_end_matches('/'));
+    ps_out
+        .lines()
+        .filter_map(parse_ps_line)
+        .filter(|&(pid, ppid, pgid, cmd)| {
+            pid > 1
+                && ppid == 1
+                && pgid == pid
+                && cmd.starts_with("/usr/bin/ssh ")
+                && cmd.split(' ').any(|a| a == "-M")
+                && cmd.contains(&needle)
+        })
+        .map(|(pid, ..)| pid)
+        .collect()
+}
+
+/// `(pid, ppid, pgid, command)` from one [`PS_ARGS`] line; `None` for anything else.
+fn parse_ps_line(line: &str) -> Option<(u32, u32, u32, &str)> {
+    let mut rest = line.trim_start();
+    let mut nums = [0u32; 3];
+    for n in &mut nums {
+        let end = rest.find(char::is_whitespace)?;
+        *n = rest[..end].parse().ok()?;
+        rest = rest[end..].trim_start();
+    }
+    Some((nums[0], nums[1], nums[2], rest))
+}
+
+/// Kill this app's orphaned link masters ([`orphaned_masters`]) and return their pids. Run once
+/// at launch, BEFORE the registry exists, so no link of this run can start first. A `ps` failure
+/// reaps nothing (said on stderr); the next connect still works, as it always did.
+pub fn reap_orphaned_masters(app_data: &Path) -> Vec<u32> {
+    let mut cmd = Command::new("/bin/ps");
+    cmd.args(PS_ARGS);
+    let out = match run_captured(cmd, "", 3_000) {
+        Ok(out) => out,
+        Err(e) => {
+            eprintln!("[claudesk] could not list processes to reap orphaned ssh links: {e}");
+            return Vec::new();
+        }
+    };
+    let pids = orphaned_masters(&out, &ssh_dir(app_data));
+    for &pid in &pids {
+        eprintln!("[claudesk] reaping orphaned ssh link master {pid} (left by a previous run)");
+        kill_group(pid);
+    }
+    pids
 }
 
 /// `<home>/.claudesk/<identifier>`, the remote state dir (dev and prod stay distinct).
@@ -749,6 +823,9 @@ fn run_worker(cfg: WorkerCfg, shared: Arc<Shared>) {
             shared.nap(POLL);
         };
         if let Err(reason) = up {
+            // The master exited or was killed: its pid must not stay published through the
+            // back-off, where a `stop()` would `killpg` it (a reused pid's group).
+            forget_master(&shared);
             if shared.stopped() {
                 break 'outer;
             }
@@ -784,6 +861,7 @@ fn run_worker(cfg: WorkerCfg, shared: Arc<Shared>) {
                 break 'outer;
             }
             if let Some(reason) = master.try_exit() {
+                forget_master(&shared);
                 set_state(&cfg, &shared, LinkState::Lost { reason }, None);
                 break;
             }
@@ -793,10 +871,15 @@ fn run_worker(cfg: WorkerCfg, shared: Arc<Shared>) {
     }
     // ⚠️ The ControlPath is NOT removed here: a new link for the same host may already own it
     // (stop does not wait for this worker). The next connect removes a stale one itself.
+    forget_master(&shared);
+    set_state(&cfg, &shared, LinkState::Down, None);
+}
+
+/// Unpublish the master's pid: it has been reaped or killed, so [`halt`] must not signal it.
+fn forget_master(shared: &Shared) {
     if let Ok(mut g) = shared.inner.lock() {
         g.master_pid = None;
     }
-    set_state(&cfg, &shared, LinkState::Down, None);
 }
 
 struct Link {

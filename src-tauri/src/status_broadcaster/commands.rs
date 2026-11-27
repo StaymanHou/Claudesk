@@ -140,8 +140,10 @@ fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>, status_log: Option<
         }
 
         if let Some(update) = update {
-            if let Err(e) = app.emit(STATUS_EVENT, &update) {
-                eprintln!("[claudesk] status-broadcaster: emit failed: {e}");
+            if let Some(registry) = app.try_state::<SharedRegistry>() {
+                if let Err(e) = super::emit_settled(&registry, update, &|u| emit_raw(&app, u)) {
+                    eprintln!("[claudesk] status-broadcaster: emit failed: {e}");
+                }
             }
         }
     }
@@ -158,11 +160,20 @@ pub fn link_edge_sink(app: AppHandle, key: String, host: String) -> super::LinkE
             return;
         };
         super::apply_link_edge(&registry, &key, &host, edge, &|u| {
-            if let Err(e) = app.emit(STATUS_EVENT, u) {
-                eprintln!("[claudesk] status-broadcaster: link overlay emit failed: {e}");
+            if let Err(e) = emit_raw(&app, u) {
+                eprintln!("[claudesk] status-broadcaster: link overlay {e}");
             }
         });
     })
+}
+
+/// THE one `emit` of [`STATUS_EVENT`]. ⚠️ Every caller goes through [`super::emit_settled`]
+/// (directly, or inside [`super::apply_link_edge`]), so the last update on the wire is always the
+/// registry's current view (paydown-2026-11-27 WP10). Pinned by
+/// `every_status_emit_is_settled`.
+fn emit_raw(app: &AppHandle, update: &super::WorkspaceStatusUpdate) -> Result<(), String> {
+    app.emit(STATUS_EVENT, update)
+        .map_err(|e| format!("workspace-status emit failed: {e}"))
 }
 
 /// The managed [`SharedRegistry`] WP4 registers at launch. Empty until WP6 wires
@@ -256,7 +267,8 @@ pub fn workspace_deregister(
 /// longer the `Stop` named by `stop_event_at` (see [`WorkspaceRegistry::promote`]). A
 /// refusal is a normal outcome, not an error.
 ///
-/// Sync and non-blocking: one lock and one emit, no waiting (`sync_commands_do_not_block`).
+/// Sync and non-blocking: no lock is held across an emit and nothing waits (`emit_settled` re-reads
+/// the registry between emits) (`sync_commands_do_not_block`).
 #[tauri::command]
 pub fn workspace_status_promote(
     app: AppHandle,
@@ -268,18 +280,17 @@ pub fn workspace_status_promote(
         .lock()
         .map_err(|_| "workspace registry lock poisoned".to_string())?
         .promote(&workspace_id, stop_event_at, Attention::VerifyHuman);
-    // The lock is dropped at the end of the statement above, before the emit. ⚠️ So the
+    // The lock is dropped at the end of the statement above, before the emit. The
     // compare-and-set orders the REGISTRY, not the emits: a newer hook event recorded and
-    // emitted between that unlock and this emit arrives first, and this stale overlay lands
-    // after it (no consumer compares `last_event_at`). The window is microseconds. Emitting
-    // under the lock is NOT the fix: this is a main-thread command and the tray listener runs
-    // on `emit`, which is the lock-held-across-a-marshal shape `sync_commands_do_not_block`
-    // cannot see.
+    // emitted between that unlock and this emit can arrive first. `emit_settled` then re-reads
+    // the registry after this emit and re-emits its current view, so the stale overlay never
+    // stays on the wire (paydown-2026-11-27 WP10). ⚠️ Emitting under the lock is NOT the fix:
+    // this is a main-thread command and the tray listener runs on `emit`, which is the
+    // lock-held-across-a-marshal shape `sync_commands_do_not_block` cannot see.
     let Some(update) = promoted else {
         return Ok(false);
     };
-    app.emit(STATUS_EVENT, &update)
-        .map_err(|e| format!("workspace-status emit failed: {e}"))?;
+    super::emit_settled(&registry, update, &|u| emit_raw(&app, u))?;
     Ok(true)
 }
 
@@ -294,11 +305,11 @@ pub fn workspace_status_clear_attention(
         .lock()
         .map_err(|_| "workspace registry lock poisoned".to_string())?
         .clear_attention();
-    for update in &cleared {
-        app.emit(STATUS_EVENT, update)
-            .map_err(|e| format!("workspace-status emit failed: {e}"))?;
+    let count = cleared.len();
+    for update in cleared {
+        super::emit_settled(&registry, update, &|u| emit_raw(&app, u))?;
     }
-    Ok(cleared.len())
+    Ok(count)
 }
 
 /// M6 WP1 helper: best-effort telemetry of a registry mutation — resolves the status
@@ -320,6 +331,78 @@ fn log_registry_mutation(app: &AppHandle, op: &str, workspace_id: Option<&str>, 
 
 #[cfg(test)]
 mod tests {
+
+    /// paydown-2026-11-27 WP10: [`emit_raw`] is THE `STATUS_EVENT` emit, and every use of it sits
+    /// inside an `emit_settled(` or `apply_link_edge(` call (both settle), so no path can put a
+    /// superseded update last on the wire. A bare `app.emit(STATUS_EVENT, …)` anywhere else in the
+    /// crate's production code fails this.
+    #[test]
+    fn every_status_emit_is_settled() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = vec![root.clone()];
+        let mut emits = Vec::new();
+        while let Some(p) = files.pop() {
+            if p.is_dir() {
+                for e in std::fs::read_dir(&p).unwrap() {
+                    files.push(e.unwrap().path());
+                }
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                let src = std::fs::read_to_string(&p).unwrap();
+                let dense = crate::test_support::dense(crate::test_support::production_text(&src));
+                for form in [
+                    "emit(STATUS_EVENT,",
+                    "emit(crate::status_broadcaster::commands::STATUS_EVENT,",
+                    "emit(super::commands::STATUS_EVENT,",
+                    "emit(\"workspace-status\",",
+                ] {
+                    for _ in dense.matches(form) {
+                        emits.push(p.display().to_string());
+                    }
+                }
+            }
+        }
+        assert_eq!(
+            emits.len(),
+            1,
+            "exactly one STATUS_EVENT emit in the crate: {emits:?}"
+        );
+        assert!(
+            emits[0].ends_with("status_broadcaster/commands.rs"),
+            "{emits:?}"
+        );
+
+        let dense = crate::test_support::dense(crate::test_support::production_text(include_str!(
+            "commands.rs"
+        )));
+        let def = dense.find("fnemit_raw(").expect("emit_raw is defined here");
+        assert!(
+            dense[def..].starts_with("fnemit_raw(app:&AppHandle,update:&super::WorkspaceStatusUpdate)->Result<(),String>{app.emit(STATUS_EVENT,update)"),
+            "emit_raw holds the one emit: {}",
+            &dense[def..def + 200]
+        );
+        let uses: Vec<usize> = dense
+            .match_indices("emit_raw(")
+            .map(|(i, _)| i)
+            .filter(|&i| i != def + "fn".len())
+            .collect();
+        assert!(
+            uses.len() >= 4,
+            "the drain, the link edge, promote, clear: {uses:?}"
+        );
+        for i in uses {
+            let stmt = &dense[dense[..i].rfind(';').map_or(0, |s| s + 1)..i];
+            assert!(
+                stmt.contains("emit_settled(") || stmt.contains("apply_link_edge("),
+                "an emit_raw use outside a settle: …{stmt}"
+            );
+        }
+        // And `apply_link_edge` itself settles.
+        let edge = crate::test_support::dense_production_fn(
+            include_str!("mod.rs"),
+            "pub fn apply_link_edge(",
+        );
+        assert!(edge.contains("emit_settled(registry,u,"), "{edge}");
+    }
     use super::*;
     use std::sync::mpsc;
     use std::time::Duration;

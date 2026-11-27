@@ -154,13 +154,13 @@ pub async fn cc_spawn_remote(
                 .unwrap_or_default(),
             target.path(),
         );
-        if let Some(real) = &facts.real_alias {
-            if let Ok(mut reg) = app
-                .state::<crate::status_broadcaster::SharedRegistry>()
-                .lock()
-            {
-                reg.set_remote_realpath(&project_path, real.clone());
-            }
+        // The spawn's answer REPLACES the stored alias, `None` included: a removed symlink or a
+        // failed exec must not keep routing the old physical folder (paydown-2026-11-27 WP10).
+        if let Ok(mut reg) = app
+            .state::<crate::status_broadcaster::SharedRegistry>()
+            .lock()
+        {
+            reg.set_remote_realpath(&project_path, facts.real_alias.clone());
         }
         let has_transcript = facts.has_transcript;
         let open = if reconnect {

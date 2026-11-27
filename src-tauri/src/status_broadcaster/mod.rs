@@ -370,8 +370,72 @@ pub fn apply_link_edge(
         reg.set_link_overlay(key, link)
     };
     if let Some(u) = update {
-        emit(&u);
+        emit_settled(registry, u, &|u| {
+            emit(u);
+            Ok(())
+        })
+        .ok();
     }
+}
+
+/// How many corrective re-emits [`emit_settled`] makes before giving up (it says so on stderr).
+/// Each one needs the registry to have changed again since the last read, so a real burst ends in
+/// one or two.
+const SETTLE_CAP: usize = 8;
+
+/// Emit `first`, then make sure the LAST update on the wire for its workspace is the registry's
+/// current view (paydown-2026-11-27 WP10, `…-M17WP4-STALE-OVERLAY-EMIT-RACE`).
+///
+/// Every emit site decides under the registry lock and emits after releasing it, so two threads
+/// (the hook drain and a remote session's link edge) can deliver in the opposite order to the one
+/// they decided in. A surface would then keep showing the superseded update (a dimmed tile after
+/// `Attached`, or Unknown after a newer hook event) until the next event. So after each emit this
+/// re-reads [`WorkspaceRegistry::current_view`] and, while it differs, emits the view.
+///
+/// ⚠️ **No lock is held across `emit`.** The tray's listener runs inside it and swaps its icon on
+/// the main thread, and `workspace_status_promote` is a main-thread command that emits too: a lock
+/// held across that is the freeze in `docs/lessons/pip-nspanel-main-thread.md`. A wire sequence
+/// that consumers compare would also work, but it would touch every consumer.
+///
+/// ⚠️ A corrective emit has its turn markers CLEARED ([`WorkspaceRegistry::current_view`]), so a
+/// raw-stream consumer never sees a second turn start or end. The comparison ignores the markers
+/// for the same reason. Stops at the first failed emit and returns its error.
+pub fn emit_settled(
+    registry: &Mutex<WorkspaceRegistry>,
+    first: WorkspaceStatusUpdate,
+    emit: &dyn Fn(&WorkspaceStatusUpdate) -> Result<(), String>,
+) -> Result<(), String> {
+    let mut next = first;
+    for _ in 0..=SETTLE_CAP {
+        emit(&next)?;
+        let view = {
+            let reg = match registry.lock() {
+                Ok(r) => r,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            reg.current_view(&next.workspace_id)
+        };
+        match view {
+            Some(v) if !same_view(&v, &next) => next = v,
+            // Settled, or the workspace is gone (closed): nothing newer to show.
+            _ => return Ok(()),
+        }
+    }
+    eprintln!(
+        "[claudesk] status-broadcaster: {} did not settle after {SETTLE_CAP} re-emits",
+        next.workspace_id
+    );
+    Ok(())
+}
+
+/// `a` and `b` show the same thing on every surface: equal apart from the turn markers.
+fn same_view(a: &WorkspaceStatusUpdate, b: &WorkspaceStatusUpdate) -> bool {
+    let bare = |u: &WorkspaceStatusUpdate| WorkspaceStatusUpdate {
+        is_turn_start: None,
+        is_turn_end: None,
+        ..u.clone()
+    };
+    bare(a) == bare(b)
 }
 
 /// The status update broadcast on the `workspace-status` Tauri event — the single
@@ -653,11 +717,23 @@ impl WorkspaceRegistry {
             // A closed workspace's overlay must not outlive it (M16.5 WP4).
             self.last_emitted.remove(&entry.workspace_id);
         }
+        // Nor its alias: the next open's spawn records a fresh one (paydown-2026-11-27 WP10).
+        self.remote_realpaths.remove(&key);
     }
 
-    /// Record `real` as the physical path of the remote row keyed `key` (AC-3.3).
-    pub fn set_remote_realpath(&mut self, key: &str, real: String) {
-        self.remote_realpaths.insert(key.to_string(), real);
+    /// Record the physical path of the remote row keyed `key` (AC-3.3), as the row's latest spawn
+    /// found it. `None` (no symlink, or no usable answer) REMOVES any alias an earlier spawn
+    /// recorded, so events from a folder the row no longer reaches stop routing to it
+    /// (paydown-2026-11-27 WP10).
+    pub fn set_remote_realpath(&mut self, key: &str, real: Option<String>) {
+        match real {
+            Some(real) => {
+                self.remote_realpaths.insert(key.to_string(), real);
+            }
+            None => {
+                self.remote_realpaths.remove(key);
+            }
+        }
     }
 
     /// The workspace registered under exactly `project_path` (its key, local or remote), for
@@ -686,6 +762,16 @@ impl WorkspaceRegistry {
                 link,
             },
         );
+    }
+
+    /// What every surface should show for `workspace_id` right now: its last recorded update with
+    /// any live display and link overlay on top, turn markers CLEARED (a re-emit of it must never
+    /// read as a second turn start or end). `None` for a workspace with no record (closed, or never
+    /// observed). [`emit_settled`] compares what it emitted against this.
+    pub fn current_view(&self, workspace_id: &str) -> Option<WorkspaceStatusUpdate> {
+        self.last_emitted
+            .get(workspace_id)
+            .map(|e| overlay_update(&e.update, e.attention, e.link.clone()))
     }
 
     /// The live link overlay of `workspace_id`, if any (M17 WP4). The drain stamps it onto every
@@ -2894,7 +2980,7 @@ mod tests {
         );
         reg.set_remote_realpath(
             &crate::config_store::remote_key(HOST_A, stored),
-            real.into(),
+            Some(real.into()),
         );
         assert_eq!(
             reg.resolve(Some(&a), "/Volumes/data/proj/src"),
@@ -2921,8 +3007,63 @@ mod tests {
         let mut reg = WorkspaceRegistry::new();
         reg.register(dir.path(), "local".to_string());
         let key = canonical_key(dir.path());
-        reg.set_remote_realpath(&key, "/elsewhere".into());
+        reg.set_remote_realpath(&key, Some("/elsewhere".into()));
         assert_eq!(reg.resolve(None, "/elsewhere"), None);
+    }
+
+    /// paydown-2026-11-27 WP10: a later spawn that finds NO alias (the symlink was removed, or the
+    /// exec gave no usable answer) clears the earlier one, so the old physical folder's events stop
+    /// routing to the row. A new alias replaces the old one.
+    #[test]
+    fn a_spawn_with_no_alias_clears_the_stored_one_and_a_new_one_replaces_it() {
+        let stored = "/Users/u/proj-link";
+        let key = crate::config_store::remote_key(HOST_A, stored);
+        let a = origin_of(HOST_A);
+        let mut reg = WorkspaceRegistry::new();
+        register_remote(&mut reg, HOST_A, stored, "remote");
+        reg.set_remote_realpath(&key, Some("/Volumes/old".into()));
+        assert_eq!(
+            reg.resolve(Some(&a), "/Volumes/old/src"),
+            Some("remote".to_string()),
+            "control: the alias routes"
+        );
+        reg.set_remote_realpath(&key, Some("/Volumes/new".into()));
+        assert_eq!(reg.resolve(Some(&a), "/Volumes/old/src"), None, "replaced");
+        assert_eq!(
+            reg.resolve(Some(&a), "/Volumes/new/src"),
+            Some("remote".to_string())
+        );
+        reg.set_remote_realpath(&key, None);
+        assert_eq!(reg.resolve(Some(&a), "/Volumes/new/src"), None, "cleared");
+        assert_eq!(
+            reg.resolve(Some(&a), stored),
+            Some("remote".to_string()),
+            "the stored path still routes"
+        );
+    }
+
+    /// paydown-2026-11-27 WP10: deregister drops the row's alias with its workspace, so a reopen
+    /// that finds no alias does not inherit the old one.
+    #[test]
+    fn deregister_drops_the_rows_alias() {
+        let stored = "/Users/u/proj-link";
+        let key = crate::config_store::remote_key(HOST_A, stored);
+        let a = origin_of(HOST_A);
+        let mut reg = WorkspaceRegistry::new();
+        register_remote(&mut reg, HOST_A, stored, "remote");
+        reg.set_remote_realpath(&key, Some("/Volumes/old".into()));
+        reg.deregister(Path::new(&key));
+        register_remote(&mut reg, HOST_A, stored, "reopened");
+        assert_eq!(
+            reg.resolve(Some(&a), stored),
+            Some("reopened".to_string()),
+            "control: the reopened row routes"
+        );
+        assert_eq!(
+            reg.resolve(Some(&a), "/Volumes/old/src"),
+            None,
+            "the closed workspace's alias outlived it"
+        );
     }
 
     // ---- M17 WP4: the link overlay (AC-6) ----
@@ -3053,6 +3194,226 @@ mod tests {
             };
             assert_eq!(display_state(&u), state);
         }
+    }
+
+    // ---- paydown-2026-11-27 WP10: settle-on-emit (the stale-overlay emit race) ----
+
+    /// A recording emit for [`emit_settled`]: every emitted update, in wire order.
+    type Wire = std::cell::RefCell<Vec<WorkspaceStatusUpdate>>;
+
+    fn record(wire: &Wire) -> impl Fn(&WorkspaceStatusUpdate) -> Result<(), String> + '_ {
+        move |u| {
+            wire.borrow_mut().push(u.clone());
+            Ok(())
+        }
+    }
+
+    fn view_of(registry: &Mutex<WorkspaceRegistry>, id: &str) -> WorkspaceStatusUpdate {
+        registry.lock().unwrap().current_view(id).expect("a record")
+    }
+
+    /// The finding's case: the drain stamps the live overlay onto a hook update, then `Attached`
+    /// clears it and its Unknown reaches the wire BEFORE the drain's stamped update. Without the
+    /// settle, the dimmed stale update would be the last thing on the wire.
+    #[test]
+    fn a_drain_update_overtaken_by_attached_still_settles_on_the_registry_view() {
+        let (mut reg, key) = remote_reg();
+        reg.set_link_overlay(&key, reconnecting());
+        let (_, _, stamped) = drain_step(&mut reg, &remote_event("UserPromptSubmit"));
+        let stamped = stamped.unwrap();
+        assert_eq!(
+            stamped.link,
+            reconnecting(),
+            "control: stamped with the overlay"
+        );
+        let registry = Mutex::new(reg);
+        let wire = Wire::default();
+        let raced = std::cell::Cell::new(false);
+        let emit = |u: &WorkspaceStatusUpdate| {
+            if !raced.replace(true) {
+                // `Attached` decides and emits while the drain's emit is in flight.
+                apply_link_edge(&registry, &key, "host-a", LinkEdge::Attached, &|u| {
+                    wire.borrow_mut().push(u.clone());
+                });
+            }
+            wire.borrow_mut().push(u.clone());
+            Ok(())
+        };
+        emit_settled(&registry, stamped.clone(), &emit).unwrap();
+        let wire = wire.into_inner();
+        assert_eq!(
+            wire[0].link, None,
+            "control: Attached's Unknown landed first"
+        );
+        assert_eq!(wire[1], stamped, "control: then the drain's stale update");
+        let last = wire.last().unwrap();
+        assert_eq!(
+            last,
+            &view_of(&registry, "ws-r"),
+            "the wire ends on the registry view"
+        );
+        assert_eq!(last.link, None, "no stale dimmed tile");
+        assert_eq!(last.state, WorkspaceState::Unknown);
+    }
+
+    /// The mirror: `Attached` decides first, a hook event is drained and emitted, and THEN
+    /// `Attached`'s Unknown lands. The wire must end on the hook state, not on Unknown, and the
+    /// corrective emit must not repeat the hook event's turn start.
+    #[test]
+    fn an_attached_update_overtaken_by_a_drain_still_settles_on_the_registry_view() {
+        let (mut reg, key) = remote_reg();
+        reg.set_link_overlay(&key, reconnecting());
+        let registry = Mutex::new(reg);
+        let unknown = {
+            let mut r = registry.lock().unwrap();
+            r.set_link_overlay(&key, None)
+                .expect("Attached clears the overlay")
+        };
+        let wire = Wire::default();
+        let raced = std::cell::Cell::new(false);
+        let emit = |u: &WorkspaceStatusUpdate| {
+            if !raced.replace(true) {
+                // A hook event is drained and emitted while Attached's emit is in flight.
+                let (_, _, d) = drain_step(
+                    &mut registry.lock().unwrap(),
+                    &remote_event("UserPromptSubmit"),
+                );
+                emit_settled(&registry, d.unwrap(), &record(&wire)).unwrap();
+            }
+            wire.borrow_mut().push(u.clone());
+            Ok(())
+        };
+        emit_settled(&registry, unknown.clone(), &emit).unwrap();
+        let wire = wire.into_inner();
+        assert_eq!(
+            wire[0].state,
+            WorkspaceState::Running,
+            "control: the drain landed first"
+        );
+        assert_eq!(wire[1], unknown, "control: then Attached's stale Unknown");
+        let last = wire.last().unwrap();
+        assert_eq!(
+            last,
+            &view_of(&registry, "ws-r"),
+            "the wire ends on the registry view"
+        );
+        assert_eq!(last.state, WorkspaceState::Running);
+        assert_eq!(
+            wire.iter()
+                .filter(|u| u.is_turn_start == Some(true))
+                .count(),
+            1,
+            "only the drain's own update starts a turn: {wire:?}"
+        );
+        assert!(wire.iter().all(|u| u.is_turn_end != Some(true)));
+    }
+
+    /// With no race, every emit path puts exactly ONE update on the wire (no spurious re-emit).
+    #[test]
+    fn with_no_race_every_path_emits_exactly_once() {
+        let once = |registry: &Mutex<WorkspaceRegistry>, u: WorkspaceStatusUpdate, what: &str| {
+            let wire = Wire::default();
+            emit_settled(registry, u, &record(&wire)).unwrap();
+            assert_eq!(wire.borrow().len(), 1, "{what}: {:?}", wire.borrow());
+        };
+        // The drain, with and without a live overlay stamped on (a turn end and a turn start).
+        let (mut reg, key) = remote_reg();
+        let (_, _, stop) = drain_step(&mut reg, &remote_event("Stop"));
+        let registry = Mutex::new(reg);
+        once(&registry, stop.unwrap(), "drain Stop");
+        let on = registry
+            .lock()
+            .unwrap()
+            .set_link_overlay(&key, reconnecting());
+        once(&registry, on.unwrap(), "link Lost");
+        let (_, _, stamped) = drain_step(
+            &mut registry.lock().unwrap(),
+            &remote_event("UserPromptSubmit"),
+        );
+        once(
+            &registry,
+            stamped.unwrap(),
+            "drain with the overlay stamped",
+        );
+        let off = registry.lock().unwrap().set_link_overlay(&key, None);
+        once(&registry, off.unwrap(), "link Attached");
+        // promote + clear_attention (a local workspace whose last record is a Stop).
+        let (reg, stop) = registry_after_stop(7);
+        let registry = Mutex::new(reg);
+        let promoted =
+            registry
+                .lock()
+                .unwrap()
+                .promote(&stop.workspace_id, 7, Attention::VerifyHuman);
+        once(&registry, promoted.expect("promoted"), "promote");
+        let cleared = registry.lock().unwrap().clear_attention();
+        assert_eq!(cleared.len(), 1);
+        for u in cleared {
+            once(&registry, u, "clear_attention");
+        }
+    }
+
+    /// A closed workspace has no view: the settle emits what it was given and stops.
+    #[test]
+    fn a_settle_for_a_closed_workspace_emits_once_and_stops() {
+        let (reg, key) = remote_reg();
+        let registry = Mutex::new(reg);
+        let u = registry
+            .lock()
+            .unwrap()
+            .set_link_overlay(&key, reconnecting())
+            .unwrap();
+        registry.lock().unwrap().deregister(Path::new(&key));
+        let wire = Wire::default();
+        emit_settled(&registry, u, &record(&wire)).unwrap();
+        assert_eq!(wire.borrow().len(), 1);
+    }
+
+    /// A registry that changes after EVERY emit (a pathological burst) cannot hold the settle
+    /// forever: it stops after the cap's re-emits and returns Ok, so an emit site never hangs.
+    #[test]
+    fn a_registry_that_never_settles_stops_at_the_cap() {
+        let (reg, key) = remote_reg();
+        let registry = Mutex::new(reg);
+        let first = registry
+            .lock()
+            .unwrap()
+            .set_link_overlay(&key, reconnecting())
+            .unwrap();
+        let calls = std::cell::Cell::new(0usize);
+        let emit = |_: &WorkspaceStatusUpdate| {
+            calls.set(calls.get() + 1);
+            // Flip the overlay every time, so the view always differs from what was emitted.
+            let mut r = registry.lock().unwrap();
+            let next = if r.link_of("ws-r").is_some() {
+                None
+            } else {
+                reconnecting()
+            };
+            r.set_link_overlay(&key, next);
+            Ok(())
+        };
+        assert_eq!(emit_settled(&registry, first, &emit), Ok(()));
+        assert_eq!(
+            calls.get(),
+            SETTLE_CAP + 1,
+            "the first emit plus the cap's re-emits"
+        );
+    }
+
+    /// A failed emit stops the settle and is returned (the commands turn it into their error).
+    #[test]
+    fn a_failed_emit_stops_the_settle_and_is_returned() {
+        let (mut reg, _) = remote_reg();
+        let (_, _, stop) = drain_step(&mut reg, &remote_event("Stop"));
+        let registry = Mutex::new(reg);
+        let calls = std::cell::Cell::new(0);
+        let err = emit_settled(&registry, stop.unwrap(), &|_| {
+            calls.set(calls.get() + 1);
+            Err("boom".into())
+        });
+        assert_eq!(err, Err("boom".to_string()));
+        assert_eq!(calls.get(), 1);
     }
 
     /// The overlay's wire shape (the TS `WireLinkOverlay` mirror), and its absence otherwise.
