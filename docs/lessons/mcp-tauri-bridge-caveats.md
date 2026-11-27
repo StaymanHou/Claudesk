@@ -76,7 +76,8 @@ To trigger a real status transition you often need to inject into a workspace's 
    fiber tree from a mounted element up through `.return`, scanning each fiber's `memoizedState`
    hook chain for a state object with a `workspaces` array, and read `workspaces[i].cc_session_id`.
 2. **`cc_input` is REJECTED by `mcp__tauri__ipc_execute_command`** with
-   `"Unsupported Tauri command: cc_input"` — the bridge's IPC tool has an allowlist. Drive such
+   `"Unsupported Tauri command: cc_input"` — the bridge's IPC tool has an allowlist that holds none
+   of this app's commands (also hit with `tray_debug_state`, paydown-2026-11-27 WP7). Drive such
    commands from inside the webview via
    `__TAURI_INTERNALS__.invoke('cc_input', { sessionId, data })` in `webview_execute_js` instead
    (base64-encode `data`; end the prompt with `\r` (0x0d) not `\n` per the raw-mode CR-is-Enter

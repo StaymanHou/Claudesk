@@ -800,6 +800,10 @@ pub fn run() {
             // active-workspace quit confirm resolves "Quit Anyway" (or immediately when
             // nothing is active). Runs the shared teardown, then app.exit(0).
             quit_now,
+            // paydown-2026-11-27 WP7: the tray's alarm + per-workspace map for the MCP bridge.
+            // DEBUG BUILDS ONLY, like the bridge itself: a release build has no such command.
+            #[cfg(debug_assertions)]
+            tray::commands::tray_debug_state,
         ])
         .on_window_event(|window, event| {
             // M5 WP5 Phase 2 — auto-summon/dismiss state machine, driven by the MAIN

@@ -223,7 +223,7 @@ Subprocess / runner / announce / preflight / remote_ops. Each item comes with a 
   `E0451` compile-fail test and `arch/claude-substrate.md` R.3 (grep repo-wide first,
   `[[doc-correction-scope-list-is-a-floor]]`).
 
-## WP7: Tray debug readout  `[impact: Low–Med · effort: XS–S · risk: Low (debug-only)]` · task
+## WP7: Tray debug readout  `[impact: Low–Med · effort: XS–S · risk: Low (debug-only)]` · task ✅ SHIPPED 2026-11-27 (remote half not run; see its backlog entry)
 
 - BL `11-16-TRAY-HAS-NO-READOUT-FOR-LIVE-VERIFY`: a `#[cfg(debug_assertions)]` command returning
   `TrayState.applied` + the per-workspace map. Register it in the sync-command guard tables. Then

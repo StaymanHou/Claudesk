@@ -65,6 +65,8 @@
 - **Backlog resolved:** SURFACE-2026-11-20-QUALITY-CONSENT-REFUSAL-NAMES-AN-UNCHANGED-FOLDER — the refusal names the folder pair only when the folders differ, and says the install record changed otherwise; both wordings pinned.
 - **Backlog resolved:** SURFACE-2026-11-20-QUALITY-INSTALL-ERA-NAMES-SERVE-ALL-OPS — `RemoteUninstallTarget` renamed `ApprovedRemoteClone` in the code and `arch/claude-substrate.md`, with the `E0451` fence re-proven.
 - **Backlog resolved:** SURFACE-2026-11-27-QUALITY-WP6-ARCH-H-STILL-DESCRIBES-PRINT-HOME — `arch/remote-workspaces.md` §H now records the shared sentinel connect step, the stricter remote `$HOME` rule and the preflight's check names.
+- **Task closed:** Backlog-paydown 2026-11-27 WP7, tray debug readout: debug builds register `tray_debug_state`, which returns the alarm the menu-bar glyph shows and the per-workspace map it was folded from, so an agent can observe the tray; with it, "closing an awaiting workspace clears the alarm" was verified live.
+- **Backlog resolved:** SURFACE-2026-11-16-TRAY-HAS-NO-READOUT-FOR-LIVE-VERIFY (partly) — the readout exists and the local close-clears-the-alarm behaviour is verified live; the remote lost-session half stays open as SURFACE-2026-11-16-TRAY-REMOTE-LOST-SESSION-ALARM-NOT-VERIFIED-LIVE.
 
 ## 2026-11-20
 

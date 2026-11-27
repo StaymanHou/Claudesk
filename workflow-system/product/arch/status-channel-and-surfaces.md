@@ -121,6 +121,8 @@ A prompt typed while a turn is running fires `UserPromptSubmit` **when it is que
 
 Like the M4 filmstrip and the M5 PiP, the tray icon subscribes to the **same M3 `status_broadcaster` `workspace-status` Tauri event** — but it is **not a status surface**, it is an **alarm** (one bit: "is a project waiting on me?") + an **actuator** (right-click acts on the app). No broadcaster change.
 
+⚠️ **Debug readout (paydown-2026-11-27 WP7):** the glyph has no other agent-observable form (`screencapture` fails in agent sessions), so debug builds register `tray::commands::tray_debug_state` → `{ applied, workspaces }`: the alarm last applied to the glyph plus the per-workspace map it was folded from (the overlay-aware `display_state` values). It and its `generate_handler!` entry are both `#[cfg(debug_assertions)]`, so a release build has neither. Call it through the webview's `__TAURI_INTERNALS__.invoke` (the bridge's `ipc_execute_command` refuses app commands; `docs/lessons/mcp-tauri-bridge-caveats.md` (e).2).
+
 - **Tray icon — native, 2-state ambient alarm, template image.** `tauri::tray::TrayIconBuilder` (confirmed current at 2.11.x). The icon is a **template image** (`icon_as_template(true)`) so macOS auto-adapts it to the light/dark menu bar. It shows **one bit**:
   - **Lit (attention)** = ANY open workspace is `AwaitingInput` — "stop what you're doing, a project is blocked on you."
   - **Neutral (template/dim)** = nothing awaiting (Running and Idle both collapse to "nothing for you to do"; running-vs-idle detail lives in PiP / the window — not in the menu bar).

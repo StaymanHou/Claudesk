@@ -32,7 +32,8 @@ use crate::status_broadcaster::WorkspaceState;
 /// bit — "is any project waiting on me?" — so this enum is deliberately binary; a 3-state
 /// (green/blue/amber) running indication was CUT (running-vs-idle lives in PiP / the
 /// window). `Neutral` is the resting glyph; `Attention` is the lit glyph.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AlarmState {
     /// No open workspace is awaiting input → the neutral (resting) glyph. This is the
     /// default: zero workspaces, or every workspace Running/Idle/Unknown.

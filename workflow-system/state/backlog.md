@@ -578,16 +578,15 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** one cleanup task.
 
-## SURFACE-2026-11-16-TRAY-HAS-NO-READOUT-FOR-LIVE-VERIFY
-- **Source:** feature:verify-human (M17 WP4 P4.verify-human.4, operator decision)
-- **Target level:** feature (dev tooling)
+## SURFACE-2026-11-16-TRAY-REMOTE-LOST-SESSION-ALARM-NOT-VERIFIED-LIVE
+- **Source:** feature:verify-human (M17 WP4 P4.verify-human.4, operator decision); narrowed at paydown-2026-11-27 WP7
+- **Target level:** feature (dev tooling / verification debt)
 - **Type:** gap
-- **Summary:** The menu-bar tray's alarm state cannot be observed by the agent: it has no IPC readout, and `screencapture` fails in agent sessions ("could not create image from display"). Two WP4 tray behaviours were accepted on unit tests alone: a lost remote session that was awaiting input keeps the alarm lit, and closing an awaiting workspace clears it.
-- **Context:** Accepted twice (P2.verify-human.1, P4.verify-human.4). Any future tray work hits the same wall.
-- **Suggested action:** Add a dev-only command (e.g. `tray_debug_state`, compiled in debug builds only) returning `TrayState.applied` plus the per-workspace map, callable over the MCP bridge. Then verify both WP4 behaviours live.
+- **Summary:** One M17 WP4 tray behaviour is still accepted on unit tests alone: a REMOTE workspace that was `AwaitingInput` when its session was lost keeps the menu-bar alarm lit. (Its sibling, "closing an awaiting workspace clears the alarm", was verified live at paydown-2026-11-27 WP7, and the readout that blocked both now exists: the debug-only `tray_debug_state` command, called through the webview's `__TAURI_INTERNALS__.invoke`.)
+- **Context:** WP7 did not run it: the dev profile has no scratch remote row, and its one remote row is the operator's real repo under the admin account, which must never be used (`[[mini-remote-user-is-stayman]]`, `[[remote-verify-hygiene]]`).
+- **Suggested action:** with a temporary scratch remote row (`<user>@<mini-host>:~/claudesk-scratch-remote`, added and removed per `[[remote-verify-hygiene]]`): open it, drive it to `AwaitingInput` (the real hook script with `CLAUDESK_ORIGIN`), lose the session (end the remote tmux session or drop the link), and read `tray_debug_state` → `attention` with the workspace still `awaiting_input`. Ride along with WP9 or WP10's remote checks.
 - **Priority:** low
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-
+- **Status:** pending
 ## Code-quality findings — m17-wp4-status-over-the-link (2026-11-16)
 
 - **Pointer:** **3 MINOR** open from the review of the WP4 ship commit (`feat(m17-wp4): remote status over the link`) (the brittle pin + stale docs: docs fixed at paydown-2026-11-27 WP2, the pin already gone since M17 WP5). The MAJOR (the link-down quit freeze) was resolved 2026-11-16; WP5 resolved the overlay-key and two-spawn-execs MINORs (2026-11-17, CHANGELOG).

@@ -185,6 +185,41 @@ fn toggle_pip(app: &AppHandle) {
     }
 }
 
+/// What [`tray_debug_state`] returns: the alarm the glyph shows and the per-workspace map it was
+/// folded from (the overlay-aware `display_state` values, as the tray stores them).
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct TrayDebugState {
+    /// The alarm last APPLIED to the glyph (`TrayState::applied`), i.e. what the menu bar shows.
+    pub applied: AlarmState,
+    /// workspace_id → the state the tray folded, sorted by id.
+    pub workspaces: std::collections::BTreeMap<String, WorkspaceState>,
+}
+
+/// Read the tray's state without touching it. Pure over `&TrayState`, so a unit test drives it.
+#[cfg(debug_assertions)]
+fn debug_snapshot(state: &TrayState) -> TrayDebugState {
+    let workspaces = {
+        let states = state.states.lock().unwrap_or_else(|p| p.into_inner());
+        states.iter().map(|(id, s)| (id.clone(), *s)).collect()
+    };
+    let applied = *state.applied.lock().unwrap_or_else(|p| p.into_inner());
+    TrayDebugState {
+        applied,
+        workspaces,
+    }
+}
+
+/// DEBUG BUILDS ONLY (paydown-2026-11-27 WP7): the tray's alarm and per-workspace map, so an agent
+/// can observe the menu-bar glyph over the MCP bridge (`screencapture` fails in agent sessions, and
+/// the glyph has no other readout). `None` when the tray failed to build. Registered in
+/// `generate_handler!` under the same `#[cfg(debug_assertions)]`, so a release build has neither.
+#[cfg(debug_assertions)]
+#[tauri::command]
+pub fn tray_debug_state(app: AppHandle) -> Option<TrayDebugState> {
+    app.try_state::<TrayState>().map(|s| debug_snapshot(&s))
+}
+
 /// Record one workspace's new state and reconcile the glyph. Pulled out of the listener so
 /// the map-update + fold + swap path reads top-to-bottom. (Runtime path is AppHandle-bound;
 /// the pure fold it drives — `aggregate_alarm` — is what's unit-tested, not this wrapper.)
@@ -346,6 +381,56 @@ mod tests {
             "a mutex is acquired between cloning the icon handle and the main-thread marshal: \
              {between:?} — that re-creates the deadlock this guard exists to prevent."
         );
+    }
+
+    /// The readout reports what the fold APPLIED and the map it folded, and follows a removal
+    /// (the `forget_workspace` path) back to neutral. Driven through the real `reconcile`; with no
+    /// tray icon built it changes `applied` and skips the AppKit swap.
+    #[cfg(debug_assertions)]
+    #[test]
+    fn the_debug_readout_reports_the_applied_alarm_and_the_folded_map() {
+        use super::{debug_snapshot, reconcile, AlarmState, TrayState};
+        use crate::status_broadcaster::WorkspaceState;
+
+        let state = TrayState::default();
+        let empty = debug_snapshot(&state);
+        assert_eq!(empty.applied, AlarmState::Neutral);
+        assert!(empty.workspaces.is_empty());
+
+        {
+            let mut m = state.states.lock().unwrap();
+            m.insert("ws-b".into(), WorkspaceState::Running);
+            m.insert("ws-a".into(), WorkspaceState::AwaitingInput);
+        }
+        reconcile(&state);
+        let lit = debug_snapshot(&state);
+        assert_eq!(lit.applied, AlarmState::Attention);
+        assert_eq!(
+            lit.workspaces
+                .iter()
+                .map(|(k, v)| (k.as_str(), *v))
+                .collect::<Vec<_>>(),
+            [
+                ("ws-a", WorkspaceState::AwaitingInput),
+                ("ws-b", WorkspaceState::Running)
+            ],
+            "every workspace, sorted by id, with the state the tray folded"
+        );
+
+        state.states.lock().unwrap().remove("ws-a");
+        reconcile(&state);
+        let after = debug_snapshot(&state);
+        assert_eq!(
+            after.applied,
+            AlarmState::Neutral,
+            "closing the awaiting one clears it"
+        );
+        assert_eq!(after.workspaces.len(), 1);
+
+        // The wire shape the bridge reads.
+        let json = serde_json::to_value(&lit).unwrap();
+        assert_eq!(json["applied"], "attention");
+        assert_eq!(json["workspaces"]["ws-a"], "awaiting_input");
     }
 
     #[test]
