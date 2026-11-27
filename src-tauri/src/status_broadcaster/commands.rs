@@ -309,6 +309,7 @@ fn log_registry_mutation(app: &AppHandle, op: &str, workspace_id: Option<&str>, 
     if let Ok(dir) = app.path().app_data_dir() {
         let key = canonical_key(Path::new(raw_path));
         StatusLog::new(&dir).write_line(&crate::status_log::format_registry_line(
+            crate::status_log::now_ms(),
             op,
             workspace_id,
             raw_path,

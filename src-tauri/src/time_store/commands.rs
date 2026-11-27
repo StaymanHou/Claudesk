@@ -1715,7 +1715,7 @@ mod tests {
         let listener = bind_listener(&sock).unwrap();
         let (status_tx, status_rx) = mpsc::channel::<HookEvent>();
         let (time_tx, time_rx) = mpsc::channel::<HookEvent>();
-        let _handle = spawn_listener_fanout(listener, vec![status_tx, time_tx]);
+        let _handle = spawn_listener_fanout(listener, vec![status_tx, time_tx], None);
 
         // A UserPromptSubmit with a length field (privacy: length, not text).
         let mut client = UnixStream::connect(&sock).unwrap();
@@ -1786,7 +1786,7 @@ mod tests {
         let listener = bind_listener(&sock).unwrap();
         let (status_tx, status_rx) = mpsc::channel::<HookEvent>();
         let (time_tx, time_rx) = mpsc::channel::<HookEvent>();
-        let _handle = spawn_listener_fanout(listener, vec![status_tx, time_tx]);
+        let _handle = spawn_listener_fanout(listener, vec![status_tx, time_tx], None);
 
         let mut client = UnixStream::connect(&sock).unwrap();
         client

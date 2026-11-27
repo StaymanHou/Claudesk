@@ -18,6 +18,7 @@ use std::thread::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::{bind_listener, spawn_listener_fanout, HookEvent};
+use crate::status_log::StatusLog;
 
 /// Basename of the Claudesk-owned hook socket under the app-data dir. Module-private —
 /// the only consumer is `hook_socket_path` below (the old `hook_install` copy was retired
@@ -77,13 +78,24 @@ pub fn start_on_launch(app: &AppHandle) -> Result<HookSocketState, String> {
     // consumer owns a single-consumer Receiver (semantics unchanged from M3).
     let (status_tx, status_rx) = mpsc::channel::<HookEvent>();
     let (time_tx, time_rx) = mpsc::channel::<HookEvent>();
-    let handle = spawn_listener_fanout(listener, vec![status_tx, time_tx]);
+    let handle = spawn_listener_fanout(
+        listener,
+        vec![status_tx, time_tx],
+        listener_log(&socket_path),
+    );
     Ok(HookSocketState {
         socket_path,
         status_receiver: Mutex::new(Some(status_rx)),
         time_receiver: Mutex::new(Some(time_rx)),
         _handle: handle,
     })
+}
+
+/// The log the listener writes its `HOOKSOCK` lines to. The socket's parent dir IS the
+/// per-identity app-data dir, so they land in the same `status-channel.log` as the
+/// broadcaster's lines.
+fn listener_log(socket_path: &std::path::Path) -> Option<StatusLog> {
+    socket_path.parent().map(StatusLog::new)
 }
 
 /// Unlink the socket file on app shutdown (`WindowEvent::CloseRequested`), mirroring
@@ -106,4 +118,21 @@ pub fn cleanup_socket(socket_path: &std::path::Path) {
 pub fn emit_start_error(app: &AppHandle, err: &str) {
     eprintln!("[claudesk] hook-socket listener failed to start: {err}");
     let _ = app.emit("hook-socket-error", err);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The listener's timeout record must land beside the socket, in the SAME per-identity
+    /// `status-channel.log` the broadcaster writes (dev and prod stay separate).
+    #[test]
+    fn the_listener_logs_to_status_channel_log_beside_the_socket() {
+        let sock = std::path::Path::new("/x/com.claudesk.app.dev/hook.sock");
+        let log = listener_log(sock).expect("a socket path with a parent yields a log");
+        assert_eq!(
+            log.path(),
+            std::path::Path::new("/x/com.claudesk.app.dev/status-channel.log")
+        );
+    }
 }

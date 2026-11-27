@@ -219,20 +219,58 @@ pub fn format_event_detail(
 
 /// Format one registry-mutation telemetry line (register / deregister). Pure.
 ///
-/// Shape: `<ts:-> REGISTRY op=<register|deregister> id=<workspace_id|-> raw=<path> key=<canonical_key>`
+/// Shape: `<ts_ms> REGISTRY op=<register|deregister> id=<workspace_id|-> raw=<path> key=<canonical_key>`
 ///
 /// The `key` is the canonicalized registry key — surfacing it on the register side
 /// (and the resolve side via [`format_event_line`]'s `resolved`) makes a
 /// canonicalization divergence in the launchd environment visible: a `register` key
 /// that doesn't match a later `Stop`'s `cwd` is the cwd-match-miss smoking gun.
+///
+/// `ts_ms` is the wall-clock time of the mutation. It was `-` until 2026-11-27, which hid
+/// WHEN a deregister happened: a backlog of `STATUS` lines (stamped with the hook's SEND
+/// time) drained after a quit's deregisters read as a routing failure an hour earlier.
 pub fn format_registry_line(
+    ts_ms: i64,
     op: &str,
     workspace_id: Option<&str>,
     raw_path: &str,
     key: &str,
 ) -> String {
     let id = workspace_id.unwrap_or("-");
-    format!("- REGISTRY op={op} id={id} raw={raw_path} key={key}")
+    format!("{ts_ms} REGISTRY op={op} id={id} raw={raw_path} key={key}")
+}
+
+/// Format the line the hook listener writes when it closes a connection that went silent
+/// past its read timeout (`hook_socket::HOOK_READ_TIMEOUT`). Pure.
+///
+/// Shape: `<ts_ms> HOOKSOCK read-timeout peer_pid=<pid|?> peer=<name|?> lines=<n> idle_ms=<ms>`
+///
+/// `peer` is the client process name: `perl` for a local hook, `ssh` for a channel forwarded
+/// from a remote host. `lines` is how many lines that connection had already delivered (a
+/// forwarded hook that sent its line but never closed shows `lines=1`).
+pub fn format_hooksock_timeout_line(
+    ts_ms: i64,
+    peer_pid: Option<i32>,
+    peer_name: Option<&str>,
+    lines: u64,
+    idle_ms: u128,
+) -> String {
+    let pid = peer_pid.map_or_else(|| "?".to_string(), |p| p.to_string());
+    let name = match peer_name {
+        Some(n) if !n.is_empty() => n,
+        _ => "?",
+    };
+    format!(
+        "{ts_ms} HOOKSOCK read-timeout peer_pid={pid} peer={name} lines={lines} idle_ms={idle_ms}"
+    )
+}
+
+/// Wall-clock epoch ms for a log line's leading field. A clock before 1970 reads as 0
+/// (best-effort, like every write here).
+pub fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
 #[cfg(test)]
@@ -308,13 +346,38 @@ mod tests {
     #[test]
     fn format_registry_line_register_and_deregister() {
         assert_eq!(
-            format_registry_line("register", Some("ws-1"), "/raw/path", "/canon/path"),
-            "- REGISTRY op=register id=ws-1 raw=/raw/path key=/canon/path"
+            format_registry_line(
+                1_795_791_069_425,
+                "register",
+                Some("ws-1"),
+                "/raw/path",
+                "/canon/path"
+            ),
+            "1795791069425 REGISTRY op=register id=ws-1 raw=/raw/path key=/canon/path"
         );
         assert_eq!(
-            format_registry_line("deregister", None, "/raw/path", "/canon/path"),
-            "- REGISTRY op=deregister id=- raw=/raw/path key=/canon/path"
+            format_registry_line(7, "deregister", None, "/raw/path", "/canon/path"),
+            "7 REGISTRY op=deregister id=- raw=/raw/path key=/canon/path"
         );
+    }
+
+    #[test]
+    fn format_hooksock_timeout_line_names_the_peer_or_marks_it_unknown() {
+        assert_eq!(
+            format_hooksock_timeout_line(5, Some(4242), Some("ssh"), 1, 2001),
+            "5 HOOKSOCK read-timeout peer_pid=4242 peer=ssh lines=1 idle_ms=2001"
+        );
+        // An unreadable peer (no pid, or an empty name) is `?`, never an empty field.
+        assert_eq!(
+            format_hooksock_timeout_line(5, None, Some(""), 0, 2000),
+            "5 HOOKSOCK read-timeout peer_pid=? peer=? lines=0 idle_ms=2000"
+        );
+    }
+
+    #[test]
+    fn now_ms_is_a_current_epoch_ms() {
+        // After 2020-01-01 and not in seconds: a mutant returning 0 or seconds fails.
+        assert!(now_ms() > 1_577_836_800_000);
     }
 
     #[test]

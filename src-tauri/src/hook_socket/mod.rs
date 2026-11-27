@@ -48,13 +48,34 @@
 pub mod commands;
 
 use std::io::{BufRead, BufReader};
-use std::os::unix::net::UnixListener;
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::thread;
+use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use thiserror::Error;
+
+use crate::status_log::{format_hooksock_timeout_line, now_ms, StatusLog};
+
+/// How long an accepted connection may sit silent before the listener closes it and moves
+/// on to the next `accept()` (2026-11-27, `SURFACE-…-HOOK-LISTENER-ONE-STUCK-CONNECTION-
+/// DEAFENS-ALL`).
+///
+/// ⚠️ The loop is SERIAL on purpose, and this timeout is what makes serial safe. CC runs a
+/// hook synchronously, so one session's events reach us as ordered, non-overlapping
+/// connections, and the status machine relies on that order (a `Stop` vs. the next
+/// `UserPromptSubmit`). A thread per connection could reorder two connections accepted
+/// microseconds apart. Without a timeout, though, one client that never closes (seen
+/// live: a channel forwarded from a remote host that delivered its line and then hung)
+/// blocks the loop for every session on the machine. 128 more connections then queue in
+/// the kernel's listen backlog, and every hook after that fails to connect.
+///
+/// It is an IDLE timeout per read, not a cap on the connection: a hook writes its one line
+/// right after connecting (local hooks read their whole payload BEFORE connecting), so only
+/// a stalled client ever reaches it. A line already received is delivered before the close.
+pub const HOOK_READ_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// A single CC lifecycle event, parsed from one JSON line off the hook socket.
 ///
@@ -217,7 +238,9 @@ pub fn bind_listener(socket_path: &Path) -> Result<UnixListener, HookSocketError
 /// thread is the simplest correct owner). Each accepted connection is drained of
 /// every newline-delimited line *promptly* before looping — the never-block-CC
 /// invariant (the WP2 Perl hook's `print $sock $line` can stall if we accept but
-/// don't read; `Timeout=>1` covers connect, not write). A parse error on any line
+/// don't read; `Timeout=>1` covers connect, not write). A connection that goes silent
+/// without closing is dropped after [`HOOK_READ_TIMEOUT`], so it can hold the loop for
+/// at most that long (see the constant for why the loop stays serial). A parse error on any line
 /// is logged and skipped — the loop never panics and never breaks (a single
 /// garbage line must not deafen the channel). Each parsed [`HookEvent`] is sent on
 /// `tx`; a closed receiver (`SendError`) means the core is shutting down, so the
@@ -232,7 +255,7 @@ pub fn bind_listener(socket_path: &Path) -> Result<UnixListener, HookSocketError
 /// broadcaster end-to-end tests). Kept as a convenience so those tests read cleanly.
 #[cfg(test)]
 pub fn spawn_listener(listener: UnixListener, tx: Sender<HookEvent>) -> thread::JoinHandle<()> {
-    spawn_listener_fanout(listener, vec![tx])
+    spawn_listener_fanout(listener, vec![tx], None)
 }
 
 /// Fan-out variant (M9 WP2 Phase 3): send each parsed [`HookEvent`] to **every**
@@ -243,13 +266,17 @@ pub fn spawn_listener(listener: UnixListener, tx: Sender<HookEvent>) -> thread::
 /// only the send side multiplexes). A sender whose receiver has dropped is removed
 /// from the set; the loop exits only once **all** receivers are gone (so tearing down
 /// one consumer never deafens the other). Empty `txs` → the loop exits immediately.
+///
+/// `log` receives a `HOOKSOCK read-timeout` line whenever a connection is dropped for
+/// silence (the production caller passes the per-identity `status-channel.log`).
 pub fn spawn_listener_fanout(
     listener: UnixListener,
     txs: Vec<Sender<HookEvent>>,
+    log: Option<StatusLog>,
 ) -> thread::JoinHandle<()> {
     thread::Builder::new()
         .name("claudesk-hook-socket".into())
-        .spawn(move || accept_loop(listener, txs))
+        .spawn(move || accept_loop(listener, txs, HOOK_READ_TIMEOUT, log))
         .expect("failed to spawn hook-socket accept thread")
 }
 
@@ -257,8 +284,14 @@ pub fn spawn_listener_fanout(
 /// probe's structure: accept → `BufReader::lines()` → trim-empty-skip → parse →
 /// fan-out-send. Accept errors are logged and the loop continues (one bad accept must
 /// not kill the listener); the loop ends only when EVERY sender's receiver has dropped
-/// (all consumers gone).
-fn accept_loop(listener: UnixListener, mut txs: Vec<Sender<HookEvent>>) {
+/// (all consumers gone). `read_timeout` is injected so tests need not wait the production
+/// [`HOOK_READ_TIMEOUT`].
+fn accept_loop(
+    listener: UnixListener,
+    mut txs: Vec<Sender<HookEvent>>,
+    read_timeout: Duration,
+    log: Option<StatusLog>,
+) {
     if txs.is_empty() {
         return; // no consumers — nothing to deliver to.
     }
@@ -270,20 +303,48 @@ fn accept_loop(listener: UnixListener, mut txs: Vec<Sender<HookEvent>>) {
                 continue;
             }
         };
+        // ⚠️ Bound every read: a client that never closes must not hold the loop (see
+        // HOOK_READ_TIMEOUT). Failing to set it leaves this one connection unbounded,
+        // which is today's behaviour, so it is logged rather than fatal.
+        if let Err(e) = stream.set_read_timeout(Some(read_timeout)) {
+            if !peer_already_closed(&e) {
+                eprintln!("[claudesk] hook-socket set_read_timeout failed: {e}");
+            }
+        }
+        // Kept to name the peer if the connection times out (the reader owns the stream).
+        let peer = stream.try_clone().ok();
+        let mut delivered: u64 = 0;
+        let mut last_activity = Instant::now();
         // Drain the whole connection promptly (read every line before looping)
         // so the hook's blocking write returns immediately — never block CC.
         let reader = BufReader::new(stream);
         for line in reader.lines() {
             let raw = match line {
                 Ok(l) => l,
+                Err(e) if is_timeout(&e) => {
+                    // Silent past the timeout: name the client and move on.
+                    if let Some(log) = &log {
+                        let (pid, name) = peer.as_ref().map_or((None, None), peer_info);
+                        log.write_line(&format_hooksock_timeout_line(
+                            now_ms(),
+                            pid,
+                            name.as_deref(),
+                            delivered,
+                            last_activity.elapsed().as_millis(),
+                        ));
+                    }
+                    break;
+                }
                 Err(e) => {
                     eprintln!("[claudesk] hook-socket read error: {e}");
                     break; // connection broken — move to the next accept
                 }
             };
+            last_activity = Instant::now();
             if raw.trim().is_empty() {
                 continue;
             }
+            delivered += 1;
             match parse_line(&raw) {
                 Ok(event) => {
                     // Fan out: send a clone to each live sender; drop any whose
@@ -304,6 +365,68 @@ fn accept_loop(listener: UnixListener, mut txs: Vec<Sender<HookEvent>>) {
             }
         }
     }
+}
+
+/// `set_read_timeout` failed because the client had ALREADY CLOSED before we accepted.
+///
+/// ⚠️ This is the COMMON case, not an edge: a local hook connects, writes its line and closes
+/// within a millisecond, so by `accept()` it is usually gone, and macOS's `setsockopt` then
+/// returns `EINVAL` (found live at verify-self 2026-11-27: one stderr line per event). The
+/// buffered line still reads and EOF follows, so the connection cannot stall the loop and
+/// needs no timeout. Any other error is still reported.
+fn peer_already_closed(e: &std::io::Error) -> bool {
+    e.raw_os_error() == Some(libc::EINVAL)
+}
+
+/// A read that hit the socket's `SO_RCVTIMEO`. macOS reports it as `EAGAIN`
+/// (`WouldBlock`); `TimedOut` is accepted too so the check does not hinge on one errno.
+fn is_timeout(e: &std::io::Error) -> bool {
+    matches!(
+        e.kind(),
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+    )
+}
+
+/// The connected client's pid and process name, best-effort (`None` where unreadable).
+/// Read only when a connection times out, while the client still holds it open, so the
+/// hot path pays nothing. A local hook reads as `perl`; a channel forwarded from a remote
+/// host reads as the local `ssh` process that carries it.
+fn peer_info(stream: &UnixStream) -> (Option<i32>, Option<String>) {
+    let pid = peer_pid(stream);
+    (pid, pid.and_then(process_name))
+}
+
+/// `getsockopt(SOL_LOCAL, LOCAL_PEERPID)`: the pid of the process that connected.
+fn peer_pid(stream: &UnixStream) -> Option<i32> {
+    use std::os::fd::AsRawFd;
+    let mut pid: libc::pid_t = 0;
+    let mut len = libc::socklen_t::try_from(std::mem::size_of::<libc::pid_t>()).ok()?;
+    // SAFETY: the fd is a live AF_UNIX socket owned by `stream` for this call; `pid` and
+    // `len` are valid for writes and `len` holds `pid`'s exact size, so the kernel writes at
+    // most that many bytes into it.
+    let rc = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_LOCAL,
+            libc::LOCAL_PEERPID,
+            std::ptr::addr_of_mut!(pid).cast(),
+            &mut len,
+        )
+    };
+    (rc == 0 && pid > 0).then_some(pid)
+}
+
+/// `proc_name(pid)`: the short process name (at most 32 bytes), or `None`.
+fn process_name(pid: i32) -> Option<String> {
+    let mut buf = [0u8; 64];
+    let cap = u32::try_from(buf.len()).ok()?;
+    // SAFETY: `buf` is valid for `cap` bytes of writes, and `proc_name` writes at most
+    // `cap` bytes, returning how many it wrote (or <= 0 on failure).
+    let n = unsafe { libc::proc_name(pid, buf.as_mut_ptr().cast(), cap) };
+    let n = usize::try_from(n)
+        .ok()
+        .filter(|&n| n > 0 && n <= buf.len())?;
+    Some(String::from_utf8_lossy(&buf[..n]).into_owned())
 }
 
 #[cfg(test)]
@@ -626,7 +749,8 @@ mod tests {
         let (tx, rx) = mpsc::channel::<HookEvent>();
         drop(rx); // receiver gone before any event arrives
 
-        let handle = thread::spawn(move || accept_loop(listener, vec![tx]));
+        let handle =
+            thread::spawn(move || accept_loop(listener, vec![tx], HOOK_READ_TIMEOUT, None));
 
         let mut client = UnixStream::connect(&path).unwrap();
         client
@@ -654,7 +778,7 @@ mod tests {
         let listener = bind_listener(&path).unwrap();
         let (status_tx, status_rx) = mpsc::channel::<HookEvent>();
         let (time_tx, time_rx) = mpsc::channel::<HookEvent>();
-        let handle = spawn_listener_fanout(listener, vec![status_tx, time_tx]);
+        let handle = spawn_listener_fanout(listener, vec![status_tx, time_tx], None);
 
         let mut client = UnixStream::connect(&path).unwrap();
         client
@@ -686,7 +810,7 @@ mod tests {
         let listener = bind_listener(&path).unwrap();
         let (status_tx, status_rx) = mpsc::channel::<HookEvent>();
         let (time_tx, time_rx) = mpsc::channel::<HookEvent>();
-        let handle = spawn_listener_fanout(listener, vec![status_tx, time_tx]);
+        let handle = spawn_listener_fanout(listener, vec![status_tx, time_tx], None);
 
         // Drop the time consumer up front — the status consumer must still work.
         drop(time_rx);
@@ -710,5 +834,171 @@ mod tests {
 
         drop(status_rx);
         drop(handle);
+    }
+
+    // ---- 2026-11-27: one stuck connection must not deafen every session ----
+
+    /// Short stand-in for [`HOOK_READ_TIMEOUT`] so the tests stay fast.
+    const TEST_READ_TIMEOUT: Duration = Duration::from_millis(200);
+
+    /// Write one event line for session `sid` on `client`.
+    fn send_event(client: &mut UnixStream, event: &str, sid: &str) {
+        let line = format!(
+            "{{\"hook_event_name\":\"{event}\",\"session_id\":\"{sid}\",\"cwd\":\"/p\"}}\n"
+        );
+        client.write_all(line.as_bytes()).unwrap();
+    }
+
+    /// The live failure (prod, 2026-11-27): a forwarded channel delivered its line and never
+    /// closed, and the serial loop waited on it for 39 minutes while every other session's
+    /// events queued and then failed to connect. With the read timeout, a second client's
+    /// event arrives while the first connection is STILL open. Without it, the
+    /// `recv_timeout` below expires (bounded, so a regression fails instead of hanging).
+    #[test]
+    fn a_connection_that_never_closes_does_not_deafen_the_next_client() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("hook.sock");
+        let listener = bind_listener(&path).unwrap();
+        let (tx, rx) = mpsc::channel::<HookEvent>();
+        thread::spawn(move || accept_loop(listener, vec![tx], TEST_READ_TIMEOUT, None));
+
+        // Client A sends one line and then holds the connection open.
+        let mut held = UnixStream::connect(&path).unwrap();
+        send_event(&mut held, "PreToolUse", "held");
+        let first = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(
+            first.session_id, "held",
+            "the held client's line is delivered"
+        );
+
+        // Client B connects and writes while A is still open.
+        let mut next = UnixStream::connect(&path).unwrap();
+        send_event(&mut next, "Stop", "next");
+        let _ = next.shutdown(std::net::Shutdown::Both);
+        let second = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("a held-open connection deafened the listener to the next client");
+        assert_eq!(second.session_id, "next");
+        assert_eq!(second.hook_event_name, "Stop");
+
+        drop(held); // only now does client A close
+    }
+
+    /// The PRODUCTION entry point wires the real timeout and the log: `spawn_listener_fanout`
+    /// (what `start_on_launch` calls) must drop a silent connection after
+    /// [`HOOK_READ_TIMEOUT`] (2 s, operator-confirmed 2026-11-27) and record it. The other
+    /// tests inject a short timeout into `accept_loop`, so they cannot see this wiring.
+    #[test]
+    fn the_production_listener_times_out_a_silent_client_at_two_seconds_and_logs_it() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("hook.sock");
+        let listener = bind_listener(&path).unwrap();
+        let log = StatusLog::new(dir.path());
+        let log_path = log.path().to_path_buf();
+        let (tx, rx) = mpsc::channel::<HookEvent>();
+        let _handle = spawn_listener_fanout(listener, vec![tx], Some(log));
+
+        let held = UnixStream::connect(&path).unwrap(); // connects, never writes
+        let mut next = UnixStream::connect(&path).unwrap();
+        send_event(&mut next, "Stop", "after-the-stall");
+        let _ = next.shutdown(std::net::Shutdown::Both);
+        let ev = rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the production listener stayed deaf behind a silent client");
+        assert_eq!(ev.session_id, "after-the-stall");
+
+        let text = std::fs::read_to_string(&log_path).unwrap_or_default();
+        let line = text
+            .lines()
+            .find(|l| l.contains("HOOKSOCK read-timeout"))
+            .unwrap_or_else(|| panic!("no timeout line logged; log was: {text:?}"));
+        let idle: u128 = line
+            .split(" idle_ms=")
+            .nth(1)
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or_else(|| panic!("no idle_ms in {line}"));
+        assert!(
+            (2000..3000).contains(&idle),
+            "the production timeout is 2 s; idle_ms={idle} in {line}"
+        );
+        drop(held);
+    }
+
+    /// The common local-hook shape: the client is gone before `accept()`. macOS then refuses
+    /// the timeout with `EINVAL`, which must classify as benign (no stderr line per event),
+    /// and the line it sent must still read normally.
+    #[test]
+    fn a_client_closed_before_accept_refuses_the_timeout_benignly_and_still_delivers() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("hook.sock");
+        let listener = bind_listener(&path).unwrap();
+        let mut client = UnixStream::connect(&path).unwrap();
+        send_event(&mut client, "Stop", "gone");
+        drop(client); // closed before the server accepts
+
+        let (stream, _) = listener.accept().unwrap();
+        let err = stream
+            .set_read_timeout(Some(TEST_READ_TIMEOUT))
+            .expect_err("macOS refuses SO_RCVTIMEO on a socket whose peer already closed");
+        assert!(
+            peer_already_closed(&err),
+            "must classify as benign: {err:?}"
+        );
+        assert!(!peer_already_closed(&std::io::Error::from_raw_os_error(
+            libc::EBADF
+        )));
+
+        let mut line = String::new();
+        BufReader::new(stream).read_line(&mut line).unwrap();
+        assert!(
+            line.contains("\"session_id\":\"gone\""),
+            "line still delivered: {line}"
+        );
+    }
+
+    /// The timeout leaves a record naming the client, so the next stall is explainable from
+    /// the log alone. The test process IS the peer, so `peer_pid` must be our own pid, and
+    /// the name must resolve (`peer=?` means the lookup failed).
+    #[test]
+    fn a_timed_out_connection_is_logged_with_its_peer() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("hook.sock");
+        let listener = bind_listener(&path).unwrap();
+        let log = StatusLog::new(dir.path());
+        let log_path = log.path().to_path_buf();
+        let (tx, rx) = mpsc::channel::<HookEvent>();
+        thread::spawn(move || accept_loop(listener, vec![tx], TEST_READ_TIMEOUT, Some(log)));
+
+        let mut held = UnixStream::connect(&path).unwrap();
+        send_event(&mut held, "PreToolUse", "held");
+        rx.recv_timeout(Duration::from_secs(5)).unwrap();
+
+        // Poll (bounded) for the timeout line; the connection stays open throughout.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let line = loop {
+            let text = std::fs::read_to_string(&log_path).unwrap_or_default();
+            if let Some(l) = text.lines().find(|l| l.contains("HOOKSOCK read-timeout")) {
+                break l.to_string();
+            }
+            assert!(
+                Instant::now() < deadline,
+                "no HOOKSOCK read-timeout line was logged"
+            );
+            thread::sleep(Duration::from_millis(20));
+        };
+        assert!(
+            line.contains(&format!(" peer_pid={} ", std::process::id())),
+            "peer_pid must be the connecting process: {line}"
+        );
+        assert!(!line.contains(" peer=? "), "peer name must resolve: {line}");
+        assert!(
+            line.contains(" lines=1 "),
+            "one line was delivered first: {line}"
+        );
+        assert!(
+            line.split(' ').next().unwrap().parse::<i64>().unwrap() > 0,
+            "the line leads with a wall-clock ms stamp: {line}"
+        );
+        drop(held);
     }
 }
