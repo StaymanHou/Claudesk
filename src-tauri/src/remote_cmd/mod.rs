@@ -446,8 +446,8 @@ pub struct SpawnFacts {
     /// The remote holds a transcript to `--continue`. No answer is `false`: a fresh session is the
     /// safe side, since a wrong `--continue` kills the pane.
     pub has_transcript: bool,
-    /// The live session's stored mode (see [`OpenFacts::mode`]); `None` when not read or unknown.
-    pub mode: Option<Option<String>>,
+    /// The live session's stored mode (see [`OpenFacts::mode`]); `Unknown` when not read.
+    pub mode: SessionMode,
 }
 
 /// [`spawn_facts_command`]'s answer for a row stored as `stored`. Every fact degrades on its own
@@ -456,7 +456,7 @@ pub fn parse_spawn_facts(out: &str, stored: &str) -> SpawnFacts {
     let mut facts = SpawnFacts {
         real_alias: None,
         has_transcript: false,
-        mode: None,
+        mode: SessionMode::Unknown,
     };
     for line in out.lines() {
         let Some(rest) = line.trim_end_matches('\r').strip_prefix(SPAWN_SENTINEL) else {
@@ -476,14 +476,37 @@ pub fn parse_spawn_facts(out: &str, stored: &str) -> SpawnFacts {
 /// Prefix of every line the open check prints, so rc-file noise before it is ignored.
 pub const OPEN_SENTINEL: &str = "CLAUDESK-OPEN:";
 
-/// Whether `v` is one of the drive modes a session can be spawned under: exactly the wire strings
-/// [`crate::config_store::DriveMode`] deserializes, so there is no second copy of the closed set
-/// to drift. A stored [`MODE_OPTION`] outside it reads as unknown, never as a mode.
-fn is_drive_mode(v: &str) -> bool {
-    serde_json::from_value::<crate::config_store::DriveMode>(serde_json::Value::String(
-        v.to_string(),
-    ))
-    .is_ok()
+/// The drive mode `v` names, when it is one a session can be spawned under: exactly the wire
+/// strings [`crate::config_store::DriveMode`] deserializes, so there is no second copy of the
+/// closed set to drift. A stored [`MODE_OPTION`] outside it reads as unknown, never as a mode.
+fn drive_mode_of(v: &str) -> Option<crate::config_store::DriveMode> {
+    serde_json::from_value(serde_json::Value::String(v.to_string())).ok()
+}
+
+/// What a live remote session's stored [`MODE_OPTION`] says about the drive mode it was SPAWNED
+/// under (M17 WP5, A9). Three answers, each its own variant (paydown-2026-11-27 WP9: they were the
+/// positions of an `Option<Option<String>>`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SessionMode {
+    /// No answer: not read, not live, or the option is unset (a session started before WP5
+    /// stored it) or holds something that is not a mode.
+    #[default]
+    Unknown,
+    /// Spawned with no drive mode ([`NO_MODE`]).
+    NoMode,
+    /// Spawned under this mode.
+    Mode(crate::config_store::DriveMode),
+}
+
+impl SessionMode {
+    /// The mode the session runs under, when that is known to be one: `NoMode` and `Unknown` are
+    /// both none (an unknown session never received the row's stored mode either).
+    pub fn mode(self) -> Option<crate::config_store::DriveMode> {
+        match self {
+            Self::Mode(m) => Some(m),
+            Self::NoMode | Self::Unknown => None,
+        }
+    }
 }
 
 /// M17 WP5 — the open check's ONE exec (AC-3.1): does the folder exist, is the workspace's tmux
@@ -820,9 +843,8 @@ pub struct OpenFacts {
     pub folder: bool,
     /// The workspace's tmux session is live.
     pub live: bool,
-    /// The live session's spawn mode: `Some(Some(m))` a mode, `Some(None)` spawned with none,
-    /// `None` unknown (not live, or a session started before WP5 stored it).
-    pub mode: Option<Option<String>>,
+    /// The live session's spawn mode. Always [`SessionMode::Unknown`] when not live.
+    pub mode: SessionMode,
     /// The project folder's PHYSICAL path on the remote (`cd -P && pwd -P`), when it resolves.
     pub real: Option<String>,
     /// The remote `workflow-system/state/.session.md` exists. `false` when not checked (gate off).
@@ -842,7 +864,7 @@ pub struct OpenFacts {
 pub fn parse_open_facts(out: &str) -> Option<OpenFacts> {
     let mut folder = None;
     let mut live = None;
-    let mut mode = None;
+    let mut mode = SessionMode::Unknown;
     let mut real = None;
     let mut session_md = false;
     let mut trusted_keys = Vec::new();
@@ -873,7 +895,7 @@ pub fn parse_open_facts(out: &str) -> Option<OpenFacts> {
     Some(OpenFacts {
         folder: folder?,
         live,
-        mode: if live { mode } else { None },
+        mode: if live { mode } else { SessionMode::Unknown },
         real,
         session_md,
         trusted_keys,
@@ -929,13 +951,11 @@ fn is_sha(v: &str) -> bool {
 
 /// A stored [`MODE_OPTION`] value: one of the four → that mode; [`NO_MODE`] → none; anything else
 /// (empty = unset, or not a mode) → unknown.
-fn parse_mode_value(v: &str) -> Option<Option<String>> {
+fn parse_mode_value(v: &str) -> SessionMode {
     if v == NO_MODE {
-        Some(None)
-    } else if is_drive_mode(v) {
-        Some(Some(v.to_string()))
+        SessionMode::NoMode
     } else {
-        None
+        drive_mode_of(v).map_or(SessionMode::Unknown, SessionMode::Mode)
     }
 }
 
@@ -1719,19 +1739,26 @@ pub(crate) mod tests {
         let key = |f: Option<OpenFacts>| f.map(|f| (f.folder, f.live, f.mode));
         assert_eq!(
             key(check(here, true, Some("autopilot"))),
-            Some((true, true, Some(Some("autopilot".into()))))
+            Some((
+                true,
+                true,
+                SessionMode::Mode(crate::config_store::DriveMode::Autopilot)
+            ))
         );
         assert_eq!(
             key(check(here, true, Some(NO_MODE))),
-            Some((true, true, Some(None)))
+            Some((true, true, SessionMode::NoMode))
         );
         // An unset option (a session started before WP5) or a value outside the four: unknown.
-        assert_eq!(check(here, true, None).unwrap().mode, None);
-        assert_eq!(check(here, true, Some("$(evil)")).unwrap().mode, None);
+        assert_eq!(check(here, true, None).unwrap().mode, SessionMode::Unknown);
+        assert_eq!(
+            check(here, true, Some("$(evil)")).unwrap().mode,
+            SessionMode::Unknown
+        );
         // Not live: no mode, whatever tmux would say.
         assert_eq!(
             key(check(here, false, Some("fsd"))),
-            Some((true, false, None))
+            Some((true, false, SessionMode::Unknown))
         );
         assert!(!check("/nonexistent/x", false, None).unwrap().folder);
     }
@@ -2088,7 +2115,7 @@ pub(crate) mod tests {
             Some(OpenFacts {
                 folder: false,
                 live: false,
-                mode: None,
+                mode: SessionMode::Unknown,
                 real: None,
                 session_md: false,
                 trusted_keys: vec![],
@@ -2118,13 +2145,17 @@ pub(crate) mod tests {
         };
         assert_eq!(
             mode(true, Some("orchestrated")),
-            Some(Some("orchestrated".into()))
+            SessionMode::Mode(crate::config_store::DriveMode::Orchestrated)
         );
-        assert_eq!(mode(true, Some(NO_MODE)), Some(None));
-        assert_eq!(mode(true, None), None, "unset: unknown");
-        assert_eq!(mode(true, Some("$(evil)")), None, "not a mode: unknown");
+        assert_eq!(mode(true, Some(NO_MODE)), SessionMode::NoMode);
+        assert_eq!(mode(true, None), SessionMode::Unknown, "unset: unknown");
+        assert_eq!(
+            mode(true, Some("$(evil)")),
+            SessionMode::Unknown,
+            "not a mode: unknown"
+        );
         // A start does not read it (its line is absent), whatever tmux holds.
-        assert_eq!(mode(false, Some("orchestrated")), None);
+        assert_eq!(mode(false, Some("orchestrated")), SessionMode::Unknown);
         assert!(!spawn_facts_command("s", "cd-1", here, false).contains("show-options"));
     }
 
@@ -2141,16 +2172,16 @@ pub(crate) mod tests {
         ] {
             let wire = serde_json::to_value(m).unwrap();
             let wire = wire.as_str().unwrap();
-            assert_eq!(
-                parse_mode_value(wire),
-                Some(Some(wire.to_string())),
-                "{wire}"
-            );
+            assert_eq!(parse_mode_value(wire), SessionMode::Mode(m), "{wire}");
         }
         for not_a_mode in ["step-by-step", "full-autopilot", "Autopilot", ""] {
-            assert_eq!(parse_mode_value(not_a_mode), None, "{not_a_mode:?}");
+            assert_eq!(
+                parse_mode_value(not_a_mode),
+                SessionMode::Unknown,
+                "{not_a_mode:?}"
+            );
         }
-        assert_eq!(parse_mode_value(NO_MODE), Some(None));
+        assert_eq!(parse_mode_value(NO_MODE), SessionMode::NoMode);
     }
 
     /// M17 WP5: the attach checks for the session FIRST and exits [`EXIT_NO_SESSION`] when it is
@@ -2426,7 +2457,7 @@ exit 1
         let none = SpawnFacts {
             real_alias: None,
             has_transcript: false,
-            mode: None,
+            mode: SessionMode::Unknown,
         };
         assert_eq!(parse_spawn_facts("", "/a"), none, "a failed exec");
         assert_eq!(

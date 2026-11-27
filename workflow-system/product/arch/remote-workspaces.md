@@ -94,6 +94,11 @@ workspace.
 
 - **`SpawnTarget::{Local { cwd }, Remote { target }}`.** `build_cc_argv` is unchanged and becomes the
   **inner** argv.
+  - **As built (paydown-2026-11-27 WP9):** `SessionRegistry::spawn` builds ONE `cc_argv` and dispatches
+    on the target itself: `Local` → `PtyCcSession::spawn`, `Remote` → `RemoteCcSession::spawn_cc`. A remote
+    open is one value, `RemoteOpen::{Start, Attach(SessionMode)}`, where `remote_cmd::SessionMode::{Unknown,
+    NoMode, Mode(DriveMode)}` is the live session's stored spawn mode. A registered session's host is
+    `RemoteExit::host`, stored once.
   - **Local** behaves exactly as today. The existing env-composition tests pin that it stays byte-identical.
   - **Remote** spawns `/usr/bin/ssh -S <ctl> -tt <host> -- <remote command>`, with a local cwd of
     `$HOME`. The remote command is (schematic; WP1 probed **each element** on the mini: the token in

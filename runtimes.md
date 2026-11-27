@@ -31,7 +31,8 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 80s (2026-11-27, paydown-2026-11-27 WP8 Phase 2 verify-auto, EXIT=0)
+- **Last:** 66s (2026-11-27, paydown-2026-11-27 WP9 Phase 1 verify-auto, EXIT=0)
+- **Prior:** 80s (2026-11-27, paydown-2026-11-27 WP8 Phase 2 verify-auto, EXIT=0)
 - **Prior:** 69s (2026-11-27, paydown-2026-11-27 WP8 Phase 1 verify-codify (full), EXIT=0)
 - **Prior:** 73s (2026-11-27, paydown-2026-11-27 WP8 Phase 1 verify-auto, EXIT=0)
 - **Prior:** 72s (2026-11-27, paydown-2026-11-27 WP7 task-verify, EXIT=0)

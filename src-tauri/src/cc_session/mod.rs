@@ -27,7 +27,9 @@ pub mod commands;
 mod remote;
 
 use remote::{on_inner_exit, RemoteShared};
-pub use remote::{remote_cap_refusal, short_host, RemoteCcSession, RemoteExit, RemoteSpawn};
+pub use remote::{
+    remote_cap_refusal, short_host, RemoteCcSession, RemoteExit, RemoteOpen, RemoteSpawn,
+};
 
 use std::collections::HashMap;
 use std::io::Write;
@@ -959,53 +961,70 @@ fn borrow_env(env: &[(String, String)]) -> Vec<(&str, &str)> {
     env.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect()
 }
 
-/// M17 WP5 (A9) — the drive mode a session RUNS under, for `cc_drive_mode`'s readout. A start runs
-/// under the mode its env carries (`resolved`). A reconnect (`attached` is `Some`) runs under the
-/// live session's own spawn mode, read over the link: a known mode is that mode, "spawned with
-/// none" or an UNKNOWN mode (a pre-WP5 session) is none, never the row's stored mode, which the
-/// session never received.
+/// M17 WP5 (A9) — the drive mode a session RUNS under, for `cc_drive_mode`'s readout. A local
+/// spawn or a remote start (`open` is `None` or [`RemoteOpen::Start`]) runs under the mode its env
+/// carries (`resolved`). An attach runs under the live session's own spawn mode, read over the
+/// link: a known mode is that mode, "spawned with none" or an UNKNOWN mode (a pre-WP5 session) is
+/// none, never the row's stored mode, which the session never received.
 fn running_drive_mode(
-    attached: Option<&Option<Option<String>>>,
+    open: Option<RemoteOpen>,
     resolved: Option<crate::config_store::DriveMode>,
 ) -> Option<crate::config_store::DriveMode> {
-    match attached {
-        Some(running) => running
-            .clone()
-            .flatten()
-            .and_then(|m| serde_json::from_value(serde_json::Value::String(m)).ok()),
-        None => resolved,
+    match open {
+        Some(RemoteOpen::Attach(running)) => running.mode(),
+        Some(RemoteOpen::Start) | None => resolved,
     }
+}
+
+/// A drive mode's wire string (`"fsd"`), through the enum's own serde vocabulary, so there is no
+/// second copy of the set. `None` only if it did not serialize, which a fieldless enum cannot do.
+fn drive_mode_wire(m: crate::config_store::DriveMode) -> Option<String> {
+    serde_json::to_value(m)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
 }
 
 /// M17 WP5 (AC-1.2) — after a spawn, write the remote session's LOCAL record: `running`, so a
 /// Claudesk crash (which runs no code) leaves it, like the unclean flag. Nothing for a failed spawn
-/// (no session exists) or a local one. The mode recorded is the one the session runs under: a
-/// start's inner-command mode (`spawn_mode`), or for a reconnect (`attached_mode` is `Some`) the
-/// live session's own, where an unknown one keeps what was recorded. Returns whether it wrote.
+/// (no session exists) or a local one (`open` is `None`). The mode recorded is the one the session
+/// runs under: a start's inner-command mode (the `CLAUDESK_DRIVE_MODE` its env `cc_env` carries),
+/// or for an attach the live session's own, where an unknown one keeps what was recorded. Returns
+/// whether it wrote.
+///
+/// Takes the whole composed env, not the mode picked out of it, so the lookup is inside the
+/// function a test drives (paydown-2026-11-27 WP9: picking it out at the call site left the
+/// B6 mutant, a `None` there, killable only by an exact-text guard).
 fn record_remote_spawn(
     data_dir: Option<&Path>,
     project_path: &str,
     spawn_ok: bool,
-    remote: bool,
-    attached_mode: Option<&Option<Option<String>>>,
-    spawn_mode: Option<&str>,
+    open: Option<RemoteOpen>,
+    cc_env: &[(String, String)],
 ) -> bool {
-    let Some(dir) = data_dir.filter(|_| spawn_ok && remote) else {
+    use crate::remote_cmd::SessionMode;
+    let (Some(dir), Some(open)) = (data_dir.filter(|_| spawn_ok), open) else {
         return false;
     };
-    let written = match attached_mode {
-        // A reconnect whose session's mode is known (`Some(None)`: spawned with none).
-        Some(Some(known)) => {
-            crate::remote_record::record_running(dir, project_path, known.as_deref())
+    let spawn_mode = cc_env
+        .iter()
+        .find(|(k, _)| k == DRIVE_MODE_ENV)
+        .map(|(_, v)| v.as_str());
+    let written = match open {
+        // An attach whose session's mode is known.
+        RemoteOpen::Attach(SessionMode::Mode(m)) => {
+            crate::remote_record::record_running(dir, project_path, drive_mode_wire(m).as_deref())
         }
-        // A reconnect whose mode is unknown (a pre-WP5 session): keep what was recorded.
-        Some(None) => crate::remote_record::record_state(
+        RemoteOpen::Attach(SessionMode::NoMode) => {
+            crate::remote_record::record_running(dir, project_path, None)
+        }
+        // An attach whose mode is unknown (a pre-WP5 session): keep what was recorded.
+        RemoteOpen::Attach(SessionMode::Unknown) => crate::remote_record::record_state(
             dir,
             project_path,
             crate::remote_record::SessionRecordState::Running,
         ),
         // A start: the mode its inner command carries.
-        None => crate::remote_record::record_running(dir, project_path, spawn_mode),
+        RemoteOpen::Start => crate::remote_record::record_running(dir, project_path, spawn_mode),
     };
     if !written {
         eprintln!("[claudesk] remote record: could not record {project_path} as running");
@@ -1182,7 +1201,9 @@ pub struct PtyCcSession {
 }
 
 /// M17 WP3 — WHERE a CC session runs (arch §C: the seam is `SessionRegistry::spawn`'s target,
-/// below `CcSession`; `PtyCcSession` owns everything a remote terminal needs).
+/// below `CcSession`; `PtyCcSession` owns everything a remote terminal needs). The dispatch on it
+/// is in `SessionRegistry::spawn` itself: `Local` → [`PtyCcSession::spawn`], `Remote` →
+/// [`RemoteCcSession::spawn_cc`], both given the same `build_cc_argv` output.
 pub enum SpawnTarget {
     /// A local PTY running `claude` in the project folder. Unchanged from before M17.
     Local,
@@ -1297,84 +1318,44 @@ impl PtyCcSession {
         }
     }
 
-    /// Spawn `claude` under the given permission `mode` with `cwd = project_path`,
-    /// optionally overriding the model (`model = None` inherits CC's own default).
+    /// Spawn CC LOCALLY: `cc_argv` (built by [`build_cc_argv`] in `SessionRegistry::spawn`,
+    /// which maps the permission mode to `--permission-mode`, an override to `--model` and the
+    /// resume arm) with `cwd = project_path`, through the generic [`Self::spawn_argv`] core.
+    /// A remote session never comes here: `SessionRegistry::spawn` dispatches on
+    /// [`SpawnTarget`] and sends it to [`RemoteCcSession::spawn_cc`] (paydown-2026-11-27 WP9:
+    /// the dispatch used to live inside this constructor).
     ///
-    /// Builds CC's argv via [`build_cc_argv`] (mapping the mode to `--permission-mode`
-    /// and an override to `--model`) plus the explicit color-TTY env, then delegates to
-    /// the generic [`Self::spawn_argv`] core. The `TERM`/`COLORTERM` overrides are
-    /// required because WP2 ran under a terminal that exported `TERM`, but a Tauri app
-    /// has none, so CC would not detect a color TTY without this
-    /// (`wp2-cc-pty-probe.md:67,176`).
+    /// The `TERM`/`COLORTERM` overrides in `env` are required because WP2 ran under a terminal
+    /// that exported `TERM`, but a Tauri app has none, so CC would not detect a color TTY
+    /// without them (`wp2-cc-pty-probe.md:67,176`).
     /// `env` (M12 WP4b) is the **already-composed** CC environment — build it with
     /// [`cc_spawn_env`], which decides whether `CLAUDESK_DRIVE_MODE` is present.
     ///
     /// ⚠️ **Takes the composed env rather than `(drive_mode, gate_enabled)` deliberately.**
-    /// Passing the two ingredients pushed this signature to 8 parameters (clippy
-    /// `too_many_arguments`), and the lint was pointing at something real: two parameters that
-    /// are one concept give a caller a way to supply the mode and forget the gate. With the
-    /// composition done by one function, "gate off ⇒ no var" cannot be re-decided here — and
+    /// Two parameters that are one concept give a caller a way to supply the mode and forget
+    /// the gate. With the composition done by one function, "gate off ⇒ no var" cannot be
+    /// re-decided here — and
     /// [`tests::the_cc_spawn_wires_the_gate_through_the_fail_closed_resolver`] guards that this
     /// receives `cc_spawn_env`'s output rather than the shell-shared [`color_tty_env`] array.
-    // M17 WP3 added `target`; the arguments are the spawn's inputs, not a hidden struct.
-    #[allow(clippy::too_many_arguments)]
     fn spawn(
         app: AppHandle,
         id: String,
         project_path: &str,
-        mode: Option<CcPermissionMode>,
-        model: Option<&str>,
-        resume: ResumeArm,
+        cc_argv: &[String],
         env: &[(String, String)],
-        target: SpawnTarget,
-    ) -> Result<Box<dyn CcSession>, CcError> {
-        let remote = match target {
-            SpawnTarget::Local => {
-                return Self::spawn_argv(
-                    app,
-                    id,
-                    &build_cc_argv(mode, model, resume),
-                    project_path,
-                    &borrow_env(env),
-                    "/exit",
-                    // F-b A.8 — a CC spawn never INHERITS a config dir or a drive mode. See
-                    // `CC_SPAWN_ENV_REMOVE`. Removal runs before `env` is applied, so Claudesk's
-                    // own values (a profile's dir, the gated drive mode) win.
-                    CC_SPAWN_ENV_REMOVE,
-                )
-                .map(|s| Box::new(s) as Box<dyn CcSession>);
-            }
-            SpawnTarget::Remote(r) => *r,
-        };
-        // M17 WP3 — the remote arm. The same argv and the same resolved env, but the PTY runs
-        // `ssh -tt` and the drive mode travels in the REMOTE command line (an arbitrary env var
-        // does not cross ssh; arch §C). It is removed from the local ssh's env.
-        let drive_mode = env
-            .iter()
-            .find(|(k, _)| k == DRIVE_MODE_ENV)
-            .map(|(_, v)| v.as_str());
-        // M17 WP5: a reconnect on open ATTACHES (`tmux attach`, never a start); every other
-        // remote spawn STARTS, refusing a session that is already live (`EXIT_SESSION_EXISTS`).
-        let argv = remote::session_argv(
-            remote.attach,
-            &remote.link.control_path,
-            remote.target.host(),
-            &remote.link.home,
-            remote.links.identifier(),
-            &remote.session,
-            remote.target.path(),
-            drive_mode,
-            &build_cc_argv(mode, model, resume),
-        );
-        let local_env: Vec<(String, String)> = env
-            .iter()
-            .filter(|(k, _)| k != DRIVE_MODE_ENV)
-            .cloned()
-            .collect();
-        // Phase 5 — the terminal is wrapped so a dropped link REATTACHES under the same session
-        // id instead of ending the workspace (`RemoteCcSession`).
-        RemoteCcSession::spawn(app, id, &argv, remote, local_env)
-            .map(|s| Box::new(s) as Box<dyn CcSession>)
+    ) -> Result<Self, CcError> {
+        Self::spawn_argv(
+            app,
+            id,
+            cc_argv,
+            project_path,
+            &borrow_env(env),
+            "/exit",
+            // F-b A.8 — a CC spawn never INHERITS a config dir or a drive mode. See
+            // `CC_SPAWN_ENV_REMOVE`. Removal runs before `env` is applied, so Claudesk's own
+            // values (a profile's dir, the gated drive mode) win.
+            CC_SPAWN_ENV_REMOVE,
+        )
     }
 
     /// Spawn the WP9 second-terminal panel's interactive login shell with
@@ -1634,9 +1615,8 @@ struct RegisteredSession {
     /// frontend reads it back (`cc_session_profile`) because a respawn re-reads `projects.json`,
     /// so the row's value at open is not the truth for the running process.
     profile: Option<String>,
-    /// M17 WP3 — the host a REMOTE session runs on (`None` locally), for the per-host cap.
-    remote_host: Option<String>,
-    /// M17 WP3 — what `cc_inject` needs to prepare a REMOTE pane (`None` locally).
+    /// M17 WP3 — a REMOTE session's handle (`None` locally): what `cc_inject` needs to prepare
+    /// its pane, and its host, for the per-host cap ([`RemoteExit::host`]).
     remote: Option<RemoteExit>,
 }
 
@@ -1702,7 +1682,6 @@ impl SessionRegistry {
                 permission: SpawnPermission::NoStart,
                 drive_mode: None,
                 profile: None,
-                remote_host: None,
                 remote: None,
             },
         );
@@ -1729,8 +1708,7 @@ impl SessionRegistry {
                 permission: SpawnPermission::NoStart,
                 drive_mode: None,
                 profile: None,
-                remote_host: Some(host.to_string()),
-                remote: None,
+                remote: Some(RemoteExit::for_test(host)),
             },
         );
     }
@@ -1747,7 +1725,7 @@ impl SessionRegistry {
     pub fn remote_count(&self, host: &str) -> usize {
         self.sessions
             .values()
-            .filter(|s| s.remote_host.as_deref() == Some(host))
+            .filter(|s| s.remote.as_ref().map(RemoteExit::host) == Some(host))
             .count()
     }
 
@@ -1788,18 +1766,14 @@ impl SessionRegistry {
     ) -> Result<String, CcError> {
         // M17 WP3 — a ninth remote session on one host is refused FIRST: before the profile is
         // resolved and before the unclean flag is consumed, so a refused open spends nothing.
-        let remote_host = match &target {
+        if let SpawnTarget::Remote(r) = &target {
+            self.admit_remote(r.target.host())?;
+        }
+        // M17 WP5: how a remote session opens. An attach runs under the mode it was SPAWNED with
+        // (read over the link by the caller), not the row's stored one. `None` = local.
+        let remote_open = match &target {
             SpawnTarget::Local => None,
-            SpawnTarget::Remote(r) => {
-                self.admit_remote(r.target.host())?;
-                Some(r.target.host().to_string())
-            }
-        };
-        // M17 WP5: a reconnect's session runs under the mode it was SPAWNED with (read over the
-        // link by the caller), not the row's stored one. `None` = not a reconnect.
-        let attached_mode = match &target {
-            SpawnTarget::Remote(r) if r.attach => Some(r.running_mode.clone()),
-            _ => None,
+            SpawnTarget::Remote(r) => Some(r.open),
         };
         // M17 WP4: a remote session's transcript answer, asked over the link by the caller.
         let remote_transcript = match &target {
@@ -1867,8 +1841,7 @@ impl SessionRegistry {
         // M13.5 WP4 P1.2 — retain the EFFECTIVE mode this session is about to spawn under, so
         // a workspace-side readout can answer "stored ≠ running" truthfully. Read back via
         // `session_drive_mode`. See `ResolvedCcSpawnEnv` for why the value is post-gate.
-        let spawned_drive_mode =
-            running_drive_mode(attached_mode.as_ref(), resolved_env.drive_mode);
+        let spawned_drive_mode = running_drive_mode(remote_open, resolved_env.drive_mode);
         let cc_env = resolved_env.env;
         let model = resolve_spawn_model(
             data_dir
@@ -1933,17 +1906,23 @@ impl SessionRegistry {
 
         let id = self.mint_id();
         let argv_mode = spawn_permission_mode(mode, profile.as_ref().map(|p| p.dir.as_path()));
-        let permission = recorded_spawn_permission(argv_mode, attached_mode.is_some());
-        let spawned = PtyCcSession::spawn(
-            app,
-            id.clone(),
-            project_path,
+        let permission = recorded_spawn_permission(
             argv_mode,
-            model.as_deref(),
-            resume,
-            &cc_env,
-            target,
+            matches!(remote_open, Some(RemoteOpen::Attach(_))),
         );
+        // ONE argv for either target. The dispatch on WHERE the session runs lives here, beside
+        // the `SpawnTarget` it reads (paydown-2026-11-27 WP9: it lived inside the PTY constructor).
+        let cc_argv = build_cc_argv(argv_mode, model.as_deref(), resume);
+        let spawned: Result<Box<dyn CcSession>, CcError> = match target {
+            SpawnTarget::Local => {
+                PtyCcSession::spawn(app, id.clone(), project_path, &cc_argv, &cc_env)
+                    .map(|s| Box::new(s) as Box<dyn CcSession>)
+            }
+            SpawnTarget::Remote(r) => {
+                RemoteCcSession::spawn_cc(app, id.clone(), &cc_argv, &cc_env, *r)
+                    .map(|s| Box::new(s) as Box<dyn CcSession>)
+            }
+        };
 
         // M12 WP2 — DEFAULT-SET the unclean-exit flag, so a crash (which runs no code at
         // all) leaves it set for free and the next open can offer `/resume`. Only a clean
@@ -1974,12 +1953,8 @@ impl SessionRegistry {
             data_dir.as_deref(),
             project_path,
             spawned.is_ok(),
-            remote_host.is_some(),
-            attached_mode.as_ref(),
-            cc_env
-                .iter()
-                .find(|(k, _)| k == DRIVE_MODE_ENV)
-                .map(|(_, v)| v.as_str()),
+            remote_open,
+            &cc_env,
         );
 
         let session = spawned?;
@@ -1990,7 +1965,6 @@ impl SessionRegistry {
                 permission,
                 drive_mode: spawned_drive_mode,
                 profile: profile.map(|p| p.name),
-                remote_host,
                 remote: remote_handle,
             },
         );
@@ -2016,7 +1990,6 @@ impl SessionRegistry {
                 drive_mode: None,
                 // A login shell is not CC; it runs under no profile.
                 profile: None,
-                remote_host: None,
                 remote: None,
             },
         );
@@ -3059,9 +3032,9 @@ mod tests {
                 .unwrap_or_else(|| panic!("`{needle}` is not in SessionRegistry::spawn"))
         };
         assert!(at("resolve_spawn_profile(") < at("consume_and_persist("));
-        assert!(at("resolve_spawn_profile(") < at("PtyCcSession::spawn("));
+        assert!(at("resolve_spawn_profile(") < at("build_cc_argv("));
         assert!(at("resolve_resume_arm(") < at("guard_continue_against_transcripts("));
-        assert!(at("guard_continue_against_transcripts(") < at("PtyCcSession::spawn("));
+        assert!(at("guard_continue_against_transcripts(") < at("build_cc_argv("));
         // F-b Phase 2: the env resolver receives the RESOLVED profile (so ruling 4 withholds the
         // drive mode), and the registered session records its name (what `cc_session_profile`
         // reports to the workspace's workflow gate).
@@ -3083,17 +3056,25 @@ mod tests {
             ),
             "the spawn must bind the profile-aware permission mode once"
         );
+        let dense = crate::test_support::dense(&code);
         assert!(
-            code.contains(
-                "let permission = recorded_spawn_permission(argv_mode, attached_mode.is_some());"
+            dense.contains(
+                "letpermission=recorded_spawn_permission(argv_mode,matches!(remote_open,Some(RemoteOpen::Attach(_))),);"
             ),
             "the recorded permission must come from the same argv mode"
         );
-        let call = &code[at("PtyCcSession::spawn(")..];
-        let call = &call[..call.find(");").unwrap()];
+        // ONE argv, from that mode, feeds BOTH targets' spawns (paydown-2026-11-27 WP9).
         assert!(
-            call.lines().any(|l| l.trim() == "argv_mode,"),
-            "the spawn must pass the profile-aware permission mode: {call}"
+            dense.contains("letcc_argv=build_cc_argv(argv_mode,model.as_deref(),resume);"),
+            "the spawn must pass the profile-aware permission mode: {code}"
+        );
+        assert!(
+            dense.contains("PtyCcSession::spawn(app,id.clone(),project_path,&cc_argv,&cc_env)"),
+            "{code}"
+        );
+        assert!(
+            dense.contains("RemoteCcSession::spawn_cc(app,id.clone(),&cc_argv,&cc_env,*r)"),
+            "{code}"
         );
         // Anchored INSIDE the `RegisteredSession { … }` literal (not indentation-bound across the
         // whole body): another struct literal gaining a `permission,` field must not satisfy it.
@@ -3472,74 +3453,87 @@ mod tests {
     #[test]
     fn a_remote_spawn_records_its_session_running_and_nothing_else_does() {
         // M17 WP5 (AC-1.2): the local record the picker's label and the open decision read.
+        use crate::config_store::DriveMode::*;
+        use crate::remote_cmd::SessionMode;
         use crate::remote_record::{get, record_running, SessionRecordState::*};
         let d = tempfile::TempDir::new().unwrap();
         let key = "ssh://me@mini/Users/me/p";
         let rec = || get(d.path(), key);
+        let start = Some(RemoteOpen::Start);
+        let attach = |m| Some(RemoteOpen::Attach(m));
+        // The env a spawn really receives, from the real composer (gate on).
+        let env = |m| cc_spawn_env(m, true);
         // A failed spawn, a local spawn, and no data dir write nothing.
+        let any = env(Some(Orchestrated));
         assert!(!record_remote_spawn(
             Some(d.path()),
             key,
             false,
-            true,
-            None,
-            None
+            start,
+            &any
         ));
-        assert!(!record_remote_spawn(
-            Some(d.path()),
-            key,
-            true,
-            false,
-            None,
-            None
-        ));
-        assert!(!record_remote_spawn(None, key, true, true, None, None));
+        assert!(!record_remote_spawn(Some(d.path()), key, true, None, &any));
+        assert!(!record_remote_spawn(None, key, true, start, &any));
         assert_eq!(rec(), None);
-        // A start records running under its inner command's mode.
-        assert!(record_remote_spawn(
-            Some(d.path()),
-            key,
-            true,
-            true,
-            None,
-            Some("orchestrated")
-        ));
+        // A start records running under the mode its env carries...
+        assert!(record_remote_spawn(Some(d.path()), key, true, start, &any));
         let r = rec().unwrap();
         assert_eq!(
             (r.state, r.drive_mode.as_deref()),
             (Running, Some("orchestrated"))
         );
-        // A reconnect records the LIVE session's mode, not the start's.
-        let known = Some(Some("fsd".to_string()));
+        // ...and none when its env carries none (no mode, or the gate off).
         assert!(record_remote_spawn(
             Some(d.path()),
             key,
             true,
+            start,
+            &env(None)
+        ));
+        assert_eq!(rec().unwrap().drive_mode, None, "a start with no mode");
+        let gate_off = cc_spawn_env(Some(Autopilot), false);
+        assert!(record_remote_spawn(
+            Some(d.path()),
+            key,
             true,
-            Some(&known),
-            Some("stepping")
+            start,
+            &gate_off
+        ));
+        assert_eq!(
+            rec().unwrap().drive_mode,
+            None,
+            "gate off: the var is absent"
+        );
+        // An attach records the LIVE session's mode, not the start's.
+        let stepping = env(Some(StepByStep));
+        let fsd = attach(SessionMode::Mode(FullAutopilot));
+        assert!(record_remote_spawn(
+            Some(d.path()),
+            key,
+            true,
+            fsd,
+            &stepping
         ));
         assert_eq!(rec().unwrap().drive_mode.as_deref(), Some("fsd"));
-        let none: Option<Option<String>> = Some(None);
+        let none = attach(SessionMode::NoMode);
         assert!(record_remote_spawn(
             Some(d.path()),
             key,
             true,
-            true,
-            Some(&none),
-            Some("stepping")
+            none,
+            &stepping
         ));
         assert_eq!(rec().unwrap().drive_mode, None, "spawned with no mode");
         // ...and an unknown one keeps what was recorded.
         record_running(d.path(), key, Some("autopilot"));
         crate::remote_record::record_state(d.path(), key, Ended);
+        let unknown = attach(SessionMode::Unknown);
         assert!(record_remote_spawn(
             Some(d.path()),
             key,
             true,
-            true,
-            Some(&None),
-            Some("stepping")
+            unknown,
+            &stepping
         ));
         let r = rec().unwrap();
         assert_eq!(
@@ -3560,11 +3554,12 @@ mod tests {
             "\n    pub fn spawn_shell(",
         );
         let dense = dense(&without_comment_lines(body));
-        // Every argument, including the mode the start records (verify-self re-run: a `None`
-        // there survived when the prefix stopped at `attached_mode`).
+        // Every argument. The mode a start records is looked up INSIDE `record_remote_spawn` from
+        // `cc_env`, which its own test drives (paydown-2026-11-27 WP9); the call passing the real
+        // env, not an empty one, is what this text pins.
         let call = dense
             .find(
-                "record_remote_spawn(data_dir.as_deref(),project_path,spawned.is_ok(),remote_host.is_some(),attached_mode.as_ref(),cc_env.iter().find(|(k,_)|k==DRIVE_MODE_ENV).map(|(_,v)|v.as_str()),);",
+                "record_remote_spawn(data_dir.as_deref(),project_path,spawned.is_ok(),remote_open,&cc_env,);",
             )
             .unwrap_or_else(|| panic!("the record write is not called with the spawn's result: {dense}"));
         assert!(call < dense.find("letsession=spawned?;").expect("the `?`"));
@@ -3590,28 +3585,34 @@ mod tests {
     fn a_reconnect_registers_the_live_sessions_mode_never_the_stored_one() {
         // M17 WP5 (A9), verified live at Phase 1: stored `orchestrated`, session spawned `fsd`.
         use crate::config_store::DriveMode::*;
-        let known = |m: &str| Some(Some(m.to_string()));
+        use crate::remote_cmd::SessionMode;
+        let attach = |m| Some(RemoteOpen::Attach(m));
+        // A local spawn and a remote start run under the resolved mode.
         assert_eq!(
             running_drive_mode(None, Some(Orchestrated)),
             Some(Orchestrated)
         );
         assert_eq!(running_drive_mode(None, None), None);
         assert_eq!(
-            running_drive_mode(Some(&known("fsd")), Some(Orchestrated)),
+            running_drive_mode(Some(RemoteOpen::Start), Some(Autopilot)),
+            Some(Autopilot)
+        );
+        // An attach runs under the live session's own mode.
+        assert_eq!(
+            running_drive_mode(attach(SessionMode::Mode(FullAutopilot)), Some(Orchestrated)),
             Some(FullAutopilot)
         );
         assert_eq!(
-            running_drive_mode(Some(&known("stepping")), None),
+            running_drive_mode(attach(SessionMode::Mode(StepByStep)), None),
             Some(StepByStep)
         );
-        // Spawned with none, or unknown, or not a mode: none, never the stored mode.
+        // Spawned with none, or unknown (a pre-WP5 session, or not a mode): none, never the stored.
         assert_eq!(
-            running_drive_mode(Some(&Some(None)), Some(Orchestrated)),
+            running_drive_mode(attach(SessionMode::NoMode), Some(Orchestrated)),
             None
         );
-        assert_eq!(running_drive_mode(Some(&None), Some(Orchestrated)), None);
         assert_eq!(
-            running_drive_mode(Some(&known("turbo")), Some(Orchestrated)),
+            running_drive_mode(attach(SessionMode::Unknown), Some(Orchestrated)),
             None
         );
     }
@@ -3625,21 +3626,30 @@ mod tests {
         let dense = dense(&without_comment_lines(production_text(include_str!(
             "mod.rs"
         ))));
-        assert!(dense.contains("letargv=remote::session_argv(remote.attach,"));
         assert!(dense.contains(
-            "letspawned_drive_mode=running_drive_mode(attached_mode.as_ref(),resolved_env.drive_mode);"
+            "letremote_open=match&target{SpawnTarget::Local=>None,SpawnTarget::Remote(r)=>Some(r.open),};"
+        ));
+        assert!(dense.contains(
+            "letspawned_drive_mode=running_drive_mode(remote_open,resolved_env.drive_mode);"
         ));
         assert!(dense.contains("drive_mode:spawned_drive_mode,"));
+        let remote = crate::test_support::dense(&without_comment_lines(production_text(
+            include_str!("remote.rs"),
+        )));
+        assert!(remote.contains("letargv=session_argv(remote.open,"));
         let commands = crate::test_support::dense(&crate::test_support::without_comment_lines(
             crate::test_support::production_text(include_str!("commands.rs")),
         ));
-        let attach = commands
-            .find("letattach=intent==Some(OpenIntent::Reconnect);")
-            .expect("cc_spawn_remote decides attach from the Reconnect door");
+        let reconnect = commands
+            .find("letreconnect=intent==Some(OpenIntent::Reconnect);")
+            .expect("cc_spawn_remote decides the open from the Reconnect door");
+        let open = commands
+            .find("letopen=ifreconnect{super::RemoteOpen::Attach(facts.mode)}else{super::RemoteOpen::Start};")
+            .expect("...attaching with the read mode, or starting");
         let into = commands
-            .find("has_transcript,attach,running_mode,})")
-            .expect("...and carries it, with the read mode, into RemoteSpawn");
-        assert!(attach < into);
+            .find("has_transcript,open,})")
+            .expect("...and carries it into RemoteSpawn");
+        assert!(reconnect < open && open < into);
     }
 
     #[test]
@@ -4716,11 +4726,16 @@ mod tests {
         assert!(early < guard.find("default_config_root").unwrap());
         assert!(guard[early..]
             .starts_with("if let Some(has) = remote_transcript {\n                return has;"));
-        // The target reaches the PTY spawn.
-        let call = &code[at("PtyCcSession::spawn(")..];
-        let call = &call[..call.find(");").unwrap()];
-        assert!(call.contains("target,"), "{call}");
-        assert!(code.contains("                remote_host,\n"));
+        // The dispatch on the target lives HERE (paydown-2026-11-27 WP9): a remote target reaches
+        // the remote constructor, a local one the PTY's.
+        let dense = crate::test_support::dense(&code);
+        assert!(
+            dense.contains("matchtarget{SpawnTarget::Local=>{PtyCcSession::spawn(")
+                && dense.contains("SpawnTarget::Remote(r)=>{RemoteCcSession::spawn_cc("),
+            "{code}"
+        );
+        // The session registers its remote handle, which the per-host cap reads the host from.
+        assert!(dense.contains("remote:remote_handle,"), "{code}");
     }
 
     #[test]
@@ -4968,9 +4983,8 @@ mod tests {
             Some(dir),
             key,
             true,
-            true,
-            None,
-            Some("autopilot")
+            Some(RemoteOpen::Start),
+            &cc_spawn_env(Some(crate::config_store::DriveMode::Autopilot), true)
         ));
         let flag = || crate::session_state::is_unclean_keyed(&crate::session_state::read(dir), key);
         let reopen = |live: bool| {
@@ -4992,7 +5006,7 @@ mod tests {
         assert_eq!(
             reopen(true),
             OpenCheck::Reconnect {
-                mode: Some("autopilot".into())
+                mode: Some(crate::config_store::DriveMode::Autopilot)
             }
         );
         assert_eq!(
@@ -5093,6 +5107,8 @@ mod tests {
                 "crate::remote_link::EXEC_TIMEOUT_MS",
                 "crate::remote_link::commands::SharedLinks",
                 "crate::remote_link::commands::target_for",
+                "super::RemoteOpen::Attach",
+                "super::RemoteOpen::Start",
                 "super::RemoteSpawn",
                 "super::SpawnTarget::Remote",
             ],
@@ -5140,11 +5156,8 @@ mod tests {
                 ),
             ),
             (
-                "the session dispatcher",
-                fn_at(
-                    include_str!("mod.rs"),
-                    "            SpawnTarget::Remote(r) => *r,",
-                ),
+                "the remote spawn arm",
+                fn_at(include_str!("remote.rs"), "    pub(super) fn spawn_cc("),
             ),
             (
                 "RemoteCcSession::spawn",
@@ -5166,13 +5179,13 @@ mod tests {
                 assert!(!body.contains(banned), "`{banned}` in {name}: {body}");
             }
         }
-        let asked = at("&crate::remote_cmd::spawn_facts_command(crate::remote_cmd::tmux_server(links.identifier()),&session,target.path(),attach,)");
+        let asked = at("&crate::remote_cmd::spawn_facts_command(crate::remote_cmd::tmux_server(links.identifier()),&session,target.path(),reconnect,)");
         let parsed = at("crate::remote_cmd::parse_spawn_facts(");
         let locked = at("registry.lock()");
         assert!(parsed < asked && asked < locked);
         at("lethas_transcript=facts.has_transcript;");
-        at("letrunning_mode=ifattach{facts.mode}else{None};");
-        at("local_cwd,has_transcript,attach,running_mode,");
+        at("letopen=ifreconnect{super::RemoteOpen::Attach(facts.mode)}else{super::RemoteOpen::Start};");
+        at("local_cwd,has_transcript,open,");
         // AC-3.3 (verify-codify): the resolved physical path is recorded as the row's alias in the
         // status registry, so its events resolve. The registry test proves the alias works; this
         // pins that the spawn records it, from the same exec.

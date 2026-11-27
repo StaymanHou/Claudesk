@@ -138,7 +138,7 @@ pub async fn cc_spawn_remote(
         //   for the physical path's slug. A failed exec reads as "no": a fresh session is safe;
         // - on a reconnect, the mode the live session was spawned under (the tmux option the
         //   start stored), registered as its running mode (A9).
-        let attach = intent == Some(OpenIntent::Reconnect);
+        let reconnect = intent == Some(OpenIntent::Reconnect);
         let facts = crate::remote_cmd::parse_spawn_facts(
             &links
                 .exec(
@@ -147,7 +147,7 @@ pub async fn cc_spawn_remote(
                         crate::remote_cmd::tmux_server(links.identifier()),
                         &session,
                         target.path(),
-                        attach,
+                        reconnect,
                     ),
                     crate::remote_link::EXEC_TIMEOUT_MS,
                 )
@@ -163,7 +163,11 @@ pub async fn cc_spawn_remote(
             }
         }
         let has_transcript = facts.has_transcript;
-        let running_mode = if attach { facts.mode } else { None };
+        let open = if reconnect {
+            super::RemoteOpen::Attach(facts.mode)
+        } else {
+            super::RemoteOpen::Start
+        };
         let local_cwd = app
             .path()
             .home_dir()
@@ -187,8 +191,7 @@ pub async fn cc_spawn_remote(
                 session,
                 local_cwd,
                 has_transcript,
-                attach,
-                running_mode,
+                open,
             })),
         )
         .map_err(|e| e.to_string())

@@ -17,7 +17,9 @@ use std::time::{Duration, Instant};
 use base64::Engine as _;
 use tauri::{AppHandle, Emitter, Manager};
 
-use super::{borrow_env, CcError, CcSession, ExitHook, PtyCcSession, CC_SPAWN_ENV_REMOVE};
+use super::{
+    borrow_env, CcError, CcSession, ExitHook, PtyCcSession, CC_SPAWN_ENV_REMOVE, DRIVE_MODE_ENV,
+};
 use crate::remote_link::{CloseExecError, ClosingGuard, LinkRegistry};
 use crate::remote_record::SessionRecordState;
 use crate::status_broadcaster::LinkEdge;
@@ -42,11 +44,20 @@ pub struct RemoteSpawn {
     /// Whether the remote holds a transcript for this project's physical path (M17 WP4): the
     /// remote answer to the `--continue` guard, asked by the caller before the registry lock.
     pub has_transcript: bool,
-    /// M17 WP5: ATTACH to the live session (a reconnect on open) instead of starting one.
-    pub attach: bool,
-    /// For an attach: the live session's spawn mode, read over the link (`Some(None)`: spawned
-    /// with none; `None`: unknown, a session started before WP5 stored it).
-    pub running_mode: Option<Option<String>>,
+    /// M17 WP5: start a session, or attach to the live one (a reconnect on open).
+    pub open: RemoteOpen,
+}
+
+/// How a remote spawn opens its tmux session (M17 WP5). One value, so "attaching" and "the mode
+/// the attached session runs under" cannot disagree (paydown-2026-11-27 WP9: they were a `bool`
+/// and an `Option<Option<String>>`, kept in step by hand).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemoteOpen {
+    /// Start a new session, refusing one that is already live (`EXIT_SESSION_EXISTS`).
+    Start,
+    /// Attach to the live session (`tmux attach`, never a start). It runs under the mode it was
+    /// spawned with, read over the link by the caller, never the row's stored one (A9).
+    Attach(crate::remote_cmd::SessionMode),
 }
 
 /// What a remote session's `kill()` needs to cancel copy-mode over the master.
@@ -63,6 +74,30 @@ pub struct RemoteExit {
 }
 
 impl RemoteExit {
+    /// The host the session runs on: the ONE place a registered session's host is stored
+    /// (paydown-2026-11-27 WP9: `RegisteredSession` carried it a second time, for the cap).
+    pub(super) fn host(&self) -> &str {
+        self.target.host()
+    }
+
+    /// Test-only: the handle of a session on `host`, over a link registry that never connects
+    /// (for the per-host cap's registry tests).
+    #[cfg(test)]
+    pub(super) fn for_test(host: &str) -> Self {
+        Self {
+            links: Arc::new(LinkRegistry::new(
+                Arc::new(crate::remote_link::SshTransport),
+                std::path::PathBuf::from("/nonexistent-claudesk-test"),
+                std::path::PathBuf::from("/nonexistent-claudesk-test/hook.sock"),
+                "com.claudesk.app.test".into(),
+                Arc::new(|_| {}),
+            )),
+            target: crate::remote_cmd::ValidTarget::new(host, "/Users/me/p")
+                .expect("a valid test target"),
+            session: "cd-test".into(),
+        }
+    }
+
     /// Best effort: with the link not Up the cancel sends nothing and returns at once
     /// (`CloseExecError::LinkNotUp`), and the close continues.
     pub(super) fn cancel_before_exit(&self) {
@@ -244,7 +279,7 @@ pub fn reattach_argv(ctl: &Path, host: &str, identifier: &str, session: &str) ->
 /// that is already live). Pure, so the choice is tested.
 #[allow(clippy::too_many_arguments)]
 pub fn session_argv(
-    attach: bool,
+    open: RemoteOpen,
     ctl: &Path,
     host: &str,
     home: &str,
@@ -254,12 +289,11 @@ pub fn session_argv(
     drive_mode: Option<&str>,
     cc_argv: &[String],
 ) -> Vec<String> {
-    if attach {
-        reattach_argv(ctl, host, identifier, session)
-    } else {
-        remote_terminal_argv(
+    match open {
+        RemoteOpen::Attach(_) => reattach_argv(ctl, host, identifier, session),
+        RemoteOpen::Start => remote_terminal_argv(
             ctl, host, home, identifier, session, path, drive_mode, cc_argv,
-        )
+        ),
     }
 }
 
@@ -747,6 +781,44 @@ fn reconnect(shared: Arc<RemoteShared>, delay: Duration, new_drop: bool) {
 }
 
 impl RemoteCcSession {
+    /// Spawn a REMOTE CC session: the same `cc_argv` and the same resolved `env` as a local spawn
+    /// (`SessionRegistry::spawn` builds both and dispatches here on `SpawnTarget::Remote`), but
+    /// the PTY runs `ssh -tt` and the drive mode travels in the REMOTE command line (an arbitrary
+    /// env var does not cross ssh; arch §C). It is removed from the local ssh's env.
+    pub(super) fn spawn_cc(
+        app: AppHandle,
+        id: String,
+        cc_argv: &[String],
+        env: &[(String, String)],
+        remote: RemoteSpawn,
+    ) -> Result<Self, CcError> {
+        let drive_mode = env
+            .iter()
+            .find(|(k, _)| k == DRIVE_MODE_ENV)
+            .map(|(_, v)| v.as_str());
+        // M17 WP5: a reconnect on open ATTACHES (`tmux attach`, never a start); every other
+        // remote spawn STARTS, refusing a session that is already live (`EXIT_SESSION_EXISTS`).
+        let argv = session_argv(
+            remote.open,
+            &remote.link.control_path,
+            remote.target.host(),
+            &remote.link.home,
+            remote.links.identifier(),
+            &remote.session,
+            remote.target.path(),
+            drive_mode,
+            cc_argv,
+        );
+        let local_env: Vec<(String, String)> = env
+            .iter()
+            .filter(|(k, _)| k != DRIVE_MODE_ENV)
+            .cloned()
+            .collect();
+        // Phase 5 — the terminal is wrapped so a dropped link REATTACHES under the same session
+        // id instead of ending the workspace.
+        Self::spawn(app, id, &argv, remote, local_env)
+    }
+
     pub(super) fn spawn(
         app: AppHandle,
         id: String,

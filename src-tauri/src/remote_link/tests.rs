@@ -1365,13 +1365,20 @@ fn live_cancel_and_folder_check() {
     };
     let facts = open("/");
     assert!(facts.folder && facts.live, "{facts:?}");
-    assert_eq!(facts.mode, None, "unset option: unknown");
+    assert_eq!(
+        facts.mode,
+        crate::remote_cmd::SessionMode::Unknown,
+        "unset option: unknown"
+    );
     sh(&format!(
         "tmux -L {} set-option -t '=cd-wp3test:' @cd_mode fsd",
         quote(srv)
     ))
     .unwrap();
-    assert_eq!(open("/").mode, Some(Some("fsd".into())));
+    assert_eq!(
+        open("/").mode,
+        crate::remote_cmd::SessionMode::Mode(crate::config_store::DriveMode::FullAutopilot)
+    );
     assert!(!open("/nonexistent-claudesk-wp3").folder);
     let none = crate::remote_cmd::parse_open_facts(
         &reg.exec(

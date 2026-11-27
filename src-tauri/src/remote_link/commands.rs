@@ -88,7 +88,7 @@ pub enum OpenCheck {
     /// A live session Claudesk left running: attach to it and fire nothing (R-2). `mode` is the
     /// mode it was spawned under, when known.
     Reconnect {
-        mode: Option<String>,
+        mode: Option<crate::config_store::DriveMode>,
     },
     /// A live session the operator closed while the host was unreachable (R-4, dialog A).
     AskEndPending {
@@ -175,7 +175,7 @@ pub(crate) fn decide_open(
     if facts.live {
         let decision = match record {
             Some(SessionRecordState::Running) => OpenCheck::Reconnect {
-                mode: facts.mode.flatten(),
+                mode: facts.mode.mode(),
             },
             Some(SessionRecordState::EndPending) => OpenCheck::AskEndPending {
                 message: format!(
@@ -1109,7 +1109,7 @@ mod tests {
         assert_eq!(
             decide_open(live(), Some(Running), false, &t),
             OpenDecision::plain(OpenCheck::Reconnect {
-                mode: Some("autopilot".into())
+                mode: Some(crate::config_store::DriveMode::Autopilot)
             })
         );
         let d = decide_open(live(), Some(EndPending), false, &t);
@@ -1290,7 +1290,7 @@ mod tests {
             )
         );
         let r = j(OpenCheck::Reconnect {
-            mode: Some("fsd".into()),
+            mode: Some(crate::config_store::DriveMode::FullAutopilot),
         });
         assert_eq!(
             (r["kind"].as_str(), r["mode"].as_str()),

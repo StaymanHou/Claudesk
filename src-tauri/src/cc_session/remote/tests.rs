@@ -790,7 +790,7 @@ fn a_reconnect_on_open_attaches_and_a_start_starts() {
         )
         .join(" ")
     };
-    let attach = argv(true);
+    let attach = argv(RemoteOpen::Attach(crate::remote_cmd::SessionMode::Unknown));
     assert!(
         attach.contains("attach -t") && attach.contains("=cd-12345678"),
         "{attach}"
@@ -803,7 +803,7 @@ fn a_reconnect_on_open_attaches_and_a_start_starts() {
         !attach.contains("CLAUDESK_DRIVE_MODE"),
         "an attach carries no spawn env: {attach}"
     );
-    let start = argv(false);
+    let start = argv(RemoteOpen::Start);
     assert!(
         start.contains(" new -s ") && start.contains("--continue"),
         "{start}"
