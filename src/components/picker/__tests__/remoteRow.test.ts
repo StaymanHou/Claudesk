@@ -6,9 +6,9 @@ import {
   pathLineFor,
   remoteAskSpec,
   remoteOpenPlan,
-  shortHost,
   startAnnounced,
 } from "../remoteRow";
+import { shortHost } from "../../../state/workspaceSurfaces";
 
 const remote: RecentProject = {
   project_path: "ssh://user@mini-host/Users/user/tank",

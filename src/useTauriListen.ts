@@ -49,9 +49,17 @@ export function useTauriListen<T>(
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    void listen<T>(event, (e) => handlerRef.current(e)).then((fn) => {
+    // ⚠️ The handler checks `cancelled` itself. Under StrictMode the first mount's cleanup runs
+    // before `listen` resolves, so the `cancelled` branch below unlistens late, and Tauri's
+    // unlisten can then fail (`listeners[eventId].handlerId`) and leave the listener ATTACHED.
+    // Both mounts' listeners share this instance's `handlerRef`, so every event was delivered
+    // TWICE in dev (paydown-2026-11-27 WP5; seen as doubled install-log lines at M18 WP6). A
+    // leaked listener now calls nothing.
+    void listen<T>(event, (e) => {
+      if (!cancelled) handlerRef.current(e);
+    }).then((fn) => {
       if (cancelled) {
-        fn();
+        safeUnlisten(fn);
         return;
       }
       unlisten = fn;
@@ -59,7 +67,21 @@ export function useTauriListen<T>(
     });
     return () => {
       cancelled = true;
-      unlisten?.();
+      if (unlisten) safeUnlisten(unlisten);
     };
   }, [event]);
+}
+
+/**
+ * Unlisten, swallowing a failure: a sync throw or a rejected promise. The known failure is the
+ * StrictMode double-unlisten above, which is harmless once the handler is `cancelled`-guarded;
+ * left unhandled it surfaced as an `unhandledrejection` on every workspace open.
+ */
+function safeUnlisten(fn: () => void): void {
+  try {
+    const r: unknown = fn();
+    if (r instanceof Promise) r.catch(() => {});
+  } catch {
+    // Already gone; nothing to release.
+  }
 }

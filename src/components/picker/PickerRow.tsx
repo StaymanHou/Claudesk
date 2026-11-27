@@ -19,7 +19,8 @@ import { ProjectModelCell } from "./ProjectModelCell";
 import { PICKER_ROW_CELLS } from "./pickerRowOrder";
 import { rowAffordances, type OpenIntent } from "./announceRow";
 import type { RecentProject } from "./ProjectPicker";
-import { isRemoteRow, pathLineFor, shortHost } from "./remoteRow";
+import { isRemoteRow, pathLineFor } from "./remoteRow";
+import { shortHost } from "../../state/workspaceSurfaces";
 
 // Label shown for a project row: prefer the display name, fall back to the path.
 function labelFor(project: RecentProject): string {

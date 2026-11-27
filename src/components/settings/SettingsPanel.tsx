@@ -199,7 +199,7 @@ export default function SettingsPanel({
           <SettingsGroup
             id={REMOTE_HOSTS_GROUP_ID}
             title="Remote hosts"
-            hint="The workflow system on each remote account your projects run on. Checked against GitHub while this panel is open, for hosts with a workspace connected."
+            hint="The workflow system on each remote account your projects run on. Checked against each clone's origin while this panel is open, for hosts with a workspace connected."
             highlighted={highlighted === REMOTE_HOSTS_GROUP_ID}
           >
             <RemoteHostsSettings readout={remoteHosts} />

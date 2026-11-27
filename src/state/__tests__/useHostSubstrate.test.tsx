@@ -91,6 +91,38 @@ describe("useHostSubstrate", () => {
     expect(calls).toContain("remote_host_substrates");
   });
 
+  it("a failed listen does not latch the store: the next subscriber starts it again", async () => {
+    // paydown-2026-11-27 WP5. Latched, every remote host would read closed all session.
+    const calls: string[] = [];
+    let listens = 0;
+    mockWindows("main");
+    mockIPC((cmd) => {
+      calls.push(cmd);
+      if (cmd === "plugin:event|listen") {
+        listens += 1;
+        if (listens === 1) throw new Error("listen refused");
+        return 1;
+      }
+      return cmd === "remote_host_substrates" ? { "me@mini-host": DEV } : null;
+    });
+    const quiet = console.error;
+    console.error = () => {};
+    try {
+      await mount(<Probe path={REMOTE} />);
+      expect(listens).toBe(1);
+      expect(calls).not.toContain("remote_host_substrates");
+      await act(async () => root?.unmount());
+      host?.remove();
+      seen = [];
+      await mount(<Probe path={REMOTE} />);
+    } finally {
+      console.error = quiet;
+    }
+    expect(listens).toBe(2);
+    expect(calls).toContain("remote_host_substrates");
+    expect(seen.at(-1)).toEqual(DEV);
+  });
+
   it("a picker with no remote row touches nothing either", async () => {
     const calls: string[] = [];
     mockWindows("main");

@@ -10,7 +10,7 @@
 // from the raw gate.
 
 import type { HostInput } from "../../state/hostSubstrate";
-import { shortHost } from "../picker/remoteRow";
+import { shortHost } from "../../state/workspaceSurfaces";
 
 /** The note's test hook. */
 export const ABSENT_HOST_NOTE_TESTID = "workspace-absent-host-note";

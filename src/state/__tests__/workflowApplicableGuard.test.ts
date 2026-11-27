@@ -71,7 +71,8 @@ const callers = files.filter((f) => callSites(f.flat).length > 0);
  * The two accepted shapes for a non-allowlisted call:
  *   direct  — `isWorkflowApplicable(useWorkflowFeaturesEnabled(), …)`;
  *   binding — `const <x>[: T] = useWorkflowFeaturesEnabled()`, where EVERY other read of `<x>` is
- *             `isWorkflowApplicable(<x>, …)`. Needed where the hook result spans many rows (the
+ *             a funnel's first argument: `isWorkflowApplicable(<x>, …)` or
+ *             `isWorkflowHostBlocked(<x>, …)` (`Workspace` reads the gate once for both). Needed where the hook result spans many rows (the
  *             picker), and where an inline call trips the React Compiler (`ProjectModelCell`:
  *             passing a prop into an opaque call widened its hand-memoized callbacks' deps).
  * Returns a violation string, or null.
@@ -109,6 +110,7 @@ function checkCall(flat: string, i: number): string | null {
   const bare = reads.filter(
     (j) =>
       !flat.slice(0, j).endsWith("isWorkflowApplicable(") &&
+      !flat.slice(0, j).endsWith("isWorkflowHostBlocked(") &&
       !memoDeps.some(([a, b]) => j > a && j < b),
   );
   return bare.length === 0
@@ -386,6 +388,15 @@ describe("workflow-applicability funnel — every caller routes (F-b ruling 4)",
         `${rel} no longer calls the hook`,
       ).toBeGreaterThan(0);
     }
+  });
+
+  it("Workspace reads the gate ONCE (one seed + one listen per workspace, one value for all uses)", () => {
+    // paydown-2026-11-27 WP5: three inline calls each seeded and listened separately.
+    const ws = files.find(
+      (f) => f.rel === "components/workspace/Workspace.tsx",
+    );
+    expect(ws).toBeDefined();
+    expect(callSites(ws!.flat)).toHaveLength(1);
   });
 
   it("the known routers are still found as callers (identity, not a count)", () => {

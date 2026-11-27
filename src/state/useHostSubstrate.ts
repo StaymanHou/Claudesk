@@ -43,20 +43,29 @@ function ensureStarted(): void {
   void listen<HostSubstrateEvent>(HOST_SUBSTRATE_EVENT, (event) => {
     heard.add(event.payload.host);
     publish({ ...byHost, [event.payload.host]: event.payload.substrate });
-  })
-    .then(() => getHostSubstrates())
-    .then((seed) => {
-      const next: Record<string, HostSubstrate> = { ...seed };
-      for (const h of heard) {
-        const v = byHost[h];
-        if (v !== undefined) next[h] = v;
-      }
-      publish(next);
-    })
-    .catch((e) => {
-      // A failed seed leaves hosts unknown (closed); events still arrive if the listen held.
-      console.error("[claudesk] remote_host_substrates failed:", e);
-    });
+  }).then(
+    () =>
+      getHostSubstrates()
+        .then((seed) => {
+          const next: Record<string, HostSubstrate> = { ...seed };
+          for (const h of heard) {
+            const v = byHost[h];
+            if (v !== undefined) next[h] = v;
+          }
+          publish(next);
+        })
+        .catch((e) => {
+          // A failed seed leaves hosts unknown (closed); events still arrive (the listen held).
+          console.error("[claudesk] remote_host_substrates failed:", e);
+        }),
+    (e) => {
+      // ⚠️ A failed LISTEN un-latches the store, so the next subscriber starts it again.
+      // Latched, every remote host would read closed for the whole session and its workflow
+      // rows would vanish with no note (`absentHostNote` shows nothing for `undefined`).
+      started = false;
+      console.error("[claudesk] remote-substrate listen failed:", e);
+    },
+  );
 }
 
 function subscribe(notify: () => void): () => void {

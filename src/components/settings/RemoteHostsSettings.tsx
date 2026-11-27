@@ -1,6 +1,6 @@
 // M18 WP5 — the "Remote hosts" settings group's body (`arch/claude-substrate.md` §R.4, §R.5): one
 // entry per distinct host among the remote rows, with the host account's workflow substrate
-// (Absent / Developer / Managed), its short HEAD, and its drift against GitHub.
+// (Absent / Developer / Managed), its short HEAD, and its drift against the clone's own origin.
 //
 // ## Buttons
 // WP5 shipped the readout alone. WP6: Install on an Absent entry whose link is Up. WP7: Update on a
@@ -8,7 +8,7 @@
 // `remoteRunOffers`). ⚠️ A Developer entry (the live account) is never offered any of them.
 //
 // ## Background work only while shown (prior `background-work-only-for-what-is-on-screen`)
-// The drift read reaches GitHub (`ls-remote` from the host, about a second), so it runs once per
+// The drift read reaches the origin (`ls-remote` from the host, about a second), so it runs once per
 // host when this group mounts, and never on open or on a timer. A result that arrives after the
 // panel closed is dropped (`useRemoteHostsReadout`'s cleanup).
 //
@@ -138,15 +138,15 @@ function driftLine(
   if (check === undefined) return null;
   switch (check.outcome) {
     case "checking":
-      return "Checking GitHub…";
+      return "Checking the clone's origin…";
     case "failed":
       return `Can't check: ${check.reason}`;
     case "checked": {
       const d = check.drift;
       if (d === null) return null;
-      if (d.drift === "up_to_date") return "Up to date with GitHub.";
+      if (d.drift === "up_to_date") return "Up to date with its origin.";
       if (d.drift === "differs") {
-        return `Behind GitHub: this host is at ${shortSha(d.head)}, GitHub at ${shortSha(d.remote)}.`;
+        return `Behind its origin: this host is at ${shortSha(d.head)}, origin at ${shortSha(d.remote)}.`;
       }
       return `Can't check: ${d.reason}`;
     }

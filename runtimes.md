@@ -31,7 +31,11 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 69s (2026-11-27, paydown-2026-11-27 WP4 verify, EXIT=0)
+- **Last:** 66s (2026-11-27, paydown-2026-11-27 WP5 Phase 2 verify-codify (full), EXIT=0)
+- **Prior:** 57s (2026-11-27, paydown-2026-11-27 WP5 Phase 2 verify-auto, EXIT=0)
+- **Prior:** 59s (2026-11-27, paydown-2026-11-27 WP5 Phase 1 verify-codify (full), EXIT=0)
+- **Prior:** 63s (2026-11-27, paydown-2026-11-27 WP5 Phase 1 verify-auto, EXIT=0)
+- **Prior:** 69s (2026-11-27, paydown-2026-11-27 WP4 verify, EXIT=0)
 - **Prior:** 67s (2026-11-27, paydown-2026-11-27 WP3 verify (re-run after a Prettier fix), EXIT=0)
 - **Prior:** 13s (2026-11-27, paydown-2026-11-27 WP3 verify, EXIT=1: `format:check` on the tripwire test)
 - **Prior:** 90s (2026-11-27, paydown-2026-11-27 WP2 verify, EXIT=0)

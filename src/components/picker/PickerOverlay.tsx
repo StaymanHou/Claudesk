@@ -25,11 +25,27 @@ interface PickerOverlayProps {
 /**
  * Give focus back to `el` (what had it before the overlay opened), if it is still in the
  * document and can take focus. Exported for its unit test.
+ *
+ * ⚠️ The target can go stale while the overlay is open: ⌘⇧digit still switches the center
+ * stage, and the workspace that held `el` becomes a background one, which is `inert`. Focusing
+ * inside an inert subtree is a no-op in WKWebView, so the restore used to strand focus on
+ * <body> and the new center-stage pane took no keys until clicked (measured live,
+ * paydown-2026-11-27 WP5). A stale target (inside `[inert]`, or detached because its workspace
+ * closed) therefore hands focus to the CENTER-STAGE workspace's CC pane instead, the same pane a
+ * plain center-stage switch focuses. The inert check is explicit, not left to the browser, so it
+ * also holds where `inert` is not enforced (jsdom).
  */
 export function restoreFocus(el: Element | null): void {
-  if (el instanceof HTMLElement && el.isConnected && el !== document.body) {
+  if (!(el instanceof HTMLElement) || el === document.body) return;
+  if (el.isConnected && el.closest("[inert]") === null) {
     el.focus();
+    return;
   }
+  document
+    .querySelector<HTMLElement>(
+      '.workspace[data-visible="true"] [data-testid="xterm-pane"] .xterm-helper-textarea',
+    )
+    ?.focus();
 }
 
 export function PickerOverlay({

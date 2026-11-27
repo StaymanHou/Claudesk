@@ -40,6 +40,7 @@ vi.mock(
 );
 
 const LOCAL = "/tmp/scratch/scratch-a";
+const LOCAL_B = "/tmp/scratch/scratch-b";
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
@@ -125,5 +126,61 @@ describe("picker filter focus through the real App", () => {
         pane,
       );
     }
+  });
+
+  it("a dismiss after a ⌘⇧digit switch focuses the NEW center-stage pane, never the background one", async () => {
+    // paydown-2026-11-27 WP5. The saved restore target sits in the workspace that just went to
+    // the background (`inert`). Live, focusing it is a no-op and focus was stranded on <body>;
+    // jsdom does not enforce `inert`, so without the explicit check this test would see focus
+    // land on the hidden pane instead. Either way the fix must hand focus to the visible pane.
+    await bootApp();
+    const seed = (window as { __seedWorkspace?: (p: string) => void })
+      .__seedWorkspace!;
+    await act(async () => seed(LOCAL));
+    await settle();
+    await act(async () => seed(LOCAL_B));
+    await settle();
+    const spaces = [...host!.querySelectorAll<HTMLElement>(".workspace")];
+    expect(spaces).toHaveLength(2);
+    // A CC-pane stand-in inside each workspace (the real `XtermPane` is stubbed here).
+    const paneOf = new Map<HTMLElement, HTMLTextAreaElement>();
+    for (const ws of spaces) {
+      const wrap = document.createElement("div");
+      wrap.dataset.testid = "xterm-pane";
+      const ta = document.createElement("textarea");
+      ta.className = "xterm-helper-textarea";
+      wrap.appendChild(ta);
+      ws.appendChild(wrap);
+      paneOf.set(ws, ta);
+    }
+    const visible = () => spaces.find((w) => w.dataset.visible === "true")!;
+    const before = visible();
+    paneOf.get(before)!.focus();
+
+    await summon();
+    expect(document.activeElement).toBe(filter());
+    // Switch to the OTHER workspace with the overlay still open (App's real capture listener).
+    const otherIndex = spaces.indexOf(before) === 0 ? 2 : 1;
+    await act(async () => {
+      document.activeElement!.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: String(otherIndex),
+          code: `Digit${otherIndex}`,
+          metaKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    await settle();
+    const after = visible();
+    expect(after).not.toBe(before);
+    expect(before.hasAttribute("inert")).toBe(true);
+
+    await pressEscape();
+    expect(overlay()).toBeNull();
+    expect(document.activeElement).not.toBe(paneOf.get(before));
+    expect(document.activeElement).toBe(paneOf.get(after));
   });
 });

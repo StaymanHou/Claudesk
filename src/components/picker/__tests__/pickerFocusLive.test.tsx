@@ -135,4 +135,36 @@ describe("restoreFocus", () => {
     restoreFocus(document.body);
     expect(spy).not.toHaveBeenCalled();
   });
+
+  it("a stale target (detached, or inside [inert]) hands focus to the center-stage CC pane", () => {
+    // paydown-2026-11-27 WP5, operator decision A: never strand focus on <body>.
+    const visible = document.createElement("div");
+    visible.className = "workspace";
+    visible.dataset.visible = "true";
+    visible.innerHTML =
+      '<div data-testid="term-pane"><textarea class="xterm-helper-textarea"></textarea></div>' +
+      '<div data-testid="xterm-pane"><textarea class="xterm-helper-textarea"></textarea></div>';
+    const background = document.createElement("div");
+    background.className = "workspace";
+    background.dataset.visible = "false";
+    background.setAttribute("inert", "");
+    background.innerHTML =
+      '<div data-testid="xterm-pane"><textarea class="xterm-helper-textarea"></textarea></div>';
+    document.body.append(visible, background);
+    const ccPane = visible.querySelector<HTMLTextAreaElement>(
+      '[data-testid="xterm-pane"] textarea',
+    )!;
+    try {
+      // Closed workspace: the target is detached.
+      restoreFocus(document.createElement("textarea"));
+      expect(document.activeElement).toBe(ccPane);
+      ccPane.blur();
+      // Background workspace: the target is inside [inert]. Never the right-panel terminal.
+      restoreFocus(background.querySelector("textarea"));
+      expect(document.activeElement).toBe(ccPane);
+    } finally {
+      visible.remove();
+      background.remove();
+    }
+  });
 });

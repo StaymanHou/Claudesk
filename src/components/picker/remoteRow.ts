@@ -30,20 +30,6 @@ export function pathLineFor(
   return r.remote != null ? r.remote.path : r.project_path;
 }
 
-/**
- * The host as the marker shows it: `user@` dropped, then cut at the first `.` so a MagicDNS name
- * (`mini-host.tail0000.ts.net`) reads as `mini-host`. An IP address or a bracketed IPv6
- * literal is kept whole, since cutting either would be meaningless.
- */
-export function shortHost(host: string): string {
-  const bare = host.includes("@")
-    ? host.slice(host.lastIndexOf("@") + 1)
-    : host;
-  if (bare.startsWith("[") || /^[0-9.]+$/.test(bare)) return bare;
-  const dot = bare.indexOf(".");
-  return dot > 0 ? bare.slice(0, dot) : bare;
-}
-
 /** What the filter matches for a row beyond its name and key: `user@host:path` for a remote row. */
 export function remoteSearchText(r: Pick<RecentProject, "remote">): string {
   return r.remote != null ? `${r.remote.host}:${r.remote.path}` : "";

@@ -34,6 +34,20 @@ export function remoteAuthority(projectPath: string): string | null {
 }
 
 /**
+ * The host as the picker marker and the workspace notices show it: `user@` dropped, then cut at the first `.` so a MagicDNS name
+ * (`mini-host.tail0000.ts.net`) reads as `mini-host`. An IP address or a bracketed IPv6
+ * literal is kept whole, since cutting either would be meaningless.
+ */
+export function shortHost(host: string): string {
+  const bare = host.includes("@")
+    ? host.slice(host.lastIndexOf("@") + 1)
+    : host;
+  if (bare.startsWith("[") || /^[0-9.]+$/.test(bare)) return bare;
+  const dot = bare.indexOf(".");
+  return dot > 0 ? bare.slice(0, dot) : bare;
+}
+
+/**
  * Which surfaces a workspace may show. `true` = present (behaves as it always has); `false` =
  * absent (render nothing, invoke nothing).
  *

@@ -166,8 +166,11 @@ export function RemoteRunPanel({
     if (p.ok) onDone();
   };
 
-  // Subscribe, THEN query (`useTauriListen`'s `onSubscribed`): the query runs only once all three
-  // listeners are attached, so nothing the run sends after the backend reads its state is missed.
+  // Subscribe, THEN query (`useTauriListen`'s `onSubscribed`): the query runs only once ALL the
+  // listeners below are attached, so nothing the run sends after the backend reads its state is
+  // missed. ⚠️ `RUN_LISTENERS` must equal the number of `useTauriListen` calls here: one fewer lets
+  // the query fire early and brings back the race WP8 P1.2 closed (a test counts the calls).
+  const RUN_LISTENERS = 3;
   const [subscribed, setSubscribed] = useState(0);
   const onSubscribed = useCallback(() => setSubscribed((n) => n + 1), []);
   useTauriListen<RemoteRunLine>(
@@ -196,7 +199,7 @@ export function RemoteRunPanel({
 
   // WP7 D11: a run already in flight for this host (Settings reopened mid-run) is shown, not
   // re-offered. Asked once per mount, after the listeners; a reply after unmount is dropped.
-  const listening = subscribed >= 3;
+  const listening = subscribed >= RUN_LISTENERS;
   const finishRef = useRef(finish);
   useEffect(() => {
     finishRef.current = finish;

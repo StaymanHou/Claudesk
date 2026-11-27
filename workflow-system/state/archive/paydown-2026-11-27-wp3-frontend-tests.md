@@ -52,7 +52,7 @@ and the label guard WP2's rewording needs.
 - Relaunch: `relaunchIntent` `reconnect → "no-fire"` → new test `×`, HEAD's copy (as `zzOldRelaunch.test.tsx`) passes (the hole). Restored, `shasum` match.
 - Shared fake: `registerOscHandler(52` → `(53` in `osc52.ts` → `osc52Live` 2 failed. Restored.
 - Tripwire: a `/* e.g. .x { flex: 1 } */` comment before `.picker-overlay-panel {` → HEAD's tripwire (`zzOldTripwire.test.ts`) fails "a rule … must exist", the new one passes. Restored.
-- Cap pin: `clipboard.rs` cap → `8 * 1024 * 1024` → the pin fails. Restored. (No dev app was running, so no live build picked up the Rust mutant.)
+- Cap pin: `clipboard.rs` cap → `8 * 1024 * 1024` → the pin fails. Restored. (⚠️ Corrected 2026-11-27 at WP5: a dev app WAS running, the previous session's agent-launched one; `pgrep "tauri dev"` missed its `tauri.js dev` process line. Its watcher may have rebuilt from the mutant for the seconds it was on disk; it was killed and relaunched from the clean tree before WP5's live checks.)
 - Label guard: `// see P4.verify-human.2` prepended to each of the two files → 1 failed each. Restored.
 - `pnpm verify:auto` EXIT=0 in 67 s (330 files / 4199 vitest; 1511 cargo). A first run failed `format:check` on the tripwire test; Prettier fixed it.
 

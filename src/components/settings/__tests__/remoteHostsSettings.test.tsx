@@ -49,7 +49,7 @@ describe("hostReadoutLines — the readout's words, as values", () => {
       stateDetail: "installed by hand; Claudesk doesn't manage it",
       head: "HEAD aaaaaaa",
       root: "/Users/me/repo",
-      drift: "Up to date with GitHub.",
+      drift: "Up to date with its origin.",
     });
   });
 
@@ -60,12 +60,12 @@ describe("hostReadoutLines — the readout's words, as values", () => {
         substrate: DEV,
         drift: { drift: "differs", head: A, remote: B },
       }).drift,
-    ).toBe("Behind GitHub: this host is at aaaaaaa, GitHub at bbbbbbb.");
+    ).toBe("Behind its origin: this host is at aaaaaaa, origin at bbbbbbb.");
   });
 
   it("every no-verdict case says why", () => {
     expect(hostReadoutLines(DEV, true, { outcome: "checking" }).drift).toBe(
-      "Checking GitHub…",
+      "Checking the clone's origin…",
     );
     expect(
       hostReadoutLines(DEV, true, { outcome: "failed", reason: "timed out" })
@@ -238,6 +238,10 @@ describe("the Remote hosts group, on the real panel", () => {
     expect(group!.previousElementSibling?.getAttribute("data-testid")).toBe(
       "settings-group-workflow-features",
     );
+    // paydown-2026-11-27 WP5 (operator decision A): the drift is read against the clone's own
+    // origin, which can be any server, so the group's hint names the origin, never GitHub.
+    expect(group!.textContent).toContain("Checked against each clone's origin");
+    expect(group!.textContent).not.toMatch(/GitHub/);
     expect(group!.querySelector(".settings-group-title")?.textContent).toBe(
       "Remote hosts",
     );
@@ -250,7 +254,7 @@ describe("the Remote hosts group, on the real panel", () => {
     expect(up.querySelector("code")?.textContent).toBe("HEAD aaaaaaa");
     expect(
       up.querySelector('[data-testid="remote-host-drift"]')?.textContent,
-    ).toBe("Behind GitHub: this host is at aaaaaaa, GitHub at bbbbbbb.");
+    ).toBe("Behind its origin: this host is at aaaaaaa, origin at bbbbbbb.");
     const down = group!.querySelector(
       '[data-testid="remote-host-me@down-host"]',
     )!;
@@ -275,7 +279,7 @@ describe("the Remote hosts group, on the real panel", () => {
     });
     expect(
       panel.querySelector('[data-testid="remote-host-drift"]')?.textContent,
-    ).toBe("Checking GitHub…");
+    ).toBe("Checking the clone's origin…");
     await act(async () => root!.unmount());
     root = null;
     await act(async () => {
@@ -549,7 +553,7 @@ describe("Install on a remote host, from its entry", () => {
     expect(q(entry(panel), "remote-run-message")).toBeNull();
     expect(refreshCalls()).toEqual(["me@up-host", "me@up-host"]);
     expect(q(entry(panel), "remote-host-drift")?.textContent).toBe(
-      "Up to date with GitHub.",
+      "Up to date with its origin.",
     );
     expect(entry(panel).querySelector("code")?.textContent).toBe(
       "HEAD aaaaaaa",

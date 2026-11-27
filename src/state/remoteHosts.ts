@@ -20,7 +20,10 @@ export interface RemoteHostEntry {
   readonly substrate: HostSubstrate;
 }
 
-/** The host clone against GitHub. `differs`: the two HEADs differ (no fetch, §R.4). */
+/**
+ * The host clone against its own `origin` (any server; the published repo is on GitHub, but a
+ * Developer clone may point elsewhere). `differs`: the two HEADs differ (no fetch, §R.4).
+ */
 export type Drift =
   | {
       readonly drift: "up_to_date";

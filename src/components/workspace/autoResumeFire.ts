@@ -58,8 +58,11 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { encodeBase64 } from "../../cc/bridge";
-import { isRemoteKey, remoteAuthority } from "../../state/workspaceSurfaces";
-import { shortHost } from "../picker/remoteRow";
+import {
+  isRemoteKey,
+  remoteAuthority,
+  shortHost,
+} from "../../state/workspaceSurfaces";
 import {
   INJECT_SETTLE_MS,
   requiresInjection,

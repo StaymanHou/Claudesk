@@ -273,8 +273,11 @@ export function Workspace({
   // never inside it. On a remote workspace the supervisor (it reads the local WIP + transcript) and
   // the turn-marker jump (it reads xterm's buffer, empty under tmux) are absent.
   const surfaces = workspaceSurfaces(workspace.project_path);
+  // ONE read of the gate for every use below (the skill row, the absent-host note, Recycle): three
+  // inline hook calls seeded and listened three times, and their copies could briefly disagree.
+  const workflowGate = useWorkflowFeaturesEnabled();
   const workflowEnabled = isWorkflowApplicable(
-    useWorkflowFeaturesEnabled(),
+    workflowGate,
     workspaceProfile,
     workspaceHost,
   );
@@ -282,7 +285,7 @@ export function Workspace({
   // workspace's host does not have it (or did not answer). Absent with the gate OFF (arm 5).
   const hostNote = absentHostNote({
     hostBlocked: isWorkflowHostBlocked(
-      useWorkflowFeaturesEnabled(),
+      workflowGate,
       workspaceProfile,
       workspaceHost,
     ),
@@ -697,7 +700,7 @@ export function Workspace({
   // purely protective; that reading is what let an announced-but-never-started recycle look fine.)
   // ⚠️ Reuses the app's existing gate hook rather than a second source of truth.
   const workflowFeaturesEnabled = isWorkflowApplicable(
-    useWorkflowFeaturesEnabled(),
+    workflowGate,
     workspaceProfile,
     workspaceHost,
   );
