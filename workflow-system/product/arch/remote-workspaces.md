@@ -76,7 +76,13 @@ workspace.
   `tmux.conf` + the `cc-launch` launcher (option (b)) and printing `$HOME` behind a sentinel,
   `LinkHold` ref-counting (the last session's drop stops the link), `stop_all` in quit teardown
   (pinned by `tests/quit_teardown_stops_remote_links.rs`), `Drop` + `killpg` so no `ssh -M` outlives
-  the app (except a hard kill: `SURFACE-2026-11-16-REMOTE-LINK-MASTER-ORPHANED-WHEN-THE-APP-IS-KILLED`).
+  the app. A hard kill (SIGTERM, SIGKILL, a crash) runs none of that, so since paydown-2026-11-27 WP10
+  the NEXT launch of the same app reaps the orphan: `reap_orphaned_masters`, called from
+  `commands::init` before the registry exists, kills only `ppid == 1`, group-leading
+  `/usr/bin/ssh -M` processes whose `-S` is under THIS app's `<app_data>/ssh/` (so dev and prod never
+  reap each other's, and a master with a live parent is never touched). `run_worker` unpublishes
+  `master_pid` (`forget_master`) once a master exits, times out or drops, so `halt` does not `killpg`
+  a stale pid through the back-off.
   ⚠️ **`ssh -S <ctl> -o ControlMaster=no` silently connects DIRECTLY when the master socket is stale
   or gone** (Phase 5 verify-self: a reconnect raced the worker's 200 ms poll, read a stale Up, and
   re-attached over its own connection). So **terminals** carry `-o ProxyCommand=/usr/bin/false`
@@ -305,7 +311,8 @@ Measured in a real Claudesk xterm.js pane (the second terminal, same `XtermPane`
     (`workspace_id_for`).
   - **Symlinked rows:** a stored path that reaches the folder through a symlink gets its physical path
     (`cd -P && pwd -P` over the master, at each remote spawn) recorded as an alias, which the registry
-    matches too.
+    matches too. Each spawn's answer REPLACES the alias: no answer (no symlink, or a failed exec)
+    removes it, and `deregister` drops it (paydown-2026-11-27 WP10).
   - **The install runs on the link worker**, after the master answers and BEFORE the link reports Up, so
     any `ensure_and_hold` caller sees its result. It fetches over the master (`READ_SETTINGS`), merges
     locally, and writes back only on change (`WRITE_SETTINGS`: the content on stdin, `cp -p` so the mode
@@ -414,7 +421,10 @@ remote. Code, UI copy and tests use these two words for these two cases only.
   - **Producer:** the session's own edges, reported through an injected `LinkEdgeSink`
     (`apply_link_edge` → `WorkspaceRegistry::set_link_overlay`), on the one `workspace-status` stream:
     Lost in `on_inner_exit`'s Reconnect arm, Attached in `reconnect`, Ended in `emit_exit`. A hook
-    event during a pending re-attach keeps it (the drain stamps it, `drain_step`).
+    event during a pending re-attach keeps it (the drain stamps it, `drain_step`). Every emit goes through
+    `emit_settled` (paydown-2026-11-27 WP10), so a drain update and an edge emitted in the opposite order
+    to the one they decided in still END on the registry's current view: no stale dimmed tile after
+    `Attached`, no Unknown after a newer hook event.
   - **Surfaces:** the filmstrip tile and PiP row show the last state's hue, dimmed, plus a
     broken-link glyph and the tooltip "Not connected to <host>: reconnecting"
     (`WorkspaceStatusIndicator`'s `link`). The pane shows a strip, "Keys you type are not sent".

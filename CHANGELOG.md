@@ -81,6 +81,12 @@
 - **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-REMOTE-DISPATCH-INSIDE-PTY-CONSTRUCTOR — `SessionRegistry::spawn` builds one `cc_argv` and calls `PtyCcSession::spawn` (now local-only) or `RemoteCcSession::spawn_cc`.
 - **Backlog resolved:** SURFACE-2026-11-16-TRAY-REMOTE-LOST-SESSION-ALARM-NOT-VERIFIED-LIVE — verified live: a remote workspace driven to awaiting-input through the deployed remote hook kept `tray_debug_state` at `attention` after its tmux session was ended.
 - **Backlog resolved:** SURFACE-2026-11-27-CLOSE-NOT-ENDED-PROJECT-NOT-LIVE-CHECKED — verified live: with only the dev link master killed, closing the scratch workspace showed the toast naming the project and the unreachable cause, and the record went to `end-pending` (the optional `failed` cause was not driven).
+- **Feature shipped:** Backlog-paydown 2026-11-27 WP10: a remote link master orphaned by a hard-killed app is reaped at the app's next launch (only `ppid 1`, group-leading masters under that app's own `ssh/` dir), a reaped master's pid is unpublished at once, a remote row's stale physical-path alias is cleared, and every `workspace-status` emit settles on the registry's current view so a superseded update never stays last on the wire.
+- **Backlog resolved:** SURFACE-2026-11-16-REMOTE-LINK-MASTER-ORPHANED-WHEN-THE-APP-IS-KILLED — `remote_link::reap_orphaned_masters` runs in `commands::init` before the registry exists; verified live (a `kill -9`'d dev app's master at ppid 1 was reaped on relaunch).
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-STALE-MASTER-PID-AFTER-REAP — `run_worker` calls `forget_master` after a failed come-up and after a drop while Up, so `halt` no longer `killpg`s a stale pid through the back-off.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP4-REALPATH-ALIAS-NEVER-CLEARED — `set_remote_realpath` takes the spawn's `Option` answer (`None` removes the alias), and `deregister` drops it.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP4-STALE-OVERLAY-EMIT-RACE — `emit_settled` re-emits the registry's current view after any emit that it superseded, and `emit_raw` is the crate's one status emit (settle-on-emit replaces the suggested wire sequence, operator-approved).
+- **Milestone:** Backlog-paydown 2026-11-27 WP10 (Remote link lifecycle), the sweep's last work package.
 
 ## 2026-11-20
 

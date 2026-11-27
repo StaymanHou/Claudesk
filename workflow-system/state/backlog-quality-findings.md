@@ -15,37 +15,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §B.6
 
-# m17-wp3-remote-terminal — 2026-11-16
-
-*(feature-review-quality on ship commit `7f96ce3`, window `7f96ce3^..7f96ce3`; drive_mode=autopilot. 0 CRITICAL, 3 MAJOR, 8 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-11-16-QUALITY-M17WP3-STALE-MASTER-PID-AFTER-REAP
-- **Severity:** MINOR
-- **Location:** src-tauri/src/remote_link/mod.rs: `run_worker` (`master_pid`)
-- **Finding:** `master_pid` is cleared only at worker exit, so after `try_exit` reaped a dead master (or the up-timeout kill) a stale pid stays published through back-off + the next pre-connect; a `stop()` in that window `killpg`s it.
-- **Why it matters:** A reused pid would SIGKILL an unrelated process group (unlikely).
-- **Suggested action:** Clear `master_pid` when the master is reaped/killed (one line).
-- **Priority:** low
-- **Status:** pending
-
-# m17-wp4-status-over-the-link — 2026-11-16
-
-## SURFACE-2026-11-16-QUALITY-M17WP4-REALPATH-ALIAS-NEVER-CLEARED
-- **Source:** feature-review-quality (M17 WP4, MINOR)
-- **Location:** src-tauri/src/status_broadcaster/mod.rs: `remote_realpaths`, `set_remote_realpath`
-- **Finding:** The alias map is never cleared. A later spawn whose realpath equals the stored path (the symlink was removed) or whose exec fails keeps the old alias, still routing events from the old physical folder.
-- **Suggested action:** remove the entry when the realpath resolves to the stored path (or the resolve fails), and on deregister.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-16-QUALITY-M17WP4-STALE-OVERLAY-EMIT-RACE
-- **Source:** feature-review-quality (M17 WP4, MINOR)
-- **Location:** src-tauri/src/status_broadcaster: `drain_step` (stamp under the lock) vs the drain's emit after release; `apply_link_edge(Attached)`
-- **Finding:** A hook update stamped with the overlay can be emitted after `Attached` has already emitted Unknown, leaving a stale dimmed tile until the next hook event.
-- **Suggested action:** emit under a per-workspace sequence (drop an update older than the last emitted), or re-stamp at emit time.
-- **Priority:** low
-- **Status:** pending
-
 # paydown-2026-11-27-wp5-input-and-listeners — 2026-11-27
 
 *(feature-review-quality on ship commit `bc161e8`, window `bc161e8^..bc161e8`; drive_mode=autopilot. 0 CRITICAL, 2 MAJOR, 5 MINOR, all auto-backlogged.)*
@@ -256,3 +225,55 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Summary:** `arch/remote-workspaces.md` §C: WP9's new "As built" sub-bullet sits under a parent that still reads `SpawnTarget::{Local { cwd }, Remote { target }}`, while the real shape is `Local` / `Remote(Box<RemoteSpawn>)`. A reader sees two spellings one line apart.
 - **Suggested action:** correct the parent line to the as-built shape (or mark it as the design-time sketch). Doc-only.
 - **Priority:** low
+
+# paydown-2026-11-27-wp10-remote-link-lifecycle — 2026-11-27
+
+*(feature-review-quality on ship commit `226f863`, window `226f863^..226f863`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 6 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-27-QUALITY-WP10-STATUS-FUNNEL-GUARD-BLIND-SPOTS
+- **Source:** feature-review-quality (paydown-2026-11-27 WP10, MINOR)
+- **Location:** src-tauri/src/status_broadcaster/commands.rs: `every_status_emit_is_settled`
+- **Finding:** The site count matches only `emit(STATUS_EVENT,`-shaped forms, so `emit_to(<target>, STATUS_EVENT, …)`, `emit_filter`, and UFCS `Emitter::emit(&app, STATUS_EVENT, …)` would bypass it. The "inside a settle" check is the text since the previous `;`, so `if emit_settled(…).is_err() { emit_raw(&app, u) }` passes.
+- **Suggested action:** Add the `emit_to(`/`emit_filter(`/`Emitter::emit(` forms to the crate-wide count; tighten the use check to "is an argument of the `emit_settled(`/`apply_link_edge(` call" (e.g. the closure `|u|emit_raw(&app,u)` as the third argument). Mutation-prove each form alone.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-27-QUALITY-WP10-FORGET-MASTER-WINDOW-UNDOCUMENTED
+- **Source:** feature-review-quality (paydown-2026-11-27 WP10, MINOR)
+- **Location:** src-tauri/src/remote_link/mod.rs: `forget_master`, `run_worker`, `SshMaster::try_exit`
+- **Finding:** `forget_master` runs after `try_exit` has already reaped the child (plus a 50 ms stderr sleep) and after the up-timeout `kill` reaped it, so a `halt()` in that window can still `killpg` a freed pid. The ship commit message says "as soon as a master exits", which overstates it.
+- **Suggested action:** Document the residual window at `forget_master` (or publish/clear the pid inside the `Master` impl around its reap if it ever matters). No behaviour change needed.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-27-QUALITY-WP10-ORPHANED-MASTERS-DOC-SAYS-DIRECTLY-UNDER
+- **Source:** feature-review-quality (paydown-2026-11-27 WP10, MINOR)
+- **Location:** src-tauri/src/remote_link/mod.rs: `orphaned_masters` doc
+- **Finding:** The doc says `-S` names a path "directly under `ssh_dir/`", but `cmd.contains(&needle)` accepts any depth (`ssh/sub/x`). It affects only the doc: real ControlPaths are one level deep.
+- **Suggested action:** Reword to "under `ssh_dir/`", or match exactly one path component after the needle (then add a `ssh/sub/x` near-miss and mutation-prove it).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-27-QUALITY-WP10-DRAIN-LOOP-SECOND-TRY-STATE
+- **Source:** feature-review-quality (paydown-2026-11-27 WP10, MINOR)
+- **Location:** src-tauri/src/status_broadcaster/commands.rs: `drain_loop` emit block
+- **Finding:** The emit block calls `app.try_state::<SharedRegistry>()` a second time. That branch is unreachable (the first lookup succeeded), and if it were hit it would drop the update silently, unlike the first lookup's explicit "dropping event" log.
+- **Suggested action:** Lift the registry handle out of the first block and reuse it for `emit_settled`.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-27-QUALITY-WP10-LINK-EDGE-EMIT-IGNORES-FAILURE
+- **Source:** feature-review-quality (paydown-2026-11-27 WP10, MINOR)
+- **Location:** src-tauri/src/status_broadcaster/mod.rs: `apply_link_edge`
+- **Finding:** The unit-returning `emit` is wrapped to `Ok(())` and the result is `.ok()`'d, so the link-edge path never stops on a failed emit while the drain/promote/clear paths do. It is benign (a failed emit leaves the registry unchanged, so the re-read matches), but asymmetric.
+- **Suggested action:** Make `apply_link_edge`'s `emit` (the `LinkEdgeSink` body) return `Result<(), String>` and pass `emit_raw` straight through.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-27-QUALITY-WP10-FUNNEL-GUARD-ABOVE-USE-LINES
+- **Source:** feature-review-quality (paydown-2026-11-27 WP10, MINOR)
+- **Location:** src-tauri/src/status_broadcaster/commands.rs: `mod tests`
+- **Finding:** `every_status_emit_is_settled` sits above `use super::*;` and the module's other `use` lines (cosmetic).
+- **Suggested action:** Move it below the `use` block.
+- **Priority:** low
+- **Status:** pending

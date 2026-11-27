@@ -554,26 +554,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (the F10b entry it was measuring is resolved; this matters only for future readings)
 - **Status:** open — upstream (mccc); **sent 2026-11-27** (`HANDOFF-to-mccc-2026-11-27-f10b-classifier-and-install-sh-backup.md`, §1; re-checked present at mccc `f8e8873`). Stays open until mccc applies or declines it.
 
-## SURFACE-2026-11-16-REMOTE-LINK-MASTER-ORPHANED-WHEN-THE-APP-IS-KILLED
-- **Source:** feature:verify-human (M17 WP3 Phase 3; observed while stopping the dev app with SIGTERM)
-- **Target level:** product:wbs (M17 WP5 lifecycle)
-- **Type:** gap
-- **Summary:** A host link's `ssh -M -N` master runs in its own process group, so when the app dies WITHOUT running `perform_quit_teardown` (SIGTERM / SIGKILL / a crash), nothing kills it: it keeps running with `ServerAliveInterval` holding the connection and its `-R` forward. A graceful quit (`quit_now`) is fine (verified, WP3 Phase 2 O6), and `LinkRegistry`'s `Drop` does not run on a process kill.
-- **Context:** Observed 2026-11-16: `kill <dev app pid>` left one `ssh -M` (ControlPath under the dev app-data dir). The next launch's pre-connect `rm -f`s the remote socket and binds a new master, so it does not break the new link, but each crash leaks one local ssh process and one remote sshd session until the network drops.
-- **Suggested action:** In WP5 (crash/R-2 work): tie the master's lifetime to the app's, e.g. a stdin pipe the master watches (ssh exits on EOF when not `-N`/`-n`; needs a probe), or on launch reap any `ssh -M` whose `-S` is under this app's `ssh/` dir before starting a link. Add a live test: SIGKILL the app → no `ssh -M` with this app's ControlPath survives the next launch.
-- **Priority:** medium
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-
-## Code-quality findings — m17-wp3-remote-terminal (2026-11-16)
-
-- **Pointer:** **1 MINOR** remains from the review of `7f96ce3` (paydown-2026-11-27 WP1 buried the guard-heuristic MINOR; WP2 + WP3 resolved the WIP labels; WP8 resolved the inject refusal callback; WP9 resolved the remote dispatch in the PTY constructor and the host stored twice) (WP4 resolved the two link-lifecycle MAJORs and the unused `remote_link_ensure`; WP5 resolved the reconnect-seam MAJOR and the `cc_session` module split, 2026-11-17, CHANGELOG).
-  - MINOR: a stale `master_pid` after reap (paydown WP10).
-
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp3-remote-terminal — 2026-11-16`.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-- **Pickup shape:** one cleanup task.
-
 ## SURFACE-2026-11-27-APPBOOT-PIP-MOUNT-TEST-FLAKY-UNDER-GATE-LOAD
 - **Source:** feature:verify-auto (paydown-2026-11-27 WP10 Phase 2, full `pnpm verify:auto`)
 - **Target level:** task
@@ -594,18 +574,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Suggested action:** Make the test accept both outcomes of `set_read_timeout` (refused → the benign path; accepted → the normal path) while still asserting delivery, or make the close deterministic before the accept (e.g. wait until the peer's close is observable). Mutation-prove that it still fails when delivery breaks.
 - **Priority:** low
 - **Status:** pending
-
-## Code-quality findings — m17-wp4-status-over-the-link (2026-11-16)
-
-- **Pointer:** **2 MINOR** open from the review of the WP4 ship commit (`feat(m17-wp4): remote status over the link`) (the brittle pin + stale docs: docs fixed at paydown-2026-11-27 WP2, the pin already gone since M17 WP5; the shared toast resolved at paydown-2026-11-27 WP8). The MAJOR (the link-down quit freeze) was resolved 2026-11-16; WP5 resolved the overlay-key and two-spawn-execs MINORs (2026-11-17, CHANGELOG).
-  - MINORs:
-    - the realpath alias is never cleared;
-    - a stale-overlay emit race.
-
-  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp4-status-over-the-link — 2026-11-16`.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-- **Pickup shape:** the alias/emit-race MINORs are one status-path cleanup.
 
 ## SURFACE-2026-11-20-INSTALL-SH-RERUN-DELETES-AN-EXISTING-CLAUDE-MD-BAK
 - **Source:** feature:build (M18 WP3 probe, P1.3, after verify-self caught the first record's gap)
@@ -650,3 +618,12 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** one small task. The arch line is a doc fix; the other four are duplication and guard precision inside `cc_session`, best taken together (two of them re-spell the same caller guards).
+
+## Code-quality findings — paydown-2026-11-27-wp10-remote-link-lifecycle (2026-11-27)
+
+- **Pointer:** **6 MINOR** from the review of `226f863` (0 CRITICAL, 0 MAJOR): the status-funnel guard's blind spots (`emit_to`/`emit_filter`/UFCS, a textual "inside a settle" check); the undocumented post-reap window before `forget_master`; the `orphaned_masters` doc's "directly under" claim; a second `try_state` in `drain_loop`; `apply_link_edge` ignoring a failed emit; a test placed above the `use` lines.
+
+  Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-27-wp10-remote-link-lifecycle — 2026-11-27`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** one cleanup task (the guard forms + the two doc fixes + the drain-loop handle).

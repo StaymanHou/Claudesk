@@ -261,7 +261,7 @@ same change.
   `SessionRegistry::spawn`; mind the guards pinning `PtyCcSession::spawn(`.
 - Live: one scratch remote open + reconnect + Recycle on the mini (`[[remote-verify-hygiene]]`).
 
-## WP10: Remote link lifecycle  `[impact: Med · effort: S–M · risk: Med]` · feature
+## WP10: Remote link lifecycle  `[impact: Med · effort: S–M · risk: Med]` · feature ✅ SHIPPED 2026-11-27 (commit 226f863)
 
 Process-lifetime and race fixes; needs the mini for the live half.
 
