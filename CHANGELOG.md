@@ -87,6 +87,8 @@
 - **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP4-REALPATH-ALIAS-NEVER-CLEARED — `set_remote_realpath` takes the spawn's `Option` answer (`None` removes the alias), and `deregister` drops it.
 - **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP4-STALE-OVERLAY-EMIT-RACE — `emit_settled` re-emits the registry's current view after any emit that it superseded, and `emit_raw` is the crate's one status emit (settle-on-emit replaces the suggested wire sequence, operator-approved).
 - **Milestone:** Backlog-paydown 2026-11-27 WP10 (Remote link lifecycle), the sweep's last work package.
+- **Task closed:** The hook-socket closed-peer test no longer flakes under gate load: it repeats the closed-before-accept scenario up to 20 times, asserts delivery and a benign refusal on every attempt, and still requires macOS to refuse the timeout at least once (HEAD's single-draw version failed 1 of 40 full runs beside it, the new one 0).
+- **Backlog resolved:** SURFACE-2026-11-27-HOOK-SOCKET-CLOSED-PEER-TEST-FLAKY — the test accepts either outcome of the kernel race per attempt and is mutation-proven on its classifier, delivery and refusal asserts.
 
 ## 2026-11-20
 

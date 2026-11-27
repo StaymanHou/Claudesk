@@ -574,17 +574,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-27-HOOK-SOCKET-CLOSED-PEER-TEST-FLAKY
-- **Source:** feature:verify-codify (paydown-2026-11-27 WP8 Phase 2 full run)
-- **Target level:** task
-- **Type:** tech-debt (flaky test)
-- **Summary:** `hook_socket::tests::a_client_closed_before_accept_refuses_the_timeout_benignly_and_still_delivers` failed once in a full `pnpm verify:auto` (2026-11-27), panicking at its "macOS refuses SO_RCVTIMEO on a socket whose peer already closed: ()" expect. It passed on 2 isolated retries and on a full `cargo test` re-run. The test asserts that the OS REFUSES `set_read_timeout` once the peer has closed, and whether the close has landed before the accept is a kernel-timing race. WP8 touched no `hook_socket` file; the test came in with `e96e3b4` (hook-listener-read-timeout).
-- **Context:** A flaky gate step trains people to re-run on red. The production behaviour it guards (a refused timeout is benign and delivery still happens) is fine either way. Only the test's premise ("macOS always refuses") is timing-dependent.
-- **Frequency (paydown-2026-11-27 WP9, same day):** it failed in 2 of 4 full `pnpm verify:auto` runs (verify-auto passed, codify failed twice, then passed) and in 1 of 10 runner `cargo test --lib` runs. It passed 3/3 run alone and 3/3 as a bare `cargo test --lib`. So it fails under the gate's load more than once in a while: the priority may need raising. **WP10 Phase 1 verify-auto (same day):** failed again, the only red in the gate, and the `cargo test` re-run was green. That makes 3 of 5 full gates today.
-- **Suggested action:** Make the test accept both outcomes of `set_read_timeout` (refused → the benign path; accepted → the normal path) while still asserting delivery, or make the close deterministic before the accept (e.g. wait until the peer's close is observable). Mutation-prove that it still fails when delivery breaks.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-11-20-INSTALL-SH-RERUN-DELETES-AN-EXISTING-CLAUDE-MD-BAK
 - **Source:** feature:build (M18 WP3 probe, P1.3, after verify-self caught the first record's gap)
 - **Target level:** upstream (mccc `install.sh`), with a note for M18 WP7 (Update)
@@ -637,3 +626,13 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** one cleanup task (the guard forms + the two doc fixes + the drain-loop handle).
+
+## SURFACE-2026-11-27-UNIDENTIFIED-RUST-LIB-TEST-FLAKE
+- **Source:** task:verify (hook-socket-closed-peer-test-flaky)
+- **Target level:** task
+- **Type:** tech-debt (flaky test)
+- **Summary:** During 40 full runs of the Rust lib test binary (`target/debug/deps/claudesk_lib-*`, all tests, sequential), one test OTHER than the hook_socket closed-peer test failed once (run batch 1, 1/20; 0/20 in batch 2). Its name was not captured: the counting loop tallied failures without printing them.
+- **Context:** The closed-peer flake is now fixed, so any remaining red in `pnpm verify:auto`'s `cargo test` step is this one (or the `appBoot` PiP vitest flake). The next red gate should record the failing test's name before re-running.
+- **Suggested action:** Next time a `cargo test` step goes red, capture the `^test .* FAILED` line and the panic. Or loop the lib binary ~50× printing only failing test names, then de-flake whatever turns up.
+- **Priority:** low
+- **Status:** pending

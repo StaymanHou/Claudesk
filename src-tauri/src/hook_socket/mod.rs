@@ -927,33 +927,52 @@ mod tests {
     /// The common local-hook shape: the client is gone before `accept()`. macOS then refuses
     /// the timeout with `EINVAL`, which must classify as benign (no stderr line per event),
     /// and the line it sent must still read normally.
+    ///
+    /// ⚠️ Whether the close has LANDED by `accept()` is a race the test cannot control: under
+    /// the parallel gate, another test's forked child can briefly hold the client fd (until
+    /// its exec closes it), so `drop` is not the last close and the timeout is ACCEPTED. A
+    /// single draw failed 3 of 5 full gates (2026-11-27). So each attempt accepts either
+    /// outcome (delivery must hold both ways, and a refusal must classify as benign), and the
+    /// macOS premise is kept by requiring at least one refusal across the attempts.
     #[test]
     fn a_client_closed_before_accept_refuses_the_timeout_benignly_and_still_delivers() {
+        const ATTEMPTS: usize = 20;
         let dir = tempfile::TempDir::new().unwrap();
         let path = dir.path().join("hook.sock");
         let listener = bind_listener(&path).unwrap();
-        let mut client = UnixStream::connect(&path).unwrap();
-        send_event(&mut client, "Stop", "gone");
-        drop(client); // closed before the server accepts
+        let mut refused = 0;
+        for attempt in 0..ATTEMPTS {
+            let sid = format!("gone-{attempt}");
+            let mut client = UnixStream::connect(&path).unwrap();
+            send_event(&mut client, "Stop", &sid);
+            drop(client); // closed before the server accepts (unless a forked child holds it)
 
-        let (stream, _) = listener.accept().unwrap();
-        let err = stream
-            .set_read_timeout(Some(TEST_READ_TIMEOUT))
-            .expect_err("macOS refuses SO_RCVTIMEO on a socket whose peer already closed");
+            let (stream, _) = listener.accept().unwrap();
+            if let Err(err) = stream.set_read_timeout(Some(TEST_READ_TIMEOUT)) {
+                assert!(
+                    peer_already_closed(&err),
+                    "a refusal must classify as benign: {err:?}"
+                );
+                refused += 1;
+            }
+
+            let mut line = String::new();
+            BufReader::new(stream).read_line(&mut line).unwrap();
+            assert!(
+                line.contains(&format!("\"session_id\":\"{sid}\"")),
+                "line still delivered on attempt {attempt}: {line}"
+            );
+            if refused > 0 {
+                break;
+            }
+        }
         assert!(
-            peer_already_closed(&err),
-            "must classify as benign: {err:?}"
+            refused > 0,
+            "macOS never refused SO_RCVTIMEO on a closed peer in {ATTEMPTS} attempts"
         );
         assert!(!peer_already_closed(&std::io::Error::from_raw_os_error(
             libc::EBADF
         )));
-
-        let mut line = String::new();
-        BufReader::new(stream).read_line(&mut line).unwrap();
-        assert!(
-            line.contains("\"session_id\":\"gone\""),
-            "line still delivered: {line}"
-        );
     }
 
     /// The timeout leaves a record naming the client, so the next stall is explainable from
