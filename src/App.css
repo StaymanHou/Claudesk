@@ -4029,21 +4029,37 @@ body,
   border-color: rgba(255, 255, 255, 0.7);
 }
 
-/* When the picker is shown as the modal overlay panel (filmstrip "+" re-entry), it is
-   height-constrained by `.picker-overlay-panel` (max-height:80% + overflow-y:auto), so
-   the standalone full-viewport column must NOT also apply — let it size to content. */
+/* When the picker is shown as the modal overlay panel (filmstrip "+" re-entry), the
+   standalone full-viewport height must NOT apply. The picker stays a flex column but
+   becomes a flex ITEM of the panel's column instead: it sizes to content, and once the
+   panel hits its max-height it SHRINKS (`min-height: 0`), handing the squeeze down to the
+   project list, the one element in it that scrolls. Before this, the panel scrolled too,
+   and the overlay showed two nested scrollbars with the bottom buttons behind the outer one
+   (SURFACE-2026-11-18-PICKER-OVERLAY-NESTED-SCROLLBARS). */
 .picker-overlay-panel .picker {
   height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* In the overlay the list takes exactly the leftover height, so the standalone-fallback
+   60vh cap would only waste space on a tall window. */
+.picker-overlay-panel .picker-recents {
+  max-height: none;
 }
 
 /* M4 WP2 — the picker shown as a modal panel inside `command-palette-backdrop`
    (the filmstrip "+" re-entry). Constrains the otherwise full-page `.picker` to a
-   centered card and tones down its top padding. Dark tokens only. */
+   centered card and tones down its top padding. Dark tokens only.
+   A flex column that never scrolls itself: its one child (`.picker`) shrinks to fit the
+   80% cap and the project list inside scrolls instead (see `.picker-overlay-panel .picker`). */
 .picker-overlay-panel {
   position: relative;
   width: min(92%, 640px);
   max-height: 80%;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background-color: #252526;
   border: 1px solid #3c3c3c;
   border-radius: 6px;
@@ -4156,7 +4172,8 @@ body,
      projects it must scroll rather than push the Open-Folder button off-screen.
      In the `.picker` flex column it takes the leftover height (flex:1) and scrolls;
      `min-height:0` is required for a flex child to shrink below content + scroll. The
-     overlay variant (no flex column) falls back to the 60vh cap below. */
+     60vh cap is a fallback for a context without a bounded column; the overlay lifts it
+     (`.picker-overlay-panel .picker-recents`), since its panel is a bounded column too. */
   flex: 1 1 auto;
   min-height: 0;
   max-height: 60vh;

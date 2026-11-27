@@ -716,6 +716,12 @@ export function ProjectPicker({
         {...NO_TEXT_ASSIST}
         placeholder="Filter projects…"
         aria-label="Filter projects"
+        // Type-to-filter the moment a picker appears. Both surfaces (the first-open scene
+        // and the "+" `PickerOverlay`) MOUNT the picker fresh each time it appears, so a
+        // mount-time focus covers every appearance. It also pulls focus out of the CC pane's
+        // xterm, where it would otherwise stay (the "+" click takes no focus) and send the
+        // keystrokes to CC. `PickerOverlay` hands focus back on dismiss.
+        autoFocus
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
       />

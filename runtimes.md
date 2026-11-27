@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-11-20
+updated: 2026-11-27
 ---
 
 # Runtime Registry
@@ -31,7 +31,9 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 75s (2026-11-20, M18 WP8 Phase 2 verify-codify (full), EXIT=0)
+- **Last:** 69s (2026-11-27, picker-qol Phase 1 verify-codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
+- **Prior:** 170s (2026-11-27, picker-qol Phase 1 verify-auto, EXIT=0; first run in a week, cold cargo cache)
+- **Prior:** 75s (2026-11-20, M18 WP8 Phase 2 verify-codify (full), EXIT=0)
 - **Prior:** 82s (2026-11-20, M18 WP8 Phase 2 verify-auto, EXIT=0)
 - **Prior:** 57s (2026-11-20, M18 WP8 Phase 1 verify-codify (full), EXIT=0)
 - **Prior:** 79s (2026-11-20, M18 WP8 Phase 1 verify-auto (re-run after a clippy fix), EXIT=0)
@@ -94,7 +96,7 @@ real chronology.
 - **Prior:** 68s (2026-11-17, M17 WP5 Phase 2 build, EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 57s (2026-11-16, M17 WP5 Phase 1 verify-auto, EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 44s (2026-11-16, M17 WP4 Phase 4 verify-codify (full), EXIT=0; incremental cache, timeout kept at the cold-run value)
-- **Use timeout:** 263000
+- **Use timeout:** 315000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
