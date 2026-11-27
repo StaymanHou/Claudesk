@@ -421,9 +421,10 @@ for dev. It is size-capped at 5 MiB with one rotated generation (`.log.1`), reus
     2026-11-04, paydown sweep R2). An adjudicator failure is often machine-wide (a broken CLI, a
     moved pin), and failures across interleaved projects may never reach 3 in any one of them. A
     machine-wide counter was proposed and **declined**, so do not re-file it as a defect.
-- **`inject-failed` is now reachable.** `injectCommand` swallows a rejected `cc_input`, so the
-  supervisor passes an `onIpcError` that re-throws. Before this, a failed injection was reported as
-  a fire.
+- **`inject-failed` is now reachable.** `injectCommand` swallows a rejected `cc_inject` and
+  resolves to the refusal (`InjectRefusal`, since paydown-2026-11-27 WP8; it was an `onIpcError`
+  callback before), and the supervisor re-throws the refusal's diagnostic `message`. Before this, a
+  failed injection was reported as a fire.
 - **In-UI:** the `⚙ supervised` badge's tooltip carries the newest decision
   (`Last: withheld: … · 2m ago`, live via the frontend-only `activityFeed`, seeded from the file on
   mount), and the `▾` trigger beside it opens a popover listing the project's last 20 decisions.

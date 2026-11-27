@@ -72,12 +72,13 @@
 - [lsof misses IPv6 Vite](lsof-ti-tcp-misses-ipv6-vite.md) — Never kill a `target/debug/claudesk` you didn't launch.
 - [F-b dev profile](dev-profile-for-f-b-verification.md) — Use `~/.config/claude-original-dev`, never real profiles.
 - [Debug bundle origin](debug-bundle-verifies-bundled-origin.md) — `tauri build --debug --bundles app` + `open` verifies `tauri://localhost`.
+- [Hidden dev window: no rAF](hidden-dev-window-blocks-raf-and-term-spawn.md) — Right-panel terminal never spawns, screenshots stale; write into the real xterm `Terminal` via its fiber; relaunch → bridge stop+start.
 - [Installed-build checks](installed-build-verify-deferred-to-release.md) — Installed-`.app` and native-window checks wait for the `/release` gate.
 - [Run CLI captures yourself](verify-human-agent-runs-cli-captures.md) — Ask the operator only for judgment calls.
 - [TCC granted, still flaky](macos-tcc-permissions-granted.md) — `screencapture` can fail a session; use the bridge screenshot.
 - [notarytool preflight errors](notarytool-credential-unreadable-while-screen-locked.md) — "No Keychain password item" = screen locked (unlock, don't re-store); 403 "agreement missing" = Account Holder must accept.
 - [Trash via Finder](verify-trash-via-finder-not-ls.md) — `~/.Trash` is TCC-blocked; read-only Finder osascript query.
-- [Mini account](mini-remote-user-is-stayman.md) — Which account to use (never root-ops; the dev `projects.json` row is still root-ops, so never take ssh's user from it), token location, the pre-push identifier grep list. Gitignored: names real accounts.
+- [Mini account](mini-remote-user-is-stayman.md) — Which account to use (never root-ops; the dev `projects.json` row is still root-ops, so never take ssh's user from it), token location, the pre-push identifier grep list (scratchpad paths count). Gitignored: names real accounts.
 - [Remote verify hygiene](remote-verify-hygiene.md) — Real commands only in a scratch remote folder; check open remote workspaces before stopping the app; rebuilds and App.tsx edits are hard stops; the mini's dev account HAS the workflow skills (HTTPS origin, `git pull` works since 2026-11-18); seed a scratch WIP before a live Recycle; probe a host without Claudesk via your own `ssh -M` (socket in a short `/tmp` dir, scripts on stdin); a hand-added dev `projects.json` row needs integer timestamps (null breaks the whole list); the open check's 20 s grace gives an Up link without spawning CC.
 - [Live preflight harness](remote-preflight-live-test-harness.md) — Check the add-time preflight on a real host via the ignored `live_preflight_against_a_real_host` + `CLAUDESK_TEST_REMOTE_HOST/_PATH`; no source edit.
 - [Trust dialog exits](cc-trust-dialog-defaults-to-exit.md) — Defaults to "No, exit"; read the pane, answer ↓ then \r.

@@ -566,12 +566,11 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m17-wp3-remote-terminal (2026-11-16)
 
-- **Pointer:** **4 MINOR** remain from the review of `7f96ce3` (paydown-2026-11-27 WP1 buried the guard-heuristic MINOR; WP2 + WP3 resolved the WIP labels) (WP4 resolved the two link-lifecycle MAJORs and the unused `remote_link_ensure`; WP5 resolved the reconnect-seam MAJOR and the `cc_session` module split, 2026-11-17, CHANGELOG).
+- **Pointer:** **3 MINOR** remain from the review of `7f96ce3` (paydown-2026-11-27 WP1 buried the guard-heuristic MINOR; WP2 + WP3 resolved the WIP labels; WP8 resolved the inject refusal callback) (WP4 resolved the two link-lifecycle MAJORs and the unused `remote_link_ensure`; WP5 resolved the reconnect-seam MAJOR and the `cc_session` module split, 2026-11-17, CHANGELOG).
   - MINORs:
     - a stale `master_pid` after reap;
     - the remote dispatch sits inside the PTY constructor;
-    - the remote host is stored twice;
-    - the inject refusal comes back as a callback, not a value.
+    - the remote host is stored twice.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp3-remote-terminal — 2026-11-16`.
 - **Priority:** low
@@ -609,52 +608,25 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** pending
 ## Code-quality findings — m17-wp4-status-over-the-link (2026-11-16)
 
-- **Pointer:** **3 MINOR** open from the review of the WP4 ship commit (`feat(m17-wp4): remote status over the link`) (the brittle pin + stale docs: docs fixed at paydown-2026-11-27 WP2, the pin already gone since M17 WP5). The MAJOR (the link-down quit freeze) was resolved 2026-11-16; WP5 resolved the overlay-key and two-spawn-execs MINORs (2026-11-17, CHANGELOG).
+- **Pointer:** **2 MINOR** open from the review of the WP4 ship commit (`feat(m17-wp4): remote status over the link`) (the brittle pin + stale docs: docs fixed at paydown-2026-11-27 WP2, the pin already gone since M17 WP5; the shared toast resolved at paydown-2026-11-27 WP8). The MAJOR (the link-down quit freeze) was resolved 2026-11-16; WP5 resolved the overlay-key and two-spawn-execs MINORs (2026-11-17, CHANGELOG).
   - MINORs:
     - the realpath alias is never cleared;
-    - the hook warning shares the inject toast (WP5 added three more writers; see the item's update);
     - a stale-overlay emit race.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp4-status-over-the-link — 2026-11-16`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-- **Pickup shape:** the alias/emit-race MINORs are one status-path cleanup; the toast item pairs with WP9.
+- **Pickup shape:** the alias/emit-race MINORs are one status-path cleanup.
 
 ## Code-quality findings — m17-wp5-lifecycle (2026-11-17)
 
-- **Pointer:** **1 MAJOR + 2 MINOR** open from the review of the WP5 ship commit (`67dec33`) (paydown-2026-11-27 WP2 resolved the announce comment, the displaced doc blocks and the `SessionExists` comment; WP4 the `DRIVE_MODES` copy and the dense-body helpers); 2 more MINORs were appended to existing WP3/WP4 items (the shared workspace toast; WIP labels in comments). The review's CRITICAL (the `remote_record` lost-update race) goes to `/feature-refactor` before finalize.
+- **Pointer:** **1 MAJOR** open from the review of the WP5 ship commit (`67dec33`) (paydown-2026-11-27 WP2 resolved the announce comment, the displaced doc blocks and the `SessionExists` comment; WP4 the `DRIVE_MODES` copy and the dense-body helpers; WP8 the close-not-ended toast's cause/project and the "no such session" text coupling); 2 more MINORs were appended to existing WP3/WP4 items (the shared workspace toast, since resolved at WP8; WIP labels in comments). The review's CRITICAL (the `remote_record` lost-update race) goes to `/feature-refactor` before finalize.
   - MAJOR: the reconnect drive mode as nested `Option`s + a redundant `attach` flag.
-  - MINORs: the close-not-ended toast's cause/project; the "no such session" text coupling.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp5-lifecycle — 2026-11-17`.
-- **Priority:** medium (the MAJOR), low (the rest)
+- **Priority:** medium
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
-- **Pickup shape:** the MAJOR + the `DRIVE_MODES` copy + the `SessionExists` comment are one reconnect-mode cleanup; the doc/comment MINORs are a docs pass; the toast/coupling MINORs fold into WP9 or the WP4 toast item.
-
-## Code-quality findings — m18-wp2-fresh-account-hardening (2026-11-18)
-
-- **Pointer:** **1 MINOR** open from the review of the WP2 ship commit (`1a71d1b`): `withheldNotice`'s defaulted `cause` (the indent-bound guard was resolved by paydown-2026-11-27 WP4). The 2 MAJORs (the stale remote bypass answer across Recycle; the `setup-token` hint) and the "is showing" MINOR were resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-fresh-account-hardening — 2026-11-18`.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
-- **Pickup shape:** paydown polish.
-
-## Code-quality findings — m18-wp2-5-remote-copy-to-mac-clipboard (2026-11-18)
-
-- **Pointer:** **1 MINOR** open from the review of the WP2.5 ship commit (`e38cdc7`): a failed or refused copy is silent (the operator pastes the previous clipboard). (The conf assert message was added at paydown-2026-11-27 WP4.) (The cap pin and the shared `Terminal` fake were resolved by paydown-2026-11-27 WP3.) The paste-jacking MAJOR was resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18`.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
-- **Pickup shape:** paydown-2026-11-27 WP8 (the silent-failure toast).
-
-## SURFACE-2026-11-17-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE
-- **Source:** feature:verify-human (M17 WP8 P3.2a, installed v0.9.0)
-- **Target level:** task
-- **Type:** tech-debt (cosmetic)
-- **Summary:** When a remote open's check finds the session dead although the picker label predicted "reconnect", the workspace shows "The Claude Code session on <host> had ended since Claudesk last saw it, so it was started again." in the RED error toast style (`role="alert"`). Nothing failed: it reports what happened, so it belongs in the neutral info style (`is-info`, `role="status"`), as WP6's absent-surface notices do.
-- **Context:** The notice rides `readRemoteOpenToast` → `setInjectFailure` in `Workspace.tsx` (the `onSessionId` handler), which always sets `kind: "error"`. The same path also carries the real failures (the remote hook install failed), so the fix has to give each notice its own kind, not flip the whole path. Operator ruling at WP8 verify-human: accept as-is for M17, backlog the restyle.
-- **Also (M18 WP2, operator 2026-11-18, P2.verify-human.3):** the auto-resume WITHHELD notices (`autoResumeFire.ts` → `withheldNotice`: the bypass-warning notice, local and remote, and the M17 remote trust notice) ride the same `setInjectFailure` red toast, though nothing failed. Give them the info kind too.
-- **Suggested action:** Have `readRemoteOpenToast` return a kind with its text, so the "started again" / predicted-vs-actual notices render as info and the hook-install warning stays an error. ⚠️ `readRemoteOpenToast` joins the open notice and the hook warning into ONE string (`parts.join(" ")`), so one toast can carry both: the **error kind must win** in that case (or split it into two toasts), so a real hook-install failure is never shown as neutral. Pin both cases with a live-mount test on the toast's `data-kind`.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
+- **Pickup shape:** one reconnect-mode cleanup.
 
 ## SURFACE-2026-11-20-INSTALL-SH-RERUN-DELETES-AN-EXISTING-CLAUDE-MD-BAK
 - **Source:** feature:build (M18 WP3 probe, P1.3, after verify-self caught the first record's gap)
@@ -685,3 +657,10 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** one small comments-only task.
+
+## Code-quality findings — paydown-2026-11-27-wp8-workspace-notices (2026-11-27)
+
+- **Pointer:** **7 MINOR** from the review of `53bac5a`: the toast stack's empty area blocks clicks to the pane (CSS `pointer-events`); OSC 52's failure sink is optional; `osc52Text` is a test-only wrapper; `OpenTimeNotice` duplicates the toast types; `FireRun.inject` was widened to `unknown`; `project_label` derives the project name separately from the picker's `display_name`; the close-not-ended mirror's new TS checks match the whole file. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-2026-11-27-wp8-workspace-notices — 2026-11-27`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** one small task. The CSS click-through fix is the only one a person would notice; the rest are typing, duplication and guard precision.

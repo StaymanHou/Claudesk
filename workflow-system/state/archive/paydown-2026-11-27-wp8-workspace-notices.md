@@ -5,7 +5,8 @@ drive_mode: autopilot
 # Feature: paydown-2026-11-27 WP8 — Workspace notices: kind + slot
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete)
+**Completed:** 2026-11-27 (ship `53bac5a`)
 **Created:** 2026-11-27
 **Source:** `workflow-system/product/backlog-paydown-wbs.md` §WP8
 
@@ -143,8 +144,8 @@ failed copy is visible, and the three shapes are values/typed with both sides pi
     Test scope: full — last phase
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality against the ship commit. Ship: full suite reused from Phase 2's codify run (`Test scope: full — last phase`; vitest 4225 passed, cargo 1596/0 after the triaged flaky re-run). Fast checks re-run at ship: eslint 0 errors, prettier clean, tsc clean Dev app running (PID 75302, picker). The dev app was stopped before the Rust edits (the PIDs I launched, by full command line)
+- **Path:** Feature > done (archived)
+- **Active scope:** none. Finalized 2026-11-27: CHANGELOG + 7 delete-on-resolve, arch resynced (remote-workspaces, workflow-supervisor), WBS §WP8 marked shipped. Ship: full suite reused from Phase 2's codify run (`Test scope: full — last phase`; vitest 4225 passed, cargo 1596/0 after the triaged flaky re-run). Fast checks re-run at ship: eslint 0 errors, prettier clean, tsc clean Dev app running (PID 75302, picker). The dev app was stopped before the Rust edits (the PIDs I launched, by full command line)
 - **Blocked:** none
 - **Unvisited:** none (all phases complete)
 - **Open discoveries:** none
@@ -184,7 +185,48 @@ Confidence: high that WP8 did not cause it. Whether it is flaky is decided by re
 Evidence: it panicked at `hook_socket/mod.rs` line 942, "macOS refuses SO_RCVTIMEO on a socket whose peer already closed: ()". The assertion expects the OS to REFUSE `set_read_timeout` on an already-closed peer; this run the call succeeded, which is a kernel-timing race in the test's premise.
 Action: re-ran the single test up to 2 more times (3 runs in all). **Result: passed both retries (inconsistent across runs → flaky, confirmed).** Neither the code nor the test was changed. A full `cargo test` re-run → 1596 passed / 0 failed. Logged as backlog `SURFACE-2026-11-27-HOOK-SOCKET-CLOSED-PEER-TEST-FLAKY`.
 
+## Code-Quality Review — paydown-2026-11-27-wp8-workspace-notices
+
+*(ship commit `53bac5a`, window `53bac5a^..53bac5a`; drive_mode=autopilot → 7 MINOR auto-backlogged to `backlog-quality-findings.md` → `# paydown-2026-11-27-wp8-workspace-notices — 2026-11-27`.)*
+
+### Strengths
+- `workspaceToasts.ts` is a well-built single funnel: `toastsReducer` is pure, its module header states every rule it enforces, `Workspace.tsx` writes only through it, and each rule is covered (including the latch staying hook-only, an unknown dismiss id, and docs' fresh id).
+- Returning the refusal as a value (`InjectRefusal | null`) is a clean API change: the Recycle object cell is gone, all four callers are short, and the supervisor's label guard regex is tighter.
+- `CloseNotEndedReason`'s `From<&CloseExecError>` is an exhaustive `match`, so a new close-error variant forces a wording choice. The serde mirror checks both wire spellings, and the kill test checks the mapping and its order after `record EndPending`.
+- The mutation testing found real gaps (the RightPanelHost → TerminalPane forward, the hook-latch scope) and closed them with tests.
+- The docs say what actually happens: security-posture admits Rust's cap is an unreached backstop, and the WIP records its substitution and the unchecked `AppPorts` emit.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [`App.css` → `.workspace-inject-toasts`] The stack container's empty area left of narrower rows, and its gaps, block clicks to the pane beneath. Fix: `pointer-events: none` on the container, `auto` on each row.
+- [`osc52.ts` → `registerOsc52` / `osc52Handler` / `macClipboardSink`] `onFailure` is optional and `sink` defaults to a failure-less Mac sink, so a bare `registerOsc52(term)` brings back the silent failed copy. `XtermPane` passes the callback twice.
+- [`osc52.ts` → `osc52Text`] A test-only wrapper beside `osc52Decode`.
+- [`remoteHookWarning.ts` → `OpenTimeNotice`] Restates the toast kind/source types instead of importing them.
+- [`autoResumeFire.ts` → `FireRun.inject`] Widened to `Promise<unknown>`, which drops the typed refusal at that seam.
+- [`cc_session::remote::project_label`] The doc claims it matches the picker row, but the row shows `derive_display_name`'s stored value, a second derivation.
+- [`the_close_not_ended_event_matches_its_ts_mirror`] The new TS checks are whole-file `contains`, not scoped to `RemoteCloseNotEnded`.
+
+### Assessment
+Well-built; it leaves the codebase better. The single overwritten slot is now one pure reducer with tested rules, the refusal callback is a return value, and two substring-coupled wire texts are pinned on both sides. The leftover debt is small and local, and none of it changes behaviour today or calls for a refactor pass.
+
+### If you disagree
+Mark a finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
 [SURFACED-2026-11-27] Phase 2 > P2.3 — `AppPorts::close_not_ended`'s `project` (from `project_label(target.path())`) has no live check. It rides WP9/WP10's remote session (operator accepted the gap at P2.verify-human.2). Logged as `SURFACE-2026-11-27-CLOSE-NOT-ENDED-PROJECT-NOT-LIVE-CHECKED`.
+
+## Retrospect
+- **What changed in our understanding:** The QF's own "WP5 update" (five writers, last wins) mattered more than the WBS line it rode under. Neither "error wins in a joined toast" nor "a separate hook slot" fixed it; only a list did, so PD1 widened the plan, and the operator kept it (option A). The OSC 52 refusal was already decided frontend-side, so Rust's "refused, not truncated (both sides)" was never reached by its only caller.
+- **Assumptions that held:** All three API changes (the `injectCommand` return, the `UnknownSession` mirror, the close-not-ended payload) stayed local: every caller moved in the same phase, `tsc` and `check:link` caught every stale call site, and `App.tsx` was never touched.
+- **Assumptions that were wrong:** (1) The plan named the right-panel shell for the live OSC 52 check, but a hidden dev window never spawns the deferred `term_spawn` (rAF does not run while `visibilityState` is hidden). The write went into the CC pane's real parser instead. (2) The RightPanelHost → TerminalPane forward looked covered and survived all 4127 tests; it needed its own test. (3) A full gate run hit a pre-existing flaky `hook_socket` test (backlogged).
+- **Approach delta:** PD1 (a list instead of a joined toast) and PD3 (`{ message, reason } | null` instead of `string | null`, because the supervisor reads `message`) went beyond the WBS line and were disclosed at plan time. Otherwise as planned: 2 phases, 32 mutants killed, 7 review MINORs backlogged. One live check (the close-not-ended `project` emit) was deferred to WP9/WP10 by operator ruling.
+
+**Closure:** Requester = operator — closure notice for self-record. **Feature complete:** paydown-2026-11-27 WP8 has shipped (`53bac5a`). Workspace notices now stack as their own red/neutral rows instead of overwriting each other, a refused or failed terminal copy is shown, and Claudesk's injection refusals and close-not-ended toasts are typed and pinned on both sides. See it by opening any workspace and raising two notices, or by copying over 4 MiB from a remote pane.

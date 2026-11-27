@@ -231,7 +231,7 @@ Subprocess / runner / announce / preflight / remote_ops. Each item comes with a 
   the alarm). The remote half (lost remote session keeps it lit) needs the mini: run it if a
   scratch remote row is available, else record it as not run.
 
-## WP8: Workspace notices: kind + slot  `[impact: Med · effort: S–M · risk: Low–Med]` · feature
+## WP8: Workspace notices: kind + slot  `[impact: Med · effort: S–M · risk: Low–Med]` · feature ✅ SHIPPED 2026-11-27 (commit 53bac5a)
 
 One theme: the single `setInjectFailure` red-toast slot is shared by five writers (last writer
 wins), and several of them aren't failures at all.

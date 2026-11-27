@@ -46,15 +46,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-16-QUALITY-M17WP3-INJECT-REFUSAL-AS-CALLBACK
-- **Severity:** MINOR
-- **Location:** src/components/workspace/autoResumeFire.ts `injectCommand`; recycleSession.ts `injectRefusal`
-- **Finding:** `onIpcError` grew a `reason` every new caller wants while ignoring `message`; Recycle needs an object-cell trick to turn the callback back into a value.
-- **Why it matters:** Callers reconstruct a return value from a callback.
-- **Suggested action:** Have `injectCommand` resolve to `string | null` (the refusal reason); simplify the three callers.
-- **Priority:** low
-- **Status:** pending
-
 # m17-wp4-status-over-the-link — 2026-11-16
 
 ## SURFACE-2026-11-16-QUALITY-M17WP4-REALPATH-ALIAS-NEVER-CLEARED
@@ -64,15 +55,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** remove the entry when the realpath resolves to the stored path (or the resolve fails), and on deregister.
 - **Priority:** low
 - **Status:** pending
-
-## SURFACE-2026-11-16-QUALITY-M17WP4-HOOK-WARNING-SHARES-INJECT-TOAST
-- **Source:** feature-review-quality (M17 WP4, MINOR)
-- **Location:** src/components/workspace/Workspace.tsx: `onSessionId` → `readRemoteHookWarning` → `setInjectFailure`
-- **Finding:** The hook-install warning reuses the inject-failure toast state and is re-read after every respawn (Recycle, drive-mode apply-now).
-- **Suggested action:** a separate notice slot (or a "shown once per link connect" latch) for the warning.
-- **Priority:** low
-- **Status:** pending
-- **Update 2026-11-17 (M17 WP5 review):** WP5 added three more writers to the same slot (the open notice, the withheld-restore notice, a failed-Detach notice): five sources, last writer wins (a start notice can be overwritten ~1.5 s later by the withheld notice). Worse, not new.
 
 ## SURFACE-2026-11-16-QUALITY-M17WP4-STALE-OVERLAY-EMIT-RACE
 - **Source:** feature-review-quality (M17 WP4, MINOR)
@@ -91,42 +73,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** `enum SessionMode { Unknown, None, Mode(DriveMode) }` + `enum RemoteOpen { Start, Attach(SessionMode) }`; re-spell the exact-text caller guards that pin today's shape in the same change.
 - **Priority:** medium
 - **Status:** pending
-
-## SURFACE-2026-11-17-QUALITY-M17WP5-CLOSE-NOT-ENDED-TOAST-CAUSE-AND-PROJECT
-- **Source:** feature-review-quality (M17 WP5, MINOR)
-- **Location:** `src/state/remoteCloseNotEnded.ts` (`closeNotEndedText`)
-- **Finding:** Always says "it isn't reachable", though `RemotePorts::close_not_ended` also fires when the end ran (link up) and failed; and the text names only the host, not the project (two such toasts for rows on one host read the same and overwrite).
-- **Suggested action:** carry the reason (not delivered vs failed) and the project name in the payload; word the toast from them.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-11-17-QUALITY-M17WP5-UNKNOWN-SESSION-TEXT-COUPLING
-- **Source:** feature-review-quality (M17 WP5, MINOR)
-- **Location:** `src/state/detachWorkspace.ts` (`NO_SUCH_SESSION`)
-- **Finding:** "Already gone → safe to close" is a substring match on Rust's `CcError::UnknownSession` Display text, with no shared constant or wire test; rewording the Rust error turns a benign case into a kept tile + error toast.
-- **Suggested action:** a typed error code on the wire, or a Rust↔TS mirror test like `the_close_not_ended_event_matches_its_ts_mirror`.
-- **Priority:** low
-- **Status:** pending
-
-# m18-wp2-fresh-account-hardening — 2026-11-18
-
-## SURFACE-2026-11-18-QUALITY-WITHHELD-NOTICE-CAUSE-DEFAULT
-- **Source:** feature-review-quality (M18 WP2, MINOR)
-- **Type:** tech-debt (API shape)
-- **Summary:** `autoResumeFire.ts` → `withheldNotice`'s `cause` defaults to `{ untrusted: true, bypass: false }`. Production always passes it; only one older test relies on the default, and a future caller that forgets it silently gets trust-only behaviour.
-- **Suggested action:** make `cause` required and update the one test.
-- **Priority:** low
-
-# m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18
-
-*(feature-review-quality on ship commit `e38cdc7`, window `e38cdc7^..e38cdc7`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*
-
-## SURFACE-2026-11-18-QUALITY-OSC52-FAILED-COPY-IS-SILENT
-- **Source:** feature-review-quality (M18 WP2.5, MINOR)
-- **Type:** UX gap (silent failure)
-- **Summary:** an oversize copy is dropped in `osc52Text` before it reaches Rust (so `clipboard.rs`'s "refused with an error" is unreachable from its only caller). An IPC or `pbcopy` failure goes only to `console.warn`, which is unobservable in this app. Either way the operator pastes the PREVIOUS clipboard believing it is the new selection: the "pastes as if whole" harm `clipboard.rs` says it prevents.
-- **Suggested action:** surface a failed or refused copy as a workspace toast (the existing toast surface), and soften security-posture's "refused, not truncated (both sides)" to say what the operator actually sees.
-- **Priority:** low
 
 # paydown-2026-11-27-wp5-input-and-listeners — 2026-11-27
 
@@ -245,4 +191,57 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** style
 - **Summary:** `subprocess::CAPTURED_PIPE_MAX`'s doc reads "an [`RunError::OutputTooLarge`]" (should be "a"), and the mechanical `MAX_OUTPUT` → `CAPTURED_PIPE_MAX` rename left over-long doc lines in `adjudicator/mod.rs`, `subprocess/captured.rs` (two), `remote_fs/mod.rs` and `remote_cmd/mod.rs` (rustfmt does not wrap comments).
 - **Suggested action:** fix the article and rewrap those doc lines.
+- **Priority:** low
+
+# paydown-2026-11-27-wp8-workspace-notices — 2026-11-27
+
+*(feature-review-quality on ship commit `53bac5a`, window `53bac5a^..53bac5a`; drive_mode=autopilot. 0 CRITICAL, 0 MAJOR, 7 MINOR, all auto-backlogged.)*
+
+## SURFACE-2026-11-27-QUALITY-WP8-TOAST-STACK-GAPS-BLOCK-CLICKS
+- **Source:** feature-review-quality (paydown-2026-11-27 WP8, MINOR)
+- **Type:** UX gap (new with the stack)
+- **Summary:** `.workspace-inject-toasts` (`src/App.css`) is an absolutely positioned flex column sized to its WIDEST row. The empty area left of narrower rows, and the `gap` between rows, sits over the content beneath (usually the CC pane) and swallows clicks there while notices are showing. The old single toast had no such dead area.
+- **Suggested action:** `pointer-events: none` on `.workspace-inject-toasts`, `pointer-events: auto` on `.workspace-inject-toast`. Verify live: a click in the gap reaches the pane (`document.elementFromPoint`).
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-WP8-OSC52-FAILURE-SINK-OPTIONAL
+- **Source:** feature-review-quality (paydown-2026-11-27 WP8, MINOR)
+- **Type:** API shape
+- **Summary:** `osc52.ts` → `registerOsc52` / `osc52Handler` / `macClipboardSink` take `onFailure` as OPTIONAL, and `sink` defaults to `writeMacClipboard` (no failure sink). A bare `registerOsc52(term)` brings the silent failed copy back. `XtermPane` passes the same callback twice (`registerOsc52(term, macClipboardSink(copyFailed), copyFailed)`). The same WP made `withheldNotice`'s `cause` required for this reason. Latent: the only production caller is pinned by `osc52Live`.
+- **Suggested action:** make `onFailure` required and build the Mac sink inside `registerOsc52` (a test override stays possible through an options argument).
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-WP8-OSC52TEXT-TEST-ONLY-WRAPPER
+- **Source:** feature-review-quality (paydown-2026-11-27 WP8, MINOR)
+- **Type:** dead-ish code
+- **Summary:** `osc52.ts` → `osc52Text` is now a wrapper over `osc52Decode` with no production reader; only `osc52.test.ts` calls it.
+- **Suggested action:** move the `osc52Text` tests onto `osc52Decode` and delete the wrapper.
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-WP8-OPENTIMENOTICE-DUPLICATES-TOAST-TYPES
+- **Source:** feature-review-quality (paydown-2026-11-27 WP8, MINOR)
+- **Type:** duplication
+- **Summary:** `remoteHookWarning.ts` → `OpenTimeNotice` restates `kind: "error" | "info"` and `source?: "hook"` instead of importing `ToastKind` / `ToastSource` from `workspaceToasts.ts`, and `Workspace.tsx` spreads it straight into a `push` action.
+- **Suggested action:** type it from the toast module (e.g. `Pick<Toast, "text" | "kind"> & { source?: "hook" }`).
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-WP8-FIRERUN-INJECT-WIDENED-TO-UNKNOWN
+- **Source:** feature-review-quality (paydown-2026-11-27 WP8, MINOR)
+- **Type:** typing
+- **Summary:** `autoResumeFire.ts` → `FireRun.inject` was widened to `Promise<unknown>` rather than `Promise<InjectRefusal | null>`, dropping the new typed refusal at that seam (a double may return anything).
+- **Suggested action:** type it `Promise<InjectRefusal | null | void>` (the existing doubles return void) or migrate the doubles to return `null`.
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-WP8-PROJECT-LABEL-SECOND-DERIVATION
+- **Source:** feature-review-quality (paydown-2026-11-27 WP8, MINOR)
+- **Type:** duplication / doc precision
+- **Summary:** `cc_session::remote::project_label`'s doc says it is "the project as its picker row names it", but the row shows the stored `display_name` (`config_store`'s `derive_display_name`), a separate derivation. Equal today; the doc asserts an equivalence nothing pins.
+- **Suggested action:** read the row's stored `display_name` for the emit (or reuse `derive_display_name`), or reword the doc to "the remote path's last segment".
+- **Priority:** low
+
+## SURFACE-2026-11-27-QUALITY-WP8-CLOSE-NOT-ENDED-MIRROR-WHOLE-FILE-CONTAINS
+- **Source:** feature-review-quality (paydown-2026-11-27 WP8, MINOR)
+- **Type:** guard precision
+- **Summary:** `the_close_not_ended_event_matches_its_ts_mirror`'s new TS-side checks (`project: string;`, the `reason` union) are whole-file `contains`, not scoped to the `RemoteCloseNotEnded` declaration. They would still pass if the field moved to another interface in the file. Same pattern as the existing `projectPath` / `host` checks.
+- **Suggested action:** slice the interface body (`export interface RemoteCloseNotEnded {` … `}`) and assert within it; mutation-prove by moving one field out.
 - **Priority:** low
