@@ -785,12 +785,11 @@ describe("P2.7 — the auto-resume latch stays closed across a recycle", () => {
     // added the `label` parameter to fix).
     const promise = recycleSession(baseInputs({ completionTimeoutMs: 10 }));
     await promise;
-    // M17 WP3 P4.6 — the third argument is now the refusal handler (`injectRefusal`), not
-    // `undefined`; the property this test pins is the LABEL.
+    // paydown-2026-11-27 WP8 — the label is the THIRD argument (the refusal is now the return
+    // value, so the old `onIpcError` slot is gone); the property this test pins is the LABEL.
     expect(injectCommandMock).toHaveBeenCalledWith(
       OLD_SID,
       HANDOFF_COMMAND,
-      expect.any(Function),
       "recycle",
     );
   });
@@ -1136,18 +1135,15 @@ describe("⚠️ M17 WP3 P4.6 — a REFUSED injection is reported, never silent"
   const NOT_READY =
     "Claude Code on host.example isn't ready for input yet (waited 15s)";
 
-  /** `injectCommand` double that REFUSES `refuse` the way the real funnel does: it calls the
-   *  caller's `onIpcError(message, reason)` and resolves (it never throws). */
+  /** `injectCommand` double that REFUSES `refuse` the way the real funnel does: it resolves to
+   *  the refusal `{ message, reason }` (it never throws), and to `null` otherwise. */
   function refusing(refuse: string) {
     injectCommandMock.mockImplementation(
-      async (
-        _sid: string,
-        command: string,
-        onIpcError?: (message: string, reason: string) => void,
-      ) => {
+      async (_sid: string, command: string) => {
         effects.push(`inject:${command}`);
-        if (command === refuse)
-          onIpcError?.(`recycle could not run ${command}`, NOT_READY);
+        return command === refuse
+          ? { message: `recycle could not run ${command}`, reason: NOT_READY }
+          : null;
       },
     );
   }

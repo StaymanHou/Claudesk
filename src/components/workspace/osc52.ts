@@ -23,49 +23,83 @@ export const MAX_CLIPBOARD_BYTES = 4 * 1024 * 1024;
 const MAX_PAYLOAD_CHARS = Math.ceil(MAX_CLIPBOARD_BYTES / 3) * 4;
 
 /**
- * The text an OSC 52 payload (`Pc;Pd`, everything after `52;`) asks to put on the clipboard, or
- * `null` when it asks for nothing this handler does: a read query (`?`), an empty Pd, a payload
- * over the cap, or malformed base64.
+ * What an OSC 52 payload (`Pc;Pd`, everything after `52;`) asks for:
+ * - `{ kind: "text" }`: put this text on the clipboard;
+ * - `{ kind: "too-large" }`: a write over the cap, REFUSED (paydown-2026-11-27 WP8: the operator is
+ *   told, because a silent refusal pastes the PREVIOUS clipboard as if it were this copy);
+ * - `null`: nothing this handler does, and nothing to tell (a read query `?`, an empty Pd,
+ *   malformed base64).
  */
-export function osc52Text(data: string): string | null {
+export type Osc52Write = { kind: "text"; text: string } | { kind: "too-large" };
+
+export function osc52Decode(data: string): Osc52Write | null {
   const semi = data.indexOf(";");
   if (semi < 0) return null;
   const pd = data.slice(semi + 1);
   // The READ query. `atob("?")` would also throw below, so no test can tell this line from its
   // absence (an equivalent mutant). It is kept so the write-only rule is stated where it is decided.
   if (pd === "" || pd === "?") return null;
-  if (pd.length > MAX_PAYLOAD_CHARS) return null;
+  if (pd.length > MAX_PAYLOAD_CHARS) return { kind: "too-large" };
   let binary: string;
   try {
     binary = atob(pd);
   } catch {
     return null;
   }
-  if (binary.length > MAX_CLIPBOARD_BYTES) return null;
+  if (binary.length > MAX_CLIPBOARD_BYTES) return { kind: "too-large" };
   const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
   // `atob` yields one char per BYTE; the text is UTF-8 (multi-byte copies, measured with `héllo ✓`).
-  return new TextDecoder("utf-8").decode(bytes);
+  return { kind: "text", text: new TextDecoder("utf-8").decode(bytes) };
+}
+
+/** The text {@link osc52Decode} would copy, or `null` (refused or nothing to copy). */
+export function osc52Text(data: string): string | null {
+  const w = osc52Decode(data);
+  return w?.kind === "text" ? w.text : null;
 }
 
 /** Where a decoded copy goes. The default sends it to the Mac clipboard through Rust. */
 export type ClipboardSink = (text: string) => void;
 
-export const writeMacClipboard: ClipboardSink = (text) => {
-  invoke("clipboard_write", { text }).catch((e: unknown) => {
-    console.warn("[claudesk] OSC 52 copy failed:", e);
-  });
-};
+/** Told, in plain words, when a copy did NOT reach the clipboard (the workspace's error notice). */
+export type CopyFailureSink = (notice: string) => void;
+
+/** The notice for a copy over the cap. */
+export const COPY_TOO_LARGE_NOTICE = `That copy was larger than ${MAX_CLIPBOARD_BYTES / (1024 * 1024)} MiB, so it was not copied. The clipboard still holds what you copied before.`;
+
+/** The notice for a copy the clipboard write rejected (`clipboard_write` / `pbcopy`). */
+export function copyFailedNotice(reason: string): string {
+  return `Couldn't copy to the clipboard: ${reason}. The clipboard still holds what you copied before.`;
+}
+
+/**
+ * The Mac-clipboard sink: `clipboard_write` (→ `pbcopy`). A rejection is told to `onFailure`
+ * (paydown-2026-11-27 WP8; it used to reach only `console.warn`, which nobody sees in this app).
+ */
+export function macClipboardSink(onFailure?: CopyFailureSink): ClipboardSink {
+  return (text) => {
+    invoke("clipboard_write", { text }).catch((e: unknown) => {
+      console.warn("[claudesk] OSC 52 copy failed:", e);
+      onFailure?.(copyFailedNotice(e instanceof Error ? e.message : String(e)));
+    });
+  };
+}
+
+export const writeMacClipboard: ClipboardSink = macClipboardSink();
 
 /**
  * The OSC 52 handler for `term.parser.registerOscHandler(52, …)`. It always returns `true`
- * (consumed), so xterm.js never acts on the sequence itself, and it never writes a reply.
+ * (consumed), so xterm.js never acts on the sequence itself, and it never writes a reply. A refused
+ * (too-large) copy is told to `onFailure`; a read query or a malformed payload is not.
  */
 export function osc52Handler(
   sink: ClipboardSink = writeMacClipboard,
+  onFailure?: CopyFailureSink,
 ): (data: string) => boolean {
   return (data) => {
-    const text = osc52Text(data);
-    if (text !== null) sink(text);
+    const w = osc52Decode(data);
+    if (w?.kind === "text") sink(w.text);
+    else if (w?.kind === "too-large") onFailure?.(COPY_TOO_LARGE_NOTICE);
     return true;
   };
 }
@@ -84,6 +118,7 @@ export interface Osc52Host {
 export function registerOsc52(
   term: Osc52Host,
   sink: ClipboardSink = writeMacClipboard,
+  onFailure?: CopyFailureSink,
 ): { dispose(): void } {
-  return term.parser.registerOscHandler(52, osc52Handler(sink));
+  return term.parser.registerOscHandler(52, osc52Handler(sink, onFailure));
 }

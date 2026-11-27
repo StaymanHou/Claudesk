@@ -149,13 +149,7 @@ describe("the plan reaches the REAL funnel with the values it carries", () => {
 
   it("auto-submit's bytes arrive at cc_inject intact", async () => {
     const plan = planSend("compose me", "auto-submit", OFF)!;
-    await injectCommand(
-      "sess-1",
-      plan.command,
-      undefined,
-      plan.label,
-      plan.buildPayload,
-    );
+    await injectCommand("sess-1", plan.command, plan.label, plan.buildPayload);
 
     expect(invokeMock).toHaveBeenCalledTimes(1);
     const [command, args] = invokeMock.mock.calls[0] as [
@@ -171,13 +165,7 @@ describe("the plan reaches the REAL funnel with the values it carries", () => {
 
   it("stage-only's bytes arrive WITHOUT the submitting CR", async () => {
     const plan = planSend("compose me", "stage-only", OFF)!;
-    await injectCommand(
-      "sess-1",
-      plan.command,
-      undefined,
-      plan.label,
-      plan.buildPayload,
-    );
+    await injectCommand("sess-1", plan.command, plan.label, plan.buildPayload);
     expect(sentText()).toBe(`${PASTE_START}compose me${PASTE_END}`);
   });
 
@@ -189,13 +177,7 @@ describe("the plan reaches the REAL funnel with the values it carries", () => {
     // default is what makes the omission visible.
     const body = "line one\nline two";
     const plan = planSend(body, "stage-only", OFF)!;
-    await injectCommand(
-      "sess-1",
-      plan.command,
-      undefined,
-      plan.label,
-      plan.buildPayload,
-    );
+    await injectCommand("sess-1", plan.command, plan.label, plan.buildPayload);
     const staged = sentText();
 
     invokeMock.mockClear();
@@ -216,13 +198,7 @@ describe("the plan reaches the REAL funnel with the values it carries", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const plan = planSend("body", "auto-submit", OFF)!;
-    await injectCommand(
-      "sess-1",
-      plan.command,
-      undefined,
-      plan.label,
-      plan.buildPayload,
-    );
+    await injectCommand("sess-1", plan.command, plan.label, plan.buildPayload);
 
     expect(warn).toHaveBeenCalledTimes(1);
     const line = String(warn.mock.calls[0][0]);

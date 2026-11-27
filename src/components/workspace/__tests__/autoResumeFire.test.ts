@@ -383,16 +383,21 @@ describe("the wiring in XtermPane (source guard — STRUCTURE, not runtime)", ()
 
 // M17 WP5 (operator ruling, P2.verify-human.3) — the withheld notice for a REMOTE folder.
 describe("withheldNotice + fireAutoResume's onWithheld", () => {
+  // paydown-2026-11-27 WP8 — `cause` is required (a forgotten one used to default to trust-only).
+  const TRUST_ONLY = { untrusted: true, bypass: false };
   it("names the short host and the command for a remote key; null for a local path", () => {
     expect(
       withheldNotice(
         "ssh://me@mini-host.tail0000.ts.net/Users/me/p",
         "/session-restore",
+        TRUST_ONLY,
       ),
     ).toBe(
       "Claude Code hasn't trusted this folder on mini-host yet, so /session-restore was not typed. Trust the folder, then type /session-restore.",
     );
-    expect(withheldNotice("/Users/me/p", "/session-restore")).toBeNull();
+    expect(
+      withheldNotice("/Users/me/p", "/session-restore", TRUST_ONLY),
+    ).toBeNull();
   });
 
   const fire = (

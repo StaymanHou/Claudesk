@@ -208,7 +208,8 @@ export interface FireRun {
   readTrust?: (projectPath: string, ptySessionId: string) => Promise<boolean>;
   /** M18 WP2 — the bypass-warning read ({@link readBypassCleared} in production). */
   readBypass?: (projectPath: string, ptySessionId: string) => Promise<boolean>;
-  inject?: (sessionId: string, command: string) => Promise<void>;
+  /** The injection; its refusal is not read here (`injectCommand` already warned). */
+  inject?: (sessionId: string, command: string) => Promise<unknown>;
   /**
    * Told when a startup dialog withheld the command and something needs saying, with the
    * plain-words notice ({@link withheldNotice}): a REMOTE untrusted folder (M17 WP5), and the
@@ -238,11 +239,14 @@ export interface WithheldCause {
  *   silent non-fire would read as "nothing to resume" (prior
  *   `a-silent-non-action-must-not-read-as-done`). When both apply, the trust dialog comes first
  *   (probe finding 4), so the notice names both in that order.
+ *
+ * `cause` is REQUIRED (paydown-2026-11-27 WP8): a caller that forgot it used to get trust-only
+ * behaviour silently. The workspace shows the notice as INFO, since nothing failed.
  */
 export function withheldNotice(
   projectPath: string,
   command: string,
-  cause: WithheldCause = { untrusted: true, bypass: false },
+  cause: WithheldCause,
 ): string | null {
   const authority = remoteAuthority(projectPath);
   const where = authority === null ? "" : ` on ${shortHost(authority)}`;
@@ -374,12 +378,30 @@ export function slashCommandPayload(command: string): string {
 }
 
 /**
- * Inject `command` into `sessionId`'s PTY.
+ * A refused injection (paydown-2026-11-27 WP8).
+ *
+ * ⚠️ A toast shows `reason`, the BACKEND's own words (e.g. a remote pane that never got ready:
+ * "Claude Code on <host> isn't ready for input yet (waited 15s)"; M17 WP3 P4.verify-human.2,
+ * operator decision A). `message` is the diagnostic, with the caller's label and command, for
+ * `console.warn` readers and the supervisor's activity record.
+ */
+export interface InjectRefusal {
+  message: string;
+  reason: string;
+}
+
+/**
+ * Inject `command` into `sessionId`'s PTY. Resolves to `null` when it went through, or to the
+ * {@link InjectRefusal} when `cc_inject` rejected (it never throws).
  *
  * ⚠️ **The `invoke` MUST have a `.catch`** — a Tauri rejection with no handler vanishes
  * silently (the WP6 picker MAJOR). Failure surfacing is settled (operator decision):
  * `console.warn` **always**, so a miss is diagnosable; a toast **only** if the IPC itself
  * rejects, which the caller owns because only it has the toast setter.
+ *
+ * paydown-2026-11-27 WP8 — the refusal is the RETURN VALUE. It used to arrive through an
+ * `onIpcError(message, reason)` callback, which every caller turned back into a value (Recycle
+ * needed an object cell to get it past TypeScript's narrowing).
  *
  * ⚠️ **NO RETRY, deliberately.** Detecting "the command did not land" would require reading
  * CC's output, which `arch.md` forbids outright, and a double-fire risks running the command
@@ -413,10 +435,9 @@ export function slashCommandPayload(command: string): string {
 export async function injectCommand(
   sessionId: string,
   command: string,
-  onIpcError?: (message: string, reason: string) => void,
   label = "auto-resume",
   buildPayload: (command: string) => string = slashCommandPayload,
-): Promise<void> {
+): Promise<InjectRefusal | null> {
   try {
     // M17 WP3 P4.3 — `cc_inject`, not `cc_input`: the backend funnel. For a LOCAL session it is
     // `cc_input`'s exact effect; for a REMOTE one it first waits for the pane's bracketed-paste
@@ -426,15 +447,12 @@ export async function injectCommand(
       sessionId,
       data: buildPayload(command),
     });
+    return null;
   } catch (e) {
     console.warn(`${label}: injecting ${command} into ${sessionId} failed`, e);
-    // M17 WP3 P4.verify-human.2 (operator decision A) — `reason` is the backend's own words
-    // (e.g. a remote pane that never got ready: "Claude Code on <host> isn't ready for input
-    // yet (waited 15s)"). A caller with a toast shows THAT, not the diagnostic `message`,
-    // whose label/command strings are for `console.warn` readers.
-    onIpcError?.(
-      `${label === "auto-resume" ? "Auto-resume" : label} could not run ${command}`,
-      e instanceof Error ? e.message : String(e),
-    );
+    return {
+      message: `${label === "auto-resume" ? "Auto-resume" : label} could not run ${command}`,
+      reason: e instanceof Error ? e.message : String(e),
+    };
   }
 }

@@ -185,12 +185,7 @@ export async function fireSkillCommand(
   // remote pane that never gets ready REFUSES the injection (`cc_inject`), and a refusal that
   // reached only the console read as "the button did nothing". The toast shows the backend's
   // own reason (`skillInjectFailure`).
-  await injectCommand(
-    sessionId,
-    command,
-    onFailure
-      ? (_message, reason) => onFailure(skillInjectFailure(command, reason))
-      : undefined,
-    "skill-button",
-  );
+  const refusal = await injectCommand(sessionId, command, "skill-button");
+  if (refusal !== null)
+    onFailure?.(skillInjectFailure(command, refusal.reason));
 }

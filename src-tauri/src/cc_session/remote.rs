@@ -122,6 +122,15 @@ pub fn short_host(host: &str) -> &str {
     h.split('.').next().unwrap_or(h)
 }
 
+/// `~/work/proj/` → `proj`: the project as its picker row names it (the path's last segment).
+pub fn project_label(path: &str) -> &str {
+    let p = path.trim_end_matches('/');
+    p.rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(path)
+}
+
 /// The dim line written into a remote pane while it reconnects. ⚠️ Claudesk's own bytes on
 /// the `cc-output-<id>` path, never parsed back; tmux's redraw on re-attach replaces it.
 pub fn reconnect_notice(host: &str) -> String {
@@ -257,6 +266,26 @@ pub fn session_argv(
 /// M17 WP5 (AC-5.3) — the app event a close emits when it could not end the remote session.
 pub const REMOTE_CLOSE_NOT_ENDED_EVENT: &str = "remote-close-not-ended";
 
+/// Why a close could not end the remote session (paydown-2026-11-27 WP8). The toast words it
+/// differently: "unreachable" was the only text before, though a failed end fired it too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CloseNotEndedReason {
+    /// The link was not Up, so nothing was sent (`CloseExecError::LinkNotUp`).
+    Unreachable,
+    /// The end ran over the link and failed (`CloseExecError::Run`).
+    Failed,
+}
+
+impl From<&CloseExecError> for CloseNotEndedReason {
+    fn from(e: &CloseExecError) -> Self {
+        match e {
+            CloseExecError::LinkNotUp => Self::Unreachable,
+            CloseExecError::Run(_) => Self::Failed,
+        }
+    }
+}
+
 /// [`REMOTE_CLOSE_NOT_ENDED_EVENT`]'s payload (wire camelCase).
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -265,6 +294,11 @@ pub struct RemoteCloseNotEnded {
     pub project_path: String,
     /// The host as a person would say it.
     pub host: String,
+    /// The project as its picker row names it ([`project_label`]): two rows on one host would
+    /// otherwise give two identical toasts (paydown-2026-11-27 WP8).
+    pub project: String,
+    /// Why the end did not happen.
+    pub reason: CloseNotEndedReason,
 }
 
 /// One terminal of a remote session: what [`RemoteShared`] needs from it. The real one is a
@@ -333,10 +367,10 @@ pub(crate) trait RemotePorts: Send + Sync {
     /// (`remote_record`), which the picker's label and the open decision read.
     fn record(&self, state: SessionRecordState);
     /// M17 WP5 (AC-5.3): an explicit close could NOT end the remote session (the link was down,
-    /// or the end failed), so it is still running and the next open will ask. Tells the app,
-    /// which says so in a toast. (A quit takes the same path; the app is going away, so nothing
-    /// shows, which is what AC-5.3 asks for.)
-    fn close_not_ended(&self);
+    /// or the end failed: `reason`), so it is still running and the next open will ask. Tells
+    /// the app, which says so in a toast. (A quit takes the same path; the app is going away, so
+    /// nothing shows, which is what AC-5.3 asks for.)
+    fn close_not_ended(&self, reason: CloseNotEndedReason);
 }
 
 /// The app's [`RemotePorts`]: the `AppHandle` for emits, the `LinkRegistry` for the link.
@@ -414,12 +448,14 @@ impl RemotePorts for AppPorts {
             .map(|_| ())
     }
 
-    fn close_not_ended(&self) {
+    fn close_not_ended(&self, reason: CloseNotEndedReason) {
         let _ = self.app.emit(
             REMOTE_CLOSE_NOT_ENDED_EVENT,
             RemoteCloseNotEnded {
                 project_path: self.key.clone(),
                 host: short_host(self.target.host()).to_string(),
+                project: project_label(self.target.path()).to_string(),
+                reason,
             },
         );
     }
@@ -802,7 +838,9 @@ impl CcSession for RemoteCcSession {
             Err(e) => {
                 eprintln!("[claudesk] remote close: could not end the remote session: {e}");
                 self.shared.ports.record(SessionRecordState::EndPending);
-                self.shared.ports.close_not_ended();
+                self.shared
+                    .ports
+                    .close_not_ended(CloseNotEndedReason::from(&e));
             }
         }
         local

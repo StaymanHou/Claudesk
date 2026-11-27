@@ -149,5 +149,10 @@ pane's tmux copy (a drag) and remote CC's `/copy` reach the Mac.
 - **tmux answers in-pane reads itself** under `set-clipboard on`, from ITS OWN buffer on the host
   (measured). That buffer holds what was copied in any Claudesk session on that `-L` server. The
   same account could already read it with `tmux show-buffer`. It never involves the Mac.
-- **Bounded:** a copy over `MAX_CLIPBOARD_BYTES` (4 MiB) is refused, not truncated (both sides),
-  and `pbcopy` runs through `run_captured` with a 5 s deadline on the blocking pool.
+- **Bounded:** a copy over `MAX_CLIPBOARD_BYTES` (4 MiB) is refused, never truncated. The
+  frontend decoder (`osc52.ts`) drops it before any IPC, so in practice Rust's own cap
+  (`clipboard.rs`, pinned equal) is a backstop that this caller never reaches. `pbcopy` runs
+  through `run_captured` with a 5 s deadline on the blocking pool. **What the operator sees**
+  (paydown-2026-11-27 WP8): a refused copy, or a `clipboard_write` that fails, shows an error
+  notice in the workspace saying the copy did not happen and the clipboard still holds the
+  previous copy. A read query or a malformed payload is ignored silently, as before.

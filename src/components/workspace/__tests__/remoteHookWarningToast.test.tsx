@@ -33,6 +33,17 @@ const WARNING =
 
 const toastOf = (el: Element) =>
   el.querySelector<HTMLElement>('[data-testid="workspace-inject-toast"]');
+/** Every notice row, as `[text, data-kind, role]`. */
+const rowsOf = (el: Element) =>
+  [
+    ...el.querySelectorAll<HTMLElement>(
+      '[data-testid="workspace-inject-toast"]',
+    ),
+  ].map((r) => [
+    r.querySelector("span")?.textContent ?? "",
+    r.getAttribute("data-kind"),
+    r.getAttribute("role"),
+  ]);
 
 async function spawnResolves(sessionId = "cc-9") {
   await act(async () => pane.props?.onSessionId?.(sessionId));
@@ -55,8 +66,7 @@ describe("the remote hook warning toast", () => {
     await spawnResolves();
     const asked = ipcCalls.filter((c) => c.cmd === "remote_hook_warning");
     expect(asked.map((c) => c.args)).toEqual([{ projectPath: REMOTE }]);
-    expect(toastOf(el)?.textContent).toContain(WARNING);
-    expect(toastOf(el)?.getAttribute("role")).toBe("alert");
+    expect(rowsOf(el)).toEqual([[WARNING, "error", "alert"]]);
     expect(uncaught).toEqual([]);
   });
 
@@ -109,21 +119,65 @@ describe("the remote open notice", () => {
     await spawnResolves();
     const asked = ipcCalls.filter((c) => c.cmd === "remote_open_notice");
     expect(asked.map((c) => c.args)).toEqual([{ projectPath: REMOTE }]);
-    expect(toastOf(el)?.textContent).toContain(NOTICE);
+    // paydown-2026-11-27 WP8 — nothing failed: neutral info, a status, not a red alert.
+    expect(rowsOf(el)).toEqual([[NOTICE, "info", "status"]]);
     expect(uncaught).toEqual([]);
   });
 
-  it("the notice and a hook warning are both shown, the notice first", async () => {
+  // paydown-2026-11-27 WP8 — TWO rows, each with its own kind: the hook failure is never shown
+  // neutral because it shares a toast with an informational notice.
+  it("the notice and a hook warning are two rows, the notice (info) first, the warning (error) second", async () => {
     const el = await mountWorkspace({
       gate: false,
       projectPath: REMOTE,
       ipcAnswers: { remote_open_notice: NOTICE, remote_hook_warning: WARNING },
     });
     await spawnResolves();
-    const text = toastOf(el)?.textContent ?? "";
-    expect(text).toContain(NOTICE);
-    expect(text).toContain(WARNING);
-    expect(text.indexOf(NOTICE)).toBeLessThan(text.indexOf(WARNING));
+    expect(rowsOf(el)).toEqual([
+      [NOTICE, "info", "status"],
+      [WARNING, "error", "alert"],
+    ]);
+  });
+
+  // The QF's WP5 update: five writers, last wins. A later withheld notice now ADDS a row.
+  it("a later withheld notice adds a row and erases neither", async () => {
+    const el = await mountWorkspace({
+      gate: false,
+      projectPath: REMOTE,
+      ipcAnswers: { remote_open_notice: NOTICE, remote_hook_warning: WARNING },
+    });
+    await spawnResolves();
+    const withheld =
+      "Claude Code hasn't trusted this folder on mini-host yet, so /session-restore was not typed. Trust the folder, then type /session-restore.";
+    await act(async () => pane.props?.onAutoResumeWithheld?.(withheld));
+    await settle();
+    expect(rowsOf(el)).toEqual([
+      [NOTICE, "info", "status"],
+      [WARNING, "error", "alert"],
+      [withheld, "info", "status"],
+    ]);
+  });
+
+  // The QF: the sticky warning is re-read after every respawn (Recycle, drive-mode apply-now).
+  it("a respawn's re-read neither duplicates the warning nor brings back a dismissed one", async () => {
+    const el = await mountWorkspace({
+      gate: false,
+      projectPath: REMOTE,
+      ipcAnswers: { remote_open_notice: null, remote_hook_warning: WARNING },
+    });
+    await spawnResolves("cc-1");
+    await spawnResolves("cc-2"); // a respawn, warning still showing
+    expect(rowsOf(el)).toEqual([[WARNING, "error", "alert"]]);
+    const dismiss = toastOf(el)?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Dismiss"]',
+    );
+    await act(async () => dismiss?.click());
+    expect(rowsOf(el)).toEqual([]);
+    await spawnResolves("cc-3"); // the next respawn re-reads the same sticky warning
+    expect(
+      ipcCalls.filter((c) => c.cmd === "remote_hook_warning"),
+    ).toHaveLength(3); // positive control: it WAS re-read
+    expect(rowsOf(el)).toEqual([]);
   });
 
   it("a local workspace never asks, and a failed read is not a toast", async () => {
@@ -154,7 +208,8 @@ describe("the remote open notice", () => {
       "Claude Code hasn't trusted this folder on mini-host yet, so /session-restore was not typed. Trust the folder, then type /session-restore.";
     await act(async () => pane.props?.onAutoResumeWithheld?.(notice));
     await settle();
-    expect(toastOf(el)?.textContent).toContain(notice);
+    // paydown-2026-11-27 WP8 (the BL's M18 WP2 addendum) — nothing failed: info.
+    expect(rowsOf(el)).toEqual([[notice, "info", "status"]]);
     expect(uncaught).toEqual([]);
   });
 
@@ -167,7 +222,7 @@ describe("the remote open notice", () => {
       projectPath: REMOTE,
       notice: { text, seq: 1 },
     });
-    expect(toastOf(el)?.textContent).toContain(text);
+    expect(rowsOf(el)).toEqual([[text, "error", "alert"]]);
     expect(uncaught).toEqual([]);
   });
 });

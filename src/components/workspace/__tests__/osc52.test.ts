@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  COPY_TOO_LARGE_NOTICE,
   MAX_CLIPBOARD_BYTES,
+  osc52Decode,
   osc52Handler,
   osc52Text,
   registerOsc52,
@@ -46,7 +48,40 @@ describe("osc52Text", () => {
   });
 });
 
+// paydown-2026-11-27 WP8 — a refused copy is told; "nothing to copy" is not.
+describe("osc52Decode", () => {
+  const atCap = "a".repeat(MAX_CLIPBOARD_BYTES);
+  it("past the cap is `too-large`, on BOTH checks (payload length, decoded length)", () => {
+    // The decoded-length check: this payload is no longer than the longest allowed one.
+    expect(osc52Decode(`c;${btoa(atCap + "a")}`)).toEqual({
+      kind: "too-large",
+    });
+    // The payload-length check, before any decode.
+    const long = "A".repeat(Math.ceil(MAX_CLIPBOARD_BYTES / 3) * 4 + 4);
+    expect(osc52Decode(`c;${long}`)).toEqual({ kind: "too-large" });
+  });
+  it("a read query, an empty Pd and malformed base64 are nothing (null), not refusals", () => {
+    for (const d of ["c;?", "c;", "cAAAA", "c;@@not-base64@@"])
+      expect(osc52Decode(d), d).toBeNull();
+  });
+});
+
 describe("osc52Handler", () => {
+  it("a too-large copy is told to onFailure and never reaches the clipboard sink", () => {
+    const sink = vi.fn();
+    const fail = vi.fn();
+    const handle = osc52Handler(sink, fail);
+    const atCap = "a".repeat(MAX_CLIPBOARD_BYTES);
+    expect(handle(`c;${btoa(atCap + "a")}`)).toBe(true);
+    expect(sink).not.toHaveBeenCalled();
+    expect(fail.mock.calls).toEqual([[COPY_TOO_LARGE_NOTICE]]);
+    // A read query and a malformed payload tell nobody.
+    handle("c;?");
+    handle("c;@@bad@@");
+    expect(fail).toHaveBeenCalledTimes(1);
+    expect(sink).not.toHaveBeenCalled();
+  });
+
   it("writes once per copy, and always reports the sequence as consumed", () => {
     const sink = vi.fn();
     const handle = osc52Handler(sink);

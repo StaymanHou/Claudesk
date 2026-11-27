@@ -396,8 +396,9 @@ describe("AC-1: exactly one record per turn end, one per exit", () => {
   });
 
   it("⚠️ inject-failed: a rejected cc_inject is an ERROR, never recorded as fired", async () => {
-    // `injectCommand` swallows a rejected `cc_inject`; the supervisor's wiring re-throws from
-    // `onIpcError` so the failure reaches `fireOne`. Without that, this recorded `fired`.
+    // `injectCommand` swallows a rejected `cc_inject` (it resolves to the refusal); the
+    // supervisor's wiring re-throws it so the failure reaches `fireOne`. Without that, this
+    // recorded `fired`.
     await mount({ tail: () => tailFor("F5"), injectFails: true });
     await turnEnd();
     expect(records.map((r) => [r.outcome, r.reason])).toEqual([

@@ -613,18 +613,7 @@ async function injectRefusal(
   sessionId: string,
   command: string,
 ): Promise<string | null> {
-  // Held in an object, not a `let`: TS narrows a `let` to its initial `null` across the `await`
-  // because it cannot see the callback assign it.
-  const refusal: { reason: string | null } = { reason: null };
-  await injectCommand(
-    sessionId,
-    command,
-    (_message, reason) => {
-      refusal.reason = reason;
-    },
-    "recycle",
-  );
-  return refusal.reason;
+  return (await injectCommand(sessionId, command, "recycle"))?.reason ?? null;
 }
 
 /**

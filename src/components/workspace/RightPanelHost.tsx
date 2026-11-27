@@ -206,6 +206,11 @@ interface RightPanelHostProps {
    */
   onDocsNotice?: (notice: DocsNotice) => void;
   /**
+   * paydown-2026-11-27 WP8 — the second terminal's refused or failed OSC 52 copy, shown in the
+   * workspace's notices as an error.
+   */
+  onCopyFailed?: (notice: string) => void;
+  /**
    * F-b ruling 4 — the profile this workspace runs under (`useWorkspaceProfile`). A non-default
    * profile has no gated docs panel; `undefined` (not yet known) fails closed.
    * ⚠️ REQUIRED, deliberately: an optional prop would let a caller omit it and silently pick one
@@ -222,6 +227,7 @@ export function RightPanelHost({
   onInjectFailure,
   onSurfaceUnavailable,
   onDocsNotice,
+  onCopyFailed,
   collapsed = false,
   registerDirtyProbe,
   terminalPaneRef,
@@ -1657,6 +1663,7 @@ export function RightPanelHost({
                     }
                     sessionId={t.id}
                     projectPath={projectPath}
+                    onCopyFailed={onCopyFailed}
                     active={
                       visible &&
                       panel === "terminal" &&

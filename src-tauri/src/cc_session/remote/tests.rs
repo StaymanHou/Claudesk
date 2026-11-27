@@ -295,8 +295,11 @@ impl RemotePorts for FakePorts {
     fn record(&self, state: SessionRecordState) {
         self.log.lock().unwrap().push(format!("record {state:?}"));
     }
-    fn close_not_ended(&self) {
-        self.log.lock().unwrap().push("close_not_ended".into());
+    fn close_not_ended(&self, reason: CloseNotEndedReason) {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("close_not_ended {reason:?}"));
     }
 }
 
@@ -377,8 +380,8 @@ impl RemotePorts for SharedPorts {
     fn record(&self, state: SessionRecordState) {
         self.0.record(state)
     }
-    fn close_not_ended(&self) {
-        self.0.close_not_ended()
+    fn close_not_ended(&self, reason: CloseNotEndedReason) {
+        self.0.close_not_ended(reason)
     }
 }
 
@@ -914,34 +917,44 @@ fn the_real_terminal_hangs_up_without_exit_and_kills_with_it() {
 
 #[test]
 fn a_close_that_could_not_end_the_session_tells_the_app_once_and_one_that_did_does_not() {
+    let told = |log: &Arc<Mutex<Vec<String>>>| {
+        entries(log)
+            .into_iter()
+            .filter(|e| e.starts_with("close_not_ended"))
+            .collect::<Vec<_>>()
+    };
     // Ended: no notice.
     let (s, _ports, log) = session(&[], Wait::Up);
     s.kill().unwrap();
     terminal_ends(&s);
-    assert_eq!(count(&log, "close_not_ended"), 0, "{:?}", entries(&log));
-    // Not delivered (the link is down) and failed: end-pending AND one notice, after the record.
-    for err in [
-        CloseExecError::LinkNotUp,
-        CloseExecError::Run(crate::subprocess::RunError::TimedOut(1)),
+    assert_eq!(told(&log), Vec::<String>::new(), "{:?}", entries(&log));
+    // Not delivered (the link is down) and failed: end-pending AND one notice, after the record,
+    // carrying WHY (paydown-2026-11-27 WP8: the toast used to say "unreachable" for both).
+    for (err, why) in [
+        (CloseExecError::LinkNotUp, "close_not_ended Unreachable"),
+        (
+            CloseExecError::Run(crate::subprocess::RunError::TimedOut(1)),
+            "close_not_ended Failed",
+        ),
     ] {
         let (s, ports, log) = session(&[], Wait::Up);
         *ports.end.lock().unwrap() = Some(err);
         s.kill().unwrap();
         terminal_ends(&s);
         let e = entries(&log);
-        assert_eq!(count(&log, "close_not_ended"), 1, "{e:?}");
+        assert_eq!(told(&log), vec![why.to_string()], "{e:?}");
         let rec = e
             .iter()
             .position(|x| x == "record EndPending")
             .expect("recorded");
-        let told = e.iter().position(|x| x == "close_not_ended").unwrap();
-        assert!(rec < told, "{e:?}");
+        let notice = e.iter().position(|x| x == why).unwrap();
+        assert!(rec < notice, "{e:?}");
     }
     // A Detach is not a close: no notice.
     let (s, _ports, log) = session(&[], Wait::Up);
     CcSession::detach(&s).unwrap();
     terminal_ends(&s);
-    assert_eq!(count(&log, "close_not_ended"), 0);
+    assert_eq!(told(&log), Vec::<String>::new());
 }
 
 /// The close-not-ended event's wire contract, pinned on both sides: the name the TS mirror listens
@@ -952,14 +965,38 @@ fn the_close_not_ended_event_matches_its_ts_mirror() {
     assert!(ts.contains(&format!(
         "REMOTE_CLOSE_NOT_ENDED_EVENT = \"{REMOTE_CLOSE_NOT_ENDED_EVENT}\""
     )));
-    let v = serde_json::to_value(RemoteCloseNotEnded {
-        project_path: "ssh://me@mini-host/p".into(),
-        host: "mini-host".into(),
-    })
-    .unwrap();
-    assert_eq!(
-        v,
-        serde_json::json!({ "projectPath": "ssh://me@mini-host/p", "host": "mini-host" })
-    );
+    for (reason, wire) in [
+        (CloseNotEndedReason::Unreachable, "unreachable"),
+        (CloseNotEndedReason::Failed, "failed"),
+    ] {
+        let v = serde_json::to_value(RemoteCloseNotEnded {
+            project_path: "ssh://me@mini-host/p".into(),
+            host: "mini-host".into(),
+            project: "p".into(),
+            reason,
+        })
+        .unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({
+                "projectPath": "ssh://me@mini-host/p",
+                "host": "mini-host",
+                "project": "p",
+                "reason": wire,
+            })
+        );
+    }
     assert!(ts.contains("projectPath: string;") && ts.contains("host: string;"));
+    // paydown-2026-11-27 WP8 — the two new fields, with the reason's closed set spelled the same.
+    assert!(ts.contains("project: string;"));
+    assert!(ts.contains(r#"reason: "unreachable" | "failed";"#));
+}
+
+/// `project_label` names a remote project the way its picker row does: the path's last segment.
+#[test]
+fn project_label_is_the_paths_last_segment() {
+    assert_eq!(project_label("/Users/me/work/proj"), "proj");
+    assert_eq!(project_label("~/work/proj/"), "proj");
+    assert_eq!(project_label("~"), "~");
+    assert_eq!(project_label("/"), "/");
 }

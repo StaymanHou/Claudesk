@@ -296,11 +296,12 @@ export function PromptPanel({
       void injectCommand(
         sessionId,
         plan.command,
-        (_message, reason) =>
-          onSendFailureRef.current?.(promptInjectFailure(reason)),
         plan.label,
         plan.buildPayload,
-      );
+      ).then((refusal) => {
+        if (refusal !== null)
+          onSendFailureRef.current?.(promptInjectFailure(refusal.reason));
+      });
 
       // ⚠️ ARCHIVE BEFORE CLEAR, and the order is load-bearing rather than stylistic.
       // `appendToHistory` refuses a blank entry, so clearing first would hand it an empty string

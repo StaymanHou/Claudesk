@@ -9,7 +9,11 @@
 // next open resumes it with `--continue`. And no dialog (AC-4.1): an explicit action keeps its
 // meaning.
 
-/** The error text of `CcError::UnknownSession` (`no such session: <id>`). */
+/**
+ * The error text of `CcError::UnknownSession` (`no such session: <id>`). ⚠️ Pinned to the Rust
+ * `#[error]` text by `the_unknown_session_text_matches_detachs_ts_mirror` (cc_session): keep this a
+ * plain double-quoted literal on one line, which is what that test reads.
+ */
 const NO_SUCH_SESSION = "no such session";
 
 /** What a Detach did. */

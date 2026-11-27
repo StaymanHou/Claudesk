@@ -4386,6 +4386,27 @@ mod tests {
         ));
     }
 
+    /// paydown-2026-11-27 WP8 — Detach's "already gone, so closing is safe" rule is a substring
+    /// match on this error's text (`detachWorkspace.ts` → `NO_SUCH_SESSION`). Rewording the
+    /// `#[error]` text away from it would turn a benign Detach into a kept tile plus an error
+    /// toast, with no type error anywhere, so both sides are pinned here.
+    #[test]
+    fn the_unknown_session_text_matches_detachs_ts_mirror() {
+        let ts = include_str!("../../../src/state/detachWorkspace.ts");
+        let literal = ts
+            .split("const NO_SUCH_SESSION = \"")
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .expect("detachWorkspace.ts declares `const NO_SUCH_SESSION = \"…\"`");
+        assert!(!literal.is_empty(), "an empty literal would match anything");
+        let shown = CcError::UnknownSession("cc-9".into()).to_string();
+        assert!(
+            shown.starts_with(literal),
+            "CcError::UnknownSession displays {shown:?}, which no longer starts with the TS \
+             mirror {literal:?}: a Detach of an already-gone session would be refused"
+        );
+    }
+
     // ⚠️ `take` (not `kill`) is what `cc_kill` calls — the P1 fix (2026-08-25) moved the
     // blocking teardown to a worker thread, so the registry's job is now ONLY the O(1)
     // removal. These two tests split what `kill_removes_session_and_invokes_kill` used to

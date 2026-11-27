@@ -69,15 +69,14 @@ describe("⚠️ wiring guards (source-level)", () => {
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^\s*\/\/.*$/gm, "");
 
-  it("⚠️ forwards the label to injectCommand as the 4th argument", () => {
-    // ⚠️ `injectCommand`'s 4th parameter defaults to `"auto-resume"`. A wiring site that drops
+  it("⚠️ forwards the label to injectCommand as the 3rd argument", () => {
+    // ⚠️ `injectCommand`'s 3rd parameter (paydown-2026-11-27 WP8: the 4th until the refusal became
+    // the return value) defaults to `"auto-resume"`. A wiring site that drops
     // the label makes every supervisor failure read as an M12 auto-resume failure — pointing
     // the ONE available diagnostic at the wrong subsystem. `FanOutDeps.inject` requires a
     // `label` parameter, but TypeScript accepts a stub that ACCEPTS AND IGNORES it, so the type
     // does not prove it is forwarded.
-    expect(code).toMatch(
-      /injectCommand\(\s*pty,\s*command,[\s\S]*?\},\s*label,?\s*\)/,
-    );
+    expect(code).toMatch(/injectCommand\(\s*pty,\s*command,\s*label,?\s*\)/);
   });
 
   it("⚠️ does NOT set `model` on the adjudicator deps", () => {

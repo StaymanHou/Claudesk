@@ -907,15 +907,24 @@ body,
   text-align: left;
 }
 
-.workspace-inject-toast {
+/* paydown-2026-11-27 WP8 — the workspace's notices stack: the container takes the old single
+   toast's anchor (under the header, right-aligned), and each row is in its flow. */
+.workspace-inject-toasts {
   position: absolute;
   top: 100%;
   right: 0.6rem;
   z-index: 40;
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+  max-width: min(32rem, calc(100% - 1.2rem));
+}
+
+.workspace-inject-toast {
+  display: flex;
   align-items: center;
   gap: 0.75rem;
-  max-width: min(32rem, calc(100% - 1.2rem));
   padding: 0.6rem 0.9rem;
   border: 1px solid rgba(248, 81, 73, 0.6);
   border-radius: 6px;

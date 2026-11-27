@@ -63,6 +63,8 @@ interface StubPaneProps {
   claimTurnOrigin?: () => SupervisorOrigin | null;
   /** M17 WP5 — what `Workspace` runs when the auto-resume fire withheld a remote command. */
   onAutoResumeWithheld?: (notice: string) => void;
+  /** paydown-2026-11-27 WP8 — a refused or failed OSC 52 copy. */
+  onCopyFailed?: (notice: string) => void;
   openIntent?: OpenIntent;
   spawnIntentRef?: SpawnIntentRef;
 }
@@ -184,6 +186,8 @@ interface RightPanelStubProps {
   onSurfaceUnavailable?: (notice: string) => void;
   /** M17 WP7 — the remote Docs panel's catch-up toast (`null` clears it). */
   onDocsNotice?: (notice: DocsNotice) => void;
+  /** paydown-2026-11-27 WP8 — the second terminal's refused or failed OSC 52 copy. */
+  onCopyFailed?: (notice: string) => void;
 }
 
 function RightPanelHostStub(props: RightPanelStubProps) {

@@ -37,10 +37,12 @@ interface TerminalPaneProps {
    * refit/repaint fires whenever it flips back to true.
    */
   active: boolean;
+  /** paydown-2026-11-27 WP8 — a refused or failed OSC 52 copy, for the workspace's notices. */
+  onCopyFailed?: (notice: string) => void;
 }
 
 export const TerminalPane = forwardRef<XtermPaneHandle, TerminalPaneProps>(
-  function TerminalPane({ sessionId, projectPath, active }, ref) {
+  function TerminalPane({ sessionId, projectPath, active, onCopyFailed }, ref) {
     return (
       <XtermPane
         ref={ref}
@@ -51,6 +53,7 @@ export const TerminalPane = forwardRef<XtermPaneHandle, TerminalPaneProps>(
         errorTitle="Could not start terminal"
         testId="term-pane"
         active={active}
+        onCopyFailed={onCopyFailed}
       />
     );
   },

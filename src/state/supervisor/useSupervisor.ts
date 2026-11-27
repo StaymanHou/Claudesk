@@ -222,15 +222,15 @@ export async function decideTurn(
         onTailRead?.(tail);
         return tail;
       },
-      // ⚠️ The label is forwarded THROUGH as `injectCommand`'s 4th argument. Dropping it would
+      // ⚠️ The label is forwarded THROUGH as `injectCommand`'s 3rd argument. Dropping it would
       // fall back to the `"auto-resume"` default and point every supervisor failure at M12's arm
       // instead of this one.
       //
-      // ⚠️ **The 3rd argument RE-THROWS.** `injectCommand` swallows a rejected `cc_input` (warns
-      // and returns), so with `onIpcError` left undefined a failed injection reached `fireOne` as
-      // a SUCCESS: its `inject-failed` arm was unreachable, and the activity record would have
-      // said `fired` for a command CC never received. Throwing from the callback makes the
-      // rejection propagate, so the failure is recorded as what it is.
+      // ⚠️ **A refusal is RE-THROWN.** `injectCommand` swallows a rejected `cc_inject` (warns and
+      // resolves to the refusal), so ignoring its result would let a failed injection reach
+      // `fireOne` as a SUCCESS: its `inject-failed` arm would be unreachable, and the activity
+      // record would say `fired` for a command CC never received. Throwing the refusal's
+      // diagnostic `message` records the failure as what it is.
       //
       // ⚠️ **The turn-attribution origin is armed BEFORE the invoke, not after it resolves.** The
       // turn start trails the invoke by ~40 ms, and arming afterwards would leave a window in which
@@ -240,18 +240,10 @@ export async function decideTurn(
           command,
           firedAt: (host.now ?? Date.now)(),
         });
-        try {
-          await injectCommand(
-            pty,
-            command,
-            (message) => {
-              throw new Error(message);
-            },
-            label,
-          );
-        } catch (e) {
+        const refusal = await injectCommand(pty, command, label);
+        if (refusal !== null) {
           cancelOrigin(host.workspaceId);
-          throw e;
+          throw new Error(refusal.message);
         }
       },
       readWip: async (w) => readWipFor(w.projectPath),

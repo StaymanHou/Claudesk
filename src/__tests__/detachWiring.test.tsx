@@ -150,21 +150,39 @@ describe("Detach through the real App (M17 WP5 Phase 3)", () => {
 
   // M17 WP5 Phase 4 (AC-5.3) — a remote close whose host was unreachable: the workspace is gone,
   // so the APP says the session is still running and the next open will ask.
-  it("the app shows the close-not-ended toast, naming the host, and it dismisses", async () => {
+  // paydown-2026-11-27 WP8 — it names the project and says WHY (unreachable vs the end failed).
+  it("the app shows the close-not-ended toast, naming the project, the host and why, and it dismisses", async () => {
     await mount();
     expect(host!.querySelector('[data-testid="app-toast"]')).toBeNull();
+    const toastText = () =>
+      host!.querySelector('[data-testid="app-toast"]')?.textContent ?? "";
     await act(async () => {
       await emit(REMOTE_CLOSE_NOT_ENDED_EVENT, {
         projectPath: REMOTE,
         host: "mini-host",
+        project: "proj",
+        reason: "unreachable",
       });
     });
     await settle();
+    expect(toastText()).toContain(
+      "Couldn't end the Claude Code session for proj: mini-host isn't reachable, so the session is still running there.",
+    );
+    await act(async () => {
+      await emit(REMOTE_CLOSE_NOT_ENDED_EVENT, {
+        projectPath: REMOTE,
+        host: "mini-host",
+        project: "proj",
+        reason: "failed",
+      });
+    });
+    await settle();
+    expect(toastText()).toContain(
+      "Couldn't end the Claude Code session for proj: ending it on mini-host failed, so the session is still running there.",
+    );
+    expect(toastText()).not.toContain("isn't reachable");
     const toast = host!.querySelector('[data-testid="app-toast"]');
     expect(toast?.getAttribute("role")).toBe("alert");
-    expect(toast?.textContent).toContain(
-      "Couldn't end the Claude Code session on mini-host",
-    );
     expect(toast?.textContent).toContain(
       "will ask whether to end it or reconnect",
     );

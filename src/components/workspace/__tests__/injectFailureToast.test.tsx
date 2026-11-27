@@ -4,6 +4,7 @@ import {
   click,
   ipcCalls,
   mountWorkspace,
+  pane,
   rightPanel,
   settle,
   uncaught,
@@ -69,6 +70,7 @@ describe("the not-sent toast", () => {
     expect(ipcCalls.some((c) => c.cmd === "cc_inject")).toBe(true);
     const toast = toastOf(el);
     expect(toast?.getAttribute("role")).toBe("alert");
+    expect(toast?.getAttribute("data-kind")).toBe("error");
     expect(toast?.textContent).toContain(
       skillInjectFailure("/session-restore", NOT_READY),
     );
@@ -212,17 +214,52 @@ describe("the remote Docs catch-up toast", () => {
       );
     });
 
-    it("a docs notice may replace a transient info notice, and its null clears its own", async () => {
+    // paydown-2026-11-27 WP8 — rows coexist: the docs notice is its own row beside an info notice
+    // from elsewhere, and a docs null clears only the docs row.
+    it("a docs notice sits beside an info notice from elsewhere, and its null clears only its own", async () => {
       const el = await mountWorkspace({ gate: true });
       const info = rightPanel.props?.onSurfaceUnavailable;
       expect(info).toBeTypeOf("function");
-      // The info notice from elsewhere (an absent-surface chord) is not an error: replaceable.
       await act(async () => info!("Sublime Text isn't available"));
       expect(toastOf(el)?.getAttribute("data-kind")).toBe("info");
       await report({ text: CHECKING_TEXT, kind: "info" });
-      expect(toastOf(el)?.textContent).toContain(CHECKING_TEXT);
+      const rows = () =>
+        [...el.querySelectorAll('[data-testid="workspace-inject-toast"]')].map(
+          (r) => r.textContent,
+        );
+      expect(rows()).toEqual([
+        "Sublime Text isn't available×",
+        `${CHECKING_TEXT}×`,
+      ]);
       await report(null);
-      expect(toastOf(el)).toBeNull();
+      expect(rows()).toEqual(["Sublime Text isn't available×"]);
     });
+  });
+});
+
+// paydown-2026-11-27 WP8 — a refused or failed OSC 52 copy, from either terminal, is an ERROR row.
+describe("a copy that did not reach the clipboard", () => {
+  const COPY = "That copy was larger than 4 MiB, so it was not copied.";
+  const rows = (el: Element) =>
+    [
+      ...el.querySelectorAll<HTMLElement>(
+        '[data-testid="workspace-inject-toast"]',
+      ),
+    ].map((r) => [r.querySelector("span")?.textContent, r.dataset.kind]);
+
+  it("the CC pane's onCopyFailed shows an error row", async () => {
+    const el = await mountWorkspace({ gate: false });
+    const fn = pane.props?.onCopyFailed;
+    expect(fn).toBeTypeOf("function");
+    await act(async () => fn!(COPY));
+    expect(rows(el)).toEqual([[COPY, "error"]]);
+  });
+
+  it("the second terminal's (RightPanelHost's) onCopyFailed shows an error row", async () => {
+    const el = await mountWorkspace({ gate: false });
+    const fn = rightPanel.props?.onCopyFailed;
+    expect(fn).toBeTypeOf("function");
+    await act(async () => fn!(COPY));
+    expect(rows(el)).toEqual([[COPY, "error"]]);
   });
 });

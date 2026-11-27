@@ -54,7 +54,7 @@ import {
 import { routeCcInput } from "./ccInputRouting";
 import { trimTrailingBlankRows } from "./mirrorTrim";
 import { loadTerminalFontSize } from "./terminalFontZoom";
-import { registerOsc52 } from "./osc52";
+import { macClipboardSink, registerOsc52 } from "./osc52";
 import { useTauriListen } from "../../useTauriListen";
 import {
   WORKSPACE_STATUS_EVENT,
@@ -273,6 +273,12 @@ interface XtermPaneProps {
    * (`fireAutoResume` → `onWithheld`). The workspace shows it in its toast.
    */
   onAutoResumeWithheld?: (notice: string) => void;
+  /**
+   * paydown-2026-11-27 WP8 — an OSC 52 copy that did NOT reach the clipboard (over the cap, or the
+   * write failed), in plain words. The workspace shows it as an error notice: a silent failure
+   * would paste the previous clipboard as if it were this copy.
+   */
+  onCopyFailed?: (notice: string) => void;
 }
 
 export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
@@ -294,6 +300,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       onInputForwarded,
       claimTurnOrigin,
       onAutoResumeWithheld,
+      onCopyFailed,
     },
     ref,
   ) {
@@ -544,6 +551,11 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     useEffect(() => {
       onAutoResumeWithheldRef.current = onAutoResumeWithheld;
     }, [onAutoResumeWithheld]);
+    // Read through a ref at copy time: the OSC 52 handler is registered once per terminal.
+    const onCopyFailedRef = useRef(onCopyFailed);
+    useEffect(() => {
+      onCopyFailedRef.current = onCopyFailed;
+    }, [onCopyFailed]);
     const onInputForwardedRef = useRef(onInputForwarded);
     useEffect(() => {
       onInputForwardedRef.current = onInputForwarded;
@@ -668,7 +680,9 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       // M18 WP2.5 — OSC 52 → this Mac's clipboard, WRITE ONLY (a read query is never answered).
       // Every pane registers it, local and remote, CC and the second terminal (R-d): a local
       // program could already write the clipboard with `pbcopy`. `term.dispose()` disposes it.
-      registerOsc52(term);
+      // paydown-2026-11-27 WP8 — a refused or failed copy is told to the workspace.
+      const copyFailed = (notice: string) => onCopyFailedRef.current?.(notice);
+      registerOsc52(term, macClipboardSink(copyFailed), copyFailed);
       termRef.current = term;
       fitRef.current = fit;
       if (spawnCommand === "cc_spawn") {

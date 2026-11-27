@@ -21,7 +21,14 @@
 // The `visible` prop drives that toggle, and is forwarded to RightPanelHost to gate
 // panel liveness + the capture-phase hotkey (only the focused workspace's host reacts).
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import type { DocsNotice } from "./docs/remoteDocsCatchUp";
 import { invoke } from "@tauri-apps/api/core";
 import type {
@@ -96,6 +103,7 @@ import {
 import { recycleSession, waitForFreshSessionId } from "./recycleSession";
 import { recycleInjectFailure } from "./injectFailure";
 import { readRemoteOpenToast } from "./remoteHookWarning";
+import { EMPTY_TOASTS, toastsReducer, type Toast } from "./workspaceToasts";
 import { reconnectStripText } from "./reconnectStrip";
 // M15 WP4 — the workflow supervisor's per-workspace host. ⚠️ `fanOut` is deliberately NOT wired
 // here; see `useSupervisor`'s header for why the host must be per-workspace.
@@ -196,62 +204,40 @@ export function Workspace({
   // "none" on hide prevents a stale accent if a workspace is demoted while focused.
   const rootRef = useRef<HTMLDivElement>(null);
   const [focusHalf, setFocusHalf] = useState<FocusHalf>("none");
-  // The "not sent" toast (operator decision, M17 WP3). Set by the skill row
-  // and the Prompt panel when `cc_inject` REFUSES (a remote pane that never got ready); the
-  // text is the backend's own reason (`injectFailure.ts`). Scoped to THIS workspace, like
-  // `.drivemode-confirm`, because backgrounded workspaces stay mounted. Dismissed by ×; a later
-  // failure replaces it.
-  //
-  // Since M17 WP6 (operator decision) the toast also carries INFORMATIONAL
-  // notices (a chord / menu item for a surface a remote workspace does not have). Nothing failed
-  // there, so it renders in a neutral style (`is-info`, the picker's info-toast look) and as a
-  // `status`, not an `alert`; failures keep the red alert. A later notice of either kind replaces it.
-  const [toast, setToast] = useState<{
-    text: string;
-    kind: "error" | "info";
-    /** M17 WP7 — clear it after this long (the remote Docs catch-up's success). */
-    autoDismissMs?: number;
-    /** Who raised it: `"docs"` for the remote Docs catch-up (see `showDocsNotice`). */
-    source?: "docs";
-  } | null>(null);
-  // M17 WP7 — a toast that asks to clear itself does, unless something replaced it
-  // first (the effect re-runs on every new toast object, cancelling the old timer).
-  useEffect(() => {
-    if (toast?.autoDismissMs === undefined) return;
-    const t = setTimeout(() => setToast(null), toast.autoDismissMs);
-    return () => clearTimeout(t);
-  }, [toast]);
-  // The remote Docs panel's catch-up toast: "checking…", then the result. The slot is SHARED, so a
-  // docs notice only owns what it raised (the WP7 review MAJOR): it never replaces another
-  // source's standing error (a refused injection stays until dismissed), and `null` clears only a
-  // docs toast. An info notice from elsewhere is transient and may be replaced.
-  const showDocsNotice = useCallback(
-    (n: DocsNotice) =>
-      setToast((prev) => {
-        if (n === null) return prev?.source === "docs" ? null : prev;
-        if (prev !== null && prev.source !== "docs" && prev.kind === "error")
-          return prev;
-        return { ...n, source: "docs" };
-      }),
-    [],
-  );
-  const setInjectFailure = useCallback(
-    (text: string | null) =>
-      setToast(text === null ? null : { text, kind: "error" }),
+  // The workspace's notices (`workspaceToasts.ts`, paydown-2026-11-27 WP8). Scoped to THIS
+  // workspace, like `.drivemode-confirm`, because backgrounded workspaces stay mounted. Each notice
+  // is its own row with its own kind: `error` (a refused injection, the remote hook-install
+  // warning, a failed Detach, a refused copy) renders red as an `alert`; `info` (the remote open
+  // notice, an auto-resume withheld notice, an absent surface, the Docs catch-up's progress)
+  // renders neutral as a `status`. Rows no longer replace each other; each has its own ×.
+  // ⚠️ Every write goes through `toastsReducer`, the one funnel; never add a second toast state.
+  const [toastState, dispatchToast] = useReducer(toastsReducer, EMPTY_TOASTS);
+  const showError = useCallback(
+    (text: string) => dispatchToast({ type: "push", text, kind: "error" }),
     [],
   );
   const showInfoNotice = useCallback(
-    (text: string) => setToast({ text, kind: "info" }),
+    (text: string) => dispatchToast({ type: "push", text, kind: "info" }),
     [],
   );
-  // M17 WP5 — an app notice for this workspace (a failed Detach) joins the same toast, once per
-  // new `seq`. Adjusted during render (React's "a prop changed" pattern), not in an effect.
+  // The remote Docs panel's catch-up toast: "checking…", then the result. It owns only its own
+  // row (the WP7 review MAJOR): a new docs notice replaces that row, and `null` clears only it.
+  const showDocsNotice = useCallback(
+    (notice: DocsNotice) => dispatchToast({ type: "docs", notice }),
+    [],
+  );
+  // M17 WP5 — an app notice for this workspace (a failed Detach) joins the list, once per new
+  // `seq`. Adjusted during render (React's "a prop changed" pattern), not in an effect.
   const [noticeSeq, setNoticeSeq] = useState(0);
   if (notice !== undefined && notice.seq !== noticeSeq) {
     setNoticeSeq(notice.seq);
     // M17 WP6 — an absent-launcher notice from the native menu is informational; a failed Detach
     // (no `kind`) stays an error.
-    setToast({ text: notice.text, kind: notice.kind ?? "error" });
+    dispatchToast({
+      type: "push",
+      text: notice.text,
+      kind: notice.kind ?? "error",
+    });
   }
 
   // ── M12 WP3 Phase 5 — the third arm ──────────────────────────────────────────────
@@ -550,7 +536,7 @@ export function Workspace({
   const fireSkill = (command: string) => {
     const sessionId = workspace.cc_session_id;
     if (sessionId === null) return; // unreachable — the row does not render without one.
-    void fireSkillCommand(sessionId, command, setInjectFailure);
+    void fireSkillCommand(sessionId, command, showError);
   };
 
   // The ungated `clear` button, built once and placed in ONE of two spots below: inside the
@@ -656,7 +642,7 @@ export function Workspace({
         waitForFreshSessionId(ccSessionIdRef, sessionId),
       // M17 WP3 — a refused handoff / restore injection shows the "not sent" toast.
       onInjectFailure: (step, reason) =>
-        setInjectFailure(recycleInjectFailure(step, reason)),
+        showError(recycleInjectFailure(step, reason)),
       // ⚠️ No `onProgress`. It exists on the interface for a caller that renders progress, and
       // this one does not: the CC pane is right there and shows the handoff running. Wiring a
       // state setter that only ever feeds an unread variable would be surface with no reader.
@@ -1142,23 +1128,18 @@ export function Workspace({
               )}
             </span>
           ))}
-        {toast !== null && (
+        {toastState.toasts.length > 0 && (
           <div
-            className={`workspace-inject-toast${toast.kind === "info" ? " is-info" : ""}`}
-            role={toast.kind === "info" ? "status" : "alert"}
-            data-testid="workspace-inject-toast"
-            data-kind={toast.kind}
+            className="workspace-inject-toasts"
+            data-testid="workspace-inject-toasts"
           >
-            <span>{toast.text}</span>
-            <button
-              type="button"
-              className="workspace-inject-toast-dismiss"
-              aria-label="Dismiss"
-              title="Dismiss"
-              onClick={() => setInjectFailure(null)}
-            >
-              ×
-            </button>
+            {toastState.toasts.map((t) => (
+              <ToastRow
+                key={t.id}
+                toast={t}
+                onDismiss={() => dispatchToast({ type: "dismiss", id: t.id })}
+              />
+            ))}
           </div>
         )}
         {/* M13.5 WP4 — the confirm. Rendered inside the header so it is scoped to THIS
@@ -1422,17 +1403,23 @@ export function Workspace({
           onSessionId={(sid) => {
             onSessionId?.(workspace.id, sid);
             // M17 WP4 (AC-1.2) — a remote host whose hook could not be registered says so here,
-            // in the same toast as a refused injection (its status dot would otherwise stay grey
-            // with no explanation). M17 WP5 (AC-2.3) — so does an open whose check found
+            // in the workspace's notices (its status dot would otherwise stay grey with no
+            // explanation). M17 WP5 (AC-2.3) — so does an open whose check found
             // something the picker's label did not predict. A local project never asks.
-            void readRemoteOpenToast(workspace.project_path).then((w) => {
-              if (w !== null) setInjectFailure(w);
+            // paydown-2026-11-27 WP8 — each notice keeps its own kind (the open notice is info,
+            // the hook warning an error), and a respawn's re-read neither duplicates the warning
+            // nor brings back one the operator dismissed (`workspaceToasts.ts`).
+            void readRemoteOpenToast(workspace.project_path).then((notices) => {
+              for (const n of notices) dispatchToast({ type: "push", ...n });
             });
           }}
-          // M17 WP5 (operator ruling) — an untrusted REMOTE folder held back the
-          // auto-fired command: say so, in the same toast (a silent non-fire reads as "nothing to
-          // resume").
-          onAutoResumeWithheld={setInjectFailure}
+          // M17 WP5 (operator ruling) — an untrusted REMOTE folder (or, since M18 WP2, the
+          // bypass-permissions warning) held back the auto-fired command: say so (a silent
+          // non-fire reads as "nothing to resume"). Nothing failed, so it is an INFO notice
+          // (paydown-2026-11-27 WP8).
+          onAutoResumeWithheld={showInfoNotice}
+          // paydown-2026-11-27 WP8 — a refused or failed OSC 52 copy (`osc52.ts`).
+          onCopyFailed={showError}
           // M14 WP0 — feed the unsent-input watermark. ⚠️ ONLY the CC pane opts in: the
           // right-panel `TerminalPane` mounts this same component for a login SHELL, which the
           // supervisor never fires into, so a watermark fed from it would suppress CC's chain
@@ -1492,14 +1479,58 @@ export function Workspace({
            stay disabled after a session first appears. A recycle updates `workspace`, so this
            value tracks it. */
         ccSessionId={workspace.cc_session_id}
-        onInjectFailure={setInjectFailure}
+        onInjectFailure={showError}
         onSurfaceUnavailable={showInfoNotice}
         onDocsNotice={showDocsNotice}
+        onCopyFailed={showError}
         workspaceProfile={workspaceProfile}
         collapsed={rightCollapsed}
         registerDirtyProbe={registerDirtyProbe}
         terminalPaneRef={termPaneRef}
       />
+    </div>
+  );
+}
+
+/**
+ * One workspace notice row (`workspaceToasts.ts`). An `error` is red and an `alert`; an `info` is
+ * neutral and a `status`. A row that asks to clear itself (`autoDismissMs`) does: the timer belongs
+ * to the row's mount, so a docs notice that replaces it (a new id, a new key) starts its own.
+ */
+function ToastRow({
+  toast,
+  onDismiss,
+}: {
+  toast: Toast;
+  onDismiss: () => void;
+}) {
+  const dismissRef = useRef(onDismiss);
+  useEffect(() => {
+    dismissRef.current = onDismiss;
+  }, [onDismiss]);
+  const ms = toast.autoDismissMs;
+  useEffect(() => {
+    if (ms === undefined) return;
+    const t = setTimeout(() => dismissRef.current(), ms);
+    return () => clearTimeout(t);
+  }, [ms]);
+  return (
+    <div
+      className={`workspace-inject-toast${toast.kind === "info" ? " is-info" : ""}`}
+      role={toast.kind === "info" ? "status" : "alert"}
+      data-testid="workspace-inject-toast"
+      data-kind={toast.kind}
+    >
+      <span>{toast.text}</span>
+      <button
+        type="button"
+        className="workspace-inject-toast-dismiss"
+        aria-label="Dismiss"
+        title="Dismiss"
+        onClick={onDismiss}
+      >
+        ×
+      </button>
     </div>
   );
 }

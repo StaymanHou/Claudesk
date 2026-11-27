@@ -578,6 +578,26 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** one cleanup task.
 
+## SURFACE-2026-11-27-HOOK-SOCKET-CLOSED-PEER-TEST-FLAKY
+- **Source:** feature:verify-codify (paydown-2026-11-27 WP8 Phase 2 full run)
+- **Target level:** task
+- **Type:** tech-debt (flaky test)
+- **Summary:** `hook_socket::tests::a_client_closed_before_accept_refuses_the_timeout_benignly_and_still_delivers` failed once in a full `pnpm verify:auto` (2026-11-27), panicking at its "macOS refuses SO_RCVTIMEO on a socket whose peer already closed: ()" expect. It passed on 2 isolated retries and on a full `cargo test` re-run. The test asserts that the OS REFUSES `set_read_timeout` once the peer has closed, and whether the close has landed before the accept is a kernel-timing race. WP8 touched no `hook_socket` file; the test came in with `e96e3b4` (hook-listener-read-timeout).
+- **Context:** A flaky gate step trains people to re-run on red. The production behaviour it guards (a refused timeout is benign and delivery still happens) is fine either way. Only the test's premise ("macOS always refuses") is timing-dependent.
+- **Suggested action:** Make the test accept both outcomes of `set_read_timeout` (refused → the benign path; accepted → the normal path) while still asserting delivery, or make the close deterministic before the accept (e.g. wait until the peer's close is observable). Mutation-prove that it still fails when delivery breaks.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-11-27-CLOSE-NOT-ENDED-PROJECT-NOT-LIVE-CHECKED
+- **Source:** feature:verify-human (paydown-2026-11-27 WP8 Phase 2, P2.verify-human.2)
+- **Target level:** task
+- **Type:** gap (verification)
+- **Summary:** The close-not-ended toast now names the project and the cause (`reason: "unreachable" | "failed"`). `AppPorts::close_not_ended` fills `project` from `cc_session::remote::project_label(target.path())` through a real `AppHandle` emit, which no unit test reaches. `project_label` and the payload shape are each pinned (`project_label_is_the_paths_last_segment`, `the_close_not_ended_event_matches_its_ts_mirror`), but the assembled emit has never been seen live.
+- **Context:** Operator accepted the gap at verify-human (2026-11-27) and deferred it to the WP9/WP10 remote session, which needs the mini anyway.
+- **Suggested action:** In the WP9/WP10 remote session, with a SCRATCH remote row open (never the admin-account row, see `remote-verify-hygiene`), take its link down (e.g. stop the dev app's link master for that host only, or block the host), close the workspace with ×. The app toast must read "Couldn't end the Claude Code session for <scratch folder name>: <host> isn't reachable, …". Optional: the `failed` cause, by making the end exec fail with the link up.
+- **Priority:** low
+- **Status:** pending — rides WP9/WP10
+
 ## SURFACE-2026-11-16-TRAY-REMOTE-LOST-SESSION-ALARM-NOT-VERIFIED-LIVE
 - **Source:** feature:verify-human (M17 WP4 P4.verify-human.4, operator decision); narrowed at paydown-2026-11-27 WP7
 - **Target level:** feature (dev tooling / verification debt)

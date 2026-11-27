@@ -49,14 +49,32 @@ export async function readRemoteOpenNotice(
   }
 }
 
-/** The remote workspace's open-time toast: the open notice, then the hook warning, either or both. */
+/** One open-time notice, with its kind (see {@link readRemoteOpenToast}). */
+export interface OpenTimeNotice {
+  text: string;
+  kind: "error" | "info";
+  /** `"hook"` for the hook warning: a dismissed one stays dismissed (`workspaceToasts.ts`). */
+  source?: "hook";
+}
+
+/**
+ * The remote workspace's open-time notices, in order: the open notice, then the hook warning,
+ * either or both, or none.
+ *
+ * ⚠️ TWO notices, never one joined string (paydown-2026-11-27 WP8). The open notice reports what
+ * happened ("it was started again"), so it is `info`. The hook warning is a real failure, so it is
+ * `error`. Joined into one toast, one kind had to win, and a neutral style could hide the failure.
+ */
 export async function readRemoteOpenToast(
   projectPath: string,
-): Promise<string | null> {
+): Promise<OpenTimeNotice[]> {
   const [notice, warning] = await Promise.all([
     readRemoteOpenNotice(projectPath),
     readRemoteHookWarning(projectPath),
   ]);
-  const parts = [notice, warning].filter((p): p is string => p !== null);
-  return parts.length > 0 ? parts.join(" ") : null;
+  const out: OpenTimeNotice[] = [];
+  if (notice !== null) out.push({ text: notice, kind: "info" });
+  if (warning !== null)
+    out.push({ text: warning, kind: "error", source: "hook" });
+  return out;
 }

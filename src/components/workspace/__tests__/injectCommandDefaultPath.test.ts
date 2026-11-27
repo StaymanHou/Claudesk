@@ -107,23 +107,23 @@ describe("M12 auto-resume — the default path's exact bytes", () => {
 
 describe("recycle — the default path, at the arity its call sites actually use", () => {
   // ⚠️ `recycleSession.test.ts` mocks `../autoResumeFire` wholesale, so the real funnel is never
-  // driven there. These two call sites pass FOUR arguments (a `"recycle"` label, no builder),
+  // driven there. These two call sites pass THREE arguments (a `"recycle"` label, no builder),
   // which is a different arity from M12's two — and arity is exactly what the widening changed.
 
   it("the handoff command crosses invoke as literal bytes", async () => {
-    await injectCommand("sess-r", "/session-handoff", undefined, "recycle");
+    await injectCommand("sess-r", "/session-handoff", "recycle");
     expect(sentBytes()).toEqual([...ascii("/session-handoff"), 0x0d]);
   });
 
   it("the restore command crosses invoke as literal bytes", async () => {
-    await injectCommand("sess-r", "/session-restore", undefined, "recycle");
+    await injectCommand("sess-r", "/session-restore", "recycle");
     expect(sentBytes()).toEqual([...ascii("/session-restore"), 0x0d]);
   });
 
   it("passing a label does NOT change the bytes", async () => {
-    // The 4th argument is diagnostic-only. If supplying it ever altered the payload, recycle and
+    // The label (3rd argument) is diagnostic-only. If supplying it ever altered the payload, recycle and
     // auto-resume would silently diverge.
-    await injectCommand("sess-r", "/session-restore", undefined, "recycle");
+    await injectCommand("sess-r", "/session-restore", "recycle");
     const labelled = sentBytes();
     invokeMock.mockClear();
     await injectCommand("sess-r", "/session-restore");
@@ -134,16 +134,11 @@ describe("recycle — the default path, at the arity its call sites actually use
 describe("M15 supervisor — the arity its wiring site forwards", () => {
   // ⚠️ `fanOut` takes `inject` as an injected dependency and is tested at THAT seam, so the real
   // funnel is unexercised there by design. What is NOT covered anywhere else is the wiring site's
-  // own forwarding shape: `injectCommand(pty, command, undefined, label)` — four arguments, a
+  // own forwarding shape: `injectCommand(pty, command, label)` — three arguments, a
   // non-default label, no builder. Pinned here so the supervisor's bytes are not taken on trust.
 
   it("a supervisor-labelled injection still emits plain slash-command bytes", async () => {
-    await injectCommand(
-      "sess-s",
-      "/feature-verify-auto",
-      undefined,
-      "supervisor",
-    );
+    await injectCommand("sess-s", "/feature-verify-auto", "supervisor");
     expect(sentBytes()).toEqual([...ascii("/feature-verify-auto"), 0x0d]);
     expect(sentBytes()).not.toContain(0x1b);
   });
@@ -184,5 +179,33 @@ describe("the default parameter IS slashCommandPayload — drift check", () => {
         0x0d,
       ]);
     }
+  });
+});
+
+// paydown-2026-11-27 WP8 — the refusal is the RETURN VALUE (it used to be an `onIpcError` callback).
+describe("injectCommand resolves to the refusal", () => {
+  it("null when cc_inject went through", async () => {
+    await expect(injectCommand("s", "/session-restore")).resolves.toBeNull();
+  });
+
+  it("{ message, reason } when cc_inject rejects: reason is the backend's words, message is labelled", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    invokeMock.mockRejectedValueOnce(
+      new Error("Claude Code on host isn't ready for input yet (waited 15s)"),
+    );
+    await expect(
+      injectCommand("s", "/session-handoff", "recycle"),
+    ).resolves.toEqual({
+      message: "recycle could not run /session-handoff",
+      reason: "Claude Code on host isn't ready for input yet (waited 15s)",
+    });
+    // A non-Error rejection (Tauri rejects with the backend's string) is its own reason.
+    invokeMock.mockRejectedValueOnce("no such session: s");
+    await expect(injectCommand("s", "/session-restore")).resolves.toEqual({
+      message: "Auto-resume could not run /session-restore",
+      reason: "no such session: s",
+    });
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
   });
 });
