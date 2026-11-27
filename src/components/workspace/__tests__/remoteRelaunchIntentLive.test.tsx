@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { installPaneShims } from "./xtermFakes";
 import { bootIpc, ipcCalls, teardownIpc } from "./liveWorkspace";
 import type { XtermPaneHandle } from "../XtermPane";
 import type { OpenIntent } from "../../../state/predictAction";
@@ -20,58 +21,16 @@ import type { OpenIntent } from "../../../state/predictAction";
 //
 // The property: Reconnect is the FIRST spawn's door only. A relaunch of the pane is a new session.
 
-vi.mock("@xterm/xterm", () => {
-  class Terminal {
-    options: Record<string, unknown> = {};
-    rows = 24;
-    cols = 80;
-    buffer = { active: { length: 0, baseY: 0, viewportY: 0 } };
-    loadAddon() {}
-    open() {}
-    focus() {}
-    write() {}
-    dispose() {}
-    scrollToLine() {}
-    registerMarker() {
-      return undefined;
-    }
-    onData() {
-      return { dispose() {} };
-    }
-    parser = {
-      registerOscHandler() {
-        return { dispose() {} };
-      },
-    };
-  }
-  return { Terminal };
-});
-vi.mock("@xterm/addon-fit", () => ({
-  FitAddon: class {
-    fit() {}
-    proposeDimensions() {
-      return { cols: 80, rows: 24 };
-    }
-  },
-}));
-vi.mock("@xterm/addon-serialize", () => ({
-  SerializeAddon: class {
-    serializeAsHTML() {
-      return "";
-    }
-  },
-}));
-
-class NoopResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??=
-  NoopResizeObserver;
-globalThis.requestAnimationFrame ??= (cb: FrameRequestCallback) =>
-  setTimeout(() => cb(0), 0) as unknown as number;
-globalThis.cancelAnimationFrame ??= (id: number) => clearTimeout(id);
+vi.mock("@xterm/xterm", async () =>
+  (await import("./xtermFakes")).xtermModule(),
+);
+vi.mock("@xterm/addon-fit", async () =>
+  (await import("./xtermFakes")).fitAddonModule(),
+);
+vi.mock("@xterm/addon-serialize", async () =>
+  (await import("./xtermFakes")).serializeAddonModule(),
+);
+installPaneShims();
 
 const REMOTE = "ssh://user@host/Users/user/scratch";
 
@@ -129,10 +88,9 @@ async function openThenRelaunch(door: OpenIntent): Promise<unknown[]> {
 describe("a remote pane's relaunch is a new session, not a reconnect (M18 WP1)", () => {
   it("a workspace opened through the Reconnect door attaches on its FIRST spawn only", async () => {
     const intents = await openThenRelaunch("reconnect");
-    expect(intents).toHaveLength(2);
-    expect(intents[0]).toBe("reconnect");
-    // The relaunch (Recycle's respawn) must not ask to attach to the session Recycle just ended.
-    expect(intents[1]).not.toBe("reconnect");
+    // Exact, not `not.toBe("reconnect")`: a relaunch mapped to `no-fire` would skip the
+    // unclean-flag resume and still pass a negative assertion.
+    expect(intents).toEqual(["reconnect", "fire"]);
   });
 
   it("positive control: a Fire-door workspace's relaunch spawns with Fire", async () => {

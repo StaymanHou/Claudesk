@@ -2,82 +2,23 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { createdTerminals as created, installPaneShims } from "./xtermFakes";
 import { bootIpc, ipcCalls, teardownIpc } from "./liveWorkspace";
 
 // M18 WP2.5 — the REAL XtermPane wires OSC 52 to the Mac clipboard, write-only, on every pane.
 // The fake Terminal records its constructor options, the OSC handlers registered on its parser,
 // and every write back to the terminal, so a read reply would be seen.
 
-const created: {
-  options: Record<string, unknown>;
-  osc: Map<number, (data: string) => boolean | Promise<boolean>>;
-  writes: unknown[];
-}[] = [];
-
-vi.mock("@xterm/xterm", () => {
-  class Terminal {
-    options: Record<string, unknown>;
-    rows = 24;
-    cols = 80;
-    buffer = { active: { length: 0, baseY: 0, viewportY: 0 } };
-    private rec: (typeof created)[number];
-    constructor(options: Record<string, unknown> = {}) {
-      this.options = { ...options };
-      this.rec = { options: { ...options }, osc: new Map(), writes: [] };
-      created.push(this.rec);
-    }
-    parser = {
-      registerOscHandler: (
-        ident: number,
-        cb: (data: string) => boolean | Promise<boolean>,
-      ) => {
-        this.rec.osc.set(ident, cb);
-        return { dispose() {} };
-      },
-    };
-    loadAddon() {}
-    open() {}
-    focus() {}
-    write(data: unknown) {
-      this.rec.writes.push(data);
-    }
-    dispose() {}
-    scrollToLine() {}
-    registerMarker() {
-      return undefined;
-    }
-    onData() {
-      return { dispose() {} };
-    }
-  }
-  return { Terminal };
-});
-vi.mock("@xterm/addon-fit", () => ({
-  FitAddon: class {
-    fit() {}
-    proposeDimensions() {
-      return { cols: 80, rows: 24 };
-    }
-  },
-}));
-vi.mock("@xterm/addon-serialize", () => ({
-  SerializeAddon: class {
-    serializeAsHTML() {
-      return "";
-    }
-  },
-}));
-
-class NoopResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??=
-  NoopResizeObserver;
-globalThis.requestAnimationFrame ??= (cb: FrameRequestCallback) =>
-  setTimeout(() => cb(0), 0) as unknown as number;
-globalThis.cancelAnimationFrame ??= (id: number) => clearTimeout(id);
+vi.mock("@xterm/xterm", async () =>
+  (await import("./xtermFakes")).xtermModule(),
+);
+vi.mock("@xterm/addon-fit", async () =>
+  (await import("./xtermFakes")).fitAddonModule(),
+);
+vi.mock("@xterm/addon-serialize", async () =>
+  (await import("./xtermFakes")).serializeAddonModule(),
+);
+installPaneShims();
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;

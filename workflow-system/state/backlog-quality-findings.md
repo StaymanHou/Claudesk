@@ -154,16 +154,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-11-16-QUALITY-M17WP3-WIP-LABELS-IN-PRODUCTION-COMMENTS
-- **Severity:** MINOR
-- **Location:** Workspace.tsx, injectFailure.ts, remote_link/*.rs, cc_session/mod.rs
-- **Finding:** 42 added production-comment references to WIP node labels (`P4.verify-human.2`, `P2.verify-self.F1`–`F4`, `P4.3`, `F9b`, …); `singleAuthority.test.ts` already forbids them per module (recycleSession.ts had to be scrubbed).
-- **Why it matters:** Once the WIP is archived these labels point nowhere; the decision content already carries the meaning.
-- **Suggested action:** ~~Reword to the decision content~~ (done for the M17-added labels, paydown-2026-11-27 WP2; the older M12/M13.5 node labels in `cc_session/mod.rs` predate this finding and were left). **Remaining:** widen the `singleAuthority` absent-rule to `Workspace.tsx` and `injectFailure.ts` (paydown-2026-11-27 WP3).
-- **Priority:** low
-- **Status:** pending
-- **Update 2026-11-17 (M17 WP5 review):** WP5 added ~23 more comment lines citing WIP node labels (`P4.verify-self.1`, `P2 re-verify #4, survivor 1`, `F9b`, `P4.2`) across `cc_session/mod.rs` tests, `remote.rs`, `remote_link/commands.rs`.
-
 # m17-wp4-status-over-the-link — 2026-11-16
 
 ## SURFACE-2026-11-16-QUALITY-M17WP4-REALPATH-ALIAS-NEVER-CLEARED
@@ -241,22 +231,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-# m18-wp1-remote-recycle-respawn — 2026-11-18
-
-## SURFACE-2026-11-18-QUALITY-RELAUNCH-LIVE-TEST-ASSERTS-NOT-EQUAL
-- **Source:** feature-review-quality (M18 WP1, MINOR)
-- **Type:** test precision
-- **Summary:** `remoteRelaunchIntentLive.test.tsx` asserts `intents[1]).not.toBe("reconnect")` while its Fire control asserts `toEqual(["fire", "fire"])`. A mutant mapping `reconnect` → `no-fire` (which would skip the unclean-flag resume) passes the test on the real pane. The unit test pins `fire`, so the hole is small.
-- **Suggested action:** assert `toEqual(["reconnect", "fire"])`.
-- **Priority:** low
-
-## SURFACE-2026-11-18-QUALITY-LIVE-PANE-XTERM-MOCKS-DUPLICATED
-- **Source:** feature-review-quality (M18 WP1, MINOR)
-- **Type:** tech-debt (test scaffolding)
-- **Summary:** The `@xterm/*` mocks and the ResizeObserver / rAF shims are now copied verbatim in two live-pane tests (`autoResumeFireLive.test.tsx`, `remoteRelaunchIntentLive.test.tsx`). A change to the Terminal surface `XtermPane` uses then has to be made in N places.
-- **Suggested action:** move the mock factories into `liveWorkspace.tsx`, beside `bootIpc`. `vi.mock` hoisting limits how they can be shared: factories can be imported, the `vi.mock` calls stay per file.
-- **Priority:** low
-
 # m18-wp2-fresh-account-hardening — 2026-11-18
 
 ## SURFACE-2026-11-18-QUALITY-WITHHELD-NOTICE-CAUSE-DEFAULT
@@ -277,25 +251,11 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit `e38cdc7`, window `e38cdc7^..e38cdc7`; drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 4 MINOR, all auto-backlogged.)*
 
-## SURFACE-2026-11-18-QUALITY-CLIPBOARD-CAP-DUPLICATED-UNPINNED
-- **Source:** feature-review-quality (M18 WP2.5, MINOR)
-- **Type:** tech-debt (duplicated constant)
-- **Summary:** `MAX_CLIPBOARD_BYTES` (4 MiB) is defined in both `osc52.ts` and `clipboard.rs`, kept equal only by a "Mirrors" comment. No test pins the two together.
-- **Suggested action:** a small test that reads both values from their sources and asserts they are equal, or drop the frontend cap and let Rust refuse (that also makes the Rust error reachable; see the next entry).
-- **Priority:** low
-
 ## SURFACE-2026-11-18-QUALITY-OSC52-FAILED-COPY-IS-SILENT
 - **Source:** feature-review-quality (M18 WP2.5, MINOR)
 - **Type:** UX gap (silent failure)
 - **Summary:** an oversize copy is dropped in `osc52Text` before it reaches Rust (so `clipboard.rs`'s "refused with an error" is unreachable from its only caller). An IPC or `pbcopy` failure goes only to `console.warn`, which is unobservable in this app. Either way the operator pastes the PREVIOUS clipboard believing it is the new selection: the "pastes as if whole" harm `clipboard.rs` says it prevents.
 - **Suggested action:** surface a failed or refused copy as a workspace toast (the existing toast surface), and soften security-posture's "refused, not truncated (both sides)" to say what the operator actually sees.
-- **Priority:** low
-
-## SURFACE-2026-11-18-QUALITY-TERMINAL-FAKE-TRIPLICATED
-- **Source:** feature-review-quality (M18 WP2.5, MINOR)
-- **Type:** tech-debt (test scaffolding)
-- **Summary:** the hand-written `@xterm/xterm` `Terminal` fake now lives in 3 test files (`osc52Live`, `autoResumeFireLive`, `remoteRelaunchIntentLive`). WP2.5 had to add `parser.registerOscHandler` to two of them just to keep them mounting, and every new Terminal API `XtermPane` touches will need the same edit in every copy.
-- **Suggested action:** move one configurable fake into `__tests__/liveWorkspace.tsx` and import it from all three.
 - **Priority:** low
 
 ## SURFACE-2026-11-18-QUALITY-CONF-ASSERT-NO-MESSAGE
@@ -396,18 +356,4 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Context:** Reviewer's reading of the code; not yet reproduced live. Before this feature the overlay never took focus, so A's pane kept it across the switch and the same misrouting already existed (keys typed into the overlay went to A). The feature narrowed the window to "switch while the overlay is open", but did not close it.
 - **Suggested action:** reproduce first in the dev app via the bridge (seed two workspaces, focus A's pane, "+", ⌘⇧2 via the real handler, Esc, read `activeElement`). Then either skip a restore target outside the focused workspace (`el.closest('.workspace')` vs the focused one) or gate the ⌘⇧digit switch while the picker overlay is open. Pin with a `pickerFocusWiring` case through the real `App`.
 - **Priority:** medium
-
-## SURFACE-2026-11-27-QUALITY-CSS-TRIPWIRE-PARSES-BRACES-BEFORE-STRIPPING-COMMENTS
-- **Source:** feature-review-quality (picker-qol-focus-and-scroll, MINOR)
-- **Type:** tech-debt (guard fragility)
-- **Summary:** `pickerOverlaySingleScroller.test.ts`'s `rulesFor` matches `{…}` before stripping comments, so a brace inside a CSS comment (`App.css` already has one, the `.file-tree-name { flex: 1 }` comment) breaks the parse. Today it fails loudly ("a rule … must exist"), not falsely green.
-- **Suggested action:** strip comments from the whole sheet before the `matchAll`.
-- **Priority:** low
-
-## SURFACE-2026-11-27-QUALITY-OVERLAY-PICKER-RULE-SPLIT-IN-TWO
-- **Source:** feature-review-quality (picker-qol-focus-and-scroll, MINOR)
-- **Type:** tech-debt (readability)
-- **Summary:** `.picker-overlay-panel .picker` is defined in two rules about 30 lines apart in `App.css` (layout in one, `padding` in the other), so the overlay picker's box model is not in one place.
-- **Suggested action:** merge the two rules; the tripwire's `rulesFor` already concatenates both, so it keeps passing.
-- **Priority:** low
 

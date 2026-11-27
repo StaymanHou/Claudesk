@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { installPaneShims } from "./xtermFakes";
 import { bootIpc, ipcCalls, teardownIpc, uncaught } from "./liveWorkspace";
 import { FIRE_DELAY_MS } from "../autoResumeFire";
 import type { AutoResumeAction } from "../../../state/predictAction";
@@ -17,58 +18,16 @@ import type { AutoResumeAction } from "../../../state/predictAction";
 // Only what jsdom cannot run is faked: xterm.js and its addons (they measure cells and paint),
 // `ResizeObserver`, and `requestAnimationFrame` where jsdom lacks it.
 
-vi.mock("@xterm/xterm", () => {
-  class Terminal {
-    options: Record<string, unknown> = {};
-    rows = 24;
-    cols = 80;
-    buffer = { active: { length: 0, baseY: 0, viewportY: 0 } };
-    loadAddon() {}
-    open() {}
-    focus() {}
-    write() {}
-    dispose() {}
-    scrollToLine() {}
-    registerMarker() {
-      return undefined;
-    }
-    onData() {
-      return { dispose() {} };
-    }
-    parser = {
-      registerOscHandler() {
-        return { dispose() {} };
-      },
-    };
-  }
-  return { Terminal };
-});
-vi.mock("@xterm/addon-fit", () => ({
-  FitAddon: class {
-    fit() {}
-    proposeDimensions() {
-      return { cols: 80, rows: 24 };
-    }
-  },
-}));
-vi.mock("@xterm/addon-serialize", () => ({
-  SerializeAddon: class {
-    serializeAsHTML() {
-      return "";
-    }
-  },
-}));
-
-class NoopResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??=
-  NoopResizeObserver;
-globalThis.requestAnimationFrame ??= (cb: FrameRequestCallback) =>
-  setTimeout(() => cb(0), 0) as unknown as number;
-globalThis.cancelAnimationFrame ??= (id: number) => clearTimeout(id);
+vi.mock("@xterm/xterm", async () =>
+  (await import("./xtermFakes")).xtermModule(),
+);
+vi.mock("@xterm/addon-fit", async () =>
+  (await import("./xtermFakes")).fitAddonModule(),
+);
+vi.mock("@xterm/addon-serialize", async () =>
+  (await import("./xtermFakes")).serializeAddonModule(),
+);
+installPaneShims();
 
 const PROJECT = "/u/never-trusted";
 const SESSION = "cc-41";

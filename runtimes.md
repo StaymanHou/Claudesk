@@ -31,7 +31,9 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 90s (2026-11-27, paydown-2026-11-27 WP2 verify, EXIT=0)
+- **Last:** 67s (2026-11-27, paydown-2026-11-27 WP3 verify (re-run after a Prettier fix), EXIT=0)
+- **Prior:** 13s (2026-11-27, paydown-2026-11-27 WP3 verify, EXIT=1: `format:check` on the tripwire test)
+- **Prior:** 90s (2026-11-27, paydown-2026-11-27 WP2 verify, EXIT=0)
 - **Prior:** 69s (2026-11-27, picker-qol Phase 1 verify-codify (full), EXIT=0; incremental, timeout kept at the cold-run value)
 - **Prior:** 170s (2026-11-27, picker-qol Phase 1 verify-auto, EXIT=0; first run in a week, cold cargo cache)
 - **Prior:** 75s (2026-11-20, M18 WP8 Phase 2 verify-codify (full), EXIT=0)

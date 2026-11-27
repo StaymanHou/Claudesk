@@ -25,6 +25,14 @@
 - **Backlog resolved:** SURFACE-2026-11-27-QUALITY-PANEL-COMMENT-SAYS-ONE-CHILD — the overlay panel comment says one in-flow child and names the positioned × button.
 - **Backlog resolved:** SURFACE-2026-11-09-QUALITY-WP6-DOCS-STILL-NAME-SPAWN-BLOCKING — **partially**: the five async commands' docs and the `ASYNC_COMMANDS` reasons name `on_blocking_worker`; adding it to `SPAWN_BOUNDARIES` remains open.
 - **Backlog resolved:** SURFACE-2026-11-16-PRUNE-COMMENT-CLAIMS-UNCHANGED-FILE-BUT-IT-RE-SORTS — `prune_missing`'s and `remove`'s comments say the always-write keeps the rows but may reorder the bytes (the read sorts by recency).
+- **Task closed:** Backlog-paydown 2026-11-27 WP3, frontend test scaffolding and precision: one shared xterm fake for the three live-pane tests, an exact relaunch assertion, a comment-safe CSS tripwire with the overlay picker's rules merged, a TS↔Rust clipboard-cap pin, and the WIP-label guard widened to the workspace host; each change mutation-proven.
+- **Backlog resolved:** SURFACE-2026-11-18-QUALITY-LIVE-PANE-XTERM-MOCKS-DUPLICATED — the xterm, fit and serialize fakes plus the jsdom shims live once in `__tests__/xtermFakes.ts`, loaded from each file's `vi.mock` factory.
+- **Backlog resolved:** SURFACE-2026-11-18-QUALITY-TERMINAL-FAKE-TRIPLICATED — the one recording `Terminal` fake serves all three live-pane tests; the OSC 52 test still fails when the pane registers the wrong OSC ident.
+- **Backlog resolved:** SURFACE-2026-11-18-QUALITY-RELAUNCH-LIVE-TEST-ASSERTS-NOT-EQUAL — the real-pane relaunch test asserts `["reconnect", "fire"]` exactly, which kills the `reconnect → no-fire` mutant the old `not.toBe` let through.
+- **Backlog resolved:** SURFACE-2026-11-27-QUALITY-CSS-TRIPWIRE-PARSES-BRACES-BEFORE-STRIPPING-COMMENTS — the tripwire strips comments from the whole sheet before matching rules, so a brace inside a comment no longer breaks it.
+- **Backlog resolved:** SURFACE-2026-11-27-QUALITY-OVERLAY-PICKER-RULE-SPLIT-IN-TWO — `.picker-overlay-panel .picker`'s layout and padding are one rule.
+- **Backlog resolved:** SURFACE-2026-11-18-QUALITY-CLIPBOARD-CAP-DUPLICATED-UNPINNED — a test reads `clipboard.rs` and fails when its cap differs from `osc52.ts`'s.
+- **Backlog resolved:** SURFACE-2026-11-16-QUALITY-M17WP3-WIP-LABELS-IN-PRODUCTION-COMMENTS — `singleAuthority` now forbids WIP node labels in `Workspace.tsx` and `injectFailure.ts`, completing the rewording WP2 did.
 
 ## 2026-11-20
 

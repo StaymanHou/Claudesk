@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   MAX_CLIPBOARD_BYTES,
   osc52Handler,
@@ -66,5 +68,26 @@ describe("osc52Handler", () => {
     };
     registerOsc52(term, () => {});
     expect(calls).toEqual([52]);
+  });
+});
+
+describe("the clipboard cap is one value on both sides of the IPC", () => {
+  // The frontend drops an oversize copy before it reaches Rust, and Rust refuses one too; the
+  // two constants are kept equal by hand, so this reads the Rust source and compares.
+  it("osc52.ts's MAX_CLIPBOARD_BYTES equals clipboard.rs's", () => {
+    const rs = readFileSync(
+      join(__dirname, "../../../../src-tauri/src/clipboard.rs"),
+      "utf8",
+    );
+    const m = rs.match(/pub const MAX_CLIPBOARD_BYTES: usize = ([0-9_ *]+);/);
+    expect(
+      m,
+      "clipboard.rs must declare MAX_CLIPBOARD_BYTES as a product of integers",
+    ).not.toBeNull();
+    const rustValue = (m as RegExpMatchArray)[1]
+      .split("*")
+      .map((f) => Number(f.replace(/_/g, "").trim()))
+      .reduce((a, b) => a * b, 1);
+    expect(rustValue).toBe(MAX_CLIPBOARD_BYTES);
   });
 });

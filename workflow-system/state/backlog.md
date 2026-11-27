@@ -607,13 +607,12 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m17-wp3-remote-terminal (2026-11-16)
 
-- **Pointer:** **5 MINOR** remain from the review of `7f96ce3` (paydown-2026-11-27 WP1 buried the guard-heuristic MINOR; WP2 reworded the M17 WIP labels, leaving that item's guard widening) (WP4 resolved the two link-lifecycle MAJORs and the unused `remote_link_ensure`; WP5 resolved the reconnect-seam MAJOR and the `cc_session` module split, 2026-11-17, CHANGELOG).
+- **Pointer:** **4 MINOR** remain from the review of `7f96ce3` (paydown-2026-11-27 WP1 buried the guard-heuristic MINOR; WP2 + WP3 resolved the WIP labels) (WP4 resolved the two link-lifecycle MAJORs and the unused `remote_link_ensure`; WP5 resolved the reconnect-seam MAJOR and the `cc_session` module split, 2026-11-17, CHANGELOG).
   - MINORs:
     - a stale `master_pid` after reap;
     - the remote dispatch sits inside the PTY constructor;
     - the remote host is stored twice;
-    - the inject refusal comes back as a callback, not a value;
-    - widen the `singleAuthority` label rule to the reworded TS modules.
+    - the inject refusal comes back as a callback, not a value.
 
   Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m17-wp3-remote-terminal — 2026-11-16`.
 - **Priority:** low
@@ -655,13 +654,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 - **Status:** deferred — carry to next cycle *(M17 close, 2026-11-17)*
 - **Pickup shape:** the MAJOR + the `DRIVE_MODES` copy + the `SessionExists` comment are one reconnect-mode cleanup; the doc/comment MINORs are a docs pass; the toast/coupling MINORs fold into WP9 or the WP4 toast item.
 
-## Code-quality findings — m18-wp1-remote-recycle-respawn (2026-11-18)
-
-- **Pointer:** **2 MINOR** open from the review of the WP1 ship commit (`411bff8`): the real-pane test's `not.toBe` should be an exact `toEqual`; the live-pane xterm mocks copied twice. (The lifecycle-flag comment and the stub assumption were resolved by paydown-2026-11-27 WP2.) Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp1-remote-recycle-respawn — 2026-11-18`.
-- **Priority:** low (all)
-- **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
-- **Pickup shape:** one small test-and-comment polish pass. The mock dedupe fits whenever a third live-pane test appears.
-
 ## Code-quality findings — m18-wp2-fresh-account-hardening (2026-11-18)
 
 - **Pointer:** **2 MINOR** open from the review of the WP2 ship commit (`1a71d1b`): `withheldNotice`'s defaulted `cause`; an indent-bound source guard. The 2 MAJORs (the stale remote bypass answer across Recycle; the `setup-token` hint) and the "is showing" MINOR were resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-fresh-account-hardening — 2026-11-18`.
@@ -671,10 +663,10 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — m18-wp2-5-remote-copy-to-mac-clipboard (2026-11-18)
 
-- **Pointer:** **4 MINOR** open from the review of the WP2.5 ship commit (`e38cdc7`): the 4 MiB cap is duplicated in TS and Rust with nothing pinning them together; a failed or refused copy is silent (the operator pastes the previous clipboard); the xterm `Terminal` test fake is copied into 3 files; one conf assert has no message. The paste-jacking MAJOR was resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18`.
+- **Pointer:** **2 MINOR** open from the review of the WP2.5 ship commit (`e38cdc7`): a failed or refused copy is silent (the operator pastes the previous clipboard); one conf assert has no message. (The cap pin and the shared `Terminal` fake were resolved by paydown-2026-11-27 WP3.) The paste-jacking MAJOR was resolved at M18 WP6 (CHANGELOG 2026-11-20). Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m18-wp2-5-remote-copy-to-mac-clipboard — 2026-11-18`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M18 close, 2026-11-20)*
-- **Pickup shape:** the silent-failure toast also settles the duplicated cap. The test-fake consolidation fits any later `XtermPane` test touch.
+- **Pickup shape:** paydown-2026-11-27 WP8 (the silent-failure toast) and WP4 (the conf assert).
 
 ## SURFACE-2026-11-17-REMOTE-OPEN-STARTED-AGAIN-NOTICE-USES-THE-ERROR-STYLE
 - **Source:** feature:verify-human (M17 WP8 P3.2a, installed v0.9.0)
@@ -730,8 +722,8 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 ## Code-quality findings — picker-qol-focus-and-scroll (2026-11-27)
 
-- **Pointer:** **1 MAJOR + 2 MINOR** from the review of `8c019bf` (the panel comment was resolved by paydown-2026-11-27 WP2). MAJOR: an overlay dismiss can restore focus to a BACKGROUND workspace's pane after a ⌘⇧digit switch while the overlay is open (keys then reach a hidden CC session; reviewer's reading, not yet reproduced). MINOR: the CSS tripwire parses braces before stripping comments; `.picker-overlay-panel .picker` is split across two rules.
+- **Pointer:** **1 MAJOR** remains from the review of `8c019bf` (its 3 MINORs were resolved by paydown-2026-11-27 WP2 + WP3). MAJOR: an overlay dismiss can restore focus to a BACKGROUND workspace's pane after a ⌘⇧digit switch while the overlay is open (keys then reach a hidden CC session; reviewer's reading, not yet reproduced).
   - Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# picker-qol-focus-and-scroll — 2026-11-27`.
 - **Priority:** medium (the MAJOR), low (the rest)
 - **Status:** pending
-- **Pickup shape:** one small task. Reproduce the MAJOR live, then guard the restore target (or the switch) with an App-level test; the 3 MINORs ride along.
+- **Pickup shape:** paydown-2026-11-27 WP5. Reproduce the MAJOR live, then guard the restore target with an App-level test.

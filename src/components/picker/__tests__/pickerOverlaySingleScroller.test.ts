@@ -20,15 +20,15 @@ const css = readFileSync(join(process.cwd(), "src", "App.css"), "utf8");
 function rulesFor(selector: string): string {
   const bodies: string[] = [];
   const re = /([^{}]+)\{([^{}]*)\}/g;
-  for (const m of css.matchAll(re)) {
-    const selectors = m[1]
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .split(",")
-      .map((s) => s.trim());
+  // Strip comments from the WHOLE sheet first: a brace inside a comment (App.css has one)
+  // would otherwise break the `{…}` match before any per-rule stripping could run.
+  const sheet = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const m of sheet.matchAll(re)) {
+    const selectors = m[1].split(",").map((s) => s.trim());
     if (selectors.includes(selector)) bodies.push(m[2]);
   }
   expect(bodies.length, `a rule for ${selector} must exist`).toBeGreaterThan(0);
-  return bodies.join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
+  return bodies.join("\n");
 }
 
 describe("the + picker overlay has one scroller (CSS tripwire)", () => {

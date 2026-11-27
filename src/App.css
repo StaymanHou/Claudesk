@@ -4040,6 +4040,7 @@ body,
   height: auto;
   flex: 1 1 auto;
   min-height: 0;
+  padding: 1.5rem 1.5rem 1.5rem;
 }
 
 /* In the overlay the list takes exactly the leftover height, so the standalone-fallback
@@ -4068,10 +4069,6 @@ body,
 }
 
 /* Inside the overlay, drop the full-page top padding the standalone picker uses. */
-.picker-overlay-panel .picker {
-  padding: 1.5rem 1.5rem 1.5rem;
-}
-
 .picker-overlay-close {
   position: absolute;
   top: 8px;

@@ -271,6 +271,23 @@ const RULES: Rule[] = [
   },
   {
     kind: "absent",
+    id: "the workspace host and its inject-failure copy carry no WIP node labels",
+    // Bare `verify-human` is NOT in the pattern: "a verify-human pause" is a product term these
+    // modules use for the blue status overlay. Only node labels (`P4.verify-human.2`, `P3.4`) are.
+    files: [
+      "src/components/workspace/Workspace.tsx",
+      "src/components/workspace/injectFailure.ts",
+    ],
+    pattern:
+      /\bP\d+\.(?:verify-(?:self|human)|\d+)\b|re-verify #|decision [AB]\b/,
+    examples: [
+      "// M17 WP3 P4.verify-human.2 (operator decision A)",
+      "// the P3.2\n// effect below",
+      "// (P2 re-verify #4)",
+    ],
+  },
+  {
+    kind: "absent",
     id: "window_state carries no provenance narrative",
     files: ["src-tauri/src/window_state/mod.rs"],
     pattern: /verified live at P\d|screenshot|backlog entry|1920×1080/,
